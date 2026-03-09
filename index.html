@@ -680,8 +680,9 @@ let adminUnlocked=false,loggedIn=false,myName='';
 let lfilt='all',ledgerShowAll=false,editTxIdx=null,curTab='home';
 const LKEY='ht_v3';
 
-// ==================== NPOINT.IO SYNC (CORS‑friendly, no key) ====================
-const NPOINT_API = 'https://api.npoint.io/';
+// ==================== JSONBIN.IO SYNC (RELIABLE, SEPARATE BIN) ====================
+const BIN_API = 'https://api.jsonbin.io/v3/b';
+const MASTER_KEY = 'YOUR_MASTER_KEY_HERE';   // <--- PASTE YOUR MASTER KEY HERE
 let binId = null;
 let syncBusy = false;
 let pendingPush = false;
@@ -702,14 +703,19 @@ async function createBin() {
   syncBusy = true; setSdot('sync');
   S.lastUpdated = new Date().toISOString();
   try {
-    const r = await fetch(NPOINT_API, {
+    const r = await fetch(BIN_API, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': MASTER_KEY,
+        'X-Bin-Private': 'false',
+        'X-Bin-Name': 'HarvestTrust'
+      },
       body: JSON.stringify(S)
     });
     if (r.ok) {
-      const data = await r.json();  // returns { id: "..." }
-      binId = data.id;
+      const data = await r.json();
+      binId = data.metadata.id;
       history.replaceState(null, '', location.pathname + location.search + '#' + binId);
       saveLocal();
       refreshShareUrl();
@@ -729,9 +735,12 @@ async function updateBin() {
   S.lastUpdated = new Date().toISOString();
   saveLocal();
   try {
-    const r = await fetch(`${NPOINT_API}${binId}`, {
+    const r = await fetch(`${BIN_API}/${binId}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': MASTER_KEY
+      },
       body: JSON.stringify(S)
     });
     setSdot(r.ok ? 'live' : '');
@@ -743,9 +752,12 @@ async function updateBin() {
 
 async function loadBin(id) {
   try {
-    const r = await fetch(`${NPOINT_API}${id}`);
+    const r = await fetch(`${BIN_API}/${id}/latest`, {
+      headers: { 'X-Master-Key': MASTER_KEY }
+    });
     if (r.ok) {
-      const rec = await r.json();
+      const data = await r.json();
+      const rec = data.record;
       Object.keys(S).forEach(k => { if (rec[k] !== undefined) S[k] = rec[k]; });
       lastRemoteTs = rec.lastUpdated || null;
       binId = id;
@@ -762,9 +774,12 @@ function startPoll() {
   pollTimer = setInterval(async () => {
     if (!binId || syncBusy) return;
     try {
-      const r = await fetch(`${NPOINT_API}${binId}`);
+      const r = await fetch(`${BIN_API}/${binId}/latest`, {
+        headers: { 'X-Master-Key': MASTER_KEY }
+      });
       if (r.ok) {
-        const rec = await r.json();
+        const data = await r.json();
+        const rec = data.record;
         if (rec.lastUpdated && rec.lastUpdated !== lastRemoteTs) {
           lastRemoteTs = rec.lastUpdated;
           Object.keys(S).forEach(k => { if (rec[k] !== undefined) S[k] = rec[k]; });
