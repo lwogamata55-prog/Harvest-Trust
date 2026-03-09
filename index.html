@@ -681,9 +681,148 @@ let adminUnlocked=false,loggedIn=false,myName='';
 let lfilt='all',ledgerShowAll=false,editTxIdx=null,curTab='home';
 const LKEY='ht_v3';
 
-function saveLocal(){try{localStorage.setItem(LKEY,JSON.stringify({...S,blobId}));}catch(e){}}
-function load(){try{const d=JSON.parse(localStorage.getItem(LKEY)||'null');if(d){Object.keys(S).forEach(k=>{if(d[k]!==undefined)S[k]=d[k];});if(d.blobId)blobId=d.blobId;}return true;}catch(e){return false;}}
+// ─── JSONBLOB SYNC ENGINE ─────────────────────────────────────────
+const BLOB_BASE='https://jsonblob.com/api/jsonBlob';
+let blobId=null, syncBusy=false, pendingPush=false, pollTimer=null, lastRemoteTs=null;
 
+function setSdot(state){
+  const d=document.getElementById('sdot');if(!d)return;
+  d.className='sdot';
+  if(state==='live')d.classList.add('live');
+  else if(state==='sync'){d.style.background='var(--amber)';d.style.boxShadow='0 0 6px var(--amber)';}
+  else{d.style.background='';d.style.boxShadow='';}
+}
+
+async function _createBlob(){
+  syncBusy=true; setSdot('sync');
+  try{
+    const r=await fetch(BLOB_BASE,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Accept':'application/json'},
+      body:JSON.stringify(S)
+    });
+    if(r.status===201){
+      const loc=r.headers.get('Location')||'';
+      const id=loc.split('/').pop();
+      if(id){
+        blobId=id;
+        history.replaceState(null,'',location.pathname+location.search+'#'+id);
+        saveLocal();
+        refreshShareUrl();
+        setSdot('live');
+        startPoll();
+        toast('✅ Live sync on! Tap ⬆ to copy your share link.','#22d47a');
+      }else setSdot('');
+    }else setSdot('');
+  }catch(e){setSdot('');toast('No internet — saved locally','#F5A623');}
+  syncBusy=false;
+  if(pendingPush){pendingPush=false;pushBin();}
+}
+
+async function _updateBlob(){
+  syncBusy=true; setSdot('sync');
+  try{
+    const r=await fetch(`${BLOB_BASE}/${blobId}`,{
+      method:'PUT',
+      headers:{'Content-Type':'application/json','Accept':'application/json'},
+      body:JSON.stringify(S)
+    });
+    setSdot(r.ok?'live':'');
+    if(!r.ok&&r.status===404){blobId=null;saveLocal();_createBlob();return;}
+  }catch(e){setSdot('');}
+  syncBusy=false;
+  if(pendingPush){pendingPush=false;pushBin();}
+}
+
+async function _fetchBlob(id){
+  try{
+    const r=await fetch(`${BLOB_BASE}/${id}`,{headers:{'Accept':'application/json'}});
+    if(r.ok){
+      const rec=await r.json();
+      Object.keys(S).forEach(k=>{if(rec[k]!==undefined)S[k]=rec[k];});
+      lastRemoteTs=rec.lastUpdated||null;
+      blobId=id;
+      saveLocal();
+      startPoll();
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+
+function startPoll(){
+  clearInterval(pollTimer);
+  pollTimer=setInterval(async()=>{
+    if(!blobId||syncBusy)return;
+    try{
+      const r=await fetch(`${BLOB_BASE}/${blobId}`,{headers:{'Accept':'application/json'}});
+      if(r.ok){
+        const rec=await r.json();
+        if(rec.lastUpdated&&rec.lastUpdated!==lastRemoteTs){
+          lastRemoteTs=rec.lastUpdated;
+          Object.keys(S).forEach(k=>{if(rec[k]!==undefined)S[k]=rec[k];});
+          saveLocal();
+          renderAll();applyMeta();updateWaTab();
+          setSdot('sync');setTimeout(()=>setSdot('live'),600);
+        }else setSdot('live');
+      }
+    }catch(e){}
+  },6000);
+}
+
+function pushBin(){
+  S.lastUpdated=new Date().toISOString();
+  saveLocal();
+  if(syncBusy){pendingPush=true;return;}
+  if(!blobId){_createBlob();return;}
+  _updateBlob();
+}
+
+function getBlobFromUrl(){const h=location.hash.replace('#','');return /^\d{15,}$/.test(h) ? h : null;}
+
+// ─── LOCAL STORAGE ──────────────────────────────────────────────
+function saveLocal(){
+  try{localStorage.setItem(LKEY,JSON.stringify({...S,blobId}));}catch(e){}
+}
+function load(){
+  try{
+    const d=JSON.parse(localStorage.getItem(LKEY)||'null');
+    if(d){
+      Object.keys(S).forEach(k=>{if(d[k]!==undefined)S[k]=d[k];});
+      if(d.blobId)blobId=d.blobId;
+    }
+    return true;
+  }catch(e){return false;}
+}
+
+// ─── SHARE ─────────────────────────────────────────────────────
+let shareOpen=false;
+function toggleShare(){
+  shareOpen=!shareOpen;const b=document.getElementById('share-banner');
+  if(shareOpen){
+    b.classList.add('show');
+    refreshShareUrl();
+    if(!blobId)pushBin(); // trigger creation if no blob yet
+  }else b.classList.remove('show');
+}
+function refreshShareUrl(){
+  const url=blobId
+    ?location.origin+location.pathname+'#'+blobId
+    :'Creating your permanent link…';
+  const inp=document.getElementById('share-inp');if(inp)inp.value=url;
+}
+function doCopy(){
+  const v=document.getElementById('share-inp').value;
+  if(!v||v.includes('Creating')){toast('Creating link — please wait a moment','#F5A623');return;}
+  const btn=document.getElementById('copy-b');
+  navigator.clipboard?.writeText(v).then(()=>{
+    btn.textContent='Copied ✓';btn.classList.add('ok');
+    setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('ok');},2500);
+    toast('Link copied! Share with members 🔗','#4F8EF7');
+  }).catch(()=>{try{document.getElementById('share-inp').select();document.execCommand('copy');toast('Copied!','#4F8EF7');}catch(e){}});
+}
+
+// ─── MISC ──────────────────────────────────────────────────────
 function toast(msg,color='#4F8EF7'){
   const w=document.getElementById('twrap'),el=document.createElement('div');el.className='toast';
   const dot=document.createElement('div');dot.className='tdot';dot.style.cssText=`background:${color};box-shadow:0 0 6px ${color};`;
@@ -695,7 +834,6 @@ function setEl(id,v){const e=document.getElementById(id);if(e)e.innerHTML=v;}
 function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[m]);}
 function fmt(n,c=false){n=Number(n);if(c&&n>=1e6)return(n/1e6).toFixed(1)+'M';if(c&&n>=1000)return(n/1000).toFixed(0)+'K';return n.toLocaleString('en-UG');}
 function initials(n){return n.split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();}
-
 function openOv(id){
   if(id==='ov-add-tx')populateSel('mg-mbr');
   if(id==='ov-apps')renderApps();
@@ -713,7 +851,7 @@ function populateSel(selId){
   sel.innerHTML=S.members.length?S.members.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join(''):'<option>No members yet</option>';
 }
 
-/* WELCOME */
+// ─── WELCOME ──────────────────────────────────────────────────
 function openApply(){document.querySelectorAll('.ov.on').forEach(o=>o.classList.remove('on'));openOv('ov-apply');}
 function openLogin(){document.querySelectorAll('.ov.on').forEach(o=>o.classList.remove('on'));openOv('ov-login');}
 
@@ -742,7 +880,7 @@ function enterApp(){
 function exitToWelcome(){document.getElementById('app').classList.remove('on');const w=document.getElementById('welcome');w.style.display='flex';w.classList.remove('out');loggedIn=false;}
 function exitWelcome(){toast('👋 Goodbye!','#7A93B8');}
 
-/* ADMIN */
+// ─── ADMIN ───────────────────────────────────────────────────
 function doAdminLogin(){
   const v=(document.getElementById('adm-pwd').value||'');
   if(btoa(v)===S.adminHash){
@@ -774,7 +912,7 @@ function changePassword(){
   pushBin();toast('Password updated','#22d47a');
 }
 
-/* APPLICATIONS */
+// ─── APPLICATIONS ────────────────────────────────────────────
 function renderApps(){
   const list=document.getElementById('apps-list');if(!list)return;
   const pending=S.applications.filter(a=>a.status==='pending');
@@ -810,7 +948,7 @@ function updateAppsBadge(){
   b.classList.toggle('hidden',cnt===0);b.textContent=cnt;
 }
 
-/* MEMBERS */
+// ─── MEMBERS ─────────────────────────────────────────────────
 function addMemberDirectly(){
   if(!adminUnlocked)return toast('Unlock admin first','#ff4d6d');
   const name=(document.getElementById('nm-name').value||'').trim();const email=(document.getElementById('nm-email').value||'').trim();
@@ -840,7 +978,7 @@ function renderAdmMbrList(){
     </div>`).join('');
 }
 
-/* COMPUTE */
+// ─── COMPUTE ─────────────────────────────────────────────────
 function balances(){
   const b={};S.members.forEach(m=>b[m]=0);
   [...S.ledger].reverse().forEach(e=>{if(b.hasOwnProperty(e.member)){if(e.type==='deposit'||e.type==='welfare')b[e.member]+=Number(e.amount);else if(e.type==='withdraw')b[e.member]-=Number(e.amount);}});
@@ -856,7 +994,7 @@ function periodStats(start,end){
   return{savings,expenses,net:savings-expenses,txCount:txs.length};
 }
 
-/* RENDER */
+// ─── RENDER ──────────────────────────────────────────────────
 function renderAll(){
   const bal=balances(),ts=totalSav(),te=totalExp(),cb=cashBal();
   const paid=S.members.filter(m=>bal[m]>0).length,pct=S.members.length?Math.round(paid/S.members.length*100):0;
@@ -916,7 +1054,7 @@ function applyMeta(){
   setEl('hdr-title',n.length>16?n.slice(0,14)+'…':n);setEl('hdr-sub',b);setEl('ws-members',S.members.length);
 }
 
-/* WHATSAPP */
+// ─── WHATSAPP ────────────────────────────────────────────────
 function updateWaTab(){
   const link=S.whatsappLink||'',btn=document.getElementById('wa-link');
   if(link){btn.href=link;btn.style.display='inline-flex';setEl('wa-note','Opens WhatsApp directly');}
@@ -932,7 +1070,7 @@ function saveWaLink(){
   S.whatsappLink=v;pushBin();updateWaTab();toast(v?'WhatsApp link saved! ✅':'Link cleared','#25D366');
 }
 
-/* LEDGER */
+// ─── LEDGER ──────────────────────────────────────────────────
 function mgAddTx(){
   if(!adminUnlocked)return toast('Unlock admin first','#ff4d6d');
   const mbr=document.getElementById('mg-mbr').value,type=document.getElementById('mg-type').value;
@@ -960,7 +1098,7 @@ function delTxConfirm(){
   S.ledger.splice(editTxIdx,1);pushBin();closeOv('ov-edit-tx');editTxIdx=null;renderAll();toast('Deleted','#ff4d6d');
 }
 
-/* EXPENSES */
+// ─── EXPENSES ────────────────────────────────────────────────
 function addExpense(){
   if(!adminUnlocked)return toast('Unlock admin first','#ff4d6d');
   const desc=(document.getElementById('ex-desc').value||'').trim();if(!desc)return toast('Enter description','#ff4d6d');
@@ -970,156 +1108,14 @@ function addExpense(){
   pushBin();closeOv('ov-add-exp');renderAll();toast('Expense recorded','#F5A623');
 }
 
-/* CSV */
+// ─── CSV ─────────────────────────────────────────────────────
 function dlCSV(rows,name){
   const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=name;document.body.appendChild(a);a.click();a.remove();toast('Downloaded: '+name,'#22d47a');
 }
 function downloadLedger(){const bal=balances();dlCSV([['Date','Member','Type','Amount (UGX)','Note','Balance'],...S.ledger.map(l=>[l.date,l.member,l.type,l.amount,l.note||'',bal[l.member]||0])],'harvest_trust_ledger.csv');}
 
-/* ═══════════════════════════════
-   LIVE SYNC — jsonblob.com
-   No API key needed. Works in any browser.
-   Flow:
-   • First pushBin() → POST creates a blob, stores ID in URL hash + localStorage
-   • Subsequent pushBin() → PUT updates the blob instantly
-   • Anyone opening the page with #blobId → loads live data, polls every 6s
-   • Sync dot: green=live  amber=syncing  grey=offline
-═══════════════════════════════ */
-const BLOB_BASE='https://jsonblob.com/api/jsonBlob';
-let blobId=null, syncBusy=false, pendingPush=false, pollTimer=null, lastRemoteTs=null;
-
-/* Called by every data mutation */
-function pushBin(){
-  S.lastUpdated=new Date().toISOString();
-  saveLocal();
-  if(syncBusy){pendingPush=true;return;}  // will be flushed after current op
-  if(!blobId){_createBlob();return;}
-  _updateBlob();
-}
-
-async function _createBlob(){
-  syncBusy=true; setSdot('sync');
-  try{
-    const r=await fetch(BLOB_BASE,{
-      method:'POST',
-      headers:{'Content-Type':'application/json','Accept':'application/json'},
-      body:JSON.stringify(S)
-    });
-    if(r.status===201){
-      const loc=r.headers.get('Location')||'';
-      const id=loc.split('/').pop();
-      if(id){
-        _storeId(id);
-        setSdot('live');
-        startPoll();
-        toast('✅ Live sync on! Tap ⬆ to copy your share link.','#22d47a');
-      }else setSdot('');
-    }else setSdot('');
-  }catch(e){setSdot('');toast('No internet — saved locally','#F5A623');}
-  syncBusy=false;
-  if(pendingPush){pendingPush=false;pushBin();}
-}
-
-async function _updateBlob(){
-  syncBusy=true; setSdot('sync');
-  try{
-    const r=await fetch(`${BLOB_BASE}/${blobId}`,{
-      method:'PUT',
-      headers:{'Content-Type':'application/json','Accept':'application/json'},
-      body:JSON.stringify(S)
-    });
-    setSdot(r.ok?'live':'');
-    if(!r.ok&&r.status===404){blobId=null;saveLocal();_createBlob();return;}
-  }catch(e){setSdot('');}
-  syncBusy=false;
-  if(pendingPush){pendingPush=false;pushBin();}
-}
-
-async function _fetchBlob(id){
-  try{
-    const r=await fetch(`${BLOB_BASE}/${id}`,{headers:{'Accept':'application/json'}});
-    if(r.ok){
-      const rec=await r.json();
-      _mergeRemote(rec);
-      _storeId(id);
-      return true;
-    }
-  }catch(e){}
-  return false;
-}
-
-function _mergeRemote(rec){
-  Object.keys(S).forEach(k=>{if(rec[k]!==undefined)S[k]=rec[k];});
-  lastRemoteTs=rec.lastUpdated||null;
-}
-
-function _storeId(id){
-  blobId=id;
-  history.replaceState(null,'',location.pathname+location.search+'#'+id);
-  saveLocal();
-  refreshShareUrl();
-}
-
-function setSdot(state){
-  const d=document.getElementById('sdot');if(!d)return;
-  d.className='sdot';
-  if(state==='live')d.classList.add('live');
-  else if(state==='sync'){d.style.background='var(--amber)';d.style.boxShadow='0 0 6px var(--amber)';}
-  else{d.style.background='';d.style.boxShadow='';}
-}
-
-function startPoll(){
-  clearInterval(pollTimer);
-  pollTimer=setInterval(async()=>{
-    if(!blobId||syncBusy)return;
-    try{
-      const r=await fetch(`${BLOB_BASE}/${blobId}`,{headers:{'Accept':'application/json'}});
-      if(r.ok){
-        const rec=await r.json();
-        if(rec.lastUpdated&&rec.lastUpdated!==lastRemoteTs){
-          lastRemoteTs=rec.lastUpdated;
-          _mergeRemote(rec);
-          saveLocal();
-          renderAll();applyMeta();updateWaTab();
-          /* Brief pulse to show data received */
-          setSdot('sync');setTimeout(()=>setSdot('live'),600);
-        }else setSdot('live');
-      }
-    }catch(e){}
-  },6000);
-}
-
-function getBlobFromUrl(){const h=location.hash.replace('#','');return/^\d{15,}$/.test(h)?h:null;}
-
-/* ── SHARE ── */
-let shareOpen=false;
-function toggleShare(){
-  shareOpen=!shareOpen;const b=document.getElementById('share-banner');
-  if(shareOpen){
-    b.classList.add('show');
-    refreshShareUrl();
-    if(!blobId){pushBin();}  // trigger creation if no blob yet
-  }else b.classList.remove('show');
-}
-function refreshShareUrl(){
-  const url=blobId
-    ?location.origin+location.pathname+'#'+blobId
-    :'Creating your permanent link…';
-  const inp=document.getElementById('share-inp');if(inp)inp.value=url;
-}
-function doCopy(){
-  const v=document.getElementById('share-inp').value;
-  if(!v||v.includes('Creating')){toast('Creating link — please wait a moment','#F5A623');return;}
-  const btn=document.getElementById('copy-b');
-  navigator.clipboard?.writeText(v).then(()=>{
-    btn.textContent='Copied ✓';btn.classList.add('ok');
-    setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('ok');},2500);
-    toast('Link copied! Share with members 🔗','#4F8EF7');
-  }).catch(()=>{try{document.getElementById('share-inp').select();document.execCommand('copy');toast('Copied!','#4F8EF7');}catch(e){}});
-}
-
-/* ── NAV ── */
+// ─── NAVIGATION ──────────────────────────────────────────────
 function goTab(name,btn){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
   document.querySelectorAll('.ni').forEach(n=>n.classList.remove('on'));
@@ -1130,14 +1126,14 @@ function goTab(name,btn){
   if(name==='admin'){renderAdmMbrList();updateAppsBadge();}if(name==='chat'){updateWaTab();}
 }
 
-/* ── KEYBOARD ── */
+// ─── KEYBOARD ────────────────────────────────────────────────
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape')document.querySelectorAll('.ov.on').forEach(o=>o.classList.remove('on'));
   if(e.key==='Enter'&&document.activeElement.id==='adm-pwd')doAdminLogin();
   if(e.key==='Enter'&&document.activeElement.id==='login-email')doMemberLogin();
 });
 
-/* ── INIT ── */
+// ─── INIT ────────────────────────────────────────────────────
 async function init(){
   const today=new Date().toISOString().split('T')[0];
   ['mg-date','ex-date'].forEach(id=>{const el=document.getElementById(id);if(el)el.value=today;});
@@ -1146,7 +1142,7 @@ async function init(){
   const urlBlob=getBlobFromUrl();
 
   if(urlBlob){
-    /* ── Opened via shared link ── */
+    /* ─── Opened via shared link ─── */
     document.getElementById('welcome').style.display='none';
     document.getElementById('loading').classList.add('show');
     load(); // load cached data immediately
@@ -1158,7 +1154,7 @@ async function init(){
     renderAll();updateWaTab();setSdot('live');
     startPoll();
   }else{
-    /* ── Normal open — show welcome ── */
+    /* ─── Normal open — show welcome ─── */
     load();
     applyMeta();setEl('ws-members',S.members.length);
     if(blobId){setSdot('live');startPoll();}
