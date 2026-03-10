@@ -6,6 +6,9 @@
 <meta name="theme-color" content="#03050D">
 <title>Harvest Trust · by Lwogamata</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- Firebase SDK (v8 compat) -->
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 <style>
 :root{
   --bg:#03050D;--bg2:#06091A;--bg3:#0A1030;--bg4:#0E1840;
@@ -348,7 +351,7 @@ button{cursor:pointer;border:none;outline:none;transition:all .18s;}
       <div id="share-banner">
         <div class="share-lbl">🔗 Permanent Link</div>
         <div class="share-row">
-          <input class="share-inp" id="share-inp" readonly onclick="this.select()">
+          <input class="share-inp" id="share-inp" readonly onclick="this.select()" value="https://lwogamata55-prog.github.io/Harvest-Trust/">
           <button class="copy-btn" id="copy-b" onclick="doCopy()">Copy</button>
         </div>
       </div>
@@ -669,8 +672,23 @@ button{cursor:pointer;border:none;outline:none;transition:all .18s;}
   });
 })();
 
-/* STATE */
-let S={
+// ==================== FIREBASE INIT ====================
+const firebaseConfig = {
+  apiKey: "AIzaSyDNiIPuw3yrLsbieOobrhlUww-mQ4uigGQ",
+  authDomain: "savinggroups-142e7.firebaseapp.com",
+  databaseURL: "https://savinggroups-142e7-default-rtdb.firebaseio.com",
+  projectId: "savinggroups-142e7",
+  storageBucket: "savinggroups-142e7.firebasestorage.app",
+  messagingSenderId: "59557732077",
+  appId: "1:59557732077:web:aa79eb14010d05728176e4",
+  measurementId: "G-Z6CHHM6FCN"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const dataRef = db.ref('harvestTrust');
+
+// ==================== GLOBAL STATE ====================
+let S = {
   groupName:'Harvest Trust',branch:'by Lwogamata',
   members:[],ledger:[],expenses:[],
   applications:[],approvedApplicants:[],
@@ -680,15 +698,18 @@ let adminUnlocked=false,loggedIn=false,myName='';
 let lfilt='all',ledgerShowAll=false,editTxIdx=null,curTab='home';
 const LKEY='ht_v3';
 
-// ==================== JSONBIN.IO SYNC (RELIABLE, SEPARATE BIN) ====================
-const BIN_API = 'https://api.jsonbin.io/v3/b';
-const MASTER_KEY = '$2a$10$.n47qk8gaFhf0WVRwLGI5edzEmxAOkp1VA72QqCiF0UpP8My3lmVC';   // <--- PASTE YOUR MASTER KEY HERE
-let binId = null;
-let syncBusy = false;
-let pendingPush = false;
-let pollTimer = null;
-let lastRemoteTs = null;
+// ─── LOCAL STORAGE ─────────────────────────────────────
+function saveLocal(){
+  try{localStorage.setItem(LKEY,JSON.stringify(S));}catch(e){}
+}
+function loadLocal(){
+  try{
+    const d=JSON.parse(localStorage.getItem(LKEY)||'null');
+    if(d) Object.assign(S,d);
+  }catch(e){}
+}
 
+// ─── FIREBASE SYNC ─────────────────────────────────────
 function setSdot(state) {
   const d = document.getElementById('sdot');
   if (!d) return;
@@ -698,153 +719,31 @@ function setSdot(state) {
   else { d.style.background = ''; d.style.boxShadow = ''; }
 }
 
-async function createBin() {
-  if (syncBusy) return;
-  syncBusy = true; setSdot('sync');
-  S.lastUpdated = new Date().toISOString();
-  try {
-    const r = await fetch(BIN_API, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Master-Key': MASTER_KEY,
-        'X-Bin-Private': 'false',
-        'X-Bin-Name': 'HarvestTrust'
-      },
-      body: JSON.stringify(S)
-    });
-    if (r.ok) {
-      const data = await r.json();
-      binId = data.metadata.id;
-      history.replaceState(null, '', location.pathname + location.search + '#' + binId);
-      saveLocal();
-      refreshShareUrl();
-      setSdot('live');
-      startPoll();
-      toast('✅ Live link ready! Tap ⬆ to share.', '#4F8EF7');
-    } else setSdot('');
-  } catch (e) { setSdot(''); toast('Offline – saved locally', '#F5A623'); }
-  syncBusy = false;
-  if (pendingPush) { pendingPush = false; pushBin(); }
+function pushToFirebase() {
+  setSdot('sync');
+  dataRef.set(S)
+    .then(() => setSdot('live'))
+    .catch(() => setSdot(''));
 }
 
-async function updateBin() {
-  if (!binId) { createBin(); return; }
-  if (syncBusy) { pendingPush = true; return; }
-  syncBusy = true; setSdot('sync');
-  S.lastUpdated = new Date().toISOString();
-  saveLocal();
-  try {
-    const r = await fetch(`${BIN_API}/${binId}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Master-Key': MASTER_KEY
-      },
-      body: JSON.stringify(S)
-    });
-    setSdot(r.ok ? 'live' : '');
-    if (!r.ok && r.status === 404) { binId = null; createBin(); return; }
-  } catch (e) { setSdot(''); }
-  syncBusy = false;
-  if (pendingPush) { pendingPush = false; pushBin(); }
-}
+dataRef.on('value', (snapshot) => {
+  const val = snapshot.val();
+  if (val) {
+    Object.assign(S, val);
+    saveLocal();
+    renderAll();
+    updateWaTab();
+  } else {
+    // No data yet – push current S (which may have local backup)
+    pushToFirebase();
+  }
+  setSdot('live');
+}, (error) => {
+  console.warn('Firebase read failed', error);
+  setSdot('');
+});
 
-async function loadBin(id) {
-  try {
-    const r = await fetch(`${BIN_API}/${id}/latest`, {
-      headers: { 'X-Master-Key': MASTER_KEY }
-    });
-    if (r.ok) {
-      const data = await r.json();
-      const rec = data.record;
-      Object.keys(S).forEach(k => { if (rec[k] !== undefined) S[k] = rec[k]; });
-      lastRemoteTs = rec.lastUpdated || null;
-      binId = id;
-      saveLocal();
-      startPoll();
-      return true;
-    }
-  } catch (e) {}
-  return false;
-}
-
-function startPoll() {
-  clearInterval(pollTimer);
-  pollTimer = setInterval(async () => {
-    if (!binId || syncBusy) return;
-    try {
-      const r = await fetch(`${BIN_API}/${binId}/latest`, {
-        headers: { 'X-Master-Key': MASTER_KEY }
-      });
-      if (r.ok) {
-        const data = await r.json();
-        const rec = data.record;
-        if (rec.lastUpdated && rec.lastUpdated !== lastRemoteTs) {
-          lastRemoteTs = rec.lastUpdated;
-          Object.keys(S).forEach(k => { if (rec[k] !== undefined) S[k] = rec[k]; });
-          saveLocal();
-          renderAll(); applyMeta(); updateWaTab();
-          setSdot('sync'); setTimeout(() => setSdot('live'), 600);
-        } else setSdot('live');
-      }
-    } catch (e) {}
-  }, 6000);
-}
-
-function pushBin() {
-  S.lastUpdated = new Date().toISOString();
-  saveLocal();
-  if (syncBusy) { pendingPush = true; return; }
-  if (!binId) { createBin(); return; }
-  updateBin();
-}
-
-function getBinFromUrl() { const h = location.hash.replace('#', ''); return h.length > 10 ? h : null; }
-
-// ─── LOCAL STORAGE ──────────────────────────────────────────────
-function saveLocal(){
-  try{localStorage.setItem(LKEY,JSON.stringify({...S,binId}));}catch(e){}
-}
-function load(){
-  try{
-    const d=JSON.parse(localStorage.getItem(LKEY)||'null');
-    if(d){
-      Object.keys(S).forEach(k=>{if(d[k]!==undefined)S[k]=d[k];});
-      if(d.binId)binId=d.binId;
-    }
-    return true;
-  }catch(e){return false;}
-}
-
-// ─── SHARE ─────────────────────────────────────────────────────
-let shareOpen=false;
-function toggleShare(){
-  shareOpen=!shareOpen;const b=document.getElementById('share-banner');
-  if(shareOpen){
-    b.classList.add('show');
-    refreshShareUrl();
-    if(!binId)pushBin(); // trigger creation if no blob yet
-  }else b.classList.remove('show');
-}
-function refreshShareUrl(){
-  const url=binId
-    ?location.origin+location.pathname+'#'+binId
-    :'Creating your permanent link…';
-  const inp=document.getElementById('share-inp');if(inp)inp.value=url;
-}
-function doCopy(){
-  const v=document.getElementById('share-inp').value;
-  if(!v||v.includes('Creating')){toast('Creating link — please wait a moment','#F5A623');return;}
-  const btn=document.getElementById('copy-b');
-  navigator.clipboard?.writeText(v).then(()=>{
-    btn.textContent='Copied ✓';btn.classList.add('ok');
-    setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('ok');},2500);
-    toast('Link copied! Share with members 🔗','#4F8EF7');
-  }).catch(()=>{try{document.getElementById('share-inp').select();document.execCommand('copy');toast('Copied!','#4F8EF7');}catch(e){}});
-}
-
-// ─── MISC ──────────────────────────────────────────────────────
+// ─── MISC UTILS ────────────────────────────────────────
 function toast(msg,color='#4F8EF7'){
   const w=document.getElementById('twrap'),el=document.createElement('div');el.className='toast';
   const dot=document.createElement('div');dot.className='tdot';dot.style.cssText=`background:${color};box-shadow:0 0 6px ${color};`;
@@ -873,9 +772,10 @@ function populateSel(selId){
   sel.innerHTML=S.members.length?S.members.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join(''):'<option>No members yet</option>';
 }
 
-// ─── WELCOME ──────────────────────────────────────────────────
+// ─── WELCOME / AUTH ────────────────────────────────────
 function openApply(){document.querySelectorAll('.ov.on').forEach(o=>o.classList.remove('on'));openOv('ov-apply');}
 function openLogin(){document.querySelectorAll('.ov.on').forEach(o=>o.classList.remove('on'));openOv('ov-login');}
+function exitWelcome(){toast('👋 Goodbye!','#7A93B8');}
 
 function submitApplication(){
   const name=(document.getElementById('apply-name').value||'').trim();
@@ -883,7 +783,7 @@ function submitApplication(){
   if(!name||!email){toast('Name and email are required','#ff4d6d');return;}
   if(S.applications.find(a=>a.email.toLowerCase()===email.toLowerCase())){toast('Already applied with this email','#ff4d6d');return;}
   S.applications.push({id:Date.now(),name,email,phone:(document.getElementById('apply-phone').value||'').trim(),why:(document.getElementById('apply-why').value||'').trim(),amount:document.getElementById('apply-amount').value,status:'pending',date:new Date().toISOString().split('T')[0]});
-  pushBin();['apply-name','apply-email','apply-phone','apply-why','apply-amount'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  pushToFirebase();['apply-name','apply-email','apply-phone','apply-why','apply-amount'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   closeOv('ov-apply');setTimeout(()=>openOv('ov-pending'),300);toast('Application submitted!','#4F8EF7');
 }
 
@@ -900,9 +800,8 @@ function enterApp(){
   setTimeout(()=>{document.getElementById('welcome').style.display='none';document.getElementById('app').classList.add('on');renderAll();updateWaTab();},500);
 }
 function exitToWelcome(){document.getElementById('app').classList.remove('on');const w=document.getElementById('welcome');w.style.display='flex';w.classList.remove('out');loggedIn=false;}
-function exitWelcome(){toast('👋 Goodbye!','#7A93B8');}
 
-// ─── ADMIN ───────────────────────────────────────────────────
+// ─── ADMIN ─────────────────────────────────────────────
 function doAdminLogin(){
   const v=(document.getElementById('adm-pwd').value||'');
   if(btoa(v)===S.adminHash){
@@ -918,11 +817,12 @@ function doAdminLogin(){
   }
 }
 function lockAdmin(){adminUnlocked=false;document.getElementById('adm-lock').classList.remove('hidden');document.getElementById('adm-panel').classList.add('hidden');renderAll();updateWaTab();toast('Admin locked','#7A93B8');}
+
 function saveSettings(){
   if(!adminUnlocked)return toast('Unlock admin first','#ff4d6d');
   const gn=(document.getElementById('st-gname').value||'').trim();const br=(document.getElementById('st-branch').value||'').trim();
   if(gn)S.groupName=gn;if(br)S.branch=br;
-  pushBin();applyMeta();closeOv('ov-settings');toast('Settings saved','#22d47a');
+  pushToFirebase();applyMeta();closeOv('ov-settings');toast('Settings saved','#22d47a');
 }
 function changePassword(){
   if(!adminUnlocked)return toast('Unlock admin first','#ff4d6d');
@@ -931,10 +831,10 @@ function changePassword(){
   if(nw.length<6)return toast('Min 6 characters','#ff4d6d');
   if(nw!==cfm)return toast('Passwords don\'t match','#ff4d6d');
   S.adminHash=btoa(nw);['pw-old','pw-new','pw-cfm'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  pushBin();toast('Password updated','#22d47a');
+  pushToFirebase();toast('Password updated','#22d47a');
 }
 
-// ─── APPLICATIONS ────────────────────────────────────────────
+// ─── APPLICATIONS ──────────────────────────────────────
 function renderApps(){
   const list=document.getElementById('apps-list');if(!list)return;
   const pending=S.applications.filter(a=>a.status==='pending');
@@ -957,12 +857,12 @@ function approveApp(id){
   if(!S.approvedApplicants.find(a=>a.email===app.email))S.approvedApplicants.push({name:app.name,email:app.email});
   if(!S.members.includes(app.name))S.members.push(app.name);
   S.applications=S.applications.filter(a=>a.id!==id);
-  pushBin();renderApps();renderAdmMbrList();renderAll();updateAppsBadge();toast(app.name+' approved!','#22d47a');
+  pushToFirebase();renderApps();renderAdmMbrList();renderAll();updateAppsBadge();toast(app.name+' approved!','#22d47a');
 }
 function rejectApp(id){
   const app=S.applications.find(a=>a.id===id);if(!app)return;
   if(!confirm('Reject '+app.name+'?'))return;
-  S.applications=S.applications.filter(a=>a.id!==id);pushBin();renderApps();updateAppsBadge();toast('Rejected','#ff4d6d');
+  S.applications=S.applications.filter(a=>a.id!==id); pushToFirebase(); renderApps(); updateAppsBadge(); toast('Rejected','#ff4d6d');
 }
 function updateAppsBadge(){
   const cnt=S.applications.filter(a=>a.status==='pending').length;
@@ -970,7 +870,7 @@ function updateAppsBadge(){
   b.classList.toggle('hidden',cnt===0);b.textContent=cnt;
 }
 
-// ─── MEMBERS ─────────────────────────────────────────────────
+// ─── MEMBERS ───────────────────────────────────────────
 function addMemberDirectly(){
   if(!adminUnlocked)return toast('Unlock admin first','#ff4d6d');
   const name=(document.getElementById('nm-name').value||'').trim();const email=(document.getElementById('nm-email').value||'').trim();
@@ -979,12 +879,12 @@ function addMemberDirectly(){
   S.members.push(name);
   if(email&&!S.approvedApplicants.find(a=>a.email===email))S.approvedApplicants.push({name,email});
   document.getElementById('nm-name').value='';document.getElementById('nm-email').value='';
-  pushBin();closeOv('ov-add-mbr');renderAll();renderAdmMbrList();toast(name+' added!','#22d47a');
+  pushToFirebase(); closeOv('ov-add-mbr'); renderAll(); renderAdmMbrList(); toast(name+' added!','#22d47a');
 }
 function removeMember(name){
   if(!confirm('Remove '+name+' and all their transactions?'))return;
   S.members=S.members.filter(m=>m!==name);S.ledger=S.ledger.filter(e=>e.member!==name);S.approvedApplicants=S.approvedApplicants.filter(a=>a.name!==name);
-  pushBin();renderAll();renderAdmMbrList();toast(name+' removed','#ff4d6d');
+  pushToFirebase(); renderAll(); renderAdmMbrList(); toast(name+' removed','#ff4d6d');
 }
 function renderAdmMbrList(){
   const list=document.getElementById('adm-mbr-list');if(!list)return;
@@ -1000,7 +900,7 @@ function renderAdmMbrList(){
     </div>`).join('');
 }
 
-// ─── COMPUTE ─────────────────────────────────────────────────
+// ─── COMPUTE ───────────────────────────────────────────
 function balances(){
   const b={};S.members.forEach(m=>b[m]=0);
   [...S.ledger].reverse().forEach(e=>{if(b.hasOwnProperty(e.member)){if(e.type==='deposit'||e.type==='welfare')b[e.member]+=Number(e.amount);else if(e.type==='withdraw')b[e.member]-=Number(e.amount);}});
@@ -1016,7 +916,7 @@ function periodStats(start,end){
   return{savings,expenses,net:savings-expenses,txCount:txs.length};
 }
 
-// ─── RENDER ──────────────────────────────────────────────────
+// ─── RENDER ────────────────────────────────────────────
 function renderAll(){
   const bal=balances(),ts=totalSav(),te=totalExp(),cb=cashBal();
   const paid=S.members.filter(m=>bal[m]>0).length,pct=S.members.length?Math.round(paid/S.members.length*100):0;
@@ -1076,7 +976,7 @@ function applyMeta(){
   setEl('hdr-title',n.length>16?n.slice(0,14)+'…':n);setEl('hdr-sub',b);setEl('ws-members',S.members.length);
 }
 
-// ─── WHATSAPP ────────────────────────────────────────────────
+// ─── WHATSAPP ──────────────────────────────────────────
 function updateWaTab(){
   const link=S.whatsappLink||'',btn=document.getElementById('wa-link');
   if(link){btn.href=link;btn.style.display='inline-flex';setEl('wa-note','Opens WhatsApp directly');}
@@ -1089,10 +989,10 @@ function saveWaLink(){
   if(!adminUnlocked)return toast('Unlock admin first','#ff4d6d');
   const v=(document.getElementById('wa-inp').value||'').trim();
   if(v&&!v.startsWith('https://chat.whatsapp.com/'))return toast('Paste a valid WhatsApp invite link','#ff4d6d');
-  S.whatsappLink=v;pushBin();updateWaTab();toast(v?'WhatsApp link saved! ✅':'Link cleared','#25D366');
+  S.whatsappLink=v; pushToFirebase(); updateWaTab(); toast(v?'WhatsApp link saved! ✅':'Link cleared','#25D366');
 }
 
-// ─── LEDGER ──────────────────────────────────────────────────
+// ─── LEDGER / TX ───────────────────────────────────────
 function mgAddTx(){
   if(!adminUnlocked)return toast('Unlock admin first','#ff4d6d');
   const mbr=document.getElementById('mg-mbr').value,type=document.getElementById('mg-type').value;
@@ -1101,7 +1001,7 @@ function mgAddTx(){
   if(!mbr||!date||isNaN(amt)||amt<=0)return toast('Fill all required fields','#ff4d6d');
   S.ledger.unshift({id:Date.now(),date,member:mbr,type,amount:Math.round(amt),note});
   document.getElementById('mg-amt').value='';document.getElementById('mg-note').value='';
-  pushBin();closeOv('ov-add-tx');renderAll();toast(mbr+': '+type+' UGX '+fmt(amt,true),'#4F8EF7');
+  pushToFirebase(); closeOv('ov-add-tx'); renderAll(); toast(mbr+': '+type+' UGX '+fmt(amt,true),'#4F8EF7');
 }
 function openEditTx(i){
   if(!adminUnlocked)return;editTxIdx=i;const l=S.ledger[i];
@@ -1113,31 +1013,31 @@ function saveEditTx(){
   if(editTxIdx===null)return;const l=S.ledger[editTxIdx];
   l.date=document.getElementById('et-date').value||l.date;l.member=document.getElementById('et-mbr').value;l.type=document.getElementById('et-type').value;l.note=document.getElementById('et-note').value;
   const a=parseFloat(document.getElementById('et-amt').value);if(!isNaN(a)&&a>0)l.amount=Math.round(a);
-  pushBin();closeOv('ov-edit-tx');editTxIdx=null;renderAll();toast('Transaction updated','#F5A623');
+  pushToFirebase(); closeOv('ov-edit-tx'); editTxIdx=null; renderAll(); toast('Transaction updated','#F5A623');
 }
 function delTxConfirm(){
   if(editTxIdx===null)return;if(!confirm('Delete this transaction?'))return;
-  S.ledger.splice(editTxIdx,1);pushBin();closeOv('ov-edit-tx');editTxIdx=null;renderAll();toast('Deleted','#ff4d6d');
+  S.ledger.splice(editTxIdx,1); pushToFirebase(); closeOv('ov-edit-tx'); editTxIdx=null; renderAll(); toast('Deleted','#ff4d6d');
 }
 
-// ─── EXPENSES ────────────────────────────────────────────────
+// ─── EXPENSES ──────────────────────────────────────────
 function addExpense(){
   if(!adminUnlocked)return toast('Unlock admin first','#ff4d6d');
   const desc=(document.getElementById('ex-desc').value||'').trim();if(!desc)return toast('Enter description','#ff4d6d');
   const amt=parseFloat(document.getElementById('ex-amt').value)||0;if(amt<=0)return toast('Enter valid amount','#ff4d6d');
   S.expenses.push({id:Date.now(),desc,amount:Math.round(amt),date:document.getElementById('ex-date').value,category:document.getElementById('ex-cat').value});
   document.getElementById('ex-desc').value='';document.getElementById('ex-amt').value='';
-  pushBin();closeOv('ov-add-exp');renderAll();toast('Expense recorded','#F5A623');
+  pushToFirebase(); closeOv('ov-add-exp'); renderAll(); toast('Expense recorded','#F5A623');
 }
 
-// ─── CSV ─────────────────────────────────────────────────────
+// ─── CSV ───────────────────────────────────────────────
 function dlCSV(rows,name){
   const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=name;document.body.appendChild(a);a.click();a.remove();toast('Downloaded: '+name,'#22d47a');
 }
 function downloadLedger(){const bal=balances();dlCSV([['Date','Member','Type','Amount (UGX)','Note','Balance'],...S.ledger.map(l=>[l.date,l.member,l.type,l.amount,l.note||'',bal[l.member]||0])],'harvest_trust_ledger.csv');}
 
-// ─── NAVIGATION ──────────────────────────────────────────────
+// ─── NAVIGATION ────────────────────────────────────────
 function goTab(name,btn){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
   document.querySelectorAll('.ni').forEach(n=>n.classList.remove('on'));
@@ -1148,39 +1048,42 @@ function goTab(name,btn){
   if(name==='admin'){renderAdmMbrList();updateAppsBadge();}if(name==='chat'){updateWaTab();}
 }
 
-// ─── KEYBOARD ────────────────────────────────────────────────
+// ─── SHARE ─────────────────────────────────────────────
+let shareOpen=false;
+function toggleShare(){
+  shareOpen=!shareOpen;const b=document.getElementById('share-banner');
+  if(shareOpen){
+    b.classList.add('show');
+  }else b.classList.remove('show');
+}
+function doCopy(){
+  const v=document.getElementById('share-inp').value;
+  navigator.clipboard?.writeText(v).then(()=>{
+    const btn=document.getElementById('copy-b');
+    btn.textContent='Copied ✓';btn.classList.add('ok');
+    setTimeout(()=>{btn.textContent='Copy';btn.classList.remove('ok');},2500);
+    toast('Link copied! Share with members 🔗','#4F8EF7');
+  }).catch(()=>{try{document.getElementById('share-inp').select();document.execCommand('copy');toast('Copied!','#4F8EF7');}catch(e){}});
+}
+
+// ─── KEYBOARD ──────────────────────────────────────────
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape')document.querySelectorAll('.ov.on').forEach(o=>o.classList.remove('on'));
   if(e.key==='Enter'&&document.activeElement.id==='adm-pwd')doAdminLogin();
   if(e.key==='Enter'&&document.activeElement.id==='login-email')doMemberLogin();
 });
 
-// ─── INIT ────────────────────────────────────────────────────
+// ─── INIT ──────────────────────────────────────────────
 async function init() {
   const today = new Date().toISOString().split('T')[0];
   ['mg-date','ex-date'].forEach(id => { const el = document.getElementById(id); if (el) el.value = today; });
   const sn = localStorage.getItem('ht_myname'); if (sn) myName = sn;
 
-  const urlBin = getBinFromUrl();
-  if (urlBin) {
-    document.getElementById('welcome').style.display = 'none';
-    document.getElementById('loading').classList.add('show');
-    load(); // load cached data
-    const ok = await loadBin(urlBin);
-    document.getElementById('loading').classList.remove('show');
-    if (!ok) toast('Offline – showing cached data', '#F5A623');
-    applyMeta(); setEl('ws-members', S.members.length);
-    document.getElementById('app').classList.add('on');
-    renderAll(); updateWaTab(); setSdot('live');
-    startPoll();
-  } else {
-    load();
-    applyMeta(); setEl('ws-members', S.members.length);
-    if (binId) { setSdot('live'); startPoll(); }
-  }
+  loadLocal(); // load backup
+  applyMeta(); setEl('ws-members', S.members.length);
+  // Firebase listener already attached
 }
 init();
 </script>
 </body>
 </html>
-
