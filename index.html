@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <meta name="theme-color" content="#030012">
 <title>Harvest Trust · by Lwogamata</title>
-<!-- Firebase SDK (v8 compat) – moved to head to fix "firebase is not defined" -->
+<!-- Firebase SDK (v8 compat) -->
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -102,12 +102,63 @@ input,select,textarea,button{font-family:'DM Sans',sans-serif;}
 .w-pulse{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);width:8px;height:8px;background:var(--blue);border-radius:50%;box-shadow:0 0 18px var(--blue);opacity:0;animation:fsu .4s ease 2.8s forwards,pulsate 2.5s ease 3.2s infinite;}
 @keyframes pulsate{0%,100%{transform:translateX(-50%) scale(1);opacity:.8;}50%{transform:translateX(-50%) scale(2.5);opacity:.15;}}
 
-/* ── LOADING ── */
-#loading{position:fixed;inset:0;z-index:7000;background:var(--bg);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;}
+/* ── LOADING (FALLING LETTERS + DECOR) ── */
+#loading{
+  position:fixed;inset:0;z-index:7000;background:var(--bg);
+  display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+  /* extra decorative glow */
+  background: radial-gradient(circle at 30% 40%, rgba(99,102,241,.12) 0%, transparent 40%),
+              radial-gradient(circle at 70% 60%, rgba(245,158,11,.08) 0%, transparent 40%),
+              var(--bg);
+}
 #loading.show{display:flex;}
+
 .ld-icon{font-size:2.6rem;animation:ldBounce .9s ease-in-out infinite;}
 @keyframes ldBounce{0%,100%{transform:translateY(0) rotate(-5deg);}50%{transform:translateY(-10px) rotate(5deg);}}
-.ld-bar{width:150px;height:2px;background:rgba(255,255,255,.06);border-radius:99px;overflow:hidden;}
+
+/* Falling letters container */
+.ld-falling-letters{
+  display:flex;
+  justify-content:center;
+  gap:2px;
+  font-family:'Syne',sans-serif;
+  font-size:1.4rem;
+  font-weight:700;
+  background:linear-gradient(135deg, #fff, var(--blue), var(--purple));
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+  letter-spacing:-0.5px;
+  margin:4px 0;
+}
+.ld-falling-letters span{
+  display:inline-block;
+  animation: fallLetter 1.4s cubic-bezier(0.25, 0.1, 0.15, 1) infinite;
+  animation-fill-mode:both;
+  transform-origin:top;
+}
+/* delay each letter */
+.ld-falling-letters span:nth-child(1){animation-delay:0s;}
+.ld-falling-letters span:nth-child(2){animation-delay:0.08s;}
+.ld-falling-letters span:nth-child(3){animation-delay:0.16s;}
+.ld-falling-letters span:nth-child(4){animation-delay:0.24s;}
+.ld-falling-letters span:nth-child(5){animation-delay:0.32s;}
+.ld-falling-letters span:nth-child(6){animation-delay:0.4s;}
+.ld-falling-letters span:nth-child(7){animation-delay:0.48s;}
+.ld-falling-letters span:nth-child(8){animation-delay:0.56s;}
+.ld-falling-letters span:nth-child(9){animation-delay:0.64s;}
+.ld-falling-letters span:nth-child(10){animation-delay:0.72s;}
+.ld-falling-letters span:nth-child(11){animation-delay:0.8s;}
+.ld-falling-letters span:nth-child(12){animation-delay:0.88s;}
+.ld-falling-letters span:nth-child(13){animation-delay:0.96s;}
+
+@keyframes fallLetter{
+  0%{transform:translateY(-30px) rotate(-8deg);opacity:0;}
+  25%{transform:translateY(0) rotate(0deg);opacity:1;}
+  75%{transform:translateY(0) rotate(0deg);opacity:1;}
+  100%{transform:translateY(40px) rotate(12deg);opacity:0;}
+}
+
+.ld-bar{width:150px;height:2px;background:rgba(255,255,255,.06);border-radius:99px;overflow:hidden;position:relative;}
 .ld-fill{height:100%;background:linear-gradient(90deg,var(--blue),var(--purple),var(--amber));animation:ldAnim 1.6s ease-in-out infinite;}
 @keyframes ldAnim{0%{width:0;margin-left:0;}60%{width:100%;margin-left:0;}100%{width:0;margin-left:100%;}}
 
@@ -355,10 +406,14 @@ button{cursor:pointer;border:none;outline:none;transition:all .18s;}
   <div class="w-pulse"></div>
 </div>
 
-<!-- LOADING -->
+<!-- LOADING (with falling letters) -->
 <div id="loading">
   <div class="ld-icon">🌿</div>
-  <div style="font-size:.88rem;font-weight:500;color:var(--t2);">Harvest Trust</div>
+  <div class="ld-falling-letters">
+    <span>H</span><span>a</span><span>r</span><span>v</span><span>e</span><span>s</span><span>t</span>
+    <span>&nbsp;</span>
+    <span>T</span><span>r</span><span>u</span><span>s</span><span>t</span>
+  </div>
   <div style="font-size:.72rem;color:var(--t3);">Syncing live data…</div>
   <div class="ld-bar"><div class="ld-fill"></div></div>
 </div>
@@ -518,7 +573,7 @@ button{cursor:pointer;border:none;outline:none;transition:all .18s;}
   </div>
 </div>
 
-<!-- ─── MODALS ─── -->
+<!-- ─── MODALS ─── (unchanged, preserve all) -->
 
 <!-- ADMIN LOGIN -->
 <div class="ov" id="ov-admin" onclick="maybeClose(event,'ov-admin')">
@@ -534,22 +589,25 @@ button{cursor:pointer;border:none;outline:none;transition:all .18s;}
   </div>
 </div>
 
-<!-- APPLY (10 QUESTIONS, NO EMAIL) -->
+<!-- APPLY (11 QUESTIONS, ALL REQUIRED, WHATSAPP NUMBER) -->
 <div class="ov" id="ov-apply" onclick="maybeClose(event,'ov-apply')">
   <div class="bs">
     <div class="bs-title">📋 Apply to Join</div>
-    <p style="font-size:.82rem;color:var(--t2);margin-bottom:14px;">The admin will review and assign your login code.</p>
-    <div class="fld"><label class="inp-label">1. Full Name *</label><input class="inp" id="apply-name" placeholder="Your full name"/></div>
-    <div class="fld"><label class="inp-label">2. Phone Number *</label><input class="inp" id="apply-phone" type="tel" placeholder="+256 700 000000"/></div>
-    <div class="fld"><label class="inp-label">3. Occupation *</label><input class="inp" id="apply-occ" placeholder="e.g. Trader, Teacher, Farmer…"/></div>
-    <div class="fld"><label class="inp-label">4. Area / Village of Residence *</label><input class="inp" id="apply-area" placeholder="e.g. Nansana, Wakiso"/></div>
-    <div class="fld"><label class="inp-label">5. National ID / NIN</label><input class="inp" id="apply-nin" placeholder="CM900…(optional)"/></div>
-    <div class="fld"><label class="inp-label">6. Next of Kin – Name *</label><input class="inp" id="apply-kin-name" placeholder="Full name"/></div>
-    <div class="fld"><label class="inp-label">7. Next of Kin – Phone *</label><input class="inp" id="apply-kin-phone" type="tel" placeholder="+256 700 000000"/></div>
-    <div class="fld"><label class="inp-label">8. Why do you want to join? *</label><textarea class="inp" id="apply-why" placeholder="Your motivation…"></textarea></div>
-    <div class="fld"><label class="inp-label">9. Expected monthly contribution (UGX) *</label><input class="inp" id="apply-amount" type="number" placeholder="200000"/></div>
-    <div class="fld"><label class="inp-label">10. Have you been in a savings/ROSCA group before?</label>
-      <select class="inp" id="apply-prev"><option value="no">No – this is my first</option><option value="yes">Yes – briefly describe in notes</option></select>
+    <p style="font-size:.82rem;color:var(--t2);margin-bottom:14px;">All fields are required. The admin will review and send your login code via WhatsApp.</p>
+    <div class="fld"><label class="inp-label">1. Full Name *</label><input class="inp" id="apply-name" placeholder="Your full name" required/></div>
+    <div class="fld"><label class="inp-label">2. WhatsApp Number *</label><input class="inp" id="apply-phone" type="tel" placeholder="+256 700 000000" required/></div>
+    <div class="fld"><label class="inp-label">3. Occupation *</label><input class="inp" id="apply-occ" placeholder="e.g. Trader, Teacher, Farmer…" required/></div>
+    <div class="fld"><label class="inp-label">4. Area / Village of Residence *</label><input class="inp" id="apply-area" placeholder="e.g. Nansana, Wakiso" required/></div>
+    <div class="fld"><label class="inp-label">5. National ID / NIN *</label><input class="inp" id="apply-nin" placeholder="CM900…" required/></div>
+    <div class="fld"><label class="inp-label">6. Next of Kin – Name *</label><input class="inp" id="apply-kin-name" placeholder="Full name" required/></div>
+    <div class="fld"><label class="inp-label">7. Next of Kin – Phone *</label><input class="inp" id="apply-kin-phone" type="tel" placeholder="+256 700 000000" required/></div>
+    <div class="fld"><label class="inp-label">8. Why do you want to join? *</label><textarea class="inp" id="apply-why" placeholder="Your motivation…" required></textarea></div>
+    <div class="fld"><label class="inp-label">9. Expected monthly contribution (UGX) *</label><input class="inp" id="apply-amount" type="number" placeholder="200000" required/></div>
+    <div class="fld"><label class="inp-label">10. Have you been in a savings/ROSCA group before? *</label>
+      <select class="inp" id="apply-prev" required><option value="">– Select –</option><option value="no">No – this is my first</option><option value="yes">Yes – briefly describe in notes</option></select>
+    </div>
+    <div class="fld"><label class="inp-label">11. I agree to join the official WhatsApp group after approval *</label>
+      <select class="inp" id="apply-wa" required><option value="">– Select –</option><option value="yes">Yes, I will join the group</option><option value="no">No, I decline</option></select>
     </div>
     <div style="display:flex;gap:10px;">
       <button class="btn btn-sec" style="flex:1;" onclick="closeOv('ov-apply')">Cancel</button>
@@ -563,7 +621,7 @@ button{cursor:pointer;border:none;outline:none;transition:all .18s;}
   <div class="bs" style="text-align:center;">
     <div style="font-size:3rem;margin-bottom:10px;">⏳</div>
     <div class="bs-title">Application Submitted!</div>
-    <p style="font-size:.84rem;color:var(--t2);margin-bottom:20px;line-height:1.6;">Your application is pending review. The admin will assign you a login code once approved. Contact the admin to follow up.</p>
+    <p style="font-size:.84rem;color:var(--t2);margin-bottom:20px;line-height:1.6;">Your application is pending review. The admin will send your login code via WhatsApp once approved.</p>
     <button class="btn btn-blue" style="width:100%;" onclick="closeOv('ov-pending')">Got it!</button>
   </div>
 </div>
@@ -573,7 +631,7 @@ button{cursor:pointer;border:none;outline:none;transition:all .18s;}
   <div class="bs">
     <div style="text-align:center;font-size:2rem;margin-bottom:8px;">🔑</div>
     <div class="bs-title" style="text-align:center;">Member Login</div>
-    <p style="font-size:.84rem;color:var(--t2);margin-bottom:16px;">Enter the 6-character login code given to you by the admin.</p>
+    <p style="font-size:.84rem;color:var(--t2);margin-bottom:16px;">Enter the 6-character login code sent to your WhatsApp.</p>
     <div class="fld"><label class="inp-label">Login Code</label><input class="inp mono" id="login-code" placeholder="e.g. HT3X9A" maxlength="10" style="text-transform:uppercase;letter-spacing:3px;font-size:1.1rem;text-align:center;"/></div>
     <div style="display:flex;gap:10px;">
       <button class="btn btn-sec" style="flex:1;" onclick="closeOv('ov-login')">Cancel</button>
@@ -611,7 +669,7 @@ button{cursor:pointer;border:none;outline:none;transition:all .18s;}
   <div class="bs">
     <div class="bs-title">👤 Add Member</div>
     <div class="fld"><label class="inp-label">Full Name</label><input class="inp" id="nm-name" placeholder="e.g. Nakato Sarah"/></div>
-    <div class="fld"><label class="inp-label">Phone Number</label><input class="inp" id="nm-phone" type="tel" placeholder="+256 700 000000"/></div>
+    <div class="fld"><label class="inp-label">WhatsApp Number</label><input class="inp" id="nm-phone" type="tel" placeholder="+256 700 000000"/></div>
     <p style="font-size:.75rem;color:var(--t3);margin-bottom:14px;">A login code will be auto-generated. Share it with the member via WhatsApp.</p>
     <div style="display:flex;gap:10px;">
       <button class="btn btn-sec" style="flex:1;" onclick="closeOv('ov-add-mbr')">Cancel</button>
@@ -771,7 +829,6 @@ button{cursor:pointer;border:none;outline:none;transition:all .18s;}
       ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
       ctx.fillStyle=p.c+p.a+')';ctx.fill();
     });
-    // draw connections
     for(let i=0;i<pts.length;i++)for(let j=i+1;j<pts.length;j++){
       const dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=Math.sqrt(dx*dx+dy*dy);
       if(d<110){ctx.beginPath();ctx.moveTo(pts[i].x,pts[i].y);ctx.lineTo(pts[j].x,pts[j].y);ctx.strokeStyle=`rgba(99,102,241,${.06*(1-d/110)})`;ctx.lineWidth=.5;ctx.stroke();}
@@ -825,12 +882,12 @@ const dataRef = db.ref('harvestTrust');
 // ==================== GLOBAL STATE ====================
 let S={
   groupName:'Harvest Trust',branch:'by Lwogamata',
-  members:[],              // string names (backward compat)
-  memberDetails:{},        // {name:{phone,code,joinDate}}
+  members:[],              // string names
+  memberDetails:{},        // {name:{phone,code,joinDate,waAgree}}
   ledger:[],               // [{id,date,member,type,amount,note}] type: deposit|withdraw|welfare|fine
   expenses:[],
   applications:[],
-  approvedApplicants:[],   // [{name,code}]
+  approvedApplicants:[],   // [{name,code,phone,waAgree}]
   rotation:{
     order:[],
     currentIndex:0,
@@ -843,7 +900,7 @@ let S={
 };
 let adminUnlocked=false,loggedIn=false,myName='';
 let lfilt='all',ledgerShowAll=false,editTxIdx=null,curTab='home';
-const LKEY='ht_v4';
+const LKEY='ht_v5';
 const DAILY_CHECKED={};
 
 // ── LOCAL STORAGE ──
@@ -884,6 +941,11 @@ function generateCode(){
   const ch='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let c='';for(let i=0;i<6;i++)c+=ch[Math.floor(Math.random()*ch.length)];return c;
 }
+function openWhatsApp(phone){
+  if(!phone) return;
+  const url = `https://wa.me/${phone.replace(/[^0-9]/g,'')}`;
+  window.open(url,'_blank');
+}
 
 function openOv(id){
   if(id==='ov-add-tx')populateSel('mg-mbr');
@@ -914,25 +976,33 @@ function openApply(){document.querySelectorAll('.ov.on').forEach(o=>o.classList.
 function openLogin(){document.querySelectorAll('.ov.on').forEach(o=>o.classList.remove('on'));openOv('ov-login');}
 
 function submitApplication(){
-  const name=(document.getElementById('apply-name').value||'').trim();
-  const phone=(document.getElementById('apply-phone').value||'').trim();
-  if(!name||!phone){toast('Name and phone are required','#F43F5E');return;}
-  const existing=S.applications.find(a=>a.name.toLowerCase()===name.toLowerCase()&&a.status==='pending');
-  if(existing){toast('Already applied with this name','#F43F5E');return;}
+  const fields = ['apply-name','apply-phone','apply-occ','apply-area','apply-nin','apply-kin-name','apply-kin-phone','apply-why','apply-amount','apply-prev','apply-wa'];
+  let allFilled = true;
+  fields.forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el || !el.value.trim()) allFilled=false;
+  });
+  if(!allFilled){toast('All fields are required','#F43F5E');return;}
+  const name=document.getElementById('apply-name').value.trim();
+  const phone=document.getElementById('apply-phone').value.trim();
+  // check if phone already approved or pending
+  if((S.approvedApplicants||[]).some(a=>a.phone===phone)){toast('This phone number is already registered','#F43F5E');return;}
+  if((S.applications||[]).some(a=>a.phone===phone && a.status==='pending')){toast('You already have a pending application','#F43F5E');return;}
   S.applications.push({
     id:Date.now(),name,phone,
-    occ:(document.getElementById('apply-occ').value||'').trim(),
-    area:(document.getElementById('apply-area').value||'').trim(),
-    nin:(document.getElementById('apply-nin').value||'').trim(),
-    kinName:(document.getElementById('apply-kin-name').value||'').trim(),
-    kinPhone:(document.getElementById('apply-kin-phone').value||'').trim(),
-    why:(document.getElementById('apply-why').value||'').trim(),
-    amount:document.getElementById('apply-amount').value||'',
-    prev:document.getElementById('apply-prev').value||'no',
+    occ:document.getElementById('apply-occ').value.trim(),
+    area:document.getElementById('apply-area').value.trim(),
+    nin:document.getElementById('apply-nin').value.trim(),
+    kinName:document.getElementById('apply-kin-name').value.trim(),
+    kinPhone:document.getElementById('apply-kin-phone').value.trim(),
+    why:document.getElementById('apply-why').value.trim(),
+    amount:document.getElementById('apply-amount').value,
+    prev:document.getElementById('apply-prev').value,
+    waAgree:document.getElementById('apply-wa').value,
     status:'pending',date:new Date().toISOString().split('T')[0]
   });
   pushToFirebase();
-  ['apply-name','apply-phone','apply-occ','apply-area','apply-nin','apply-kin-name','apply-kin-phone','apply-why','apply-amount'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  fields.forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   closeOv('ov-apply');setTimeout(()=>openOv('ov-pending'),300);toast('Application submitted! 📋','#6366F1');
 }
 
@@ -1010,7 +1080,7 @@ function changePassword(){
   pushToFirebase();toast('Password updated ✓','#10B981');
 }
 
-// ── APPLICATIONS ──
+// ── APPLICATIONS (approve/reject work) ──
 function renderApps(){
   const list=document.getElementById('apps-list');if(!list)return;
   const pending=(S.applications||[]).filter(a=>a.status==='pending');
@@ -1021,7 +1091,7 @@ function renderApps(){
       <div class="app-meta">📞 ${esc(a.phone||'—')} · ${esc(a.date||'')} · ${esc(a.occ||'')} · ${esc(a.area||'')}</div>
       ${a.kinName?`<div class="micro" style="margin-top:4px;">Next of Kin: ${esc(a.kinName)} · ${esc(a.kinPhone||'')}</div>`:''}
       ${a.why?`<div class="app-why">"${esc(a.why)}"</div>`:''}
-      ${a.amount?`<div class="micro" style="margin-top:5px;">Contribution: UGX ${fmt(a.amount)}/month · Prior group: ${esc(a.prev||'no')}</div>`:''}
+      <div class="micro" style="margin-top:5px;">Contribution: UGX ${fmt(a.amount)}/month · Prior: ${esc(a.prev||'no')} · WhatsApp agree: ${a.waAgree}</div>
       <div style="display:flex;gap:8px;margin-top:10px;">
         <button class="btn btn-sm btn-blue" style="flex:1;" onclick="approveApp(${a.id})">✅ Approve</button>
         <button class="btn btn-sm btn-red" style="flex:1;" onclick="rejectApp(${a.id})">✕ Reject</button>
@@ -1033,10 +1103,12 @@ function approveApp(id){
   const code=generateCode();
   app.status='approved';
   if(!S.approvedApplicants)S.approvedApplicants=[];
-  if(!S.approvedApplicants.find(a=>a.name===app.name))S.approvedApplicants.push({name:app.name,code});
+  if(!S.approvedApplicants.find(a=>a.name===app.name)){
+    S.approvedApplicants.push({name:app.name,code,phone:app.phone,waAgree:app.waAgree});
+  }
   if(!S.members.includes(app.name))S.members.push(app.name);
   if(!S.memberDetails)S.memberDetails={};
-  S.memberDetails[app.name]={phone:app.phone||'',code,joinDate:new Date().toISOString().split('T')[0]};
+  S.memberDetails[app.name]={phone:app.phone||'',code,joinDate:new Date().toISOString().split('T')[0],waAgree:app.waAgree};
   S.applications=S.applications.filter(a=>a.id!==id);
   // add to rotation if not there
   if(!(S.rotation&&S.rotation.order&&S.rotation.order.includes(app.name))){
@@ -1044,7 +1116,14 @@ function approveApp(id){
     S.rotation.order.push(app.name);
   }
   pushToFirebase();renderApps();renderAdmMbrList();renderAll();renderRotation();updateAppsBadge();
-  toast(`${app.name} approved! Code: ${code} 🎉`,'#10B981');
+  // Provide buttons to copy code and open WhatsApp
+  const waNumber = app.phone;
+  const groupLink = S.whatsappLink ? `\n\nGroup invite: ${S.whatsappLink}` : '';
+  toast(`✅ ${app.name} approved! Code: ${code}`, '#10B981');
+  if(confirm(`Copy code and open WhatsApp to send to ${app.name}?`)){
+    navigator.clipboard?.writeText(`Your Harvest Trust login code is: ${code}. Use it to log in.${groupLink}`);
+    openWhatsApp(waNumber);
+  }
 }
 function rejectApp(id){
   const app=(S.applications||[]).find(a=>a.id===id);if(!app)return;
@@ -1063,19 +1142,23 @@ function addMemberDirectly(){
   if(!adminUnlocked)return toast('Unlock admin first','#F43F5E');
   const name=(document.getElementById('nm-name').value||'').trim();
   const phone=(document.getElementById('nm-phone').value||'').trim();
-  if(!name)return toast('Enter a name','#F43F5E');
+  if(!name||!phone)return toast('Enter name and phone','#F43F5E');
   if(S.members.includes(name))return toast('Member already exists','#F43F5E');
   const code=generateCode();
   S.members.push(name);
   if(!S.memberDetails)S.memberDetails={};
-  S.memberDetails[name]={phone,code,joinDate:new Date().toISOString().split('T')[0]};
+  S.memberDetails[name]={phone,code,joinDate:new Date().toISOString().split('T')[0],waAgree:'yes'};
   if(!S.approvedApplicants)S.approvedApplicants=[];
-  S.approvedApplicants.push({name,code});
+  S.approvedApplicants.push({name,code,phone,waAgree:'yes'});
   if(!S.rotation)S.rotation={order:[],currentIndex:0,history:[],weekStart:null};
   if(!S.rotation.order.includes(name))S.rotation.order.push(name);
   document.getElementById('nm-name').value='';document.getElementById('nm-phone').value='';
   pushToFirebase();closeOv('ov-add-mbr');renderAll();renderAdmMbrList();renderRotation();
-  toast(`${name} added! Code: ${code}`,'#10B981');
+  toast(`${name} added! Code: ${code}`, '#10B981');
+  if(confirm(`Copy code and open WhatsApp to send to ${name}?`)){
+    navigator.clipboard?.writeText(`Your Harvest Trust login code is: ${code}. Use it to log in.`);
+    openWhatsApp(phone);
+  }
 }
 function removeMember(name){
   if(!confirm('Remove '+name+' and all their transactions?'))return;
@@ -1094,6 +1177,7 @@ function renderAdmMbrList(){
     const det=(S.memberDetails&&S.memberDetails[m])||{};
     const app=(S.approvedApplicants||[]).find(a=>a.name===m);
     const code=det.code||app&&app.code||'—';
+    const phone=det.phone||app&&app.phone||'';
     return`<div style="padding:11px 12px;background:var(--card);border:1px solid var(--br);border-radius:10px;margin-bottom:7px;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
         <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
@@ -1103,6 +1187,7 @@ function renderAdmMbrList(){
             <div style="display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap;">
               <span class="code-pill">${esc(code)}</span>
               <span class="micro ${(bal[m]||0)>=0?'sv-green':'sv-red'}">UGX ${fmt(bal[m]||0)}</span>
+              ${phone?`<button class="btn-sm" style="background:transparent;border:1px solid var(--br);padding:4px 8px;" onclick="openWhatsApp('${phone}')">💬</button>`:''}
             </div>
           </div>
         </div>
@@ -1175,7 +1260,6 @@ function renderRotationHero(){
 
 function renderRotation(){
   renderRotationHero();
-  // Schedule list
   const list=document.getElementById('rot-sched-list');if(!list)return;
   const rot=S.rotation||{};const order=rot.order||[];const cur=rot.currentIndex||0;
   if(!order.length){
@@ -1196,7 +1280,6 @@ function renderRotation(){
         ${i===cur?`<div style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:.8rem;color:var(--amber);">UGX ${fmt(getWeeklyPool(),true)}</div>`:''}
       </div>`;}).join('');
   }
-  // History
   const hist=document.getElementById('rot-hist-list');if(!hist)return;
   const history=(rot.history||[]).slice(0,15);
   hist.innerHTML=history.length?history.map(h=>`
