@@ -11,10 +11,10 @@
 <style>
 :root{
   --bg:#030012;--bg2:#06001E;--bg3:#0A0030;--bg4:#100040;
-  /* Even brighter blues */
-  --blue:#A5B4FC;        /* was #818CF8 */
-  --blue2:#8A9CF0;       /* was #6D75E0 */
-  --blue3:rgba(165,180,252,.18); /* was rgba(129,140,248,.18) */
+  /* Brighter blues */
+  --blue:#A5B4FC;        /* main bright blue */
+  --blue2:#8A9CF0;       /* secondary */
+  --blue3:rgba(165,180,252,.18);
   --blue4:rgba(165,180,252,.09);
   --cyan:#22D3EE;--cyan2:rgba(34,211,238,.16);
   --amber:#F59E0B;--amber2:rgba(245,158,11,.2);--amber3:rgba(245,158,11,.09);
@@ -25,7 +25,7 @@
   --orange:#F97316;--orange2:rgba(249,115,22,.18);
   --t:#EEF0FF;--t2:#B0B7F0;  /* brighter secondary */
   --t3:#5D63B0;           /* a bit brighter for micro */
-  --br:rgba(255,255,255,.08);--br2:rgba(165,180,252,.28); /* updated */
+  --br:rgba(255,255,255,.08);--br2:rgba(165,180,252,.28);
   --card:rgba(255,255,255,.042);--card2:rgba(165,180,252,.09);
   --r:16px;--r2:12px;--r3:9px;
   --sh:0 12px 48px rgba(0,0,0,.7);
@@ -1211,10 +1211,13 @@ select.inp option{background:var(--bg3);}
   }
 
   window.exitToWelcome = function(){
-    document.getElementById('app').classList.remove('on');
-    currentMember = null;
+    // Ensure admin is locked on exit
     document.getElementById('adm-lock')?.classList.remove('hidden');
     document.getElementById('adm-panel')?.classList.add('hidden');
+    document.getElementById('rot-adv-btn')?.classList.add('hidden');
+
+    document.getElementById('app').classList.remove('on');
+    currentMember = null;
     document.getElementById('member-greeting')?.classList.remove('show');
     const welcome = document.getElementById('welcome');
     welcome.style.display = 'flex';
@@ -1239,6 +1242,11 @@ select.inp option{background:var(--bg3);}
   };
 
   window.doMemberLogin = async function(){
+    // Ensure admin is locked before member login
+    document.getElementById('adm-lock')?.classList.remove('hidden');
+    document.getElementById('adm-panel')?.classList.add('hidden');
+    document.getElementById('rot-adv-btn')?.classList.add('hidden');
+
     const phone = document.getElementById('login-phone')?.value.trim();
     const pw = document.getElementById('login-pw')?.value;
     if(!phone||!pw){ toast('Enter phone and password','#F43F5E'); return; }
@@ -1273,6 +1281,7 @@ select.inp option{background:var(--bg3);}
   window.lockAdmin = function(){
     document.getElementById('adm-lock')?.classList.remove('hidden');
     document.getElementById('adm-panel')?.classList.add('hidden');
+    document.getElementById('rot-adv-btn')?.classList.add('hidden');
     toast('Admin panel locked','#6366F1');
   };
 
@@ -1638,17 +1647,11 @@ select.inp option{background:var(--bg3);}
   window.editTransaction = function(key){
     const tx = transactions.find(t => t.id === key);
     if(!tx){ toast('Transaction not found', '#F43F5E'); return; }
-    // Pre-fill modal
-    const memberSel = document.getElementById('edit-tx-member');
-    const typeSel = document.getElementById('edit-tx-type');
-    const amountInp = document.getElementById('edit-tx-amount');
-    const descInp = document.getElementById('edit-tx-desc');
-    const idInp = document.getElementById('edit-tx-id');
-    if(memberSel) memberSel.value = tx.memberPhone || '';
-    if(typeSel) typeSel.value = tx.type || 'deposit';
-    if(amountInp) amountInp.value = tx.amount || 0;
-    if(descInp) descInp.value = tx.description || '';
-    if(idInp) idInp.value = key;
+    document.getElementById('edit-tx-member').value = tx.memberPhone || '';
+    document.getElementById('edit-tx-type').value = tx.type || 'deposit';
+    document.getElementById('edit-tx-amount').value = tx.amount || 0;
+    document.getElementById('edit-tx-desc').value = tx.description || '';
+    document.getElementById('edit-tx-id').value = key;
     openOv('ov-edit-tx');
   };
 
@@ -1664,7 +1667,6 @@ select.inp option{background:var(--bg3);}
     if(!db){ toast('Firebase not connected', '#F43F5E'); return; }
 
     try{
-      // Get old transaction to revert its effect
       const snap = await db.ref('transactions/' + key).once('value');
       const oldTx = snap.val();
       if(!oldTx){ toast('Original transaction not found', '#F43F5E'); return; }
@@ -1673,28 +1675,26 @@ select.inp option{background:var(--bg3);}
       if(oldTx.type === 'deposit' || oldTx.type === 'withdraw'){
         const oldMember = members.find(m => m.phone === oldTx.memberPhone);
         if(oldMember){
-          const oldChange = oldTx.type === 'deposit' ? -oldTx.amount : oldTx.amount; // reverse
+          const oldChange = oldTx.type === 'deposit' ? -oldTx.amount : oldTx.amount;
           await db.ref('members/' + oldMember.id).update({ balance: (oldMember.balance || 0) + oldChange });
         }
       }
 
-      // Apply new effect (if deposit/withdraw)
+      // Apply new effect
       let balanceChange = 0;
       if(type === 'deposit') balanceChange = amount;
       else if(type === 'withdraw') balanceChange = -amount;
-
       if(balanceChange !== 0){
         await db.ref('members/' + member.id).update({ balance: (member.balance || 0) + balanceChange });
       }
 
-      // Update transaction record (overwrite)
       const updatedTx = {
         memberPhone,
         memberName: member.name,
         type,
         amount,
         description: desc,
-        date: oldTx.date || Date.now()  // preserve original date or use new?
+        date: oldTx.date || Date.now()
       };
       await db.ref('transactions/' + key).set(updatedTx);
 
@@ -1703,7 +1703,7 @@ select.inp option{background:var(--bg3);}
     } catch(e){ toast('Error updating transaction', '#F43F5E'); }
   };
 
-  // ── DELETE TRANSACTION (now allows any transaction) ──
+  // ── DELETE TRANSACTION (any transaction) ──
   window.deleteTransaction = async function(key){
     if(!db){ toast('Firebase not connected', '#F43F5E'); return; }
     if(!confirm('Delete this transaction? This cannot be undone.')) return;
