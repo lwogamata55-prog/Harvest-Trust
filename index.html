@@ -10,7 +10,7 @@
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-/* ========== CSS (unchanged, but added a deposit-banner style) ========== */
+/* ========== CSS (unchanged, includes delete button style) ========== */
 :root{--bg:#030012;--bg2:#06001E;--bg3:#0A0030;--bg4:#100040;--blue:#6366F1;--blue2:#4F46E5;--blue3:rgba(99,102,241,.15);--blue4:rgba(99,102,241,.07);--cyan:#22D3EE;--cyan2:rgba(34,211,238,.13);--amber:#F59E0B;--amber2:rgba(245,158,11,.16);--amber3:rgba(245,158,11,.07);--green:#10B981;--green2:rgba(16,185,129,.14);--red:#F43F5E;--red2:rgba(244,63,94,.14);--purple:#A855F7;--purple2:rgba(168,85,247,.14);--t:#EEF0FF;--t2:#7B82C4;--t3:#2D3070;--br:rgba(255,255,255,.07);--br2:rgba(99,102,241,.22);--card:rgba(255,255,255,.038);--card2:rgba(99,102,241,.07);--r:16px;--r2:12px;--r3:9px;--sh:0 12px 48px rgba(0,0,0,.7);--nav:64px;--hdr:56px;}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 html,body{height:100%;background:var(--bg);color:var(--t);font-family:'DM Sans',sans-serif;overflow:hidden;overscroll-behavior:none;}
@@ -455,7 +455,7 @@ select.inp option{background:var(--bg3);}
   </div>
 </div>
 
-<!-- ========== MODALS (all unchanged, but included for completeness) ========== -->
+<!-- ========== MODALS (all unchanged, included for completeness) ========== -->
 <!-- ADMIN LOGIN MODAL -->
 <div class="ov" id="ov-admin" onclick="maybeClose(event,'ov-admin')">
   <div class="bs">
@@ -1064,8 +1064,13 @@ select.inp option{background:var(--bg3);}
     if (admList) {
       admList.innerHTML = members.map(m => `
         <div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--card);border-radius:var(--r2);margin-bottom:6px;">
-          <span><span class="code-pill">${m.name}</span> <span class="micro">${m.phone}</span></span>
-          <span class="mc-bal ${(m.balance||0) > 0 ? 'bp' : 'bz'}">UGX ${(m.balance||0).toLocaleString()}</span>
+          <div style="flex:1">
+            <span class="code-pill">${m.name}</span> <span class="micro">${m.phone}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="mc-bal ${(m.balance||0) > 0 ? 'bp' : 'bz'}">UGX ${(m.balance||0).toLocaleString()}</span>
+            <button class="txc-delete" style="width:auto;height:auto;padding:4px 8px;" onclick="deleteMember('${m.id}')">🗑️</button>
+          </div>
         </div>
       `).join('');
     }
@@ -1261,6 +1266,25 @@ select.inp option{background:var(--bg3);}
       await db.ref('rotation').update({ currentIndex: nextIdx, history });
       toast('Payout recorded and rotation advanced', '#10B981');
     } catch (e) { toast('Error', '#F43F5E'); }
+  };
+
+  // ---------- DELETE MEMBER ----------
+  window.deleteMember = async function(id) {
+    if (!db) { toast('Firebase not connected', '#F43F5E'); return; }
+    if (!confirm('Are you sure you want to delete this member? This will remove them from the group permanently.')) return;
+    try {
+      // Remove from members
+      await db.ref('members/' + id).remove();
+      // Remove from rotation order if present
+      if (rotation.order && rotation.order.includes(id)) {
+        const newOrder = rotation.order.filter(mid => mid !== id);
+        let newIndex = rotation.currentIndex;
+        if (newOrder.length === 0) newIndex = 0;
+        else if (rotation.currentIndex >= newOrder.length) newIndex = newOrder.length - 1;
+        await db.ref('rotation').update({ order: newOrder, currentIndex: newIndex });
+      }
+      toast('Member deleted', '#F43F5E');
+    } catch (e) { toast('Error deleting member', '#F43F5E'); }
   };
 
   // ---------- DELETE TRANSACTION ----------
