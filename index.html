@@ -9,6 +9,7 @@
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
+/* ========== ALL ORIGINAL STYLES (preserved) ========== */
 :root{
   --bg:#eef2ff;--bg2:#e0e7ff;--bg3:#ffffff;--bg4:#f8f9ff;
   --surf:rgba(255,255,255,.94);--surf2:rgba(255,255,255,.78);
@@ -405,11 +406,11 @@ select.inp option{background:#fff;}
 .adm-label{font-size:.6rem;font-weight:600;color:var(--t2);text-align:center;line-height:1.3;}
 .adm-badge{position:absolute;top:5px;right:5px;min-width:17px;height:17px;background:var(--red);border-radius:99px;font-size:.54rem;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0 3px;color:#fff;}
 
-/* DAILY CHECK */
-.daily-check{display:flex;align-items:center;gap:9px;padding:10px 11px;background:var(--surf);border:1px solid var(--br);border-radius:var(--r2);margin-bottom:6px;cursor:pointer;transition:border-color .15s;}
-.daily-check.checked{border-color:rgba(5,150,105,.35);background:rgba(5,150,105,.05);}
-.dc-box{width:21px;height:21px;border-radius:6px;border:2px solid var(--br2);display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0;transition:background .15s,border-color .15s;}
-.daily-check.checked .dc-box{background:var(--green);border-color:var(--green);}
+/* WEEKLY CHECK (renamed from daily) */
+.weekly-check{display:flex;align-items:center;gap:9px;padding:10px 11px;background:var(--surf);border:1px solid var(--br);border-radius:var(--r2);margin-bottom:6px;cursor:pointer;transition:border-color .15s;}
+.weekly-check.checked{border-color:rgba(5,150,105,.35);background:rgba(5,150,105,.05);}
+.wc-box{width:21px;height:21px;border-radius:6px;border:2px solid var(--br2);display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0;transition:background .15s,border-color .15s;}
+.weekly-check.checked .wc-box{background:var(--green);border-color:var(--green);}
 
 /* TRANSACTION ROW */
 .txc{background:var(--surf);border:1px solid var(--br);border-radius:var(--r2);padding:11px;margin-bottom:7px;display:flex;align-items:center;gap:10px;transition:background .15s;}
@@ -442,17 +443,7 @@ select.inp option{background:#fff;}
 .forgot-link a{color:var(--blue);font-size:.73rem;text-decoration:none;}
 .forgot-link a:hover{text-decoration:underline;}
 
-/* MEMBER GREETING */
-#member-greeting{background:linear-gradient(135deg,rgba(37,99,235,.12),rgba(124,58,237,.09),rgba(219,39,119,.06));border:1px solid rgba(37,99,235,.22);border-radius:var(--r);padding:13px;margin-bottom:10px;display:none;box-shadow:var(--sh);}
-#member-greeting.show{display:block;animation:pop .35s ease;}
-.mg-top{display:flex;align-items:center;gap:11px;}
-.mg-av{width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,var(--blue),var(--purple),var(--pink));display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:1.2rem;color:#fff;flex-shrink:0;box-shadow:0 0 14px rgba(37,99,235,.3);}
-.mg-name{font-family:'Syne',sans-serif;font-size:.95rem;font-weight:700;}
-.mg-phone{font-size:.68rem;color:var(--t3);margin-top:1px;}
-.mg-balance{text-align:right;margin-left:auto;}
-.mg-bal-lbl{font-size:.56rem;color:var(--t3);letter-spacing:1px;text-transform:uppercase;}
-.mg-bal-val{font-family:'JetBrains Mono',monospace;font-size:1rem;font-weight:700;color:var(--green);}
-
+/* MEMBER GREETING (removed – no longer needed) */
 /* DRAG REORDER ROTATION */
 .rot-drag-item{display:flex;align-items:center;gap:10px;padding:10px;background:var(--surf);border:1px solid var(--br);border-radius:var(--r2);margin-bottom:6px;cursor:grab;user-select:none;transition:box-shadow .2s,border-color .2s;}
 .rot-drag-item:active{cursor:grabbing;}
@@ -518,7 +509,7 @@ select.inp option{background:#fff;}
     <div class="w-stats">
       <div class="w-stat"><div class="w-stat-n" id="ws-members">0</div><div class="w-stat-l">Members</div></div>
       <div class="w-stat"><div class="w-stat-n">UGX</div><div class="w-stat-l">Currency</div></div>
-      <div class="w-stat"><div class="w-stat-n">Daily</div><div class="w-stat-l">Savings</div></div>
+      <div class="w-stat"><div class="w-stat-n">Weekly</div><div class="w-stat-l">Savings</div></div>
     </div>
     <button class="w-game-btn" onclick="openWelcomeGame()">
       <span class="w-game-icon">🏃</span><span>Play Dino Runner – Kill Boredom!</span><span style="opacity:.5;font-size:.75rem;">▶</span>
@@ -564,19 +555,12 @@ select.inp option{background:#fff;}
           <button class="copy-btn" onclick="doCopy()">Copy</button>
         </div>
       </div>
-      <div id="member-greeting">
-        <div class="mg-top">
-          <div class="mg-av" id="mg-av">?</div>
-          <div><div class="mg-name" id="mg-name">Welcome back!</div><div class="mg-phone" id="mg-phone"></div></div>
-          <div class="mg-balance"><div class="mg-bal-lbl">My Balance</div><div class="mg-bal-val" id="mg-bal">UGX 0</div></div>
-        </div>
-      </div>
       <!-- COMPACT STATS STRIP -->
       <div class="stats-strip">
         <div class="ss-tile ss-t-amber"><div class="ss-ico">💵</div><div class="ss-val sv-amber" id="h-cash">0</div><div class="ss-lbl">Cash</div></div>
         <div class="ss-tile ss-t-blue"><div class="ss-ico">🏦</div><div class="ss-val sv-blue" id="h-group-gross">0</div><div class="ss-lbl">Fund</div></div>
         <div class="ss-tile ss-t-green"><div class="ss-ico">📈</div><div class="ss-val sv-green" id="h-profit">0</div><div class="ss-lbl">Profit</div></div>
-        <div class="ss-tile ss-t-purple"><div class="ss-ico">📅</div><div class="ss-val sv-purple" id="h-rate">2000</div><div class="ss-lbl">Daily</div></div>
+        <div class="ss-tile ss-t-purple"><div class="ss-ico">📅</div><div class="ss-val sv-purple" id="h-rate">14000</div><div class="ss-lbl">Weekly</div></div>
       </div>
       <!-- ROTATION HERO -->
       <div class="rot-hero">
@@ -585,8 +569,8 @@ select.inp option{background:#fff;}
         <div class="rot-name" id="rot-beneficiary">—</div>
         <div class="rot-pool" id="rot-pool">Cash: UGX 0</div>
         <div class="rot-progress"><div class="rot-pf" id="rot-pbar" style="width:0%"></div></div>
-        <div class="rot-days"><span id="rot-day-label">Pool target</span><span id="rot-days-left">—</span></div>
-        <!-- ROTATION ORDER STRIP (bigger, more visible) -->
+        <div class="rot-days"><span id="rot-day-label">Weekly target</span><span id="rot-days-left">—</span></div>
+        <!-- ROTATION ORDER STRIP -->
         <div class="rot-order-strip" id="rot-order-strip">
           <div class="rot-order-label">📋 Rotation Order</div>
           <div class="rot-order-chips" id="rot-order-chips"></div>
@@ -604,7 +588,7 @@ select.inp option{background:#fff;}
       <!-- DEPOSIT BANNER -->
       <div class="deposit-banner">
         <span class="deposit-icon">📲</span>
-        <span class="deposit-text">Send savings to:</span>
+        <span class="deposit-text">Send weekly savings to:</span>
         <span class="deposit-number">0770371720</span>
       </div>
       <!-- MOTIVATION -->
@@ -690,7 +674,7 @@ select.inp option{background:#fff;}
       </div>
     </div>
 
-    <!-- ADMIN TAB -->
+    <!-- ADMIN TAB (scrollable) -->
     <div id="t-admin" class="tab">
       <div id="adm-lock" class="lock-wrap">
         <div style="font-size:3rem;">🔐</div>
@@ -705,16 +689,17 @@ select.inp option{background:#fff;}
         </div>
         <div class="adm-grid">
           <button class="adm-btn" onclick="openOv('ov-add-mbr')"><div class="adm-icon ai-purple">👤</div><div class="adm-label">Add Member</div></button>
-          <button class="adm-btn" onclick="openDailySavings()"><div class="adm-icon ai-green">📅</div><div class="adm-label">Daily Savings</div></button>
+          <button class="adm-btn" onclick="openWeeklySavings()"><div class="adm-icon ai-green">📅</div><div class="adm-label">Weekly Savings</div></button>
           <button class="adm-btn" onclick="openOv('ov-add-fine')"><div class="adm-icon ai-amber">⚡</div><div class="adm-label">Add Fine</div></button>
           <button class="adm-btn" onclick="openOv('ov-add-welfare')"><div class="adm-icon ai-purple">🤝</div><div class="adm-label">Add Welfare</div></button>
           <button class="adm-btn" onclick="openOv('ov-add-exp')"><div class="adm-icon ai-red">💸</div><div class="adm-label">Add Expense</div></button>
-          <button class="adm-btn" onclick="openOv('ov-cover-missed')"><div class="adm-icon ai-cyan">📆</div><div class="adm-label">Cover Missed Days</div></button>
+          <button class="adm-btn" onclick="openOv('ov-cover-missed')"><div class="adm-icon ai-cyan">📆</div><div class="adm-label">Cover Missed Weeks</div></button>
           <button class="adm-btn" onclick="openOv('ov-rot-manage')"><div class="adm-icon ai-blue">🔄</div><div class="adm-label">Reorder Rotation</div></button>
           <button class="adm-btn" onclick="openOv('ov-settings')"><div class="adm-icon ai-cyan">⚙️</div><div class="adm-label">Settings</div></button>
           <button class="adm-btn" id="adm-apps-btn" onclick="openOv('ov-apps')" style="position:relative;"><div class="adm-icon ai-amber">📬</div><div class="adm-label">Applications</div><div class="adm-badge hidden" id="apps-badge">0</div></button>
           <button class="adm-btn" onclick="exportCSV()"><div class="adm-icon ai-green">⬇</div><div class="adm-label">Export CSV</div></button>
           <button class="adm-btn" onclick="openOv('ov-reset')"><div class="adm-icon ai-red">⚠️</div><div class="adm-label">Reset Group</div></button>
+          <button class="adm-btn" onclick="resetDataKeepMembers()"><div class="adm-icon ai-cyan">🔄</div><div class="adm-label">Reset Data (Keep Members)</div></button>
           <button class="adm-btn" onclick="openOv('ov-rot-manage');markPaidBtn()"><div class="adm-icon ai-green">✅</div><div class="adm-label">Mark Paid</div></button>
         </div>
         <div class="sec-h">Members & Codes</div>
@@ -772,17 +757,7 @@ select.inp option{background:#fff;}
   </div>
 </div>
 
-<div class="ov" id="ov-login" onclick="maybeClose(event,'ov-login')">
-  <div class="bs">
-    <div style="text-align:center;font-size:1.9rem;margin-bottom:7px;">🔑</div>
-    <div class="bs-title" style="text-align:center;">Member Login</div>
-    <p style="font-size:.82rem;color:var(--t2);margin-bottom:14px;">Enter your WhatsApp number and password.</p>
-    <div class="fld"><label class="inp-label">WhatsApp Number</label><input class="inp" id="login-phone" type="tel" placeholder="+256 700 000000"/></div>
-    <div class="fld"><label class="inp-label">Password</label><div class="pwd-row"><input class="inp" id="login-pw" type="password" placeholder="Your password"/><button class="pwd-eye" onclick="togglePwd('login-pw')">👁</button></div></div>
-    <div class="forgot-link"><a href="#" onclick="event.preventDefault();openForgotPassword();">Forgot password?</a></div>
-    <div style="display:flex;gap:9px;margin-top:11px;"><button class="btn btn-sec" style="flex:1;" onclick="closeOv('ov-login')">Cancel</button><button class="btn btn-blue" style="flex:1;" onclick="doMemberLogin()">Login</button></div>
-  </div>
-</div>
+<!-- No login modal – removed -->
 
 <div class="ov" id="ov-forgot" onclick="maybeClose(event,'ov-forgot')">
   <div class="bs">
@@ -834,18 +809,18 @@ select.inp option{background:#fff;}
   </div>
 </div>
 
-<!-- COVER MISSED DAYS MODAL -->
+<!-- COVER MISSED WEEKS MODAL (updated) -->
 <div class="ov" id="ov-cover-missed" onclick="maybeClose(event,'ov-cover-missed')">
   <div class="bs">
-    <div class="bs-title">📆 Cover Missed Savings</div>
-    <p style="font-size:.82rem;color:var(--t2);margin-bottom:14px;">Select a member and choose which past days to record savings for (backdated).</p>
+    <div class="bs-title">📆 Cover Missed Weeks</div>
+    <p style="font-size:.82rem;color:var(--t2);margin-bottom:14px;">Select a member and choose which past weeks to record savings for (backdated).</p>
     <div class="fld"><label class="inp-label">Member</label><select class="inp" id="cover-member"><option value="">Select member</option></select></div>
     <div class="fld">
-      <label class="inp-label">Select Missed Days (last 14 days)</label>
-      <div id="cover-dates" style="margin-top:6px;"></div>
+      <label class="inp-label">Select Missed Weeks (last 4 weeks)</label>
+      <div id="cover-weeks" style="margin-top:6px;"></div>
     </div>
     <div style="background:rgba(217,119,6,.07);border:1px solid rgba(217,119,6,.2);border-radius:10px;padding:10px;margin-bottom:14px;font-size:.78rem;color:var(--amber);">
-      💡 Each selected day will record a savings of <strong id="cover-daily-amt">UGX 2,000</strong>
+      💡 Each selected week will record a savings of <strong id="cover-weekly-amt">UGX 14,000</strong>
     </div>
     <div style="display:flex;gap:9px;"><button class="btn btn-sec" style="flex:1;" onclick="closeOv('ov-cover-missed')">Cancel</button><button class="btn btn-blue" style="flex:1;" onclick="saveCoverMissed()">Record Savings</button></div>
   </div>
@@ -893,13 +868,13 @@ select.inp option{background:#fff;}
   </div>
 </div>
 
-<div class="ov" id="ov-daily" onclick="maybeClose(event,'ov-daily')">
+<div class="ov" id="ov-weekly" onclick="maybeClose(event,'ov-weekly')">
   <div class="bs">
-    <div class="bs-title">📅 Daily Savings</div>
-    <p style="font-size:.87rem;color:var(--t2);margin-bottom:14px;">Mark members who saved today.</p>
-    <div id="daily-list"></div>
-    <button class="btn btn-green" style="width:100%;margin-top:11px;" onclick="saveDaily()">Save Today's Savings</button>
-    <button class="btn btn-sec" style="width:100%;margin-top:7px;" onclick="closeOv('ov-daily')">Cancel</button>
+    <div class="bs-title">📅 Weekly Savings</div>
+    <p style="font-size:.87rem;color:var(--t2);margin-bottom:14px;">Mark members who saved this week.</p>
+    <div id="weekly-list"></div>
+    <button class="btn btn-green" style="width:100%;margin-top:11px;" onclick="saveWeekly()">Save This Week's Savings</button>
+    <button class="btn btn-sec" style="width:100%;margin-top:7px;" onclick="closeOv('ov-weekly')">Cancel</button>
   </div>
 </div>
 
@@ -908,7 +883,7 @@ select.inp option{background:#fff;}
     <div class="bs-title">⚙️ Settings</div>
     <div class="fld"><label class="inp-label">Group Name</label><input class="inp" id="set-groupname" value="Harvest Trust"/></div>
     <div class="fld"><label class="inp-label">WhatsApp Group Link</label><input class="inp" id="set-whatsapp" placeholder="https://chat.whatsapp.com/..."/></div>
-    <div class="fld"><label class="inp-label">Daily Savings (UGX)</label><input class="inp" id="set-daily" type="number" value="2000"/></div>
+    <div class="fld"><label class="inp-label">Weekly Savings (UGX)</label><input class="inp" id="set-weekly" type="number" value="14000"/></div>
     <div class="fld"><label class="inp-label">Late Fine (UGX)</label><input class="inp" id="set-fine" type="number" value="5000"/></div>
     <button class="btn btn-blue" style="width:100%;" onclick="doSaveSettings()">Save Settings</button>
     <button class="btn btn-sec" style="width:100%;margin-top:7px;" onclick="closeOv('ov-settings')">Cancel</button>
@@ -939,7 +914,7 @@ select.inp option{background:#fff;}
   frame();
 })();
 
-/* ─── LION SPLASH SEQUENCE (from provided script) ─── */
+/* ─── LION SPLASH SEQUENCE ─── */
 (function(){
   const subPhrases = [
     "preparing your pride",
@@ -966,12 +941,10 @@ select.inp option{background:#fff;}
     clearInterval(iv);
     const lion = document.getElementById('lion-splash');
     lion.classList.add('out');
-    // Show the original loading screen
     const loading = document.getElementById('loading');
     loading.classList.add('show');
     setTimeout(() => {
       lion.style.display = 'none';
-      // After another 1.8s, hide loading and show welcome (original flow)
       setTimeout(() => {
         loading.classList.remove('show');
         // Show welcome
@@ -985,7 +958,6 @@ select.inp option{background:#fff;}
     }, 1000);
   }, 3200);
 
-  // Keep these in outer scope for the sequence above
   function animateWelcomeTitle(){
     const wt=document.getElementById('wt');if(!wt)return;
     wt.innerHTML=`<div class="wt-line wt-harvest"><span class="wt-letter">H</span><span class="wt-letter">a</span><span class="wt-letter">r</span><span class="wt-letter">v</span><span class="wt-letter">e</span><span class="wt-letter">s</span><span class="wt-letter">t</span></div><div class="wt-line wt-trust"><span class="wt-letter">T</span><span class="wt-letter">r</span><span class="wt-letter">u</span><span class="wt-letter">s</span><span class="wt-letter">t</span></div>`;
@@ -993,7 +965,7 @@ select.inp option{background:#fff;}
   }
   function updateWelcomeButtons(){
     const c=document.getElementById('welcome-buttons');if(!c)return;
-    c.innerHTML=`<div class="w-btn-row"><button class="w-btn w-btn-primary" onclick="openApply()">📝 Apply to Join</button><button class="w-btn w-btn-outline" onclick="openLogin()">🔑 Login</button></div><div class="w-btn-row"><button class="w-btn w-btn-outline" onclick="openOv('ov-admin')" style="flex:0 0 auto;padding:12px 20px;">🔐 Admin</button><button class="w-btn w-btn-ghost" onclick="exitWelcome()">👋 Exit</button></div>`;
+    c.innerHTML=`<div class="w-btn-row"><button class="w-btn w-btn-primary" onclick="openApply()">📝 Apply to Join</button><button class="w-btn w-btn-outline" onclick="enterDashboard()">🚪 Enter Dashboard</button></div><div class="w-btn-row"><button class="w-btn w-btn-outline" onclick="openOv('ov-admin')" style="flex:0 0 auto;padding:12px 20px;">🔐 Admin</button><button class="w-btn w-btn-ghost" onclick="exitWelcome()">👋 Exit</button></div>`;
   }
   function updateMotivation(){
     const quotes=["💪 A little saving today, a fortune tomorrow!","💰 Every coin saved brings you closer to your goal.","🌟 Consistency is the key to building wealth.","📈 Your future self will thank you for saving today.","🚀 Small drops make an ocean – keep saving!","🎯 Stay focused, stay disciplined, stay saving.","💎 Savings are the foundation of financial freedom.","🌱 Plant the seed of savings now, reap the harvest later.","🏆 You're one step closer to your dream with every deposit.","⚡ Save smart, live large!","✨ Your wallet will thank you – save every day!","🌈 Build the life you want, one coin at a time.","🔥 Discipline beats motivation – save today!","🦁 Strong savers build strong futures.","🌻 Every saving is a vote for your future self."];
@@ -1001,11 +973,21 @@ select.inp option{background:#fff;}
     const m=quotes[d%quotes.length];
     ['motivation-banner','w-motivation'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerText=m;});
   }
-  // loadAllData is defined inside the main IIFE – we expose it after that runs
   function loadAllData(){ window._loadAllData && window._loadAllData(); }
+  window.enterDashboard = function(){
+    // Directly show app, no login
+    const w = document.getElementById('welcome');
+    w.classList.add('out');
+    setTimeout(()=>{
+      w.style.display='none';
+      document.getElementById('app').classList.add('on');
+      document.getElementById('sdot')?.classList.add('live');
+    },900);
+    loadAllData();
+  };
 })();
 
-/* ─── DINO RUNNER ─── */
+/* ─── DINO RUNNER (unchanged) ─── */
 (function(){
   const CW=460,CH=190,GROUND=140;
   let canvas,ctx,animId=null,gameRunning=false;
@@ -1056,7 +1038,7 @@ select.inp option{background:#fff;}
 })();
 
 /* ════════════════════════════════════
-   MAIN APP
+   MAIN APP – updated with weekly savings, direct entry, reset data keep members, fixed payout
 ════════════════════════════════════ */
 (function(){
   const firebaseConfig={
@@ -1075,21 +1057,17 @@ select.inp option{background:#fff;}
   }
 
   /* ── STATE ── */
-  let currentMember=null;
   let members=[];
   let transactions=[];
   let rotation={order:[],currentIndex:0,history:[]};
-  let settings={groupName:'Harvest Trust',dailyAmount:2000,fineAmount:5000,whatsappLink:''};
-  let adminUnlocked=false; // tracks admin lock state for reactive UI
+  let settings={groupName:'Harvest Trust',weeklyAmount:14000,fineAmount:5000,whatsappLink:''};
+  let adminUnlocked=false;
   let dragOrder=[];
-  let coverDates={};
+  let coverWeeks={}; // for missed weeks
 
-  /* ── COMPUTED BALANCES ── */
-  // Always compute balances from transactions — avoids sync bugs
-  let memberBalances={}; // phone -> balance (computed)
+  let memberBalances={};
   let cashFromDeposits=0, groupProfit=0, totalDeposits=0, totalExpenses=0, totalFines=0, totalWelfare=0;
 
-  /* ── MOTIVATION ── */
   const quotes=[
     "💪 A little saving today, a fortune tomorrow!",
     "💰 Every coin saved brings you closer to your goal.",
@@ -1110,7 +1088,6 @@ select.inp option{background:#fff;}
   function getDailyQ(){const d=Math.floor((new Date()-new Date(new Date().getFullYear(),0,0))/86400000);return quotes[d%quotes.length];}
   function updateMotivation(){const m=getDailyQ();['motivation-banner','w-motivation'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerText=m;});}
 
-  /* ── HELPERS ── */
   window.toast=function(msg,color='#059669'){
     const w=document.getElementById('twrap'),t=document.createElement('div');
     t.className='toast';
@@ -1119,14 +1096,14 @@ select.inp option{background:#fff;}
   };
   window.openOv=function(id){
     document.getElementById(id)?.classList.add('on');
-    if(['ov-add-fine','ov-add-welfare','ov-daily'].includes(id)) populateMemberDropdowns();
+    if(['ov-add-fine','ov-add-welfare','ov-weekly'].includes(id)) populateMemberDropdowns();
     if(id==='ov-apps') loadApplications();
-    if(id==='ov-daily') loadDailyList();
+    if(id==='ov-weekly') loadWeeklyList();
     if(id==='ov-cover-missed') openCoverMissed();
     if(id==='ov-settings'){
       document.getElementById('set-groupname').value=settings.groupName;
       document.getElementById('set-whatsapp').value=settings.whatsappLink||'';
-      document.getElementById('set-daily').value=settings.dailyAmount;
+      document.getElementById('set-weekly').value=settings.weeklyAmount;
       document.getElementById('set-fine').value=settings.fineAmount;
     }
     if(id==='ov-rot-manage') buildDragRotation();
@@ -1136,17 +1113,10 @@ select.inp option{background:#fff;}
   window.maybeClose=function(e,id){if(e.target.classList.contains('ov'))closeOv(id);};
   window.togglePwd=function(i){const el=document.getElementById(i);if(el)el.type=el.type==='password'?'text':'password';};
 
-  /* ── SHOW/HIDE APP ── */
-  function showApp(){
-    const w=document.getElementById('welcome');w.classList.add('out');
-    setTimeout(()=>{w.style.display='none';document.getElementById('app').classList.add('on');document.getElementById('sdot')?.classList.add('live');},900);
-    loadAllData();
-  }
+  function showApp(){ /* already handled by enterDashboard */ }
   window.exitToWelcome=function(){
     setAdminUnlocked(false);
     document.getElementById('app').classList.remove('on');
-    currentMember=null;
-    document.getElementById('member-greeting')?.classList.remove('show');
     const w=document.getElementById('welcome');w.style.display='flex';w.classList.remove('out');
     document.getElementById('sdot')?.classList.remove('live');
     toast('Logged out 👋','#6366F1');
@@ -1163,42 +1133,21 @@ select.inp option{background:#fff;}
       document.getElementById('adm-panel')?.classList.add('hidden');
       document.getElementById('rot-manage-btn').style.display='none';
     }
-    // Always refresh ledger and recent with current admin state
     loadLedger('all');
     updateHomeRecent();
     updateRotationUI();
   }
 
-  /* ── LOGIN ── */
   window.doAdminLogin=function(){
     const pwd=document.getElementById('adm-pwd')?.value;
     if(!pwd){toast('Enter admin password','#dc2626');return;}
     if(pwd!=='admin123'){toast('Wrong password','#dc2626');return;}
     closeOv('ov-admin');
-    showApp();
-    setTimeout(()=>{setAdminUnlocked(true);goTab('admin',document.getElementById('ni-admin'));},1100);
+    setTimeout(()=>{setAdminUnlocked(true);goTab('admin',document.getElementById('ni-admin'));},100);
     toast('Admin access granted ✅','#059669');
   };
-  window.doMemberLogin=async function(){
-    const phone=document.getElementById('login-phone')?.value.trim();
-    const pw=document.getElementById('login-pw')?.value;
-    if(!phone||!pw){toast('Enter phone and password','#dc2626');return;}
-    if(!db){toast('Firebase not connected','#dc2626');return;}
-    try{
-      const snap=await db.ref('members').orderByChild('phone').equalTo(phone).once('value');
-      const data=snap.val();
-      if(!data){toast('No account found with that number','#dc2626');return;}
-      const[id,member]=Object.entries(data)[0];
-      if(member.password!==pw){toast('Wrong password','#dc2626');return;}
-      currentMember={...member,id};
-      closeOv('ov-login');
-      showApp();
-      setTimeout(()=>updateMemberGreeting(),1200);
-      toast(`Welcome back, ${member.name}! 🌿`,'#059669');
-    }catch(e){console.error(e);toast('Login error – check connection','#dc2626');}
-  };
   window.lockAdmin=function(){setAdminUnlocked(false);toast('Panel locked','#6366F1');};
-  window.openForgotPassword=function(){closeOv('ov-login');openOv('ov-forgot');};
+  window.openForgotPassword=function(){openOv('ov-forgot');};
   window.doForgotPassword=async function(){
     const phone=document.getElementById('forgot-phone')?.value.trim();
     if(!phone||!db){toast('Enter number','#dc2626');return;}
@@ -1209,23 +1158,9 @@ select.inp option{background:#fff;}
     }catch(e){toast('Error','#dc2626');}
   };
 
-  /* ── WELCOME BUTTONS ── */
-  function updateWelcomeButtons(){
-    document.getElementById('welcome-buttons').innerHTML=`
-      <div class="w-btn-row"><button class="w-btn w-btn-primary" onclick="openApply()">📝 Apply to Join</button><button class="w-btn w-btn-outline" onclick="openLogin()">🔑 Login</button></div>
-      <div class="w-btn-row"><button class="w-btn w-btn-outline" onclick="openOv('ov-admin')" style="flex:0 0 auto;padding:12px 20px;">🔐 Admin</button><button class="w-btn w-btn-ghost" onclick="exitWelcome()">👋 Exit</button></div>`;
-  }
-  window.openApply=function(){closeOv('ov-admin');closeOv('ov-login');openOv('ov-apply');};
-  window.openLogin=function(){closeOv('ov-admin');closeOv('ov-apply');openOv('ov-login');};
+  window.openApply=function(){closeOv('ov-admin');openOv('ov-apply');};
   window.exitWelcome=function(){toast('Goodbye! 👋');};
 
-  function animateWelcomeTitle(){
-    const wt=document.getElementById('wt');if(!wt)return;
-    wt.innerHTML=`<div class="wt-line wt-harvest"><span class="wt-letter">H</span><span class="wt-letter">a</span><span class="wt-letter">r</span><span class="wt-letter">v</span><span class="wt-letter">e</span><span class="wt-letter">s</span><span class="wt-letter">t</span></div><div class="wt-line wt-trust"><span class="wt-letter">T</span><span class="wt-letter">r</span><span class="wt-letter">u</span><span class="wt-letter">s</span><span class="wt-letter">t</span></div>`;
-    wt.querySelectorAll('.wt-letter').forEach((l,i)=>{l.style.animationDelay=(0.5+i*.06)+'s';});
-  }
-
-  /* ── NAVIGATION ── */
   window.goTab=function(tab,btn){
     document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
     document.getElementById(`t-${tab}`)?.classList.add('on');
@@ -1246,14 +1181,13 @@ select.inp option{background:#fff;}
     if(btn){btn.style.borderColor='var(--blue)';btn.style.color='var(--blue)';}
     loadLedger(f);
   };
-  window.openDailySavings=function(){openOv('ov-daily');};
+  window.openWeeklySavings=function(){openOv('ov-weekly');};
 
-  /* ── FIREBASE LISTENERS ── */
   function loadAllData(){
     if(!db)return;
     db.ref('members').on('value',snap=>{
       members=snap.val()?Object.entries(snap.val()).map(([id,m])=>({...m,id})):[];
-      updateMembersUI();computePots();updateMemberGreeting();
+      updateMembersUI();computePots();
       document.getElementById('ws-members').innerText=members.length;
     });
     db.ref('transactions').on('value',snap=>{
@@ -1262,12 +1196,11 @@ select.inp option{background:#fff;}
     });
     db.ref('rotation').on('value',snap=>{rotation=snap.val()||{order:[],currentIndex:0,history:[]};updateRotationUI();});
     db.ref('settings').on('value',snap=>{
-      settings=snap.val()||{groupName:'Harvest Trust',dailyAmount:2000,fineAmount:5000,whatsappLink:''};
+      settings=snap.val()||{groupName:'Harvest Trust',weeklyAmount:14000,fineAmount:5000,whatsappLink:''};
       document.getElementById('hdr-title').innerText=settings.groupName;
-      document.getElementById('h-rate').innerText=settings.dailyAmount.toLocaleString();
-      // Update cover missed daily amount hint
-      const cdel=document.getElementById('cover-daily-amt');
-      if(cdel)cdel.textContent=`UGX ${settings.dailyAmount.toLocaleString()}`;
+      document.getElementById('h-rate').innerText=settings.weeklyAmount.toLocaleString();
+      const cdel=document.getElementById('cover-weekly-amt');
+      if(cdel)cdel.textContent=`UGX ${settings.weeklyAmount.toLocaleString()}`;
     });
     db.ref('applications').orderByChild('status').equalTo('pending').on('value',snap=>{
       const c=snap.val()?Object.keys(snap.val()).length:0;
@@ -1277,7 +1210,6 @@ select.inp option{background:#fff;}
     updateMotivation();
   }
 
-  /* ── COMPUTE POTS (from transactions – no Firebase balance field) ── */
   function computePots(){
     let cash=0,profit=0,deps=0,exp=0,fines=0,welf=0;
     memberBalances={};
@@ -1294,7 +1226,7 @@ select.inp option{background:#fff;}
       else if(tx.type==='expense'){profit-=a;exp+=a;}
       else if(tx.type==='payout'){cash-=a;}
     });
-    cashFromDeposits=Math.max(0,cash); // never show negative cash
+    cashFromDeposits=Math.max(0,cash);
     groupProfit=profit;
     totalDeposits=deps;totalExpenses=exp;totalFines=fines;totalWelfare=welf;
     updateStats();
@@ -1307,22 +1239,8 @@ select.inp option{background:#fff;}
     document.getElementById('bs-s').innerText=totalDeposits.toLocaleString();
     document.getElementById('bs-e').innerText=totalExpenses.toLocaleString();
     document.getElementById('bs-n').innerText=groupProfit.toLocaleString();
-    if(currentMember)updateMemberGreeting();
   }
 
-  function updateMemberGreeting(){
-    if(!currentMember)return;
-    const card=document.getElementById('member-greeting');if(!card)return;
-    card.classList.add('show');
-    const m=members.find(x=>x.id===currentMember.id)||currentMember;
-    const bal=memberBalances[m.phone]||0; // computed from transactions
-    document.getElementById('mg-av').innerText=(m.name||'?').charAt(0).toUpperCase();
-    document.getElementById('mg-name').innerText=m.name;
-    document.getElementById('mg-phone').innerText=m.phone||'';
-    document.getElementById('mg-bal').innerText=`UGX ${Math.max(0,bal).toLocaleString()}`;
-  }
-
-  /* ── SAVINGS ADVICE ENGINE ── */
   function updateSavingsAdvice(){
     const list=document.getElementById('advice-list');
     if(!list||members.length===0){if(list)list.innerHTML='<div style="text-align:center;color:var(--t3);font-size:.78rem;padding:10px;">No members yet.</div>';return;}
@@ -1331,7 +1249,7 @@ select.inp option{background:#fff;}
     const rows=members.map(m=>{
       const mTx=transactions.filter(t=>t.memberPhone===m.phone&&t.type==='deposit');
       const recentTx=mTx.filter(t=>(today-t.date)<sevenDays);
-      const expectedWeekly=settings.dailyAmount*7;
+      const expectedWeekly=settings.weeklyAmount;
       const ratio=expectedWeekly>0?recentTx.reduce((s,t)=>s+t.amount,0)/expectedWeekly:0;
       const streak=countStreak(mTx);
       const totalSaved=memberBalances[m.phone]||0;
@@ -1341,16 +1259,16 @@ select.inp option{background:#fff;}
         comment='No savings recorded yet. Start saving today – every shilling counts!';
       } else if(ratio>=0.9&&streak>=5){
         cls='good';badge='badge-good';
-        comment=`Excellent! ${streak}-day streak. You are a financial champion – keep it up!`;
+        comment=`Excellent! ${streak}-week streak. You are a financial champion – keep it up!`;
       } else if(ratio>=0.6){
         cls='good';badge='badge-good';
-        comment=`Good pace! ${Math.round(ratio*100)}% of weekly target hit. Aim for 7 days straight!`;
+        comment=`Good pace! ${Math.round(ratio*100)}% of weekly target hit. Aim for full weeks!`;
       } else if(ratio>=0.3){
         cls='warn';badge='badge-warn';
-        comment=`Only ${Math.round(ratio*100)}% of weekly target. Try to save every single day this week.`;
+        comment=`Only ${Math.round(ratio*100)}% of weekly target. Try to save every week.`;
       } else {
         cls='bad';badge='badge-bad';
-        comment=`Very low savings this week. Missing daily savings hurts the whole group. Please catch up today!`;
+        comment=`Very low savings this week. Missing weekly savings hurts the whole group. Please catch up today!`;
       }
       return{m,cls,badge,comment,totalSaved};
     });
@@ -1364,18 +1282,17 @@ select.inp option{background:#fff;}
 
   function countStreak(txs){
     if(!txs.length)return 0;
-    const byDay={};
-    txs.forEach(t=>{const d=new Date(t.date).toDateString();byDay[d]=(byDay[d]||0)+t.amount;});
+    const byWeek={};
+    txs.forEach(t=>{const week=Math.floor(t.date/(7*24*3600*1000));byWeek[week]=(byWeek[week]||0)+t.amount;});
     let streak=0;
-    for(let i=0;i<30;i++){
-      const d=new Date(Date.now()-i*86400000).toDateString();
-      if(byDay[d])streak++;
+    const currentWeek=Math.floor(Date.now()/(7*24*3600*1000));
+    for(let i=0;i<10;i++){
+      if(byWeek[currentWeek-i])streak++;
       else if(i>0)break;
     }
     return streak;
   }
 
-  /* ── MEMBERS UI ── */
   function updateMembersUI(){
     const list=document.getElementById('members-list');
     if(!list)return;
@@ -1410,7 +1327,6 @@ select.inp option{background:#fff;}
       else if(tx.type==='withdraw')ico='tic-w';
       else if(tx.type==='fine')ico='tic-f';
       else if(tx.type==='welfare')ico='tic-welf';
-      // Show edit/delete only when adminUnlocked
       const acts=adminUnlocked&&tx.type!=='payout'
         ?`<div class="txc-actions"><div class="txc-edit" onclick="editTransaction('${tx.id}')">✏️</div><div class="txc-delete" onclick="deleteTransaction('${tx.id}')">🗑️</div></div>`
         :'';
@@ -1418,18 +1334,16 @@ select.inp option{background:#fff;}
     }).join('');
   }
 
-  /* ── ROTATION UI (bigger, clearer) ── */
   function updateRotationUI(){
     const idx=rotation.currentIndex||0;
     const bid=rotation.order?.[idx];
     const bene=members.find(m=>m.id===bid)||{name:'—'};
     document.getElementById('rot-beneficiary').innerText=bene.name;
     document.getElementById('rot-pool').innerText=`Cash: UGX ${cashFromDeposits.toLocaleString()}`;
-    const target=settings.dailyAmount*members.length*7;
+    const target=settings.weeklyAmount*members.length;
     document.getElementById('rot-pbar').style.width=(target?Math.min(100,Math.round(cashFromDeposits/target*100)):0)+'%';
-    document.getElementById('rot-day-label').innerText='Pool target';
+    document.getElementById('rot-day-label').innerText='Weekly target';
     document.getElementById('rot-days-left').innerText=`${Math.max(0,members.length-(idx+1))} members left`;
-    // Rotation order chips (bigger, colored)
     const chips=document.getElementById('rot-order-chips');
     if(chips&&rotation.order){
       chips.innerHTML=rotation.order.map((id,i)=>{
@@ -1439,15 +1353,12 @@ select.inp option{background:#fff;}
         return `<div class="rot-chip ${cl}">${icon} ${i+1}. ${m?.name||'?'}</div>`;
       }).join('');
     }
-    // Manage button
     const manBtn=document.getElementById('rot-manage-btn');
     if(manBtn)manBtn.style.display=adminUnlocked?'flex':'none';
-    // Mark paid button in rotation manage modal
     const mpw=document.getElementById('rot-mark-paid-wrap');
-    if(mpw&&cashFromDeposits>0&&adminUnlocked){
+    if(mpw&&cashFromDeposits>=target&&adminUnlocked){
       mpw.innerHTML=`<button class="btn btn-green" style="width:100%;" onclick="markPaidAndAdvance()">✅ Mark ${bene.name} as Paid & Advance</button>`;
     } else if(mpw){mpw.innerHTML='';}
-    // Rotation tab schedule
     const sched=document.getElementById('rot-sched-list');
     if(sched&&rotation.order){
       sched.innerHTML=rotation.order.map((id,i)=>{
@@ -1464,7 +1375,6 @@ select.inp option{background:#fff;}
       rotation.history.map(h=>{const m=members.find(m=>m.id===h.memberId);return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px;background:var(--surf);border:1px solid var(--br);border-radius:var(--r2);margin-bottom:5px;"><span style="font-weight:600;">${m?.name||'?'}</span><span class="sv-amber" style="font-family:JetBrains Mono;font-weight:700;">UGX ${h.amount.toLocaleString()}</span><span class="micro">${new Date(h.date).toLocaleDateString()}</span></div>`;}).join('');
   }
 
-  /* ── DRAG ROTATION REORDER ── */
   function buildDragRotation(){
     dragOrder=[...(rotation.order||[])];
     const container=document.getElementById('rot-drag-list');if(!container)return;
@@ -1509,19 +1419,19 @@ select.inp option{background:#fff;}
     const bid=rotation.order?.[rotation.currentIndex];
     const bene=members.find(m=>m.id===bid);
     if(!bene){toast('No current beneficiary','#dc2626');return;}
-    if(cashFromDeposits<=0){toast('No cash from deposits to pay out','#dc2626');return;}
+    const target=settings.weeklyAmount*members.length;
+    if(cashFromDeposits<target){toast(`Insufficient funds. Need UGX ${target.toLocaleString()} but have UGX ${cashFromDeposits.toLocaleString()}`,'#dc2626');return;}
     try{
-      await db.ref('transactions').push({memberPhone:bene.phone,memberName:bene.name,type:'payout',amount:cashFromDeposits,description:'Weekly payout',date:Date.now()});
-      const history=[...(rotation.history||[]),{memberId:bene.id,amount:cashFromDeposits,date:Date.now()}];
+      await db.ref('transactions').push({memberPhone:bene.phone,memberName:bene.name,type:'payout',amount:target,description:'Weekly payout',date:Date.now()});
+      const history=[...(rotation.history||[]),{memberId:bene.id,amount:target,date:Date.now()}];
       const ni=((rotation.currentIndex||0)+1)%rotation.order.length;
       await db.ref('rotation').update({currentIndex:ni,history});
-      toast('Payout recorded & rotation advanced ✅','#059669');closeOv('ov-rot-manage');
+      toast(`Payout of UGX ${target.toLocaleString()} recorded & rotation advanced ✅`,'#059669');
+      closeOv('ov-rot-manage');
     }catch(e){toast('Error','#dc2626');}
   };
-  // Alias for admin grid button
-  window.markPaidBtn=function(){/* opens ov-rot-manage which has the button */};
+  window.markPaidBtn=function(){};
 
-  /* ── GROUP TAB ── */
   function updateGroupTab(){
     document.getElementById('group-gross').innerText=(totalFines+totalWelfare).toLocaleString();
     document.getElementById('group-net').innerText=groupProfit.toLocaleString();
@@ -1536,7 +1446,6 @@ select.inp option{background:#fff;}
     }).join('');
   }
 
-  /* ── LEDGER ── */
   function loadLedger(filter='all'){
     const list=document.getElementById('ledger-list');if(!list)return;
     let f=filter==='all'?transactions:transactions.filter(tx=>tx.type===filter);
@@ -1549,7 +1458,6 @@ select.inp option{background:#fff;}
       let ico='tic-d';
       if(tx.type==='withdraw')ico='tic-w';else if(tx.type==='fine')ico='tic-f';
       else if(tx.type==='welfare')ico='tic-welf';else if(tx.type==='expense'||tx.type==='payout')ico='tic-we';
-      // Always show edit/delete when admin is unlocked (uses reactive adminUnlocked variable)
       const acts=adminUnlocked&&tx.type!=='payout'
         ?`<div class="txc-actions"><div class="txc-edit" onclick="editTransaction('${tx.id}')">✏️</div><div class="txc-delete" onclick="deleteTransaction('${tx.id}')">🗑️</div></div>`
         :'';
@@ -1557,7 +1465,6 @@ select.inp option{background:#fff;}
     }).join('');
   }
 
-  /* ── EDIT TRANSACTION ── */
   window.editTransaction=function(key){
     const tx=transactions.find(t=>t.id===key);if(!tx){toast('Not found','#dc2626');return;}
     populateMemberDropdowns();
@@ -1587,7 +1494,6 @@ select.inp option{background:#fff;}
     }catch(e){toast('Error updating','#dc2626');}
   };
 
-  /* ── DELETE TRANSACTION (balance re-computed from transactions so no separate reversal needed) ── */
   window.deleteTransaction=async function(key){
     if(!db){toast('Firebase not connected','#dc2626');return;}
     if(!confirm('Delete this transaction? Cannot be undone.'))return;
@@ -1596,69 +1502,65 @@ select.inp option{background:#fff;}
       const tx=snap.val();if(!tx){toast('Not found','#dc2626');return;}
       if(tx.type==='payout'){toast('Payouts cannot be deleted','#dc2626');return;}
       await db.ref('transactions/'+key).remove();
-      // Balance is auto-recomputed from transactions in computePots()
       toast('Transaction deleted ✅','#dc2626');
     }catch(e){toast('Error','#dc2626');}
   };
 
-  /* ── COVER MISSED DAYS ── */
   function openCoverMissed(){
-    coverDates={};
+    coverWeeks={};
     populateMemberDropdowns();
-    // Also add cover-member to select
     const csel=document.getElementById('cover-member');
     if(csel){
       csel.innerHTML='<option value="">Select member</option>';
       members.forEach(m=>{csel.innerHTML+=`<option value="${m.phone}">${m.name}</option>`;});
     }
-    // Build last 14 days checkboxes
-    const dateContainer=document.getElementById('cover-dates');
-    if(!dateContainer)return;
-    dateContainer.innerHTML='';
-    for(let i=1;i<=14;i++){
-      const d=new Date(Date.now()-i*86400000);
-      const dateStr=d.toLocaleDateString('en-UG',{weekday:'short',day:'numeric',month:'short'});
-      const dateKey=d.toISOString().split('T')[0];
-      const safe=dateKey.replace(/-/g,'');
+    const container=document.getElementById('cover-weeks');
+    if(!container)return;
+    container.innerHTML='';
+    const now=new Date();
+    for(let i=1;i<=4;i++){
+      const weekDate=new Date(now.getTime() - i*7*86400000);
+      const weekLabel=`Week of ${weekDate.toLocaleDateString('en-UG',{month:'short',day:'numeric'})}`;
+      const weekKey=weekDate.toISOString().split('T')[0];
+      const safe=weekKey.replace(/-/g,'');
       const row=document.createElement('div');
-      row.className='daily-check';
-      row.onclick=()=>toggleCoverDate(dateKey,safe);
-      row.innerHTML=`<div class="dc-box" id="cdate-${safe}"></div><span>${dateStr}</span>`;
-      dateContainer.appendChild(row);
+      row.className='weekly-check';
+      row.onclick=()=>toggleCoverWeek(weekKey,safe);
+      row.innerHTML=`<div class="wc-box" id="cweek-${safe}"></div><span>${weekLabel}</span>`;
+      container.appendChild(row);
     }
-    const amt=document.getElementById('cover-daily-amt');
-    if(amt)amt.textContent=`UGX ${settings.dailyAmount.toLocaleString()}`;
+    const amt=document.getElementById('cover-weekly-amt');
+    if(amt)amt.textContent=`UGX ${settings.weeklyAmount.toLocaleString()}`;
   }
-  window.toggleCoverDate=function(dateKey,safe){
-    const box=document.getElementById('cdate-'+safe);if(!box)return;
-    const p=box.closest('.daily-check');
-    if(p.classList.contains('checked')){p.classList.remove('checked');delete coverDates[dateKey];}
-    else{p.classList.add('checked');coverDates[dateKey]=true;}
+  window.toggleCoverWeek=function(weekKey,safe){
+    const box=document.getElementById('cweek-'+safe);if(!box)return;
+    const p=box.closest('.weekly-check');
+    if(p.classList.contains('checked')){p.classList.remove('checked');delete coverWeeks[weekKey];}
+    else{p.classList.add('checked');coverWeeks[weekKey]=true;}
   };
   window.saveCoverMissed=async function(){
     const mp=document.getElementById('cover-member')?.value;
-    const dates=Object.keys(coverDates);
+    const weeks=Object.keys(coverWeeks);
     if(!mp){toast('Select a member','#dc2626');return;}
-    if(!dates.length){toast('Select at least one day','#dc2626');return;}
+    if(!weeks.length){toast('Select at least one week','#dc2626');return;}
     const member=members.find(m=>m.phone===mp);if(!member){toast('Member not found','#dc2626');return;}
     if(!db){toast('Firebase not connected','#dc2626');return;}
     try{
-      for(const dateKey of dates){
-        const dateTs=new Date(dateKey+'T12:00:00').getTime();
+      for(const weekKey of weeks){
+        const dateTs=new Date(weekKey+'T12:00:00').getTime();
         await db.ref('transactions').push({
           memberPhone:mp,memberName:member.name,
-          type:'deposit',amount:settings.dailyAmount,
-          description:`Backdated savings – ${dateKey}`,
+          type:'deposit',amount:settings.weeklyAmount,
+          description:`Backdated weekly savings – ${weekKey}`,
           date:dateTs
         });
       }
-      coverDates={};
-      toast(`✅ ${dates.length} day(s) of savings recorded for ${member.name}`,'#059669');
+      coverWeeks={};
+      toast(`✅ ${weeks.length} week(s) of savings recorded for ${member.name}`,'#059669');
       closeOv('ov-cover-missed');
     }catch(e){toast('Error recording savings','#dc2626');}
   };
 
-  /* ── ADD ACTIONS ── */
   window.addMember=async function(){
     const name=document.getElementById('mbr-name')?.value.trim();
     const phone=document.getElementById('mbr-phone')?.value.trim();
@@ -1666,7 +1568,6 @@ select.inp option{background:#fff;}
     const join=document.getElementById('mbr-join')?.value;
     if(!name||!phone||!pw||!join){toast('All fields required','#dc2626');return;}
     if(!db){toast('Firebase not connected','#dc2626');return;}
-    // Note: we no longer store balance in Firebase – it's computed from transactions
     try{await db.ref('members').push({name,phone,password:pw,joinDate:join});toast('Member added ✅','#059669');closeOv('ov-add-mbr');}
     catch(e){toast('Error','#dc2626');}
   };
@@ -1713,20 +1614,19 @@ select.inp option{background:#fff;}
     }catch(e){toast('Error','#dc2626');}
   };
 
-  /* ── DAILY SAVINGS (no longer updates member.balance in Firebase – computed from tx) ── */
-  let dailyChecked={};
-  window.loadDailyList=function(){
-    const list=document.getElementById('daily-list');if(!list)return;
-    list.innerHTML=members.length?members.map(m=>`<div class="daily-check" onclick="toggleDaily('${m.phone}')"><div class="dc-box" id="daily-${m.phone.replace(/\W/g,'_')}"></div><span>${m.name}</span></div>`).join(''):'<p class="muted">No members.</p>';
+  let weeklyChecked={};
+  window.loadWeeklyList=function(){
+    const list=document.getElementById('weekly-list');if(!list)return;
+    list.innerHTML=members.length?members.map(m=>`<div class="weekly-check" onclick="toggleWeekly('${m.phone}')"><div class="wc-box" id="weekly-${m.phone.replace(/\W/g,'_')}"></div><span>${m.name}</span></div>`).join(''):'<p class="muted">No members.</p>';
   };
-  window.toggleDaily=function(phone){
-    const box=document.getElementById('daily-'+phone.replace(/\W/g,'_'));if(!box)return;
-    const p=box.closest('.daily-check');
-    if(p.classList.contains('checked')){p.classList.remove('checked');delete dailyChecked[phone];}
-    else{p.classList.add('checked');dailyChecked[phone]=true;}
+  window.toggleWeekly=function(phone){
+    const box=document.getElementById('weekly-'+phone.replace(/\W/g,'_'));if(!box)return;
+    const p=box.closest('.weekly-check');
+    if(p.classList.contains('checked')){p.classList.remove('checked');delete weeklyChecked[phone];}
+    else{p.classList.add('checked');weeklyChecked[phone]=true;}
   };
-  window.saveDaily=async function(){
-    const phones=Object.keys(dailyChecked);
+  window.saveWeekly=async function(){
+    const phones=Object.keys(weeklyChecked);
     if(!phones.length){toast('No members selected','#dc2626');return;}
     if(!db){toast('Firebase not connected','#dc2626');return;}
     try{
@@ -1734,30 +1634,27 @@ select.inp option{background:#fff;}
         const m=members.find(m=>m.phone===phone);if(!m)continue;
         await db.ref('transactions').push({
           memberPhone:phone,memberName:m.name,
-          type:'deposit',amount:settings.dailyAmount,
-          description:'Daily savings',date:Date.now()
+          type:'deposit',amount:settings.weeklyAmount,
+          description:'Weekly savings',date:Date.now()
         });
-        // Balance is computed from transactions – no need to update member.balance separately
       }
-      toast(`Daily savings saved for ${phones.length} members ✅`,'#059669');
-      dailyChecked={};closeOv('ov-daily');
+      toast(`Weekly savings saved for ${phones.length} members ✅`,'#059669');
+      weeklyChecked={};closeOv('ov-weekly');
     }catch(e){toast('Error','#dc2626');}
   };
 
-  /* ── SETTINGS ── */
   window.doSaveSettings=async function(){
     const groupName=document.getElementById('set-groupname')?.value.trim()||'Harvest Trust';
     const whatsappLink=document.getElementById('set-whatsapp')?.value.trim()||'';
-    const daily=parseFloat(document.getElementById('set-daily')?.value);
+    const weekly=parseFloat(document.getElementById('set-weekly')?.value);
     const fine=parseFloat(document.getElementById('set-fine')?.value);
-    if(isNaN(daily)||isNaN(fine)){toast('Invalid numbers','#dc2626');return;}
+    if(isNaN(weekly)||isNaN(fine)){toast('Invalid numbers','#dc2626');return;}
     if(!db){toast('Firebase not connected','#dc2626');return;}
-    try{await db.ref('settings').set({groupName,whatsappLink,dailyAmount:daily,fineAmount:fine});toast('Settings saved ⚙️','#2563eb');closeOv('ov-settings');}
+    try{await db.ref('settings').set({groupName,whatsappLink,weeklyAmount:weekly,fineAmount:fine});toast('Settings saved ⚙️','#2563eb');closeOv('ov-settings');}
     catch(e){toast('Error','#dc2626');}
   };
   window.saveSettings=window.doSaveSettings;
 
-  /* ── APPLICATIONS ── */
   window.loadApplications=async function(){
     if(!db){document.getElementById('apps-list').innerHTML='<p class="muted">Firebase not connected</p>';return;}
     try{
@@ -1798,7 +1695,6 @@ select.inp option{background:#fff;}
     }catch(e){toast('Error submitting','#dc2626');}
   };
 
-  /* ── RESET ── */
   window.resetGroup=async function(){
     const pwd=document.getElementById('reset-pwd')?.value.trim();
     if(!pwd){toast('Enter admin password','#dc2626');return;}
@@ -1811,14 +1707,25 @@ select.inp option{background:#fff;}
     }catch(e){toast('Error','#dc2626');}
   };
 
-  /* ── EXPORT ── */
+  window.resetDataKeepMembers=async function(){
+    if(!confirm('This will delete all transactions, rotation history, and applications. Members will remain. Continue?'))return;
+    const pwd=prompt('Enter admin password to confirm:');
+    if(pwd!=='admin123'){toast('Wrong password','#dc2626');return;}
+    if(!db){toast('Firebase not connected','#dc2626');return;}
+    try{
+      await db.ref('transactions').remove();
+      await db.ref('rotation').remove();
+      await db.ref('applications').remove();
+      toast('Data reset complete. Members preserved.','#059669');
+    }catch(e){toast('Error resetting data','#dc2626');}
+  };
+
   window.exportCSV=function(){
     let csv="Date,Type,Member,Description,Amount\n";
     transactions.forEach(tx=>{const m=members.find(m=>m.phone===tx.memberPhone)?.name||tx.memberName||'';csv+=`${new Date(tx.date).toLocaleDateString()},${tx.type},${m},${tx.description||''},${tx.amount}\n`;});
     const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='harvest-trust-ledger.csv';a.click();toast('CSV downloaded','#059669');
   };
 
-  /* ── POPULATE DROPDOWNS ── */
   function populateMemberDropdowns(){
     ['fine-member','welfare-member','edit-tx-member'].forEach(id=>{
       const sel=document.getElementById(id);if(!sel)return;
@@ -1827,10 +1734,7 @@ select.inp option{background:#fff;}
     });
   }
 
-  /* ── INIT ── */
-  // Expose loadAllData so the splash sequence IIFE can call it after welcome appears
   window._loadAllData = loadAllData;
-  // onload is intentionally empty – splash IIFE drives the full init sequence
   window.onload=function(){};
 })();
 </script>
