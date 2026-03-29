@@ -9,7 +9,7 @@
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-/* ========== GLOBAL VARIABLES & RESET ========== */
+/* ========== COMPLETE STYLES (same as latest working version, with minor adjustments for daily savings) ========== */
 :root {
   --bg: #fef7e8;
   --bg2: #fdefd6;
@@ -96,7 +96,7 @@ input, select, textarea, button {
 .scale-in { animation: scaleIn 0.3s ease forwards; }
 .slide-left { animation: slideInLeft 0.3s ease forwards; }
 
-/* ========== LION SPLASH – WHITE BACKGROUND ========== */
+/* ========== LION SPLASH – WHITE ========== */
 #lion-splash {
   position: fixed; inset: 0; z-index: 10000;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -162,7 +162,7 @@ input, select, textarea, button {
 .lion-dots div:nth-child(3) { animation-delay: 0.5s; }
 @keyframes dotPulse { 0%,100% { background: rgba(0, 0, 0, 0.1); } 50% { background: rgba(245, 158, 11, 0.6); } }
 
-/* ========== LOADING SCREEN ========== */
+/* ========== LOADING ========== */
 #loading {
   position: fixed; inset: 0; z-index: 7000;
   display: none; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
@@ -569,14 +569,14 @@ input, select, textarea, button {
 .adm-label { font-size: 0.6rem; font-weight: 600; color: var(--t2); text-align: center; line-height: 1.3; }
 .adm-badge { position: absolute; top: 5px; right: 5px; min-width: 17px; height: 17px; background: var(--red); border-radius: 99px; font-size: 0.54rem; font-weight: 800; display: flex; align-items: center; justify-content: center; padding: 0 3px; color: #fff; }
 
-/* WEEKLY CHECK (replaces daily) */
-.weekly-check {
+/* DAILY CHECK (for daily savings and cover missed days) */
+.daily-check {
   display: flex; align-items: center; gap: 9px; padding: 10px 11px; background: var(--surf);
   border: 1px solid var(--br); border-radius: var(--r2); margin-bottom: 6px; cursor: pointer; transition: all 0.2s;
 }
-.weekly-check.checked { border-color: rgba(43, 122, 62, 0.35); background: rgba(43, 122, 62, 0.05); }
-.wc-box { width: 21px; height: 21px; border-radius: 6px; border: 2px solid var(--br2); display: flex; align-items: center; justify-content: center; font-size: 0.8rem; flex-shrink: 0; transition: background 0.15s, border-color 0.15s; }
-.weekly-check.checked .wc-box { background: var(--green); border-color: var(--green); }
+.daily-check.checked { border-color: rgba(43, 122, 62, 0.35); background: rgba(43, 122, 62, 0.05); }
+.dc-box { width: 21px; height: 21px; border-radius: 6px; border: 2px solid var(--br2); display: flex; align-items: center; justify-content: center; font-size: 0.8rem; flex-shrink: 0; transition: background 0.15s, border-color 0.15s; }
+.daily-check.checked .dc-box { background: var(--green); border-color: var(--green); }
 
 /* TRANSACTION ROW */
 .txc {
@@ -610,7 +610,7 @@ input, select, textarea, button {
 }
 .mc:hover { transform: translateY(-2px); border-color: var(--br2); }
 .mc-av {
-  width: 38px; height: 38px; border-radius: 12px; background: linear-gradient(135deg, var(--blue), var(--purple));
+  width: 38px; height: 38px; border-radius: 12px;
   display: flex; align-items: center; justify-content: center; font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1rem; color: #fff; flex-shrink: 0;
 }
 .mc-name { font-weight: 600; font-size: 0.88rem; }
@@ -716,7 +716,7 @@ input, select, textarea, button {
     <div class="w-stats">
       <div class="w-stat"><div class="w-stat-n" id="ws-members">0</div><div class="w-stat-l">Members</div></div>
       <div class="w-stat"><div class="w-stat-n">UGX</div><div class="w-stat-l">Currency</div></div>
-      <div class="w-stat"><div class="w-stat-n">Weekly</div><div class="w-stat-l">Savings</div></div>
+      <div class="w-stat"><div class="w-stat-n">Daily</div><div class="w-stat-l">Savings</div></div>
     </div>
     <div class="w-btns" id="welcome-buttons"></div>
   </div>
@@ -738,7 +738,7 @@ input, select, textarea, button {
   </div>
 
   <div id="content">
-    <!-- HOME -->
+    <!-- HOME TAB -->
     <div id="t-home" class="tab on">
       <div id="share-banner">
         <div class="share-lbl">🔗 Permanent Link</div>
@@ -751,7 +751,7 @@ input, select, textarea, button {
         <div class="ss-tile ss-t-amber"><div class="ss-ico">💵</div><div class="ss-val sv-amber" id="h-cash">0</div><div class="ss-lbl">Cash</div></div>
         <div class="ss-tile ss-t-blue"><div class="ss-ico">🏦</div><div class="ss-val sv-blue" id="h-group-gross">0</div><div class="ss-lbl">Fund</div></div>
         <div class="ss-tile ss-t-green"><div class="ss-ico">📈</div><div class="ss-val sv-green" id="h-profit">0</div><div class="ss-lbl">Profit</div></div>
-        <div class="ss-tile ss-t-purple"><div class="ss-ico">📅</div><div class="ss-val sv-purple" id="h-rate">14000</div><div class="ss-lbl">Weekly</div></div>
+        <div class="ss-tile ss-t-purple"><div class="ss-ico">📅</div><div class="ss-val sv-purple" id="h-rate">2000</div><div class="ss-lbl">Daily</div></div>
       </div>
       <div class="rot-hero">
         <div class="rot-hero-glow"></div>
@@ -770,30 +770,30 @@ input, select, textarea, button {
           <div class="bal-cell bc-net"><div class="bc-lbl">Net Fund</div><div class="bc-val sv-amber" id="bs-n">0</div></div>
         </div>
       </div>
-      <div class="deposit-banner"><span class="deposit-icon">📲</span><span class="deposit-text">Send weekly savings to:</span><span class="deposit-number">0770371720</span></div>
+      <div class="deposit-banner"><span class="deposit-icon">📲</span><span class="deposit-text">Send daily savings to:</span><span class="deposit-number">0770371720</span></div>
       <div class="motivation-banner" id="motivation-banner">Loading…</div>
       <div class="advice-card"><div class="advice-title">🧠 Savings Intelligence</div><div id="advice-list"><div style="text-align:center;padding:10px;">Analysing members…</div></div></div>
       <div class="sec-h">Recent Transactions</div><div id="h-recent"></div>
     </div>
 
-    <!-- MEMBERS -->
+    <!-- MEMBERS TAB -->
     <div id="t-members" class="tab"><div class="sec-h">All Members (<span id="m-count">0</span>)</div><div id="members-list"></div></div>
 
-    <!-- ROTATION -->
+    <!-- ROTATION TAB -->
     <div id="t-rotation" class="tab"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><div class="sec-h" style="margin:0;">Rotation Schedule</div><button class="btn btn-sm btn-sec" id="rot-manage-btn" onclick="openOv('ov-rot-manage')" style="display:none;">⚙ Reorder</button></div><div id="rot-sched-list"></div><div class="sec-h" style="margin-top:14px;">Payout History</div><div id="rot-hist-list"></div></div>
 
-    <!-- LEDGER -->
+    <!-- LEDGER TAB -->
     <div id="t-ledger" class="tab"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><div class="sec-h" style="margin:0;">Ledger</div><button class="btn btn-sm btn-sec" onclick="exportCSV()">⬇ CSV</button></div><div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;"><button class="btn btn-sm btn-sec" onclick="setLF('all',this)" id="lf-all" style="border-color:var(--blue);color:var(--blue);">All</button><button class="btn btn-sm btn-sec" onclick="setLF('deposit',this)">Deposits</button><button class="btn btn-sm btn-sec" onclick="setLF('withdraw',this)">Withdrawals</button><button class="btn btn-sm btn-sec" onclick="setLF('fine',this)">Fines</button><button class="btn btn-sm btn-sec" onclick="setLF('welfare',this)">Welfare</button><button class="btn btn-sm btn-sec" onclick="setLF('expense',this)">Expenses</button></div><div id="ledger-list"></div></div>
 
-    <!-- GROUP FUND -->
+    <!-- GROUP FUND TAB -->
     <div id="t-group" class="tab"><div class="sec-h">Group Fund</div><div style="display:flex;gap:8px;margin-bottom:10px;"><div class="stat-tile st-blue" style="flex:1;padding:10px;"><div class="stat-lbl">Gross</div><div class="stat-val sv-blue" id="group-gross">0</div></div><div class="stat-tile st-green" style="flex:1;padding:10px;"><div class="stat-lbl">Net</div><div class="stat-val sv-green" id="group-net">0</div></div><div class="stat-tile st-pink" style="flex:1;padding:10px;"><div class="stat-lbl">Expenses</div><div class="stat-val sv-red" id="group-exp">0</div></div></div><div id="group-list"></div></div>
 
-    <!-- CHAT -->
+    <!-- CHAT TAB -->
     <div id="t-chat" class="tab">
       <div class="chat-container">
         <div class="chat-header"><h3>💬 Harvest Trust Group Chat</h3><p class="micro">Stay connected with your savings family</p></div>
         <div class="chat-messages">
-          <div class="message"><div class="message-avatar">🌾</div><div class="message-bubble"><div class="name">Sarah Nakato</div><div class="text">Just sent my weekly savings! 💰</div><div class="time">10:32 AM</div></div></div>
+          <div class="message"><div class="message-avatar">🌾</div><div class="message-bubble"><div class="name">Sarah Nakato</div><div class="text">Just sent my daily savings! 💰</div><div class="time">10:32 AM</div></div></div>
           <div class="message"><div class="message-avatar">🐅</div><div class="message-bubble"><div class="name">John Okello</div><div class="text">Great job Sarah! Payout coming soon 🔥</div><div class="time">10:35 AM</div></div></div>
           <div class="message own"><div class="message-bubble"><div class="name">You</div><div class="text">Can't wait for the rotation!</div><div class="time">10:38 AM</div></div><div class="message-avatar">👤</div></div>
         </div>
@@ -801,24 +801,24 @@ input, select, textarea, button {
       </div>
     </div>
 
-    <!-- ADMIN -->
+    <!-- ADMIN TAB -->
     <div id="t-admin" class="tab">
       <div id="adm-lock" class="lock-wrap"><div style="font-size:3rem;">🔐</div><div style="font-family:'Syne';font-size:1.05rem;font-weight:700;">Admin Access</div><div class="muted" style="font-size:.8rem;">Only the group admin can manage data.</div><button class="btn btn-blue" style="margin-top:8px;" onclick="openOv('ov-admin')">Unlock Panel</button></div>
       <div id="adm-panel" class="hidden">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;"><div><div style="font-weight:700;">Admin Panel</div><div class="micro">Full access</div></div><button class="btn btn-sm btn-red" onclick="lockAdmin()">🔒 Lock</button></div>
         <div class="adm-grid">
           <button class="adm-btn" onclick="openOv('ov-add-mbr')"><div class="adm-icon ai-purple">👤</div><div class="adm-label">Add Member</div></button>
-          <button class="adm-btn" onclick="openWeeklySavings()"><div class="adm-icon ai-green">📅</div><div class="adm-label">Weekly Savings</div></button>
+          <button class="adm-btn" onclick="openDailySavings()"><div class="adm-icon ai-green">📅</div><div class="adm-label">Daily Savings</div></button>
           <button class="adm-btn" onclick="openOv('ov-add-fine')"><div class="adm-icon ai-amber">⚡</div><div class="adm-label">Add Fine</div></button>
           <button class="adm-btn" onclick="openOv('ov-add-welfare')"><div class="adm-icon ai-purple">🤝</div><div class="adm-label">Add Welfare</div></button>
           <button class="adm-btn" onclick="openOv('ov-add-exp')"><div class="adm-icon ai-red">💸</div><div class="adm-label">Add Expense</div></button>
-          <button class="adm-btn" onclick="openOv('ov-cover-weeks')"><div class="adm-icon ai-cyan">📆</div><div class="adm-label">Cover Missed Weeks</div></button>
+          <button class="adm-btn" onclick="openOv('ov-cover-days')"><div class="adm-icon ai-cyan">📆</div><div class="adm-label">Cover Missed Days</div></button>
           <button class="adm-btn" onclick="openOv('ov-rot-manage')"><div class="adm-icon ai-blue">🔄</div><div class="adm-label">Manage Rotation</div></button>
           <button class="adm-btn" onclick="openOv('ov-settings')"><div class="adm-icon ai-cyan">⚙️</div><div class="adm-label">Settings</div></button>
           <button class="adm-btn" id="adm-apps-btn" onclick="openOv('ov-apps')" style="position:relative;"><div class="adm-icon ai-amber">📬</div><div class="adm-label">Applications</div><div class="adm-badge hidden" id="apps-badge">0</div></button>
           <button class="adm-btn" onclick="openOv('ov-reset')"><div class="adm-icon ai-red">⚠️</div><div class="adm-label">Reset Group</div></button>
           <button class="adm-btn" onclick="resetDataKeepMembers()"><div class="adm-icon ai-cyan">🔄</div><div class="adm-label">Reset Data (Keep Members)</div></button>
-          <button class="adm-btn" onclick="openOv('ov-rot-manage');markPaidBtn()"><div class="adm-icon ai-green">✅</div><div class="adm-label">Mark Paid</div></button>
+          <button class="adm-btn" onclick="openMarkPaid()"><div class="adm-icon ai-green">✅</div><div class="adm-label">Mark Paid</div></button>
         </div>
         <div class="sec-h">Members & Codes</div>
         <div id="adm-mbr-list"></div>
@@ -842,27 +842,38 @@ input, select, textarea, button {
 <div class="ov" id="ov-apply" onclick="maybeClose(event,'ov-apply')"><div class="bs"><div class="bs-title">📋 Apply to Join</div><div class="fld"><input class="inp" id="apply-name" placeholder="Full Name *"/></div><div class="fld"><input class="inp" id="apply-phone" type="tel" placeholder="WhatsApp Number *"/></div><div class="fld"><div class="pwd-row"><input class="inp" id="apply-pw" type="password" placeholder="Password *"/><button class="pwd-eye" onclick="togglePwd('apply-pw')">👁</button></div></div><div class="fld"><div class="pwd-row"><input class="inp" id="apply-pw2" type="password" placeholder="Confirm Password *"/><button class="pwd-eye" onclick="togglePwd('apply-pw2')">👁</button></div></div><div class="agree-checkbox"><input type="checkbox" id="apply-agree"><label>I agree to abide by the group's constitution *</label></div><div style="display:flex;gap:9px;"><button class="btn btn-sec" onclick="closeOv('ov-apply')">Cancel</button><button class="btn btn-blue" onclick="submitApplication()">Submit</button></div></div></div>
 <div class="ov" id="ov-pending" onclick="maybeClose(event,'ov-pending')"><div class="bs" style="text-align:center;"><div style="font-size:2.8rem;">⏳</div><div class="bs-title">Application Submitted!</div><p>Your application is pending review.</p><button class="btn btn-blue" onclick="closeOv('ov-pending')">Got it!</button></div></div>
 
-<div class="ov" id="ov-weekly" onclick="maybeClose(event,'ov-weekly')"><div class="bs"><div class="bs-title">📅 Weekly Savings</div><p>Mark members who saved this week.</p><div id="weekly-list"></div><button class="btn btn-green" onclick="saveWeekly()">Save This Week's Savings</button><button class="btn btn-sec" onclick="closeOv('ov-weekly')">Cancel</button></div></div>
+<!-- Daily Savings Modal -->
+<div class="ov" id="ov-daily" onclick="maybeClose(event,'ov-daily')"><div class="bs"><div class="bs-title">📅 Daily Savings</div><p>Mark members who saved today.</p><div id="daily-list"></div><button class="btn btn-green" onclick="saveDaily()">Save Today's Savings</button><button class="btn btn-sec" onclick="closeOv('ov-daily')">Cancel</button></div></div>
 
-<div class="ov" id="ov-cover-weeks" onclick="maybeClose(event,'ov-cover-weeks')"><div class="bs"><div class="bs-title">📆 Cover Missed Weeks</div><p>Select a member and choose which past weeks to record savings for (including current week).</p><div class="fld"><label class="inp-label">Member</label><select class="inp" id="cover-member"><option value="">Select member</option></select></div><div class="fld"><label class="inp-label">Select Weeks (last 4 weeks, including current)</label><div id="cover-weeks-list" style="margin-top:6px;"></div></div><div style="background:rgba(230,126,34,.07);border-radius:10px;padding:10px;margin-bottom:14px;font-size:.78rem;color:var(--amber);">💡 Each selected week will record a savings of <strong id="cover-weekly-amt">UGX 14,000</strong></div><div style="display:flex;gap:9px;"><button class="btn btn-sec" onclick="closeOv('ov-cover-weeks')">Cancel</button><button class="btn btn-blue" onclick="saveCoverWeeks()">Record Savings</button></div></div></div>
+<!-- Cover Missed Days Modal -->
+<div class="ov" id="ov-cover-days" onclick="maybeClose(event,'ov-cover-days')"><div class="bs"><div class="bs-title">📆 Cover Missed Days</div><p>Select a member and choose which past days to record savings for (including today).</p><div class="fld"><label class="inp-label">Member</label><select class="inp" id="cover-member"><option value="">Select member</option></select></div><div class="fld"><label class="inp-label">Select Days (last 14 days, including today)</label><div id="cover-days-list" style="margin-top:6px;"></div></div><div style="background:rgba(230,126,34,.07);border-radius:10px;padding:10px;margin-bottom:14px;font-size:.78rem;color:var(--amber);">💡 Each selected day will record a savings of <strong id="cover-daily-amt">UGX 2,000</strong></div><div style="display:flex;gap:9px;"><button class="btn btn-sec" onclick="closeOv('ov-cover-days')">Cancel</button><button class="btn btn-blue" onclick="saveCoverDays()">Record Savings</button></div></div></div>
 
-<div class="ov" id="ov-add-mbr" onclick="maybeClose(event,'ov-add-mbr')"><div class="bs"><div class="bs-title">👤 Add Member</div><div class="fld"><input class="inp" id="mbr-name" placeholder="Full Name"/></div><div class="fld"><input class="inp" id="mbr-phone" type="tel" placeholder="WhatsApp Number"/></div><div class="fld"><div class="pwd-row"><input class="inp" id="mbr-pw" type="password" value="password123"/><button class="pwd-eye" onclick="togglePwd('mbr-pw')">👁</button></div></div><div class="fld"><input class="inp" id="mbr-join" type="date" value="2025-01-01"/></div><div style="display:flex;gap:9px;"><button class="btn btn-sec" onclick="closeOv('ov-add-mbr')">Cancel</button><button class="btn btn-blue" onclick="addMember()">Add Member</button></div></div></div>
+<!-- Mark Paid Modal (simple) -->
+<div class="ov" id="ov-mark-paid" onclick="maybeClose(event,'ov-mark-paid')"><div class="bs"><div class="bs-title">✅ Mark as Paid</div><div id="mark-paid-info" style="margin-bottom:16px;text-align:center;">Loading...</div><button class="btn btn-green" style="width:100%;" onclick="confirmMarkPaid()">Confirm & Advance</button><button class="btn btn-sec" style="width:100%;margin-top:8px;" onclick="closeOv('ov-mark-paid')">Cancel</button></div></div>
 
+<!-- Other modals (add member, fine, welfare, expense, rotation manage, edit transaction, apps, settings, reset) -->
+<div class="ov" id="ov-add-mbr" onclick="maybeClose(event,'ov-add-mbr')"><div class="bs"><div class="bs-title">👤 Add Member</div><div class="fld"><input class="inp" id="mbr-name" placeholder="Full Name"/></div><div class="fld"><input class="inp" id="mbr-phone" type="tel" placeholder="WhatsApp Number"/></div><div class="fld"><div class="pwd-row"><input class="inp" id="mbr-pw" type="password" value="password123"/><button class="pwd-eye" onclick="togglePwd('mbr-pw')">👁</button></div></div><div class="fld"><input class="inp" id="mbr-join" type="date" value="2025-01-01"/></div><div class="fld"><label class="inp-label">Profile Photo URL (optional)</label><input class="inp" id="mbr-photo" placeholder="https://example.com/photo.jpg"/></div><div style="display:flex;gap:9px;"><button class="btn btn-sec" onclick="closeOv('ov-add-mbr')">Cancel</button><button class="btn btn-blue" onclick="addMember()">Add Member</button></div></div></div>
 <div class="ov" id="ov-add-fine" onclick="maybeClose(event,'ov-add-fine')"><div class="bs"><div class="bs-title">⚡ Add Fine</div><div class="fld"><select class="inp" id="fine-member"></select></div><div class="fld"><input class="inp" id="fine-reason" placeholder="Reason"/></div><div class="fld"><input class="inp" id="fine-amount" type="number" value="5000"/></div><div style="display:flex;gap:9px;"><button class="btn btn-sec" onclick="closeOv('ov-add-fine')">Cancel</button><button class="btn btn-blue" onclick="addFine()">Apply Fine</button></div></div></div>
-
 <div class="ov" id="ov-add-welfare" onclick="maybeClose(event,'ov-add-welfare')"><div class="bs"><div class="bs-title">🤝 Add Welfare</div><div class="fld"><select class="inp" id="welfare-member"></select></div><div class="fld"><input class="inp" id="welfare-desc" placeholder="Description"/></div><div class="fld"><input class="inp" id="welfare-amount" type="number" value="2000"/></div><div style="display:flex;gap:9px;"><button class="btn btn-sec" onclick="closeOv('ov-add-welfare')">Cancel</button><button class="btn" style="background:var(--purple);color:#fff;" onclick="addWelfare()">Add Welfare</button></div></div></div>
-
 <div class="ov" id="ov-add-exp" onclick="maybeClose(event,'ov-add-exp')"><div class="bs"><div class="bs-title">💸 Record Expense</div><div class="fld"><input class="inp" id="exp-desc" placeholder="Description"/></div><div class="fld"><input class="inp" id="exp-amount" type="number"/></div><div class="fld"><input class="inp" id="exp-paidto" placeholder="Paid to"/></div><div style="display:flex;gap:9px;"><button class="btn btn-sec" onclick="closeOv('ov-add-exp')">Cancel</button><button class="btn btn-red" onclick="addExpense()">Record</button></div></div></div>
-
-<div class="ov" id="ov-rot-manage" onclick="maybeClose(event,'ov-rot-manage')"><div class="bs"><div class="bs-title">🔄 Reorder Rotation</div><div id="rot-drag-list"></div><button class="btn btn-blue" style="width:100%;margin-top:10px;" onclick="saveRotationOrder()">💾 Save Order</button><button class="btn btn-sec" style="width:100%;margin-top:7px;" onclick="advanceRotation()">➡ Advance to Next</button><div id="rot-mark-paid-wrap"></div><button class="btn btn-sec" style="width:100%;margin-top:7px;" onclick="closeOv('ov-rot-manage')">Close</button></div></div>
-
+<div class="ov" id="ov-rot-manage" onclick="maybeClose(event,'ov-rot-manage')"><div class="bs"><div class="bs-title">🔄 Manage Rotation</div><div id="rot-drag-list"></div><button class="btn btn-blue" style="width:100%;margin-top:10px;" onclick="saveRotationOrder()">💾 Save Order</button><button class="btn btn-sec" style="width:100%;margin-top:7px;" onclick="advanceRotation()">➡ Advance to Next</button><div id="rot-mark-paid-wrap" style="margin-top:7px;"></div><button class="btn btn-sec" style="width:100%;margin-top:7px;" onclick="closeOv('ov-rot-manage')">Close</button></div></div>
 <div class="ov" id="ov-edit-tx" onclick="maybeClose(event,'ov-edit-tx')"><div class="bs"><div class="bs-title">✏️ Edit Transaction</div><div class="fld"><select class="inp" id="edit-tx-member"></select></div><div class="fld"><select class="inp" id="edit-tx-type"><option value="deposit">Deposit</option><option value="withdraw">Withdrawal</option><option value="fine">Fine</option><option value="welfare">Welfare</option><option value="expense">Expense</option></select></div><div class="fld"><input class="inp" id="edit-tx-amount" type="number"/></div><div class="fld"><input class="inp" id="edit-tx-desc" placeholder="Description"/></div><input type="hidden" id="edit-tx-id"/><div style="display:flex;gap:9px;"><button class="btn btn-sec" onclick="closeOv('ov-edit-tx')">Cancel</button><button class="btn btn-blue" onclick="updateTransaction()">Update</button></div></div></div>
-
 <div class="ov" id="ov-apps" onclick="maybeClose(event,'ov-apps')"><div class="bs"><div class="bs-title">📬 Pending Applications</div><div id="apps-list"></div><button class="btn btn-sec" onclick="closeOv('ov-apps')">Close</button></div></div>
-
-<div class="ov" id="ov-settings" onclick="maybeClose(event,'ov-settings')"><div class="bs"><div class="bs-title">⚙️ Settings</div><div class="fld"><input class="inp" id="set-groupname" value="Harvest Trust"/></div><div class="fld"><input class="inp" id="set-whatsapp" placeholder="WhatsApp Group Link"/></div><div class="fld"><input class="inp" id="set-weekly" type="number" value="14000"/></div><div class="fld"><input class="inp" id="set-fine" type="number" value="5000"/></div><button class="btn btn-blue" onclick="doSaveSettings()">Save Settings</button><button class="btn btn-sec" onclick="closeOv('ov-settings')">Cancel</button></div></div>
-
+<div class="ov" id="ov-settings" onclick="maybeClose(event,'ov-settings')"><div class="bs"><div class="bs-title">⚙️ Settings</div><div class="fld"><input class="inp" id="set-groupname" value="Harvest Trust"/></div><div class="fld"><input class="inp" id="set-whatsapp" placeholder="WhatsApp Group Link"/></div><div class="fld"><input class="inp" id="set-daily" type="number" value="2000"/></div><div class="fld"><input class="inp" id="set-fine" type="number" value="5000"/></div><button class="btn btn-blue" onclick="doSaveSettings()">Save Settings</button><button class="btn btn-sec" onclick="closeOv('ov-settings')">Cancel</button></div></div>
 <div class="ov" id="ov-reset" onclick="maybeClose(event,'ov-reset')"><div class="bs"><div style="font-size:2.3rem;">⚠️</div><div class="bs-title">Reset Entire Group?</div><p>This will permanently delete all members, transactions, rotation history and applications.</p><div class="fld"><div class="pwd-row"><input class="inp" id="reset-pwd" type="password" placeholder="Admin password"/><button class="pwd-eye" onclick="togglePwd('reset-pwd')">👁</button></div></div><div style="display:flex;gap:9px;"><button class="btn btn-sec" onclick="closeOv('ov-reset')">Cancel</button><button class="btn btn-red" onclick="resetGroup()">Yes, Reset</button></div></div></div>
+
+<!-- Edit Member Modal -->
+<div class="ov" id="ov-edit-member" onclick="maybeClose(event,'ov-edit-member')">
+  <div class="bs">
+    <div class="bs-title">✏️ Edit Member</div>
+    <div class="fld"><label class="inp-label">Full Name</label><input class="inp" id="edit-name" placeholder="Full Name"/></div>
+    <div class="fld"><label class="inp-label">WhatsApp Number</label><input class="inp" id="edit-phone" type="tel" placeholder="+256 700 000000"/></div>
+    <div class="fld"><label class="inp-label">Profile Photo URL (optional)</label><input class="inp" id="edit-photo" placeholder="https://example.com/photo.jpg"/></div>
+    <div class="fld"><label class="inp-label">Join Date</label><input class="inp" id="edit-join" type="date"/></div>
+    <input type="hidden" id="edit-member-id"/>
+    <div style="display:flex;gap:9px;"><button class="btn btn-sec" onclick="closeOv('ov-edit-member')">Cancel</button><button class="btn btn-blue" onclick="updateMember()">Save Changes</button></div>
+  </div>
+</div>
 
 <script>
 // ========== BACKGROUND PARTICLES ==========
@@ -909,11 +920,21 @@ input, select, textarea, button {
   }
 
   let members=[], transactions=[], rotation={order:[],currentIndex:0,history:[]};
-  let settings={groupName:'Harvest Trust',weeklyAmount:14000,fineAmount:5000,whatsappLink:''};
-  let adminUnlocked=false, dragOrder=[], coverWeeks={}, weeklyChecked={};
+  let settings={groupName:'Harvest Trust',dailyAmount:2000,fineAmount:5000,whatsappLink:''};
+  let adminUnlocked=false, dragOrder=[], coverDays={}, dailyChecked={};
   let memberBalances={}, cashFromDeposits=0, groupProfit=0, totalDeposits=0, totalExpenses=0, totalFines=0, totalWelfare=0;
 
-  // 100+ personalized quotes
+  // Helper: get avatar HTML
+  function getAvatar(member, size='32px', fontSize='0.9rem', borderRadius='50%'){
+    if(!member) return `<div style="width:${size};height:${size};background:linear-gradient(135deg, var(--blue), var(--purple));border-radius:${borderRadius};display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;font-size:${fontSize};">?</div>`;
+    if(member.photoURL && member.photoURL.trim() !== ''){
+      return `<img src="${member.photoURL}" onerror="this.onerror=null;this.style.display='none';this.nextSibling.style.display='flex';" style="width:${size};height:${size};border-radius:${borderRadius};object-fit:cover;background:linear-gradient(135deg, var(--blue), var(--purple));" /><div style="width:${size};height:${size};background:linear-gradient(135deg, var(--blue), var(--purple));border-radius:${borderRadius};display:none;align-items:center;justify-content:center;color:white;font-weight:bold;font-size:${fontSize};">${(member.name||'?').charAt(0).toUpperCase()}</div>`;
+    } else {
+      return `<div style="width:${size};height:${size};background:linear-gradient(135deg, var(--blue), var(--purple));border-radius:${borderRadius};display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;font-size:${fontSize};">${(member.name||'?').charAt(0).toUpperCase()}</div>`;
+    }
+  }
+
+  // 100+ quotes
   const quoteTemplates = {
     excellent: ["🔥 {name} is on fire! A perfect saving streak – keep roaring like a lion!","🌟 {name} is a savings champion! {weeks} weeks of unstoppable consistency.","🏆 {name} leads the pride! {weeks} weeks of flawless savings.","💎 {name}'s discipline is inspiring – you're building real wealth!","🚀 {name} is soaring high with {weeks} weeks of perfect savings!","🦁 {name} is the king of savings! Your consistency is legendary.","✨ {name} shines bright! {weeks} weeks of dedication – keep it up!","🌱 {name} has planted a forest of savings! {weeks} weeks of growth.","💰 {name} is a saving machine! {weeks} weeks of excellence.","🎯 {name} hits the target every week! {weeks} weeks of perfection.","💪 {name} is unstoppable! {weeks} weeks of flawless savings.","👑 {name} rules the savings kingdom! {weeks} weeks of glory.","🌈 {name} is a savings rainbow – bright and consistent!","⚡ {name} is electric with {weeks} weeks of perfect saving!","🏅 {name} earns the gold medal in savings!","🎉 {name} celebrates {weeks} weeks of excellence!","🌻 {name}'s savings bloom every week!","📈 {name}'s graph is straight up – perfect streak!","🧠 {name} is a savings genius!","🦅 {name} soars above the rest!"],
     good: ["👍 {name} is doing great! {weeks} weeks of consistent savings – keep the momentum!","🌿 {name} is building a strong foundation. Keep saving steadily!","📈 {name} is on the right track! Your savings are growing beautifully.","💪 {name} shows strength – maintain this habit and you'll reach your goals.","🍀 {name} is making good progress. A few more weeks and you'll be a champion!","🎉 {name} is saving well! {weeks} weeks of good effort.","🌻 {name} is growing wealth like a sunflower – keep going!","⚡ {name} has the energy of a lion! Keep that saving spark alive.","🏅 {name} is a solid saver. Aim for a perfect streak next week!","📊 {name} is on a positive trend. Consistency pays off!","🌟 {name} shines with steady savings!","💼 {name} is building wealth brick by brick.","🚗 {name} is driving toward financial freedom!","🎯 {name} hits the mark every week!","🌈 {name} paints a bright future with savings!","🍯 {name} saves like a busy bee!","🛡️ {name} guards their future with savings.","📚 {name} writes a success story each week.","🔔 {name} rings the savings bell!","🕊️ {name} is peaceful with consistent savings."],
@@ -926,8 +947,8 @@ input, select, textarea, button {
     const member = members[Math.floor(Math.random() * members.length)];
     const totalSaved = memberBalances[member.phone] || 0;
     const joinDate = new Date(member.joinDate || '2025-01-01');
-    const weeksSinceJoin = Math.floor((Date.now() - joinDate.getTime()) / (7*24*3600*1000)) || 1;
-    const expectedTotal = settings.weeklyAmount * weeksSinceJoin;
+    const daysSinceJoin = Math.floor((Date.now() - joinDate.getTime()) / (24*3600*1000)) || 1;
+    const expectedTotal = settings.dailyAmount * daysSinceJoin;
     const ratio = expectedTotal > 0 ? totalSaved / expectedTotal : 1;
     let weeksSaved = 0;
     const now = Date.now();
@@ -954,17 +975,27 @@ input, select, textarea, button {
     const el = document.getElementById(id);
     if(!el) return;
     el.classList.add('on');
-    if(id === 'ov-cover-weeks'){ buildCoverWeeksList(); populateMemberDropdowns(); }
-    if(['ov-add-fine','ov-add-welfare','ov-weekly','ov-edit-tx'].includes(id)){ populateMemberDropdowns(); }
-    if(id === 'ov-weekly'){ loadWeeklyList(); }
+    if(id === 'ov-cover-days'){ buildCoverDaysList(); populateMemberDropdowns(); }
+    if(['ov-add-fine','ov-add-welfare','ov-daily','ov-edit-tx'].includes(id)){ populateMemberDropdowns(); }
+    if(id === 'ov-daily'){ loadDailyList(); }
     if(id === 'ov-apps'){ loadApplications(); }
     if(id === 'ov-settings'){
       document.getElementById('set-groupname').value = settings.groupName;
       document.getElementById('set-whatsapp').value = settings.whatsappLink || '';
-      document.getElementById('set-weekly').value = settings.weeklyAmount;
+      document.getElementById('set-daily').value = settings.dailyAmount;
       document.getElementById('set-fine').value = settings.fineAmount;
     }
     if(id === 'ov-rot-manage'){ buildDragRotation(); }
+    if(id === 'ov-edit-member'){ 
+      const memberId = document.getElementById('edit-member-id').value;
+      const member = members.find(m=>m.id===memberId);
+      if(member){
+        document.getElementById('edit-name').value = member.name || '';
+        document.getElementById('edit-phone').value = member.phone || '';
+        document.getElementById('edit-photo').value = member.photoURL || '';
+        document.getElementById('edit-join').value = member.joinDate || '';
+      }
+    }
   };
   window.closeOv=function(id){document.getElementById(id)?.classList.remove('on');};
   window.maybeClose=function(e,id){if(e.target.classList.contains('ov'))closeOv(id);};
@@ -980,14 +1011,41 @@ input, select, textarea, button {
   window.toggleShare=function(){document.getElementById('share-banner')?.classList.toggle('show');};
   window.doCopy=function(){const i=document.getElementById('share-inp');if(i){i.select();document.execCommand('copy');}toast('Link copied!','#2563eb');};
   window.setLF=function(f,btn){document.querySelectorAll('[id^="lf-"]').forEach(b=>{b.style.borderColor='';b.style.color='';});if(btn){btn.style.borderColor='var(--blue)';btn.style.color='var(--blue)';}loadLedger(f);};
-  window.openWeeklySavings=function(){openOv('ov-weekly');};
+  window.openDailySavings=function(){openOv('ov-daily');};
+  window.openMarkPaid=function(){openOv('ov-mark-paid'); loadMarkPaidInfo(); };
+
+  function loadMarkPaidInfo(){
+    const idx = rotation.currentIndex || 0;
+    const bid = rotation.order?.[idx];
+    const bene = members.find(m=>m.id===bid);
+    const target = settings.dailyAmount * 7 * members.length;
+    const info = document.getElementById('mark-paid-info');
+    if(!bene) info.innerHTML = '<span class="muted">No active beneficiary found.</span>';
+    else info.innerHTML = `<strong>${bene.name}</strong><br>Payout amount: UGX ${target.toLocaleString()}<br>Current cash: UGX ${cashFromDeposits.toLocaleString()}`;
+  }
+  window.confirmMarkPaid = async function(){
+    if(!db){toast('Firebase not connected','#dc2626');return;}
+    const idx = rotation.currentIndex || 0;
+    const bid = rotation.order?.[idx];
+    const bene = members.find(m=>m.id===bid);
+    if(!bene){toast('No current beneficiary','#dc2626');closeOv('ov-mark-paid');return;}
+    const target = settings.dailyAmount * 7 * members.length;
+    if(cashFromDeposits < target){toast(`Insufficient funds. Need UGX ${target.toLocaleString()} but have UGX ${cashFromDeposits.toLocaleString()}`,'#dc2626');return;}
+    try{
+      await db.ref('transactions').push({memberPhone:bene.phone,memberName:bene.name,type:'payout',amount:target,description:'Weekly payout',date:Date.now()});
+      const history=[...(rotation.history||[]),{memberId:bene.id,amount:target,date:Date.now()}];
+      const ni=((rotation.currentIndex||0)+1)%rotation.order.length;
+      await db.ref('rotation').update({currentIndex:ni,history});
+      toast(`Payout of UGX ${target.toLocaleString()} recorded & rotation advanced ✅`,'#059669');
+      closeOv('ov-mark-paid');
+    }catch(e){toast('Error','#dc2626');}
+  };
 
   function loadAllData(){
     if(!db)return;
     db.ref('members').on('value',snap=>{
       members=snap.val()?Object.entries(snap.val()).map(([id,m])=>({...m,id})):[];
       updateMembersUI();computePots();document.getElementById('ws-members').innerText=members.length;generatePersonalQuote();
-      // Initialize rotation order if empty and members exist
       if(rotation.order.length===0 && members.length>0){
         rotation.order = members.map(m=>m.id);
         db.ref('rotation').update({order:rotation.order, currentIndex:0});
@@ -1006,11 +1064,11 @@ input, select, textarea, button {
       }
     });
     db.ref('settings').on('value',snap=>{
-      settings=snap.val()||{groupName:'Harvest Trust',weeklyAmount:14000,fineAmount:5000,whatsappLink:''};
+      settings=snap.val()||{groupName:'Harvest Trust',dailyAmount:2000,fineAmount:5000,whatsappLink:''};
       document.getElementById('hdr-title').innerText=settings.groupName;
-      document.getElementById('h-rate').innerText=settings.weeklyAmount.toLocaleString();
-      const amtSpan=document.getElementById('cover-weekly-amt');
-      if(amtSpan)amtSpan.textContent=`UGX ${settings.weeklyAmount.toLocaleString()}`;
+      document.getElementById('h-rate').innerText=settings.dailyAmount.toLocaleString();
+      const amtSpan=document.getElementById('cover-daily-amt');
+      if(amtSpan)amtSpan.textContent=`UGX ${settings.dailyAmount.toLocaleString()}`;
     });
     db.ref('applications').orderByChild('status').equalTo('pending').on('value',snap=>{
       const c=snap.val()?Object.keys(snap.val()).length:0;
@@ -1018,35 +1076,166 @@ input, select, textarea, button {
       if(b){if(c>0){b.classList.remove('hidden');b.innerText=c;}else b.classList.add('hidden');}
     });
   }
-  function computePots(){let cash=0,profit=0,deps=0,exp=0,fines=0,welf=0;memberBalances={};transactions.forEach(tx=>{const a=tx.amount||0;if(tx.type==='deposit'){cash+=a;deps+=a;memberBalances[tx.memberPhone]=(memberBalances[tx.memberPhone]||0)+a;}else if(tx.type==='withdraw'){cash-=a;memberBalances[tx.memberPhone]=(memberBalances[tx.memberPhone]||0)-a;}else if(tx.type==='fine'){profit+=a;fines+=a;}else if(tx.type==='welfare'){profit+=a;welf+=a;}else if(tx.type==='expense'){profit-=a;exp+=a;}else if(tx.type==='payout'){cash-=a;}});cashFromDeposits=Math.max(0,cash);groupProfit=profit;totalDeposits=deps;totalExpenses=exp;totalFines=fines;totalWelfare=welf;updateStats();}
-  function updateStats(){document.getElementById('h-cash').innerText=cashFromDeposits.toLocaleString();document.getElementById('h-group-gross').innerText=(totalFines+totalWelfare).toLocaleString();document.getElementById('h-profit').innerText=groupProfit.toLocaleString();document.getElementById('bs-s').innerText=totalDeposits.toLocaleString();document.getElementById('bs-e').innerText=totalExpenses.toLocaleString();document.getElementById('bs-n').innerText=groupProfit.toLocaleString();}
-  function updateSavingsAdvice(){const list=document.getElementById('advice-list');if(!list||members.length===0){if(list)list.innerHTML='<div style="text-align:center;padding:10px;">No members yet.</div>';return;}const today=Date.now();const weekMs=7*24*3600*1000;const rows=members.map(m=>{const mTx=transactions.filter(t=>t.memberPhone===m.phone&&t.type==='deposit');const recentTx=mTx.filter(t=>(today-t.date)<weekMs);const expectedWeekly=settings.weeklyAmount;const ratio=expectedWeekly>0?recentTx.reduce((s,t)=>s+t.amount,0)/expectedWeekly:0;const weeksSaved=mTx.filter(t=>(today-t.date)<4*weekMs).length;const totalSaved=memberBalances[m.phone]||0;let cls,badge,comment;if(mTx.length===0){cls='info';badge='badge-info';comment='No savings recorded yet. Start saving today – every shilling counts!';}else if(ratio>=0.9&&weeksSaved>=3){cls='good';badge='badge-good';comment=`Excellent! ${weeksSaved} weeks of savings. You are a financial champion!`;}else if(ratio>=0.6){cls='good';badge='badge-good';comment=`Good pace! ${Math.round(ratio*100)}% of weekly target. Keep it up!`;}else if(ratio>=0.2){cls='warn';badge='badge-warn';comment=`Only ${Math.round(ratio*100)}% of weekly target. Try to save this week!`;}else{cls='bad';badge='badge-bad';comment=`Low savings this week. Please catch up to help the group.`;}return{m,cls,badge,comment,totalSaved};});list.innerHTML=rows.map(r=>`<div class="advice-row ${r.cls}"><div class="advice-av">${(r.m.name||'?').charAt(0)}</div><div style="flex:1"><div class="advice-name">${r.m.name}</div><div class="advice-comment">${r.comment}</div></div><span class="advice-badge ${r.badge}">UGX ${Math.max(0,r.totalSaved).toLocaleString()}</span></div>`).join('');}
-  function updateMembersUI(){const list=document.getElementById('members-list');if(!list)return;list.innerHTML=members.length===0?'<p class="muted" style="text-align:center;padding:22px;">No members yet.</p>':members.map(m=>{const bal=Math.max(0,memberBalances[m.phone]||0);return `<div class="mc"><div class="mc-av">${(m.name||'?').charAt(0)}</div><div style="flex:1"><div class="mc-name">${m.name}</div><div class="micro">${m.phone||''}</div></div><div class="mc-bal ${bal>0?'bp':'bz'}">UGX ${bal.toLocaleString()}</div></div>`;}).join('');document.getElementById('m-count').innerText=members.length;const admList=document.getElementById('adm-mbr-list');if(admList)admList.innerHTML=members.map(m=>{const bal=Math.max(0,memberBalances[m.phone]||0);return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--surf);border-radius:var(--r2);margin-bottom:5px;border:1px solid var(--br);"><div style="flex:1"><span class="code-pill">${m.name}</span> <span class="micro">${m.phone||''}</span></div><div style="display:flex;align-items:center;gap:7px;"><span class="mc-bal ${bal>0?'bp':'bz'}">UGX ${bal.toLocaleString()}</span><button class="txc-delete" style="width:auto;height:auto;padding:3px 8px;" onclick="deleteMember('${m.id}')">🗑️</button></div></div>`;}).join('');}
-  function updateHomeRecent(){const list=document.getElementById('h-recent');if(!list)return;const sorted=[...transactions].sort((a,b)=>(b.date||0)-(a.date||0));list.innerHTML=sorted.slice(0,5).map(tx=>{const member=members.find(m=>m.phone===tx.memberPhone)||{name:tx.memberName||'Unknown'};const isP=(tx.type==='deposit'||tx.type==='fine'||tx.type==='welfare');const sign=isP?'amt-p':'amt-n';const pre=isP?'+':'-';let ico='tic-we';if(tx.type==='deposit')ico='tic-d';else if(tx.type==='withdraw')ico='tic-w';else if(tx.type==='fine')ico='tic-f';else if(tx.type==='welfare')ico='tic-welf';const acts=adminUnlocked&&tx.type!=='payout'?`<div class="txc-actions"><div class="txc-edit" onclick="editTransaction('${tx.id}')">✏️</div><div class="txc-delete" onclick="deleteTransaction('${tx.id}')">🗑️</div></div>`:'';return `<div class="txc"><div class="txc-ico ${ico}"></div><div style="flex:1"><div class="txc-name">${member.name}</div><div class="txc-meta">${tx.description||tx.type}</div></div><div class="txc-amt ${sign}">${pre} UGX ${tx.amount.toLocaleString()}</div>${acts}</div>`;}).join('');}
-  function updateRotationUI(){const idx=rotation.currentIndex||0;const bid=rotation.order?.[idx];const bene=members.find(m=>m.id===bid)||{name:'—'};document.getElementById('rot-beneficiary').innerText=bene.name;document.getElementById('rot-pool').innerText=`Cash: UGX ${cashFromDeposits.toLocaleString()}`;const target=settings.weeklyAmount*members.length;document.getElementById('rot-pbar').style.width=(target?Math.min(100,Math.round(cashFromDeposits/target*100)):0)+'%';document.getElementById('rot-day-label').innerText='Weekly target';document.getElementById('rot-days-left').innerText=`${Math.max(0,members.length-(idx+1))} members left`;const chips=document.getElementById('rot-order-chips');if(chips&&rotation.order){chips.innerHTML=rotation.order.map((id,i)=>{const m=members.find(m=>m.id===id);const cl=i<idx?'rot-chip-done':i===idx?'rot-chip-cur':'rot-chip-next';const icon=i<idx?'✅':i===idx?'💰':'⏳';return `<div class="rot-chip ${cl}">${icon} ${i+1}. ${m?.name||'?'}</div>`;}).join('');}const manBtn=document.getElementById('rot-manage-btn');if(manBtn)manBtn.style.display=adminUnlocked?'flex':'none';const mpw=document.getElementById('rot-mark-paid-wrap');if(mpw&&cashFromDeposits>=target&&adminUnlocked){mpw.innerHTML=`<button class="btn btn-green" style="width:100%;" onclick="markPaidAndAdvance()">✅ Mark ${bene.name} as Paid & Advance</button>`;}else if(mpw){mpw.innerHTML='';}const sched=document.getElementById('rot-sched-list');if(sched&&rotation.order){sched.innerHTML=rotation.order.map((id,i)=>{const m=members.find(m=>m.id===id);const st=i===idx?'current':i<idx?'done':'upcoming';return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:7px;padding:10px;background:${st==='current'?'rgba(230,126,34,.07)':'var(--surf)'};border:1px solid ${st==='current'?'rgba(230,126,34,.25)':'var(--br)'};border-radius:var(--r2);"><div style="width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:JetBrains Mono,monospace;font-size:.82rem;font-weight:700;background:${st==='done'?'var(--green2)':st==='current'?'var(--amber2)':'var(--blue3)'};color:${st==='done'?'var(--green)':st==='current'?'var(--amber)':'var(--blue)'};">${i+1}</div><div style="flex:1"><div style="font-weight:700;font-size:.9rem;">${m?.name||'Unknown'}</div><div class="micro">${st==='done'?'✅ Paid':st==='current'?'💰 This Week':'⏳ Upcoming'}</div></div></div>`;}).join('');}const hist=document.getElementById('rot-hist-list');if(hist)hist.innerHTML=!rotation.history?.length?'<p class="muted" style="text-align:center;padding:14px;">No payout history yet.</p>':rotation.history.map(h=>{const m=members.find(m=>m.id===h.memberId);return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px;background:var(--surf);border:1px solid var(--br);border-radius:var(--r2);margin-bottom:5px;"><span style="font-weight:600;">${m?.name||'?'}</span><span class="sv-amber" style="font-family:JetBrains Mono;font-weight:700;">UGX ${h.amount.toLocaleString()}</span><span class="micro">${new Date(h.date).toLocaleDateString()}</span></div>`;}).join('');}
+  function computePots(){
+    let cash=0,profit=0,deps=0,exp=0,fines=0,welf=0;
+    memberBalances={};
+    transactions.forEach(tx=>{
+      const a=tx.amount||0;
+      if(tx.type==='deposit'){cash+=a;deps+=a;memberBalances[tx.memberPhone]=(memberBalances[tx.memberPhone]||0)+a;}
+      else if(tx.type==='withdraw'){cash-=a;memberBalances[tx.memberPhone]=(memberBalances[tx.memberPhone]||0)-a;}
+      else if(tx.type==='fine'){profit+=a;fines+=a;}
+      else if(tx.type==='welfare'){profit+=a;welf+=a;}
+      else if(tx.type==='expense'){profit-=a;exp+=a;}
+      else if(tx.type==='payout'){cash-=a;}
+    });
+    cashFromDeposits=Math.max(0,cash);
+    groupProfit=profit;
+    totalDeposits=deps;totalExpenses=exp;totalFines=fines;totalWelfare=welf;
+    updateStats();
+  }
+  function updateStats(){
+    document.getElementById('h-cash').innerText=cashFromDeposits.toLocaleString();
+    document.getElementById('h-group-gross').innerText=(totalFines+totalWelfare).toLocaleString();
+    document.getElementById('h-profit').innerText=groupProfit.toLocaleString();
+    document.getElementById('bs-s').innerText=totalDeposits.toLocaleString();
+    document.getElementById('bs-e').innerText=totalExpenses.toLocaleString();
+    document.getElementById('bs-n').innerText=groupProfit.toLocaleString();
+  }
+  function updateSavingsAdvice(){
+    const list=document.getElementById('advice-list');
+    if(!list||members.length===0){if(list)list.innerHTML='<div style="text-align:center;padding:10px;">No members yet.</div>';return;}
+    const today=Date.now();
+    const weekMs=7*24*3600*1000;
+    const rows=members.map(m=>{
+      const mTx=transactions.filter(t=>t.memberPhone===m.phone&&t.type==='deposit');
+      const recentTx=mTx.filter(t=>(today-t.date)<weekMs);
+      const expectedWeekly=settings.dailyAmount*7;
+      const ratio=expectedWeekly>0?recentTx.reduce((s,t)=>s+t.amount,0)/expectedWeekly:0;
+      const weeksSaved=mTx.filter(t=>(today-t.date)<4*weekMs).length;
+      const totalSaved=memberBalances[m.phone]||0;
+      let cls,badge,comment;
+      if(mTx.length===0){cls='info';badge='badge-info';comment='No savings recorded yet. Start saving today – every shilling counts!';}
+      else if(ratio>=0.9&&weeksSaved>=3){cls='good';badge='badge-good';comment=`Excellent! ${weeksSaved} weeks of savings. You are a financial champion!`;}
+      else if(ratio>=0.6){cls='good';badge='badge-good';comment=`Good pace! ${Math.round(ratio*100)}% of weekly target. Keep it up!`;}
+      else if(ratio>=0.2){cls='warn';badge='badge-warn';comment=`Only ${Math.round(ratio*100)}% of weekly target. Try to save this week!`;}
+      else{cls='bad';badge='badge-bad';comment=`Low savings this week. Please catch up to help the group.`;}
+      return{m,cls,badge,comment,totalSaved};
+    });
+    list.innerHTML=rows.map(r=>`
+      <div class="advice-row ${r.cls}">
+        <div class="advice-av" style="position:relative;">${getAvatar(r.m, '32px', '0.9rem', '9px')}</div>
+        <div style="flex:1"><div class="advice-name">${r.m.name}</div><div class="advice-comment">${r.comment}</div></div>
+        <span class="advice-badge ${r.badge}">UGX ${Math.max(0,r.totalSaved).toLocaleString()}</span>
+      </div>`).join('');
+  }
+  function updateMembersUI(){
+    const list=document.getElementById('members-list');
+    if(!list)return;
+    list.innerHTML=members.length===0?'<p class="muted" style="text-align:center;padding:22px;">No members yet.</p>':
+      members.map(m=>{
+        const bal=Math.max(0,memberBalances[m.phone]||0);
+        return `<div class="mc">
+          <div style="position:relative;">${getAvatar(m, '38px', '1rem', '12px')}</div>
+          <div style="flex:1"><div class="mc-name">${m.name}</div><div class="micro">${m.phone||''}</div></div>
+          <div class="mc-bal ${bal>0?'bp':'bz'}">UGX ${bal.toLocaleString()}</div>
+        </div>`;
+      }).join('');
+    document.getElementById('m-count').innerText=members.length;
+    const admList=document.getElementById('adm-mbr-list');
+    if(admList)admList.innerHTML=members.map(m=>{
+      const bal=Math.max(0,memberBalances[m.phone]||0);
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--surf);border-radius:var(--r2);margin-bottom:5px;border:1px solid var(--br);">
+        <div style="display:flex;align-items:center;gap:8px;flex:1;">
+          <div style="position:relative;">${getAvatar(m, '32px', '0.9rem', '8px')}</div>
+          <div><div class="code-pill">${m.name}</div><div class="micro">${m.phone||''}</div></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:7px;">
+          <span class="mc-bal ${bal>0?'bp':'bz'}">UGX ${bal.toLocaleString()}</span>
+          <button class="txc-edit" style="width:auto;height:auto;padding:5px 8px;" onclick="openEditMember('${m.id}')">✏️</button>
+          <button class="txc-delete" style="width:auto;height:auto;padding:5px 8px;" onclick="deleteMember('${m.id}')">🗑️</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  function updateHomeRecent(){
+    const list=document.getElementById('h-recent');if(!list)return;
+    const sorted=[...transactions].sort((a,b)=>(b.date||0)-(a.date||0));
+    list.innerHTML=sorted.slice(0,5).map(tx=>{
+      const member=members.find(m=>m.phone===tx.memberPhone)||{name:tx.memberName||'Unknown'};
+      const isP=(tx.type==='deposit'||tx.type==='fine'||tx.type==='welfare');
+      const sign=isP?'amt-p':'amt-n';const pre=isP?'+':'-';
+      let ico='tic-we';
+      if(tx.type==='deposit')ico='tic-d';
+      else if(tx.type==='withdraw')ico='tic-w';
+      else if(tx.type==='fine')ico='tic-f';
+      else if(tx.type==='welfare')ico='tic-welf';
+      const acts=adminUnlocked&&tx.type!=='payout'?`<div class="txc-actions"><div class="txc-edit" onclick="editTransaction('${tx.id}')">✏️</div><div class="txc-delete" onclick="deleteTransaction('${tx.id}')">🗑️</div></div>`:'';
+      return `<div class="txc"><div class="txc-ico ${ico}"></div><div style="flex:1"><div class="txc-name">${member.name}</div><div class="txc-meta">${tx.description||tx.type}</div></div><div class="txc-amt ${sign}">${pre} UGX ${tx.amount.toLocaleString()}</div>${acts}</div>`;
+    }).join('');
+  }
+  function updateRotationUI(){
+    const idx=rotation.currentIndex||0;
+    const bid=rotation.order?.[idx];
+    const bene=members.find(m=>m.id===bid)||{name:'—'};
+    document.getElementById('rot-beneficiary').innerText=bene.name;
+    document.getElementById('rot-pool').innerText=`Cash: UGX ${cashFromDeposits.toLocaleString()}`;
+    const target=settings.dailyAmount*7*members.length;
+    document.getElementById('rot-pbar').style.width=(target?Math.min(100,Math.round(cashFromDeposits/target*100)):0)+'%';
+    document.getElementById('rot-day-label').innerText='Weekly target';
+    document.getElementById('rot-days-left').innerText=`${Math.max(0,members.length-(idx+1))} members left`;
+    const chips=document.getElementById('rot-order-chips');
+    if(chips&&rotation.order){
+      chips.innerHTML=rotation.order.map((id,i)=>{
+        const m=members.find(m=>m.id===id);
+        const cl=i<idx?'rot-chip-done':i===idx?'rot-chip-cur':'rot-chip-next';
+        const icon=i<idx?'✅':i===idx?'💰':'⏳';
+        return `<div class="rot-chip ${cl}" style="display:inline-flex;align-items:center;gap:6px;">${icon} ${i+1}. ${m?.name||'?'}</div>`;
+      }).join('');
+    }
+    const manBtn=document.getElementById('rot-manage-btn');
+    if(manBtn)manBtn.style.display=adminUnlocked?'flex':'none';
+    const mpw=document.getElementById('rot-mark-paid-wrap');
+    if(mpw&&cashFromDeposits>=target&&adminUnlocked){
+      mpw.innerHTML=`<button class="btn btn-green" style="width:100%;" onclick="confirmMarkPaid()">✅ Mark ${bene.name} as Paid & Advance</button>`;
+    }else if(mpw){mpw.innerHTML='';}
+    const sched=document.getElementById('rot-sched-list');
+    if(sched&&rotation.order){
+      sched.innerHTML=rotation.order.map((id,i)=>{
+        const m=members.find(m=>m.id===id);
+        const st=i===idx?'current':i<idx?'done':'upcoming';
+        return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:7px;padding:10px;background:${st==='current'?'rgba(230,126,34,.07)':'var(--surf)'};border:1px solid ${st==='current'?'rgba(230,126,34,.25)':'var(--br)'};border-radius:var(--r2);">
+          <div style="width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:JetBrains Mono,monospace;font-size:.82rem;font-weight:700;background:${st==='done'?'var(--green2)':st==='current'?'var(--amber2)':'var(--blue3)'};color:${st==='done'?'var(--green)':st==='current'?'var(--amber)':'var(--blue)'};">${i+1}</div>
+          <div style="flex:1"><div style="font-weight:700;font-size:.9rem;">${m?.name||'Unknown'}</div><div class="micro">${st==='done'?'✅ Paid':st==='current'?'💰 This Week':'⏳ Upcoming'}</div></div>
+        </div>`;
+      }).join('');
+    }
+    const hist=document.getElementById('rot-hist-list');
+    if(hist)hist.innerHTML=!rotation.history?.length?'<p class="muted" style="text-align:center;padding:14px;">No payout history yet.</p>':
+      rotation.history.map(h=>{const m=members.find(m=>m.id===h.memberId);return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px;background:var(--surf);border:1px solid var(--br);border-radius:var(--r2);margin-bottom:5px;"><span style="font-weight:600;">${m?.name||'?'}</span><span class="sv-amber" style="font-family:JetBrains Mono;font-weight:700;">UGX ${h.amount.toLocaleString()}</span><span class="micro">${new Date(h.date).toLocaleDateString()}</span></div>`;}).join('');
+  }
   function buildDragRotation(){dragOrder=[...(rotation.order||[])];const container=document.getElementById('rot-drag-list');if(!container)return;renderDragList(container);}
   function renderDragList(container){container.innerHTML='';if(!dragOrder.length){container.innerHTML='<p class="muted" style="text-align:center;padding:14px;">No rotation order. Add members first.</p>';return;}dragOrder.forEach((id,i)=>{const m=members.find(m=>m.id===id)||{name:'Unknown'};const div=document.createElement('div');div.className='rot-drag-item';div.draggable=true;div.dataset.index=i;div.innerHTML=`<span class="drag-handle">⠿</span><div class="drag-num">${i+1}</div><div class="drag-name">${m.name}</div>`;div.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain',i);div.classList.add('dragging');});div.addEventListener('dragend',()=>div.classList.remove('dragging'));div.addEventListener('dragover',e=>{e.preventDefault();div.classList.add('drag-over');});div.addEventListener('dragleave',()=>div.classList.remove('drag-over'));div.addEventListener('drop',e=>{e.preventDefault();div.classList.remove('drag-over');const from=parseInt(e.dataTransfer.getData('text/plain'));if(from===i)return;const moved=dragOrder.splice(from,1)[0];dragOrder.splice(i,0,moved);renderDragList(container);});container.appendChild(div);});}
   window.saveRotationOrder=async function(){if(!db){toast('Firebase not connected','#dc2626');return;}try{await db.ref('rotation').update({order:dragOrder,currentIndex:0});toast('Rotation order saved ✅','#059669');closeOv('ov-rot-manage');}catch(e){toast('Error','#dc2626');}};
   window.advanceRotation=async function(){if(!db||!rotation.order?.length){toast('No rotation set','#dc2626');return;}const ni=((rotation.currentIndex||0)+1)%rotation.order.length;try{await db.ref('rotation').update({currentIndex:ni});toast('Rotation advanced ➡️','#7c3aed');}catch(e){toast('Error','#dc2626');}};
-  window.markPaidAndAdvance=async function(){if(!db){toast('Firebase not connected','#dc2626');return;}const bid=rotation.order?.[rotation.currentIndex];const bene=members.find(m=>m.id===bid);if(!bene){toast('No current beneficiary','#dc2626');return;}const target=settings.weeklyAmount*members.length;if(cashFromDeposits<target){toast(`Insufficient funds. Need UGX ${target.toLocaleString()} but have UGX ${cashFromDeposits.toLocaleString()}`,'#dc2626');return;}try{await db.ref('transactions').push({memberPhone:bene.phone,memberName:bene.name,type:'payout',amount:target,description:'Weekly payout',date:Date.now()});const history=[...(rotation.history||[]),{memberId:bene.id,amount:target,date:Date.now()}];const ni=((rotation.currentIndex||0)+1)%rotation.order.length;await db.ref('rotation').update({currentIndex:ni,history});toast(`Payout of UGX ${target.toLocaleString()} recorded & rotation advanced ✅`,'#059669');closeOv('ov-rot-manage');}catch(e){toast('Error','#dc2626');}};
-  window.markPaidBtn=function(){};
   function updateGroupTab(){document.getElementById('group-gross').innerText=(totalFines+totalWelfare).toLocaleString();document.getElementById('group-net').innerText=groupProfit.toLocaleString();document.getElementById('group-exp').innerText=totalExpenses.toLocaleString();const list=document.getElementById('group-list');if(!list)return;const f=transactions.filter(tx=>['fine','welfare','expense'].includes(tx.type)).sort((a,b)=>(b.date||0)-(a.date||0));list.innerHTML=f.slice(0,50).map(tx=>{const m=members.find(m=>m.phone===tx.memberPhone)||{name:tx.memberName||'Unknown'};const s=(tx.type==='fine'||tx.type==='welfare')?'amt-p':'amt-n';const pr=(tx.type==='fine'||tx.type==='welfare')?'+':'-';const ico=tx.type==='welfare'?'tic-welf':tx.type==='expense'?'tic-we':'tic-f';return `<div class="txc"><div class="txc-ico ${ico}"></div><div style="flex:1"><div class="txc-name">${m.name}</div><div class="txc-meta">${tx.description||tx.type} · ${new Date(tx.date).toLocaleDateString()}</div></div><div class="txc-amt ${s}">${pr} UGX ${tx.amount.toLocaleString()}</div></div>`;}).join('');}
   function loadLedger(filter='all'){const list=document.getElementById('ledger-list');if(!list)return;let f=filter==='all'?transactions:transactions.filter(tx=>tx.type===filter);f.sort((a,b)=>(b.date||0)-(a.date||0));if(!f.length){list.innerHTML='<p class="muted" style="text-align:center;padding:22px;">No transactions found.</p>';return;}list.innerHTML=f.slice(0,100).map(tx=>{const m=members.find(m=>m.phone===tx.memberPhone)||{name:tx.memberName||'Unknown'};const isP=(tx.type==='deposit'||tx.type==='fine'||tx.type==='welfare');const s=isP?'amt-p':'amt-n';const pr=isP?'+':'-';let ico='tic-d';if(tx.type==='withdraw')ico='tic-w';else if(tx.type==='fine')ico='tic-f';else if(tx.type==='welfare')ico='tic-welf';else if(tx.type==='expense'||tx.type==='payout')ico='tic-we';const acts=adminUnlocked&&tx.type!=='payout'?`<div class="txc-actions"><div class="txc-edit" onclick="editTransaction('${tx.id}')">✏️</div><div class="txc-delete" onclick="deleteTransaction('${tx.id}')">🗑️</div></div>`:'';return `<div class="txc"><div class="txc-ico ${ico}"></div><div style="flex:1"><div class="txc-name">${m.name}</div><div class="txc-meta">${tx.description||tx.type} · ${new Date(tx.date).toLocaleDateString()}</div></div><div class="txc-amt ${s}">${pr} UGX ${tx.amount.toLocaleString()}</div>${acts}</div>`;}).join('');}
   window.editTransaction=function(key){const tx=transactions.find(t=>t.id===key);if(!tx){toast('Not found','#dc2626');return;}populateMemberDropdowns();setTimeout(()=>{const sel=document.getElementById('edit-tx-member');if(sel)sel.value=tx.memberPhone||'';document.getElementById('edit-tx-type').value=tx.type||'deposit';document.getElementById('edit-tx-amount').value=tx.amount||0;document.getElementById('edit-tx-desc').value=tx.description||'';document.getElementById('edit-tx-id').value=key;},60);openOv('ov-edit-tx');};
   window.updateTransaction=async function(){const key=document.getElementById('edit-tx-id').value;const mp=document.getElementById('edit-tx-member')?.value;const type=document.getElementById('edit-tx-type')?.value;const amount=parseFloat(document.getElementById('edit-tx-amount')?.value);const desc=document.getElementById('edit-tx-desc')?.value.trim()||type;if(!key||!mp||!type||!amount||amount<=0){toast('Invalid input','#dc2626');return;}const member=members.find(m=>m.phone===mp);if(!member){toast('Member not found','#dc2626');return;}if(!db){toast('Firebase not connected','#dc2626');return;}try{const snap=await db.ref('transactions/'+key).once('value');const old=snap.val();if(!old){toast('Original not found','#dc2626');return;}await db.ref('transactions/'+key).set({memberPhone:mp,memberName:member.name,type,amount,description:desc,date:old.date||Date.now()});toast('Transaction updated ✅','#2563eb');closeOv('ov-edit-tx');}catch(e){toast('Error updating','#dc2626');}};
   window.deleteTransaction=async function(key){if(!db){toast('Firebase not connected','#dc2626');return;}if(!confirm('Delete this transaction? Cannot be undone.'))return;try{const snap=await db.ref('transactions/'+key).once('value');const tx=snap.val();if(!tx){toast('Not found','#dc2626');return;}if(tx.type==='payout'){toast('Payouts cannot be deleted','#dc2626');return;}await db.ref('transactions/'+key).remove();toast('Transaction deleted ✅','#dc2626');}catch(e){toast('Error','#dc2626');}};
-  function buildCoverWeeksList(){const container=document.getElementById('cover-weeks-list');if(!container)return;container.innerHTML='';const now=new Date();for(let i=0;i<4;i++){const weekStart=new Date(now.getTime() - i*7*24*3600*1000);const weekLabel=`Week of ${weekStart.toLocaleDateString('en-UG',{month:'short',day:'numeric',year:'numeric'})}`;const weekKey=weekStart.toISOString().split('T')[0];const safe=weekKey.replace(/-/g,'');const row=document.createElement('div');row.className='weekly-check';row.onclick=()=>toggleCoverWeek(weekKey,safe);row.innerHTML=`<div class="wc-box" id="cweek-${safe}"></div><span>${weekLabel}</span>`;container.appendChild(row);}}
-  window.toggleCoverWeek=function(weekKey,safe){const box=document.getElementById('cweek-'+safe);if(!box)return;const p=box.closest('.weekly-check');if(p.classList.contains('checked')){p.classList.remove('checked');delete coverWeeks[weekKey];}else{p.classList.add('checked');coverWeeks[weekKey]=true;}};
-  window.saveCoverWeeks=async function(){const mp=document.getElementById('cover-member')?.value;const weeks=Object.keys(coverWeeks);if(!mp){toast('Select a member','#dc2626');return;}if(!weeks.length){toast('Select at least one week','#dc2626');return;}const member=members.find(m=>m.phone===mp);if(!member){toast('Member not found','#dc2626');return;}if(!db){toast('Firebase not connected','#dc2626');return;}try{for(const weekKey of weeks){const dateTs=new Date(weekKey+'T12:00:00').getTime();await db.ref('transactions').push({memberPhone:mp,memberName:member.name,type:'deposit',amount:settings.weeklyAmount,description:`Backdated weekly savings – ${weekKey}`,date:dateTs});}coverWeeks={};toast(`✅ ${weeks.length} week(s) of savings recorded for ${member.name}`,'#059669');closeOv('ov-cover-weeks');}catch(e){toast('Error recording savings','#dc2626');}};
-  window.addMember=async function(){const name=document.getElementById('mbr-name')?.value.trim();const phone=document.getElementById('mbr-phone')?.value.trim();const pw=document.getElementById('mbr-pw')?.value;const join=document.getElementById('mbr-join')?.value;if(!name||!phone||!pw||!join){toast('All fields required','#dc2626');return;}if(!db){toast('Firebase not connected','#dc2626');return;}try{await db.ref('members').push({name,phone,password:pw,joinDate:join});toast('Member added ✅','#059669');closeOv('ov-add-mbr');}catch(e){toast('Error','#dc2626');}};
+  function buildCoverDaysList(){const container=document.getElementById('cover-days-list');if(!container)return;container.innerHTML='';for(let i=0;i<14;i++){const d=new Date(Date.now() - i*86400000);const dateStr=d.toLocaleDateString('en-UG',{weekday:'short',day:'numeric',month:'short'});const dateKey=d.toISOString().split('T')[0];const safe=dateKey.replace(/-/g,'');const row=document.createElement('div');row.className='daily-check';row.onclick=()=>toggleCoverDay(dateKey,safe);row.innerHTML=`<div class="dc-box" id="cday-${safe}"></div><span>${dateStr}</span>`;container.appendChild(row);}}
+  window.toggleCoverDay=function(dateKey,safe){const box=document.getElementById('cday-'+safe);if(!box)return;const p=box.closest('.daily-check');if(p.classList.contains('checked')){p.classList.remove('checked');delete coverDays[dateKey];}else{p.classList.add('checked');coverDays[dateKey]=true;}};
+  window.saveCoverDays=async function(){const mp=document.getElementById('cover-member')?.value;const days=Object.keys(coverDays);if(!mp){toast('Select a member','#dc2626');return;}if(!days.length){toast('Select at least one day','#dc2626');return;}const member=members.find(m=>m.phone===mp);if(!member){toast('Member not found','#dc2626');return;}if(!db){toast('Firebase not connected','#dc2626');return;}try{for(const dayKey of days){const dateTs=new Date(dayKey+'T12:00:00').getTime();await db.ref('transactions').push({memberPhone:mp,memberName:member.name,type:'deposit',amount:settings.dailyAmount,description:`Backdated daily savings – ${dayKey}`,date:dateTs});}coverDays={};toast(`✅ ${days.length} day(s) of savings recorded for ${member.name}`,'#059669');closeOv('ov-cover-days');}catch(e){toast('Error recording savings','#dc2626');}};
+  window.addMember=async function(){const name=document.getElementById('mbr-name')?.value.trim();const phone=document.getElementById('mbr-phone')?.value.trim();const pw=document.getElementById('mbr-pw')?.value;const join=document.getElementById('mbr-join')?.value;const photoURL=document.getElementById('mbr-photo')?.value.trim();if(!name||!phone||!pw||!join){toast('All fields required','#dc2626');return;}if(!db){toast('Firebase not connected','#dc2626');return;}try{await db.ref('members').push({name,phone,password:pw,joinDate:join,photoURL});toast('Member added ✅','#059669');closeOv('ov-add-mbr');}catch(e){toast('Error','#dc2626');}};
   window.addFine=async function(){const mp=document.getElementById('fine-member')?.value;const reason=document.getElementById('fine-reason')?.value.trim()||'Fine';const amount=parseFloat(document.getElementById('fine-amount')?.value);if(!mp||!amount){toast('Invalid','#dc2626');return;}const m=members.find(m=>m.phone===mp);if(!m)return;if(!db){toast('Firebase not connected','#dc2626');return;}try{await db.ref('transactions').push({memberPhone:mp,memberName:m.name,type:'fine',amount,description:reason,date:Date.now()});toast('Fine applied ⚡','#d97706');closeOv('ov-add-fine');}catch(e){toast('Error','#dc2626');}};
   window.addWelfare=async function(){const mp=document.getElementById('welfare-member')?.value;const desc=document.getElementById('welfare-desc')?.value.trim()||'Welfare';const amount=parseFloat(document.getElementById('welfare-amount')?.value);if(!mp||!amount){toast('Invalid','#dc2626');return;}const m=members.find(m=>m.phone===mp);if(!m)return;if(!db){toast('Firebase not connected','#dc2626');return;}try{await db.ref('transactions').push({memberPhone:mp,memberName:m.name,type:'welfare',amount,description:desc,date:Date.now()});toast('Welfare recorded 🤝','#7c3aed');closeOv('ov-add-welfare');}catch(e){toast('Error','#dc2626');}};
   window.addExpense=async function(){const desc=document.getElementById('exp-desc')?.value.trim();const amount=parseFloat(document.getElementById('exp-amount')?.value);const paidto=document.getElementById('exp-paidto')?.value.trim()||'Unknown';if(!desc||!amount){toast('Invalid','#dc2626');return;}if(!db){toast('Firebase not connected','#dc2626');return;}try{await db.ref('transactions').push({memberPhone:'expense',memberName:paidto,type:'expense',amount,description:desc,date:Date.now()});toast('Expense recorded','#dc2626');closeOv('ov-add-exp');}catch(e){toast('Error','#dc2626');}};
   window.deleteMember=async function(id){if(!db||!confirm('Delete this member permanently?'))return;try{await db.ref('members/'+id).remove();if(rotation.order?.includes(id)){const no=rotation.order.filter(x=>x!==id);let ni=rotation.currentIndex||0;if(!no.length)ni=0;else if(ni>=no.length)ni=no.length-1;await db.ref('rotation').update({order:no,currentIndex:ni});}toast('Member deleted','#dc2626');}catch(e){toast('Error','#dc2626');}};
-  window.loadWeeklyList=function(){const list=document.getElementById('weekly-list');if(!list)return;list.innerHTML=members.length?members.map(m=>`<div class="weekly-check" onclick="toggleWeekly('${m.phone}')"><div class="wc-box" id="weekly-${m.phone.replace(/\W/g,'_')}"></div><span>${m.name}</span></div>`).join(''):'<p class="muted">No members.</p>';};
-  window.toggleWeekly=function(phone){const box=document.getElementById('weekly-'+phone.replace(/\W/g,'_'));if(!box)return;const p=box.closest('.weekly-check');if(p.classList.contains('checked')){p.classList.remove('checked');delete weeklyChecked[phone];}else{p.classList.add('checked');weeklyChecked[phone]=true;}};
-  window.saveWeekly=async function(){const phones=Object.keys(weeklyChecked);if(!phones.length){toast('No members selected','#dc2626');return;}if(!db){toast('Firebase not connected','#dc2626');return;}try{for(const phone of phones){const m=members.find(m=>m.phone===phone);if(!m)continue;await db.ref('transactions').push({memberPhone:phone,memberName:m.name,type:'deposit',amount:settings.weeklyAmount,description:'Weekly savings',date:Date.now()});}toast(`Weekly savings saved for ${phones.length} members ✅`,'#059669');weeklyChecked={};closeOv('ov-weekly');}catch(e){toast('Error','#dc2626');}};
-  window.doSaveSettings=async function(){const groupName=document.getElementById('set-groupname')?.value.trim()||'Harvest Trust';const whatsappLink=document.getElementById('set-whatsapp')?.value.trim()||'';const weekly=parseFloat(document.getElementById('set-weekly')?.value);const fine=parseFloat(document.getElementById('set-fine')?.value);if(isNaN(weekly)||isNaN(fine)){toast('Invalid numbers','#dc2626');return;}if(!db){toast('Firebase not connected','#dc2626');return;}try{await db.ref('settings').set({groupName,whatsappLink,weeklyAmount:weekly,fineAmount:fine});toast('Settings saved ⚙️','#2563eb');closeOv('ov-settings');}catch(e){toast('Error','#dc2626');}};
+  window.openEditMember=function(id){document.getElementById('edit-member-id').value = id; openOv('ov-edit-member');};
+  window.updateMember=async function(){const id=document.getElementById('edit-member-id').value;const name=document.getElementById('edit-name').value.trim();const phone=document.getElementById('edit-phone').value.trim();const photoURL=document.getElementById('edit-photo').value.trim();const joinDate=document.getElementById('edit-join').value;if(!name||!phone||!joinDate){toast('All fields required','#dc2626');return;}if(!db){toast('Firebase not connected','#dc2626');return;}try{await db.ref('members/'+id).update({name,phone,photoURL,joinDate});toast('Member updated ✅','#059669');closeOv('ov-edit-member');}catch(e){toast('Error','#dc2626');}};
+  window.loadDailyList=function(){const list=document.getElementById('daily-list');if(!list)return;list.innerHTML=members.length?members.map(m=>`<div class="daily-check" onclick="toggleDaily('${m.phone}')"><div class="dc-box" id="daily-${m.phone.replace(/\W/g,'_')}"></div><span>${m.name}</span></div>`).join(''):'<p class="muted">No members.</p>';};
+  window.toggleDaily=function(phone){const box=document.getElementById('daily-'+phone.replace(/\W/g,'_'));if(!box)return;const p=box.closest('.daily-check');if(p.classList.contains('checked')){p.classList.remove('checked');delete dailyChecked[phone];}else{p.classList.add('checked');dailyChecked[phone]=true;}};
+  window.saveDaily=async function(){const phones=Object.keys(dailyChecked);if(!phones.length){toast('No members selected','#dc2626');return;}if(!db){toast('Firebase not connected','#dc2626');return;}try{for(const phone of phones){const m=members.find(m=>m.phone===phone);if(!m)continue;await db.ref('transactions').push({memberPhone:phone,memberName:m.name,type:'deposit',amount:settings.dailyAmount,description:'Daily savings',date:Date.now()});}toast(`Daily savings saved for ${phones.length} members ✅`,'#059669');dailyChecked={};closeOv('ov-daily');}catch(e){toast('Error','#dc2626');}};
+  window.doSaveSettings=async function(){const groupName=document.getElementById('set-groupname')?.value.trim()||'Harvest Trust';const whatsappLink=document.getElementById('set-whatsapp')?.value.trim()||'';const daily=parseFloat(document.getElementById('set-daily')?.value);const fine=parseFloat(document.getElementById('set-fine')?.value);if(isNaN(daily)||isNaN(fine)){toast('Invalid numbers','#dc2626');return;}if(!db){toast('Firebase not connected','#dc2626');return;}try{await db.ref('settings').set({groupName,whatsappLink,dailyAmount:daily,fineAmount:fine});toast('Settings saved ⚙️','#2563eb');closeOv('ov-settings');}catch(e){toast('Error','#dc2626');}};
   window.loadApplications=async function(){if(!db){document.getElementById('apps-list').innerHTML='<p class="muted">Firebase not connected</p>';return;}try{const snap=await db.ref('applications').orderByChild('status').equalTo('pending').once('value');const apps=snap.val()?Object.entries(snap.val()).map(([key,a])=>({...a,key})):[];const c=document.getElementById('apps-list');if(!apps.length){c.innerHTML='<p class="muted" style="text-align:center;padding:22px;">No pending applications.</p>';return;}c.innerHTML=apps.map(a=>`<div class="app-card"><div style="font-weight:700;">${a.name}</div><div class="micro">📞 ${a.phone} · ${a.occupation||''}</div><div style="display:flex;gap:7px;margin-top:8px;"><button class="btn btn-sm btn-green" onclick="approveApplication('${a.key}')">✅ Approve</button><button class="btn btn-sm btn-red" onclick="rejectApplication('${a.key}')">✕ Reject</button></div></div>`).join('');}catch(e){console.warn(e);}};
   window.approveApplication=async function(key){if(!db)return;const snap=await db.ref('applications/'+key).once('value');const a=snap.val();if(!a)return;try{await db.ref('members').push({name:a.name,phone:a.phone,password:a.password,joinDate:new Date().toISOString().split('T')[0]});await db.ref('applications/'+key).update({status:'approved'});toast('✅ '+a.name+' approved!','#059669');loadApplications();}catch(e){toast('Error','#dc2626');}};
   window.rejectApplication=async function(key){if(!db)return;try{await db.ref('applications/'+key).update({status:'rejected'});toast('Rejected','#dc2626');loadApplications();}catch(e){toast('Error','#dc2626');}};
