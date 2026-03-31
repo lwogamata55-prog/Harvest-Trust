@@ -1515,28 +1515,46 @@ function updateGroupTab() {
   }).join('') || '<div class="muted" style="text-align:center;padding:16px;">No group transactions.</div>';
 }
 
-// ===== SAVINGS LEADERBOARD =====
+// ===== SAVINGS LEADERBOARD (FIXED) =====
 function updateSavingsAdvice() {
   const list = document.getElementById('advice-list');
   if (!list) return;
   if (!members.length) { list.innerHTML = '<div style="text-align:center;padding:16px;color:var(--t3);">No members yet.</div>'; return; }
 
   const today = Date.now();
-  const weekMs = 7 * 24 * 3600 * 1000;
   const da = +(settings.dailyAmount || 2000);
+
+  // Pre‑compute the earliest deposit date for each member
+  const firstDepositMap = {};
+  transactions.forEach(tx => {
+    if (tx.type === 'deposit' && tx.memberPhone) {
+      if (!firstDepositMap[tx.memberPhone] || tx.date < firstDepositMap[tx.memberPhone]) {
+        firstDepositMap[tx.memberPhone] = tx.date;
+      }
+    }
+  });
 
   let data = members.map(m => {
     const mTx = transactions.filter(t => t.memberPhone === m.phone && t.type === 'deposit');
+    const weekMs = 7 * 24 * 3600 * 1000;
     const weekAmt = mTx.filter(t => (today - t.date) < weekMs).reduce((s, t) => s + (+t.amount), 0);
-    const joinDate = new Date(m.joinDate || '2025-01-01');
-    const daysSince = Math.max(1, Math.floor((today - joinDate.getTime()) / (24 * 3600 * 1000)));
+    const totalDep = mTx.reduce((s, t) => s + (+t.amount), 0);
+    const firstDepositDate = firstDepositMap[m.phone];
+    let daysSince;
+    if (firstDepositDate && firstDepositDate > 0) {
+      daysSince = Math.max(1, Math.floor((today - firstDepositDate) / (24 * 3600 * 1000)));
+    } else {
+      // fallback to join date if exists, otherwise assume they just joined today (so no deposits)
+      const joinDate = m.joinDate ? new Date(m.joinDate).getTime() : today;
+      daysSince = Math.max(1, Math.floor((today - joinDate) / (24 * 3600 * 1000)));
+      if (totalDep === 0) daysSince = 1; // avoid division by zero for zero deposits
+    }
     const expected = da * daysSince;
-    const actual = mTx.reduce((s, t) => s + (+t.amount), 0);
-    const ratio = expected > 0 ? actual / expected : 0;
+    const ratio = expected > 0 ? totalDep / expected : 0;
     const weekRatio = (da * 7) > 0 ? weekAmt / (da * 7) : 0;
     const overallPct = Math.round(Math.min(100, Math.max(0, ratio * 100)));
     const weekPct = Math.round(Math.min(100, Math.max(0, weekRatio * 100)));
-    return { m, ratio, weekRatio, overallPct, weekPct };
+    return { m, ratio, weekRatio, overallPct, weekPct, totalDep, daysSince };
   });
 
   data.sort((a, b) => b.ratio - a.ratio);
@@ -1548,7 +1566,7 @@ function updateSavingsAdvice() {
     const isLeader = rank === 1;
     const isLast = rank === data.length && data.length > 1;
     let cls, comment, barColor;
-    if (!transactions.some(t => t.memberPhone === d.m.phone && t.type === 'deposit')) {
+    if (d.totalDep === 0) {
       cls = 'info'; comment = 'No deposits yet. Every shilling counts!'; barColor = 'rgba(100,116,139,0.4)';
     } else if (d.ratio >= 0.9) {
       cls = 'good'; comment = '🔥 Outstanding! ' + d.overallPct + '% savings rate!'; barColor = 'var(--green)';
