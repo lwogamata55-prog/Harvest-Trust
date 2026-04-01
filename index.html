@@ -1534,8 +1534,13 @@ function updateRotationUI() {
 
   const mpw = document.getElementById('rot-mark-paid-wrap');
   if (mpw) {
-    if (cashFromDeposits >= target && target > 0 && adminUnlocked) {
-      mpw.innerHTML = '<button class="btn btn-green btn-full" onclick="openOv(\'ov-mark-paid\');loadMarkPaidInfo()">✅ Mark ' + bene.name + ' as Paid &amp; Advance</button>';
+    if (target > 0 && adminUnlocked) {
+      const _shortfall = Math.max(0, target - cashFromDeposits);
+      const _btnLabel = _shortfall > 0
+        ? '⚡ Pay ' + bene.name + ' &amp; Recover UGX ' + _shortfall.toLocaleString() + ' from Defaulters'
+        : '✅ Mark ' + bene.name + ' as Paid &amp; Advance';
+      const _btnCls = _shortfall > 0 ? 'btn btn-amber btn-full' : 'btn btn-green btn-full';
+      mpw.innerHTML = '<button class="' + _btnCls + '" onclick="openOv(\'ov-mark-paid\');loadMarkPaidInfo()">' + _btnLabel + '</button>';
     } else {
       mpw.innerHTML = '';
     }
@@ -2373,16 +2378,31 @@ function loadMarkPaidInfo() {
   const target = +(settings.dailyAmount||2000) * 7 * members.length;
   const info = document.getElementById('mark-paid-info');
   if (!bene) { info.innerHTML = '<span class="muted">No active beneficiary.</span>'; return; }
-  const ready = cashFromDeposits >= target;
   const debt = memberDebts[bene.phone] || 0;
   const netPayout = Math.max(0, target - debt);
-  info.innerHTML =
+  const shortfall = Math.max(0, netPayout - cashFromDeposits);
+  const defaulters = members.filter(m => m.phone !== bene.phone && (memberAutoDebts[m.phone] || 0) > 0);
+  const perDefaulter = defaulters.length > 0 ? Math.ceil(shortfall / defaulters.length) : 0;
+  let html =
     '<div style="font-size:1.1rem;font-weight:800;margin-bottom:6px;">' + bene.name + '</div>' +
-    '<div>💰 Target payout: <strong>UGX ' + target.toLocaleString() + '</strong></div>' +
-    (debt > 0 ? '<div>💳 Outstanding debt: <strong style="color:var(--red);">- UGX ' + debt.toLocaleString() + '</strong></div>' +
-                '<div>✅ Net payout: <strong style="color:var(--green);">UGX ' + netPayout.toLocaleString() + '</strong></div>' : '') +
-    '<div>🏦 Current cash: <strong style="color:' + (ready ? 'var(--green)' : 'var(--red)') + ';">UGX ' + cashFromDeposits.toLocaleString() + '</strong></div>' +
-    '<div style="margin-top:6px;font-size:0.78rem;color:' + (ready ? 'var(--green)' : 'var(--red)') + ';">' + (ready ? '✅ Sufficient funds available!' : '❌ Insufficient funds') + '</div>';
+    '<div>💰 Full payout: <strong>UGX ' + target.toLocaleString() + '</strong></div>' +
+    (debt > 0 ? '<div>💳 Receiver debt deducted: <strong style="color:var(--red);">- UGX ' + debt.toLocaleString() + '</strong></div>' : '') +
+    '<div>✅ Net to receiver: <strong style="color:var(--green);">UGX ' + netPayout.toLocaleString() + '</strong></div>' +
+    '<div>🏦 Cash in pool: <strong style="color:' + (shortfall > 0 ? 'var(--red)' : 'var(--green)') + ';">UGX ' + cashFromDeposits.toLocaleString() + '</strong></div>';
+  if (shortfall > 0) {
+    html += '<div style="margin-top:8px;padding:8px;background:rgba(190,47,45,0.07);border-radius:9px;border:1px solid rgba(190,47,45,0.18);">' +
+      '<div style="font-size:0.72rem;font-weight:700;color:var(--red);margin-bottom:4px;">⚡ Shortfall: UGX ' + shortfall.toLocaleString() + ' — to be recovered from defaulters</div>';
+    if (defaulters.length > 0) {
+      html += '<div style="font-size:0.7rem;color:var(--t2);">Split among ' + defaulters.length + ' defaulting member' + (defaulters.length > 1 ? 's' : '') + ' (UGX ' + perDefaulter.toLocaleString() + ' each):</div>' +
+        '<div style="margin-top:4px;">' + defaulters.map(m => '<div style="font-size:0.68rem;color:var(--red);">• ' + m.name + ' → +UGX ' + perDefaulter.toLocaleString() + ' debt</div>').join('') + '</div>';
+    } else {
+      html += '<div style="font-size:0.7rem;color:var(--amber);">⚠️ No defaulting members detected. Ensure a Group Start Date is set in Settings.</div>';
+    }
+    html += '</div>';
+  } else {
+    html += '<div style="margin-top:6px;font-size:0.78rem;color:var(--green);">✅ Sufficient funds available!</div>';
+  }
+  info.innerHTML = html;
 }
 
 function confirmMarkPaid() {
@@ -2392,22 +2412,49 @@ function confirmMarkPaid() {
   const bene = members.find(m => m.id === bid);
   if (!bene) { toast('No current beneficiary', '#dc2626'); closeOv('ov-mark-paid'); return; }
   const target = +(settings.dailyAmount||2000) * 7 * members.length;
-  if (cashFromDeposits < target) { toast('Insufficient funds. Need UGX ' + target.toLocaleString(), '#dc2626'); return; }
-  const debt = memberDebts[bene.phone] || 0;
-  const netPayout = Math.max(0, target - debt);
+  const receiverDebt = memberDebts[bene.phone] || 0;
+  const netPayout = Math.max(0, target - receiverDebt);
+  const shortfall = Math.max(0, netPayout - cashFromDeposits);
+  const defaulters = members.filter(m => m.phone !== bene.phone && (memberAutoDebts[m.phone] || 0) > 0);
+  const perDefaulter = defaulters.length > 0 ? Math.ceil(shortfall / defaulters.length) : 0;
   const now = Date.now();
+
   const writes = [
-    db.ref('transactions').push({ memberPhone: bene.phone, memberName: bene.name, type: 'payout', amount: netPayout, description: 'Weekly payout' + (debt > 0 ? ' (debt deducted: UGX ' + debt.toLocaleString() + ')' : ''), date: now })
+    db.ref('transactions').push({
+      memberPhone: bene.phone, memberName: bene.name, type: 'payout', amount: netPayout,
+      description: 'Weekly payout' +
+        (receiverDebt > 0 ? ' (receiver debt UGX ' + receiverDebt.toLocaleString() + ' deducted)' : '') +
+        (shortfall > 0 ? ' (shortfall UGX ' + shortfall.toLocaleString() + ' recovered from defaulters)' : ''),
+      date: now
+    })
   ];
-  if (debt > 0) {
-    writes.push(db.ref('transactions').push({ memberPhone: bene.phone, memberName: bene.name, type: 'debt_cleared', amount: debt, description: 'Debt cleared on payout', date: now + 1 }));
+
+  if (receiverDebt > 0) {
+    writes.push(db.ref('transactions').push({
+      memberPhone: bene.phone, memberName: bene.name, type: 'debt_cleared',
+      amount: receiverDebt, description: 'Debt cleared on payout', date: now + 1
+    }));
   }
+
+  if (shortfall > 0 && defaulters.length > 0) {
+    defaulters.forEach((m, i) => {
+      writes.push(db.ref('transactions').push({
+        memberPhone: m.phone, memberName: m.name, type: 'debt', amount: perDefaulter,
+        description: 'Payout shortfall share for ' + bene.name + ' (' + defaulters.length + ' defaulters, UGX ' + perDefaulter.toLocaleString() + ' each)',
+        date: now + 2 + i
+      }));
+    });
+  }
+
   Promise.all(writes).then(() => {
     const history = [...(rotation.history || []), { memberId: bene.id, amount: netPayout, date: now }];
     const ni = ((rotation.currentIndex || 0) + 1) % rotation.order.length;
     return db.ref('rotation').update({ currentIndex: ni, history });
   }).then(() => {
-    toast('✅ Payout UGX ' + netPayout.toLocaleString() + ' to ' + bene.name + (debt > 0 ? ' (debt cleared!)' : '') + '!', '#059669');
+    let msg = '✅ UGX ' + netPayout.toLocaleString() + ' paid to ' + bene.name;
+    if (receiverDebt > 0) msg += ', debt cleared';
+    if (shortfall > 0 && defaulters.length > 0) msg += '. Shortfall UGX ' + shortfall.toLocaleString() + ' debited to ' + defaulters.length + ' defaulter' + (defaulters.length !== 1 ? 's' : '');
+    toast(msg + '!', '#059669');
     closeOv('ov-mark-paid');
   }).catch(() => toast('Error', '#dc2626'));
 }
