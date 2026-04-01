@@ -923,7 +923,8 @@ Consistent saving builds our collective strength! 💪
     <div class="bs-title">⚙️ Group Settings</div>
     <div class="fgrp"><label class="flbl">Group Name</label><input type="text" id="set-groupname" class="inp" placeholder="Harvest Trust"></div>
     <div class="fgrp"><label class="flbl">Daily Savings Amount (UGX)</label><input type="number" id="set-daily" class="inp" placeholder="2000"></div>
-    <div class="fgrp"><label class="flbl">Default Fine Amount (UGX)</label><input type="number" id="set-fine" class="inp" placeholder="5000"></div>
+    <div class="fgrp"><label class="flbl">Default Fine Amount (UGX) — charged per missed day</label><input type="number" id="set-fine" class="inp" placeholder="5000"></div>
+    <div class="fgrp"><label class="flbl">Group Start Date (all members joined)</label><input type="date" id="set-startdate" class="inp"><div style="font-size:0.68rem;color:var(--t3);margin-top:4px;">Sets the baseline for auto-detecting missed savings, debts &amp; fines. Leave blank to disable.</div></div>
     <div class="fgrp"><label class="flbl">WhatsApp Group Link</label><input type="url" id="set-whatsapp" class="inp" placeholder="https://chat.whatsapp.com/…"></div>
     <div class="fgrp">
       <label class="flbl">Group Photo / Banner URL</label>
@@ -989,7 +990,8 @@ let members = [];
 let transactions = [];
 let comments = [];
 let rotation = { order: [], currentIndex: 0, history: [] };
-let settings = { groupName: 'Harvest Trust', dailyAmount: 2000, fineAmount: 5000, whatsappLink: '', bannerUrl: '' };
+let settings = { groupName: 'Harvest Trust', dailyAmount: 2000, fineAmount: 5000, whatsappLink: '', bannerUrl: '', startDate: '' };
+let memberAutoDebts = {};
 let currentUser = null;
 let adminUnlocked = false;
 let rotationLoaded = false;
@@ -1367,6 +1369,7 @@ function computePots() {
   memberBalances = {};
   memberWelfareMap = {};
   memberDebts = {};
+  memberAutoDebts = {};
   transactions.forEach(tx => {
     const a = +(tx.amount) || 0;
     if (tx.type === 'deposit') {
@@ -1404,6 +1407,29 @@ function computePots() {
   perMemberIncomeShare = members.length ? Math.floor(fines / members.length) : 0;
   updateStats();
   updateRotationUI();
+  // ===== AUTO-COMPUTE MISSED SAVINGS DEBT + FINE =====
+  if (settings.startDate) {
+    const _da = +(settings.dailyAmount || 2000);
+    const _fa = +(settings.fineAmount || 5000);
+    const _startTs = new Date(settings.startDate).setHours(0,0,0,0);
+    const _todayTs = new Date().setHours(0,0,0,0);
+    const _daysSinceStart = Math.max(0, Math.floor((_todayTs - _startTs) / 86400000));
+    const _expectedSavings = _da * _daysSinceStart;
+    members.forEach(m => {
+      if (!m.phone) return;
+      const _actualDeposits = transactions
+        .filter(t => t.memberPhone === m.phone && t.type === 'deposit')
+        .reduce((s, t) => s + (+(t.amount) || 0), 0);
+      const _missed = Math.max(0, _expectedSavings - _actualDeposits);
+      if (_missed > 0) {
+        const _missedDays = Math.ceil(_missed / _da);
+        const _autoFine = _missedDays * _fa;
+        const _autoTotal = _missed + _autoFine;
+        memberAutoDebts[m.phone] = _autoTotal;
+        memberDebts[m.phone] = (memberDebts[m.phone] || 0) + _autoTotal;
+      }
+    });
+  }
   updateDebtAlerts();
   updateProfitPoolUI();
 }
@@ -1485,7 +1511,11 @@ function updateRotationUI() {
   const pt = document.getElementById('rot-pct-txt');
   if (pt) pt.innerText = pct + '%';
   const pool = document.getElementById('rot-pool');
-  if (pool) pool.innerText = 'Cash: UGX ' + cashFromDeposits.toLocaleString() + ' / Target: UGX ' + target.toLocaleString();
+  if (pool) {
+    const beneDebt11 = bene.phone ? (memberDebts[bene.phone] || 0) : 0;
+    const netPay11 = Math.max(0, target - beneDebt11);
+    pool.innerHTML = 'Cash: UGX ' + cashFromDeposits.toLocaleString() + ' / Target: UGX ' + target.toLocaleString() + (beneDebt11 > 0 ? ' <span style="color:var(--red);font-weight:700;">&middot; Net payout: UGX ' + netPay11.toLocaleString() + '</span>' : '');
+  }
   const dl = document.getElementById('rot-days-left');
   if (dl) dl.innerText = Math.max(0, rotation.order.length - (idx + 1)) + ' members remaining after current';
 
@@ -1552,7 +1582,8 @@ function updateMembersUI() {
     const av = m.photoURL
       ? '<img src="' + m.photoURL + '" style="width:38px;height:38px;border-radius:12px;object-fit:cover;flex-shrink:0;" onerror="this.style.display=\'none\'">'
       : '<div style="' + getAvatarStyle(m) + '">' + (m.name || '?').charAt(0).toUpperCase() + '</div>';
-    const debtBadge = debt > 0 ? '<div class="debt-badge">Debt: ' + debt.toLocaleString() + '</div>' : '';
+    const autoD10 = memberAutoDebts[m.phone] || 0;
+    const debtBadge = debt > 0 ? '<div class="debt-badge" style="color:var(--red);background:rgba(190,47,45,0.12);border:1px solid rgba(190,47,45,0.25);">⚠ Debt: UGX ' + debt.toLocaleString() + '</div>' : '';
     return '<div class="mc" onclick="openMemberProfile(\'' + m.id + '\')">' +
       av +
       '<div style="flex:1;min-width:0;">' +
@@ -1560,9 +1591,7 @@ function updateMembersUI() {
         '<div class="micro">📞 ' + (m.phone || '') + ' · ' + (m.joinDate || '') + '</div>' +
       '</div>' +
       debtBadge +
-      '<div style="font-family:\'JetBrains Mono\',monospace;font-size:0.74rem;font-weight:700;padding:3px 8px;border-radius:7px;' + (bal >= 0 ? 'color:var(--green);background:rgba(26,102,53,0.1)' : 'color:var(--t3);background:rgba(0,0,0,0.04)') + ';">' +
-        (+bal).toLocaleString() +
-      '</div>' +
+      (function(){const nb=bal-debt;return '<div style="font-family:\'JetBrains Mono\',monospace;font-size:0.74rem;font-weight:700;padding:3px 8px;border-radius:7px;'+(nb>=0?'color:var(--green);background:rgba(26,102,53,0.1)':'color:var(--red);background:rgba(190,47,45,0.08)')+';">'+(nb<0?'−':'')+Math.abs(nb).toLocaleString()+'</div>';})() +
       '<div style="color:var(--t3);font-size:0.8rem;margin-left:4px;">›</div>' +
     '</div>';
   }).join('');
@@ -1610,12 +1639,31 @@ function openMemberProfile(id) {
       '<div class="micro">Joined ' + (m.joinDate || 'Unknown') + ' · Rotation #' + rotPos + '</div>' +
     '</div>' +
     '<div class="mbr-stat-grid">' +
-      '<div class="mbr-stat-cell"><div class="mbr-stat-val sv-blue">UGX ' + (+bal).toLocaleString() + '</div><div class="mbr-stat-lbl">Balance</div></div>' +
+      (function(){const netBal=bal-debt;return '<div class="mbr-stat-cell"><div class="mbr-stat-val" style="color:'+(netBal>=0?'var(--green)':'var(--red)') +';">'+( netBal<0?'−':'')+' UGX '+Math.abs(netBal).toLocaleString()+'</div><div class="mbr-stat-lbl">Net Balance</div></div>';})() +
       '<div class="mbr-stat-cell"><div class="mbr-stat-val sv-green">' + totalDeps + '</div><div class="mbr-stat-lbl">Total Deposits</div></div>' +
       '<div class="mbr-stat-cell"><div class="mbr-stat-val sv-amber">' + recentDeps + '</div><div class="mbr-stat-lbl">This Week</div></div>' +
       '<div class="mbr-stat-cell"><div class="mbr-stat-val sv-red">' + finesCount + '</div><div class="mbr-stat-lbl">Fines</div></div>' +
     '</div>' +
-    (debt > 0 ? '<div class="mbr-debt-row">💳 Outstanding Debt: UGX ' + debt.toLocaleString() + '</div>' : '') +
+    (function(){
+      const autoD = memberAutoDebts[m.phone] || 0;
+      const manualD = Math.max(0, debt - autoD);
+      if (debt <= 0) return '';
+      let dhtml = '<div class="mbr-debt-row">💳 Total Debt: UGX ' + debt.toLocaleString();
+      if (autoD > 0) {
+        const _da = +(settings.dailyAmount||2000);
+        const _fa = +(settings.fineAmount||5000);
+        const _actualDep = transactions.filter(t=>t.memberPhone===m.phone&&t.type==='deposit').reduce((s,t)=>s+(+(t.amount)||0),0);
+        const _startTs = settings.startDate ? new Date(settings.startDate).setHours(0,0,0,0) : 0;
+        const _expectedDep = _startTs > 0 ? _da*Math.max(0,Math.floor((new Date().setHours(0,0,0,0)-_startTs)/86400000)) : 0;
+        const _missedAmt = Math.max(0, _expectedDep - _actualDep);
+        const _missedDays = Math.ceil(_missedAmt / _da);
+        const _autoFine = _missedDays * _fa;
+        dhtml += '<br><span style="font-size:0.65rem;color:var(--red);opacity:0.85;">📅 Auto: UGX '+_missedAmt.toLocaleString()+' missed savings + UGX '+_autoFine.toLocaleString()+' fine ('+_missedDays+' day'+(_missedDays!==1?'s':'')+' missed)</span>';
+        if (manualD > 0) dhtml += '<br><span style="font-size:0.65rem;color:var(--amber);opacity:0.85;">🧾 Assigned: UGX '+manualD.toLocaleString()+'</span>';
+      }
+      dhtml += '</div>';
+      return dhtml;
+    })() +
     (welfAmt > 0 ? '<div class="mbr-income-share">🤝 Welfare received: UGX ' + (+welfAmt).toLocaleString() + '</div>' : '') +
     (perMemberIncomeShare > 0 ? '<div class="mbr-income-share">💎 Income share from fines: UGX ' + perMemberIncomeShare.toLocaleString() + '</div>' : '') +
     '<div class="sec-h">Transaction History</div>' +
@@ -1644,7 +1692,7 @@ function updateAdminMembersList() {
       '<div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:0.88rem;">' + m.name + '</div>' +
       '<div class="micro">' + (m.phone || '') + (debt > 0 ? ' · <span style="color:var(--red)">Debt: UGX ' + debt.toLocaleString() + '</span>' : '') + '</div></div>' +
       '<div style="display:flex;gap:5px;align-items:center;">' +
-        '<div style="font-family:\'JetBrains Mono\',monospace;font-size:0.72rem;font-weight:700;padding:3px 7px;border-radius:7px;color:' + (bal >= 0 ? 'var(--green)' : 'var(--red)') + ';background:rgba(0,0,0,0.04);">' + (+bal).toLocaleString() + '</div>' +
+        (function(){const nb=bal-debt;return '<div style="font-family:\'JetBrains Mono\',monospace;font-size:0.72rem;font-weight:700;padding:3px 7px;border-radius:7px;color:'+(nb>=0?'var(--green)':'var(--red)')+';background:'+(nb>=0?'rgba(26,102,53,0.08)':'rgba(190,47,45,0.08)') +';">'+(nb<0?'−':'')+Math.abs(nb).toLocaleString()+'</div>';})() +
         '<button class="txc-edit" onclick="openEditMember(\'' + m.id + '\')">✏️</button>' +
         '<button class="txc-delete" onclick="deleteMember(\'' + m.id + '\')">🗑️</button>' +
       '</div>' +
@@ -2445,6 +2493,7 @@ function loadSettings() {
   document.getElementById('set-groupname').value = settings.groupName || '';
   document.getElementById('set-daily').value = settings.dailyAmount || 2000;
   document.getElementById('set-fine').value = settings.fineAmount || 5000;
+  document.getElementById('set-startdate').value = settings.startDate || '';
   document.getElementById('set-whatsapp').value = settings.whatsappLink || '';
   document.getElementById('set-banner-url').value = settings.bannerUrl || '';
   const prev = document.getElementById('set-banner-preview');
@@ -2458,13 +2507,14 @@ function updateBannerPreview(url) {
 
 function doSaveSettings() {
   const groupName = document.getElementById('set-groupname').value.trim() || 'Harvest Trust';
+  const startDate = document.getElementById('set-startdate').value || '';
   const whatsappLink = document.getElementById('set-whatsapp').value.trim() || '';
   const daily = parseFloat(document.getElementById('set-daily').value);
   const fine = parseFloat(document.getElementById('set-fine').value);
   const bannerUrl = document.getElementById('set-banner-url').value.trim() || '';
   if (isNaN(daily) || isNaN(fine)) { toast('Invalid numbers', '#dc2626'); return; }
   if (!db) { toast('Firebase not connected', '#dc2626'); return; }
-  db.ref('settings').set({ groupName, whatsappLink, dailyAmount: daily, fineAmount: fine, bannerUrl })
+  db.ref('settings').set({ groupName, whatsappLink, dailyAmount: daily, fineAmount: fine, bannerUrl, startDate })
     .then(() => { toast('✅ Settings saved!', '#2563eb'); closeOv('ov-settings'); })
     .catch(() => toast('Error', '#dc2626'));
 }
