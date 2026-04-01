@@ -924,7 +924,7 @@ Consistent saving builds our collective strength! 💪
     <div class="fgrp"><label class="flbl">Group Name</label><input type="text" id="set-groupname" class="inp" placeholder="Harvest Trust"></div>
     <div class="fgrp"><label class="flbl">Daily Savings Amount (UGX)</label><input type="number" id="set-daily" class="inp" placeholder="2000"></div>
     <div class="fgrp"><label class="flbl">Default Fine Amount (UGX) — charged per missed day</label><input type="number" id="set-fine" class="inp" placeholder="5000"></div>
-    <div class="fgrp"><label class="flbl">Group Start Date (all members joined)</label><input type="date" id="set-startdate" class="inp"><div style="font-size:0.68rem;color:var(--t3);margin-top:4px;">Sets the baseline for auto-detecting missed savings, debts &amp; fines. Leave blank to disable.</div></div>
+    <div class="fgrp"><label class="flbl">Group Start Date (all members joined)</label><input type="date" id="set-startdate" class="inp"><div style="font-size:0.68rem;color:var(--t3);margin-top:4px;">Sets the baseline for auto-fines on missed savings days. Leave blank to disable auto-fines.</div></div>
     <div class="fgrp"><label class="flbl">WhatsApp Group Link</label><input type="url" id="set-whatsapp" class="inp" placeholder="https://chat.whatsapp.com/…"></div>
     <div class="fgrp">
       <label class="flbl">Group Photo / Banner URL</label>
@@ -1003,6 +1003,12 @@ let memberBalances = {}, memberWelfareMap = {}, memberDebts = {};
 let cashFromDeposits = 0, groupProfit = 0;
 let totalDeposits = 0, totalExpenses = 0, totalFines = 0, totalWelfare = 0, perMemberIncomeShare = 0;
 let selectedRating = 0;
+
+// ---- Initial load coordination flags (for auto-fine check) ----
+let _initialLoadComplete = false;
+let _settingsLoaded = false;
+let _membersLoaded = false;
+let _transactionsLoaded = false;
 
 const QUOTES = [
   { text: "Do not save what is left after spending; instead, spend what is left after saving.", author: "Warren Buffett" },
@@ -1118,6 +1124,16 @@ function initFirebase() {
   }
 }
 
+// ===== INITIAL LOAD COORDINATION =====
+// Called after each of the three key Firebase listeners sets its flag.
+// Fires runAutoFineCheck() exactly once when all three are ready.
+function _checkInitialLoad() {
+  if (!_initialLoadComplete && _settingsLoaded && _membersLoaded && _transactionsLoaded) {
+    _initialLoadComplete = true;
+    runAutoFineCheck();
+  }
+}
+
 // ===== DATA LOADING =====
 function loadAllData() {
   if (!db) return;
@@ -1126,6 +1142,8 @@ function loadAllData() {
     const s = snap.val();
     if (s) settings = {...settings, ...s};
     applySettings();
+    _settingsLoaded = true;
+    _checkInitialLoad();
   });
 
   db.ref('members').on('value', snap => {
@@ -1139,6 +1157,8 @@ function loadAllData() {
     updateAdminMembersList();
     checkStoredLogin();
     if (rotation.order) updateRotationUI();
+    _membersLoaded = true;
+    _checkInitialLoad();
   });
 
   db.ref('transactions').on('value', snap => {
@@ -1149,6 +1169,8 @@ function loadAllData() {
     updateGroupTab();
     updateSavingsAdvice();
     generatePersonalQuote();
+    _transactionsLoaded = true;
+    _checkInitialLoad();
   });
 
   db.ref('rotation').on('value', snap => {
@@ -1180,6 +1202,7 @@ function loadAllData() {
   });
 }
 
+// ===== APPLY SETTINGS =====
 function applySettings() {
   const title = document.getElementById('hdr-title');
   const rateEl = document.getElementById('h-rate');
@@ -1197,6 +1220,132 @@ function applySettings() {
   const hdrLogo = document.getElementById('hdr-logo-wrap');
   if (bannerImg) { bannerImg.src = bannerUrl; bannerImg.style.display = 'block'; }
   if (hdrLogo) hdrLogo.innerHTML = '<img src="' + bannerUrl + '" alt="HT" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML=\'🌿\'">';
+}
+
+// ===== AUTO-FINE CHECK =====
+// Runs once per app load after settings, members, and transactions are all fetched.
+// For each calendar day from the day after autoFineLastChecked through yesterday,
+// checks whether each member deposited their daily amount. If not, writes a fine
+// transaction with description "Auto-fine: missed savings on YYYY-MM-DD".
+// Uses that description as a duplicate-detection key so re-runs are idempotent.
+// After all writes, sets autoFineLastChecked to today's date string.
+function runAutoFineCheck() {
+  if (!db) return;
+  // Feature disabled unless Group Start Date is configured in Settings
+  if (!settings.startDate) return;
+
+  const da = +(settings.dailyAmount || 2000);
+  const fa = +(settings.fineAmount || 5000);
+  const startTs = new Date(settings.startDate + 'T00:00:00').getTime();
+
+  // Compute midnight local time for today and yesterday
+  const todayMidnight = new Date();
+  todayMidnight.setHours(0, 0, 0, 0);
+  const todayDateStr = _isoDate(todayMidnight);
+  const yesterdayMidnight = new Date(todayMidnight.getTime() - 86400000);
+
+  db.ref('autoFineLastChecked').once('value', snap => {
+    const lastChecked = snap.val(); // YYYY-MM-DD or null
+
+    // Determine first day to process
+    let firstDay;
+    if (!lastChecked) {
+      firstDay = new Date(settings.startDate + 'T00:00:00');
+    } else {
+      firstDay = new Date(lastChecked + 'T00:00:00');
+      firstDay.setDate(firstDay.getDate() + 1);
+    }
+    // Never go earlier than startDate
+    if (firstDay.getTime() < startTs) {
+      firstDay = new Date(settings.startDate + 'T00:00:00');
+    }
+
+    // Only process days up through yesterday — never touch today
+    if (firstDay.getTime() > yesterdayMidnight.getTime()) {
+      db.ref('autoFineLastChecked').set(todayDateStr);
+      return;
+    }
+
+    // Collect all days to check
+    const daysToProcess = [];
+    const cur = new Date(firstDay.getTime());
+    while (cur.getTime() <= yesterdayMidnight.getTime()) {
+      daysToProcess.push(_isoDate(cur));
+      cur.setDate(cur.getDate() + 1);
+    }
+
+    if (!daysToProcess.length) {
+      db.ref('autoFineLastChecked').set(todayDateStr);
+      return;
+    }
+
+    // Build per-member deposit map: phone -> { "YYYY-MM-DD": totalAmount }
+    const depositsByMemberDay = {};
+    // Build set of existing auto-fine keys: "phone::YYYY-MM-DD"
+    const existingAutoFineKeys = new Set();
+
+    transactions.forEach(tx => {
+      if (tx.type === 'deposit' && tx.memberPhone && tx.date) {
+        const ds = _isoDate(new Date(tx.date));
+        if (!depositsByMemberDay[tx.memberPhone]) depositsByMemberDay[tx.memberPhone] = {};
+        depositsByMemberDay[tx.memberPhone][ds] = (depositsByMemberDay[tx.memberPhone][ds] || 0) + (+(tx.amount) || 0);
+      }
+      if (tx.type === 'fine' && tx.memberPhone && tx.description) {
+        const prefix = 'Auto-fine: missed savings on ';
+        if (tx.description.startsWith(prefix)) {
+          const dateInDesc = tx.description.slice(prefix.length).trim();
+          existingAutoFineKeys.add(tx.memberPhone + '::' + dateInDesc);
+        }
+      }
+    });
+
+    // Determine which member+day pairs need a fine written
+    const writes = [];
+    members.forEach(m => {
+      if (!m.phone) return;
+      const memberDeps = depositsByMemberDay[m.phone] || {};
+      daysToProcess.forEach(dayStr => {
+        // Skip days before this member's join date
+        if (m.joinDate) {
+          const joinTs = new Date(m.joinDate + 'T00:00:00').getTime();
+          const dayTs = new Date(dayStr + 'T00:00:00').getTime();
+          if (dayTs < joinTs) return;
+        }
+        // Skip if an auto-fine for this member+day already exists
+        if (existingAutoFineKeys.has(m.phone + '::' + dayStr)) return;
+        // Skip if member deposited enough on this day
+        if ((memberDeps[dayStr] || 0) >= da) return;
+        // Queue a fine write
+        writes.push({
+          memberPhone: m.phone,
+          memberName: m.name,
+          type: 'fine',
+          amount: fa,
+          description: 'Auto-fine: missed savings on ' + dayStr,
+          date: new Date(dayStr + 'T23:59:00').getTime()
+        });
+      });
+    });
+
+    if (!writes.length) {
+      db.ref('autoFineLastChecked').set(todayDateStr);
+      return;
+    }
+
+    // Write all fines, then update the checkpoint
+    Promise.all(writes.map(w => db.ref('transactions').push(w)))
+      .then(() => db.ref('autoFineLastChecked').set(todayDateStr))
+      .then(() => toast('⚡ ' + writes.length + ' auto-fine(s) recorded for missed savings days', '#d97706'))
+      .catch(err => console.error('Auto-fine write error:', err));
+  });
+}
+
+// Returns "YYYY-MM-DD" for a Date object using local calendar date
+function _isoDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + day;
 }
 
 // ===== STORED LOGIN =====
@@ -1407,7 +1556,8 @@ function computePots() {
   perMemberIncomeShare = members.length ? Math.floor(fines / members.length) : 0;
   updateStats();
   updateRotationUI();
-  // ===== AUTO-COMPUTE MISSED SAVINGS DEBT + FINE =====
+
+  // ===== IN-MEMORY AUTO-DEBT COMPUTE (display only — does NOT write to Firebase) =====
   if (settings.startDate) {
     const _da = +(settings.dailyAmount || 2000);
     const _fa = +(settings.fineAmount || 5000);
@@ -1587,15 +1737,13 @@ function updateMembersUI() {
     const av = m.photoURL
       ? '<img src="' + m.photoURL + '" style="width:38px;height:38px;border-radius:12px;object-fit:cover;flex-shrink:0;" onerror="this.style.display=\'none\'">'
       : '<div style="' + getAvatarStyle(m) + '">' + (m.name || '?').charAt(0).toUpperCase() + '</div>';
-    const autoD10 = memberAutoDebts[m.phone] || 0;
-    const debtBadge = debt > 0 ? '<div class="debt-badge" style="color:var(--red);background:rgba(190,47,45,0.12);border:1px solid rgba(190,47,45,0.25);">⚠ Debt: UGX ' + debt.toLocaleString() + '</div>' : '';
     return '<div class="mc" onclick="openMemberProfile(\'' + m.id + '\')">' +
       av +
       '<div style="flex:1;min-width:0;">' +
         '<div style="font-weight:600;font-size:0.88rem;">' + m.name + '</div>' +
         '<div class="micro">📞 ' + (m.phone || '') + ' · ' + (m.joinDate || '') + '</div>' +
       '</div>' +
-      debtBadge +
+      (debt > 0 ? '<div class="debt-badge">⚠ Debt: UGX ' + debt.toLocaleString() + '</div>' : '') +
       (function(){const nb=bal-debt;return '<div style="font-family:\'JetBrains Mono\',monospace;font-size:0.74rem;font-weight:700;padding:3px 8px;border-radius:7px;'+(nb>=0?'color:var(--green);background:rgba(26,102,53,0.1)':'color:var(--red);background:rgba(190,47,45,0.08)')+';">'+(nb<0?'−':'')+Math.abs(nb).toLocaleString()+'</div>';})() +
       '<div style="color:var(--t3);font-size:0.8rem;margin-left:4px;">›</div>' +
     '</div>';
@@ -1855,7 +2003,7 @@ function updateSavingsAdvice() {
 }
 
 // ===== COMMENTS & RATINGS =====
-function starsHTML(rating, filled) {
+function starsHTML(rating) {
   return [1,2,3,4,5].map(i => '<span class="star ' + (i <= rating ? 'filled' : '') + '">★</span>').join('');
 }
 
@@ -2468,7 +2616,7 @@ function buildCoverDaysList() {
   for (let i = 0; i < 14; i++) {
     const d = new Date(Date.now() - i * 86400000);
     const dateStr = d.toLocaleDateString('en-UG', { weekday: 'short', day: 'numeric', month: 'short' });
-    const dateKey = d.toISOString().split('T')[0];
+    const dateKey = _isoDate(d);
     const row = document.createElement('div');
     row.className = 'daily-check';
     row.setAttribute('data-date', dateKey);
