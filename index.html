@@ -398,6 +398,7 @@ Dear members, this is your reminder to make your daily savings.
 'use strict';
 // ===== VERSION =====
 const APP_VERSION = '1.8.1';
+console.log('🚀 Harvest Trust v' + APP_VERSION + ' starting...');
 
 // ===== FIREBASE CONFIG =====
 const FIREBASE_CONFIG = {
@@ -410,7 +411,7 @@ const FIREBASE_CONFIG = {
   appId: "1:59557732077:web:aa79eb14010d05728176e4"
 };
 
-// ===== TRANSLATIONS (English only for brevity; full multi‑language available) =====
+// ===== TRANSLATIONS (abbreviated for brevity – full set available) =====
 const translations = {
   en: {
     appName:'🌾 Harvest Trust',tagline:'Grow together · rotate wealth',member:'Member',admin:'Admin',
@@ -472,7 +473,6 @@ function applyTranslations(){
   if(currentUser) updateAccountUI();
   updateHomeUI();
 }
-function changeLanguage(lang){ currentLang=lang; localStorage.setItem('ht_lang',lang); applyTranslations(); }
 
 // ===== GLOBAL STATE =====
 let db=null;
@@ -511,11 +511,21 @@ function buildDepositTransactions(member,amount,ts,desc){
 
 // ===== FIREBASE INIT =====
 function initFirebase(){
-  if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
-  db=firebase.database();
-  loadAllData();
+  try {
+    if (!firebase.apps.length) {
+      firebase.initializeApp(FIREBASE_CONFIG);
+      console.log('✅ Firebase initialized');
+    }
+    db = firebase.database();
+    loadAllData();
+    console.log('📡 Firebase database connected');
+  } catch(e) {
+    console.error('❌ Firebase init error:', e);
+    toast('Firebase connection failed. Check console.', '#dc2626');
+  }
 }
 function loadAllData(){
+  if (!db) return;
   db.ref('settings').on('value',snap=>{ if(snap.val()) settings={...settings,...snap.val()}; applySettings(); });
   db.ref('members').on('value',snap=>{
     members=snap.val()?Object.entries(snap.val()).map(([id,m])=>({...m,id})):[];
@@ -1099,146 +1109,76 @@ window.buildCoverDaysList=function(){
   const c=document.getElementById('cover-days-list');c.innerHTML='';selectedCoverDays={};
   for(let i=0;i<14;i++){ const d=new Date(Date.now()-i*86400000); const dk=_isoDate(d); const r=document.createElement('div'); r.className='daily-check'; r.setAttribute('data-date',dk); r.onclick=()=>toggleCoverDay(dk,r); r.innerHTML=`<div class="dc-box">✓</div><span>${d.toLocaleDateString()}</span>`; c.appendChild(r); }
 };
-function toggleCoverDay(dk,row){if(selectedCoverDays[dk]){delete selectedCoverDays[dk];row.classList.remove('checked');}else{selectedCoverDays[dk]=true;true;row.classList.add('checked');}updateSelectedChips();}
-function updateSelectedChips(){document.getElementById('selected-days-chips').innerHTML=Object.keys(selectedCoverDays).row.classList.add('checked');}updateSelectedChips();}
-function updateSelectedChips(){document.getElementById('selected-days-chips').innerHTML=Object.keys(selectedCoverDays).map(dmap(dk=>`<div class="cover-chip">${dk}</divk=>`<div class="cover-chip">${dk}</div>`).>`).join('join('');}
-window.addCustomCoverDate=function(){const dk=document.getElementById('custom-date-picker').value;if(dk){selectedCoverDays');}
+function toggleCoverDay(dk,row){if(selectedCoverDays[dk]){delete selectedCoverDays[dk];row.classList.remove('checked');}else{selectedCoverDays[dk]=true;row.classList.add('checked');}updateSelectedChips();}
+function updateSelectedChips(){document.getElementById('selected-days-chips').innerHTML=Object.keys(selectedCoverDays).map(dk=>`<div class="cover-chip">${dk}</div>`).join('');}
 window.addCustomCoverDate=function(){const dk=document.getElementById('custom-date-picker').value;if(dk){selectedCoverDays[dk]=true;updateSelectedChips();}};
 window.saveCoverDays=function(){
   const phone=document.getElementById('cover-member').value;const m=members.find(m=>m.phone===phone);if(!m)return;
   const da=settings.dailyAmount||2500;const writes=[];
-  Object.keys(selectedCoverDays).forEach(dk=>{buildDepositTransactions(m,da,new Date(dk).getTime(),'Cover[dk]=true;updateSelectedChips();}};
-window.saveCoverDays=function(){
-  const phone=document.getElementById('cover-member').value;const m=members.find(m=>m.phone===phone);if(!m)return;
-  const da=settings.dailyAmount||2500;const writes=[];
   Object.keys(selectedCoverDays).forEach(dk=>{buildDepositTransactions(m,da,new Date(dk).getTime(),'Cover: '+dk).forEach(w=>writes.push(db.ref('transactions').push(w)));});
-  Promise.all(writes).then: '+dk).forEach(w=>writes.push(db.ref('transactions').push(w)));});
-  Promise.all(writes).then(()=>{to(()=>{toast(t('coverDaysSavedast(t('coverDaysSaved'),'#059669');closeOv'),'#059669');closeOv('ov('ov-cover');});
+  Promise.all(writes).then(()=>{toast(t('coverDaysSaved'),'#059669');closeOv('ov-cover');});
 };
 window.loadApplications=function(){
-  db.ref('applications').orderBy-cover');});
-};
-window.loadApplications=function(){
-  db.ref('applications').orderByChildChild('status').equalTo('pending').once('value',snap=>{
+  db.ref('applications').orderByChild('status').equalTo('pending').once('value',snap=>{
     const apps=snap.val()?Object.entries(snap.val()).map(([k,v])=>({...v,key:k})):[];
-    document.getElementById('apps-list').innerHTML=apps.map(a=>`<div class="app-item"><div>${a.name} (${a.phone})</div><button class="btn btn-sm btn-green" onclick="approveApplication('${a.key}')">('status').equalTo('pending').once('value',snap=>{
-    const apps=snap.val()?Object.entries(snap.val()).map(([k,v])=>({...v,key:k})):[];
-    document.getElementById('apps-list').innerHTML=apps.map(a=>`<div class="app-item"><div>${a.name} (${a.phone})</div><button class="btn btn-sm btn-green" onclick="approveApplication('${a.key}')">${t('approve')}</button${t('approve')}</button></div>`).join('')||></div>`).join('')||`<div class="empty-state"><div class="empty`<div class="empty-state"><div class="empty-state-text">${t('noPending')}</div></div>`;
+    document.getElementById('apps-list').innerHTML=apps.map(a=>`<div class="app-item"><div>${a.name} (${a.phone})</div><button class="btn btn-sm btn-green" onclick="approveApplication('${a.key}')">${t('approve')}</button></div>`).join('')||`<div class="empty-state"><div class="empty-state-text">${t('noPending')}</div></div>`;
   });
 };
-window.app-state-text">${t('noPending')}</div></div>`;
-  });
-};
-window.approveApplicationroveApplication=function(key){
+window.approveApplication=function(key){
   db.ref('applications/'+key).once('value',snap=>{
-    const a=snap=function(key){
-  db.ref('applications/'+key).once('value',snap=>{
-    const a=snap.val();.val();if(!a)return;
-    db.ref('members').push({name:a.name,phone:a.phone,password:'HT'+a.phone.slice(-4),approved:true,joinDate:new Date().toISOString().split('if(!a)return;
+    const a=snap.val();if(!a)return;
     db.ref('members').push({name:a.name,phone:a.phone,password:'HT'+a.phone.slice(-4),approved:true,joinDate:new Date().toISOString().split('T')[0]}).then(ref=>{
       db.ref('applications/'+key).update({status:'approved'});
-      if(!rotation.order.includes(ref.key)) db.ref('rotation').update({order:[...rotation.order,ref.keyT')[0]}).then(ref=>{
-      db.ref('applications/'+key).update({status:'approved'});
       if(!rotation.order.includes(ref.key)) db.ref('rotation').update({order:[...rotation.order,ref.key]});
-      toast(a.name+' '+t('application]});
-      toast(a.name+' '+t('applicationApproApproved'),'#059669');loadApplications();
+      toast(a.name+' '+t('applicationApproved'),'#059669');loadApplications();
     });
   });
 };
 window.addMember=function(){
-  const name=document.getElementById('mbr-name').value,phone=ved'),'#059669');loadApplications();
-    });
-  });
-};
-window.addMember=function(){
-  const name=document.getElementById('mbr-name').value,phone=document.getElementById('mbr-phone').document.getElementById('mbr-phone').value,pw=document.getElementByIdvalue,pw=document.getElementById('mbr-pw').value,join=document.getElementById('mbr-('mbr-pw').value,join=document.getElementById('mbr-join').value;
+  const name=document.getElementById('mbr-name').value,phone=document.getElementById('mbr-phone').value,pw=document.getElementById('mbr-pw').value,join=document.getElementById('mbr-join').value;
   if(!name||!phone)return toast(t('fillAllFields'),'#dc2626');
-  db.ref('members').push({name,phone,password:pw||'HT'+phone.slice(-4),approved:true,joinDatejoin').value;
-  if(!name||!phone)return toast(t('fillAllFields'),'#dc2626');
-  db.ref('members').push({name,phone,password:pw||'HT'+phone.slice(-4),approved:true,joinDate:join:join}).then(ref=>{
-    db.ref}).then(ref=>{
-    db.ref('rotation('rotation').update({order:[...').update({order:[...rotation.orderrotation.order,ref,ref.key].key]});
-    toast(t('memberAdded'),'#059669});
+  db.ref('members').push({name,phone,password:pw||'HT'+phone.slice(-4),approved:true,joinDate:join}).then(ref=>{
+    db.ref('rotation').update({order:[...rotation.order,ref.key]});
     toast(t('memberAdded'),'#059669');
-    closeOv');
-    closeOv('ov-add-m('ov-add-mbr');
-br');
-  });
+    closeOv('ov-add-mbr');
   });
 };
-window};
-window.deleteMember=function(id.deleteMember=function(id){if(confirm(t('confirmDelete'))){db.ref('members/'+id).){if(confirm(t('confirmDelete'))){db.ref('members/'+id).remove();toast(t('memberDeleted'),'#dc2626');}};
+window.deleteMember=function(id){if(confirm(t('confirmDelete'))){db.ref('members/'+id).remove();toast(t('memberDeleted'),'#dc2626');}};
 window.loadSettings=function(){
   document.getElementById('set-groupname').value=settings.groupName||'';
   document.getElementById('set-daily').value=settings.dailyAmount||2500;
   document.getElementById('set-welfare-amount').value=settings.welfareAmount||0;
   document.getElementById('set-fine-contribution').value=settings.fineContribution||0;
-remove();toast(t('memberDeleted'),'#dc2626');}};
-window.loadSettings=function(){
-  document.getElementById('set-groupname').value=settings.groupName||'';
-  document.getElementById('set-daily').value=settings.dailyAmount||2500;
-  document.getElementById('set-welfare-amount').value=settings.welfareAmount||0;
-  document.getElementById('set-fine-contribution').value=settings.fineContribution||0;
-  document.getElementById  document.getElementById('('set-fine').value=settings.fset-fine').value=settings.fineAmount||5000;
-ineAmount||5000;
-  document.getElementById('set-whatsapp').value=settings.whats  document.getElementById('set-whatsapp').value=settings.whatsappLink||'';
+  document.getElementById('set-fine').value=settings.fineAmount||5000;
+  document.getElementById('set-whatsapp').value=settings.whatsappLink||'';
   document.getElementById('set-banner-url').value=settings.bannerUrl||'';
 };
-window.doSaveSettings=appLink||'';
-  document.getElementById('set-banner-url').value=settings.bannerUrl||'';
-};
-window.doSavefunction(){
-  settings.groupName=document.getElementById('set-groupname').value;
-  settings.dailyAmount=+document.getElementById('set-daily').value;
-  settings.welfareAmount=+document.getElementById('set-welfare-amount').value;
-  settings.fineContribution=+document.getElementById('set-fine-contribution').value;
-  settings.fineAmount=+document.getElementById('set-fine').value;
- Settings=function(){
+window.doSaveSettings=function(){
   settings.groupName=document.getElementById('set-groupname').value;
   settings.dailyAmount=+document.getElementById('set-daily').value;
   settings.welfareAmount=+document.getElementById('set-welfare-amount').value;
   settings.fineContribution=+document.getElementById('set-fine-contribution').value;
   settings.fineAmount=+document.getElementById('set-fine').value;
   settings.whatsappLink=document.getElementById('set-whatsapp').value;
-  settings.bannerUrl=document.getElementById('set settings.whatsappLink=document.getElementById('set-whatsapp').value;
   settings.bannerUrl=document.getElementById('set-banner-url').value;
-  db.ref('settings').set(settings).then(()=>{toast(t('settingsSaved-banner-url').value;
   db.ref('settings').set(settings).then(()=>{toast(t('settingsSaved'),'#059669');closeOv('ov-settings');applySettings();});
 };
-window.resetGroup=function(){if(confirm(t('confirmReset''),'#059669');closeOv('ov-settings');applySettings();});
-};
-window.resetGroup=function(){if(confirm(t('confirmReset'))){db.ref('members').remove();db.ref('transactions').remove();db.ref('))){db.ref('members').remove();db.ref('transactions').remove();db.ref('rotation').rotation').remove();location.reload();remove();location.reload();}};
-}};
-window.resetDataKeepMembers=window.resetDataKeepMembers=function(){function(){ifif(confirm(t('confirmResetData'))){db.ref('transactions').remove();db.ref('rotation').remove();location.reload();}};
+window.resetGroup=function(){if(confirm(t('confirmReset'))){db.ref('members').remove();db.ref('transactions').remove();db.ref('rotation').remove();location.reload();}};
+window.resetDataKeepMembers=function(){if(confirm(t('confirmResetData'))){db.ref('transactions').remove();db.ref('rotation').remove();location.reload();}};
 window.exportCSV=function(){
-  let csv='Date,(confirm(t('confirmResetData'))){db.ref('transactions').remove();db.ref('rotation').remove();location.reload();}};
-window.exportCSV=function(){
-  let csv='Date,TypeType,Member,Amount\n';
+  let csv='Date,Type,Member,Amount\n';
   transactions.forEach(tx=>{csv+=new Date(tx.date).toLocaleDateString()+','+tx.type+','+(tx.memberName||'')+','+tx.amount+'\n';});
-,Member,Amount\n';
-  transactions.forEach(tx=>{csv+=new Date(tx.date).toLocaleDateString()+','+tx.type+','+(tx.memberName||'')+','+tx.amount+'\n';});
-  const  const a= a=document.createElementdocument.createElement('a');a.href=URL.createObject('a');a.href=URL.createObjectURL(newURL(new Blob([csv]));a.download=' Blob([csv]));a.download='harvest-trust.csv';a.click();toast(t('csvDownloaded'),'#059harvest-trust.csv';a.click();toast(t('csvDownloaded'),'#059669');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv]));a.download='harvest-trust.csv';a.click();toast(t('csvDownloaded'),'#059669');
 };
-window.openWhats669');
-};
-window.openWhatsAppReminder=function(){const msgAppReminder=function(){const msg=document=document.getElementById('.getElementById('reminderreminder-msg-msg').value;window.open('https://api.whats').value;window.open('https://api.whatsapp.com/send?text='+app.com/send?text='+encodeURIComponent(msgencodeURIComponent(msg),'_blank');};
-window.copyReminderMessage=function),'_blank');};
-window.copyReminderMessage=function(){n(){navigator.clipboardavigator.clipboard?.writeText(document.getElementById('reminder-msg').value);toast(t('messageCopied'),'#2563eb');};
-
-// ===== ADMIN LOCK =====
-window.unlockAdmin=function(){
-  if(document.getElementById('adm-pwd').value===ADMIN?.writeText(document.getElementById('reminder-msg').value);toast(t('messageCopied'),'#2563eb');};
+window.openWhatsAppReminder=function(){const msg=document.getElementById('reminder-msg').value;window.open('https://api.whatsapp.com/send?text='+encodeURIComponent(msg),'_blank');};
+window.copyReminderMessage=function(){navigator.clipboard?.writeText(document.getElementById('reminder-msg').value);toast(t('messageCopied'),'#2563eb');};
 
 // ===== ADMIN LOCK =====
 window.unlockAdmin=function(){
   if(document.getElementById('adm-pwd').value===ADMIN_PASSWORD){
     adminUnlocked=true;
     document.getElementById('adm-lock').classList.add('hidden');
-    document.getElementById('adm-panel').classList.remove('hidden_PASSWORD){
-    adminUnlocked=true;
-    document.getElementById('adm-lock').classList.add('hidden');
     document.getElementById('adm-panel').classList.remove('hidden');
-    document.getElementById');
     document.getElementById('adm-pwd').value='';
     currentAdminTab='savings';
     document.querySelectorAll('.admin-tab').forEach(t=>t.classList.remove('active'));
@@ -1256,78 +1196,45 @@ window.lockAdmin=function(){
 
 // ===== TAB NAVIGATION =====
 window.goTab=function(tab,btn){
-  document.querySelectorAll('adm-pwd').value='';
-    currentAdminTab='savings';
-    document.querySelectorAll('.admin-tab').forEach(t=>t.classList.remove('active'));
-    document.querySelector('[data-tab="savings"]').classList.add('active');
-    renderAdminPanel();
-    toast(t('adminUnlocked'),'#059669');
-  } else toast(t('incorrectAdminPassword'),'#dc2626');
-};
-window.lockAdmin=function(){
-  adminUnlocked=false;
-  document.getElementById('adm-lock').classList.remove('hidden');
-  document.getElementById('adm-panel').classList.add('hidden');
-  toast(t('adminLocked'),'#2563eb');
-};
-
-// ===== TAB NAVIGATION =====
-window.goTab=function(tab,btn){
-  document.querySelectorAll('.tab').forEach('.tab').forEach(t=>t.classList.remove('on'));
-  const target(t=>t.classList.remove('on'));
-  const targetTab =Tab = document.getElementById('t-'+tab);
-  if(targetTab) targetTab.classList document.getElementById('t-'+tab);
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+  const targetTab = document.getElementById('t-'+tab);
   if(targetTab) targetTab.classList.add('on');
-  if(btn){document.querySelectorAll('.ni').forEach(b=>b.classList.remove.add('on');
-  if(btn){document.querySelectorAll('.ni').forEach(b=>b('on'));btn.classList.add('on');}
-  currentScreen=tab.classList.remove('on'));btn.classList.add('on');}
+  if(btn){document.querySelectorAll('.ni').forEach(b=>b.classList.remove('on'));btn.classList.add('on');}
   currentScreen=tab;
-  if(tab==='home;
-  if(tab==='home'){updateHomeRecent();updateHomeUI();'){updateHomeRecent();updateHomeUI();}
- }
-  if(t if(tab==='ledab==='ledger') loadLedger('ger') loadLedger('all');
-all');
-  if(tab==='  if(tab==='account') updateAccountUI();
-  if(tabaccount') updateAccountUI();
+  if(tab==='home'){updateHomeRecent();updateHomeUI();}
+  if(tab==='ledger') loadLedger('all');
+  if(tab==='account') updateAccountUI();
   if(tab==='admin'){
-    if(currentUser==='admin'){
-    if(currentUser?.is?.isAdmin&&adminUnlocked){Admin&&adminUnlocked){document.getElementByIddocument.getElementById('adm('adm-lock-lock').classList.add('hidden');document.getElementById('adm-panel').classList').classList.add('hidden');document.getElementById('adm-panel').classList.remove('.remove('hidden');hidden');renderAdminPanel();}
+    if(currentUser?.isAdmin&&adminUnlocked){document.getElementById('adm-lock').classList.add('hidden');document.getElementById('adm-panel').classList.remove('hidden');renderAdminPanel();}
     else{document.getElementById('adm-lock').classList.remove('hidden');document.getElementById('adm-panel').classList.add('hidden');}
   }
 };
 
 // ===== SPLASH + INIT =====
+console.log('🦁 Lion splash starting...');
 const splashMessages=['Loading your pride…','Connecting to hive…','Fetching balances…','Almost there…'];
 let msgIdx=0;
 const subEl=document.getElementById('lion-sub');
-const msgInterval=setInterval(()=>{msgIdx=(msgIdx+1renderAdminPanel();}
-    else{document.getElementById('adm-lock').classList.remove('hidden');document.getElementById('adm-panel').classList.add('hidden');}
-  }
-};
-
-// ===== SPLASH + INIT =====
-const splashMessages=['Loading your pride…','Connecting to hive…','Fetching balances…','Almost there…'];
-let msgIdx=0;
-const subEl=document.getElementById('lion-sub');
-const msgInterval=setInterval(()=>{msgIdx=(msgIdx+1)%splashMessages.length;if(subEl)subEl.innerText=splashMessages[msgIdx];},1200);
-
-setTimeout(()=>{
-  clearInterval(msgInterval);
-  document.getElementById('lion-splash').classList.add('out');
+if(subEl){
+  const msgInterval=setInterval(()=>{msgIdx=(msgIdx+1)%splashMessages.length;subEl.innerText=splashMessages[msgIdx];},1200);
   setTimeout(()=>{
-    document.getElementById('lion-splash').style.display='none';
-)%splashMessages.length;if(subEl)subEl.innerText=splashMessages[msgIdx];},1200);
-
-setTimeout(()=>{
-  clearInterval(msgInterval);
-  document.getElementById('lion-splash').classList.add('out');
-  setTimeout(()=>{
-    document.getElementById('lion-splash').style.display='none';
-    document.getElementById('login-screen').classList.remove('hidden');
-  },800);
-},4500);
+    clearInterval(msgInterval);
+    console.log('⏰ Splash timeout – showing login');
+    const splash=document.getElementById('lion-splash');
+    if(splash) splash.classList.add('out');
+    setTimeout(()=>{
+      if(splash) splash.style.display='none';
+      const loginScreen=document.getElementById('login-screen');
+      if(loginScreen) loginScreen.classList.remove('hidden');
+      else console.error('❌ login-screen element not found!');
+    },800);
+  },4500);
+} else {
+  console.error('❌ lion-sub element not found!');
+}
 
 window.onload=()=>{
+  console.log('📄 Page loaded – initializing Firebase');
   initFirebase();
   setTimeout(()=>applyTranslations(),500);
 };
