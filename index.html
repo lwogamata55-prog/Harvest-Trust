@@ -986,14 +986,17 @@ window.switchAdminTab=function(tab){
 function renderAdminPanel(){
   const container=document.getElementById('admin-tab-content-container'); if(!container)return;
   let html='';
-  if(currentAdminTab==='savings'){
-    html=`<div class="card"><div class="sec-h">💰 Savings Settings</div>
-      <div class="fgrp"><label class="flbl">Daily Amount (UGX)</label><input type="number" id="admin-daily" class="inp" value="${settings.dailyAmount||2500}"></div>
-      <div class="fgrp"><label class="flbl">Welfare Deduction (UGX)</label><input type="number" id="admin-welfare" class="inp" value="${settings.welfareAmount||0}"></div>
-      <div class="fgrp"><label class="flbl">Fine Deduction (UGX)</label><input type="number" id="admin-finecontrib" class="inp" value="${settings.fineContribution||0}"></div>
-      <div class="fgrp"><label class="flbl">Default Fine Amount (UGX)</label><input type="number" id="admin-fine" class="inp" value="${settings.fineAmount||5000}"></div>
-      <button class="btn btn-blue btn-full" onclick="saveSavingsSettings()">💾 Save Settings</button>
-      <div style="padding:10px;background:rgba(26,102,53,0.07);border-radius:12px;margin-top:6px;font-size:0.78rem;">Net daily: <strong>UGX ${getNetDaily().toLocaleString()}</strong> | Weekly: <strong>UGX ${computeTotalWeekly().toLocaleString()}</strong></div>
+    if(currentAdminTab==='savings'){
+    html=`<div class="card"><div class="sec-h">💰 ${t('savings')}</div>
+      <div class="fgrp"><label class="flbl">${t('dailyAmount')}</label><input type="number" id="admin-daily" class="inp" value="${settings.dailyAmount||2500}"></div>
+      <div class="fgrp"><label class="flbl">${t('welfareDeduction')}</label><input type="number" id="admin-welfare" class="inp" value="${settings.welfareAmount||0}"></div>
+      <div class="fgrp"><label class="flbl">${t('fineDeduction')}</label><input type="number" id="admin-finecontrib" class="inp" value="${settings.fineContribution||0}"></div>
+      <div class="fgrp"><label class="flbl">${t('defaultFine')}</label><input type="number" id="admin-fine" class="inp" value="${settings.fineAmount||5000}"></div>
+      <button class="btn btn-blue btn-full" onclick="saveSavingsSettings()">💾 ${t('save')}</button>
+      <div style="padding:10px;background:rgba(26,102,53,0.07);border-radius:12px;margin-top:6px;">
+        Net daily: UGX ${getNetDaily().toLocaleString()} | Weekly pool: UGX ${computeTotalWeekly().toLocaleString()}<br>
+        <strong>💰 Available Profit: UGX ${groupProfit.toLocaleString()}</strong>
+      </div>
     </div>`;
   } else if(currentAdminTab==='notice'){
     html=`<div class="card"><div class="sec-h">📢 Admin Notice</div>
@@ -1198,10 +1201,14 @@ window.assignDebt=function(){
   const m=members.find(m=>m.phone===phone);if(!m||!amount)return toast('Select member and enter amount.','#dc2626');
   db.ref('transactions').push({memberPhone:phone,memberName:m.name,type:'debt',amount,description:reason,date:Date.now()}).then(()=>{toast('Debt assigned!','#dc2626');closeOv('ov-assign-debt');});
 };
-window.distributeProfit=function(){
-  if(groupProfit<=0)return toast('No profit to distribute.','#dc2626');
-  const per=Math.floor(groupProfit/members.length);if(per<=0)return;
-  Promise.all(members.map(m=>db.ref('transactions').push({memberPhone:m.phone,memberName:m.name,type:'profit_dist',amount:per,date:Date.now()}))).then(()=>toast('Profit distributed!','#059669'));
+window.distributeProfit = function(){
+  if(groupProfit <= 0) return toast(t('noProfit'), '#dc2626');
+  const per = Math.floor(groupProfit / members.length);
+  if(per <= 0) return toast(t('noProfit'), '#dc2626');
+  const totalDistributed = per * members.length;
+  if(!confirm(`Distribute UGX ${per.toLocaleString()} to each of ${members.length} members?\nTotal: UGX ${totalDistributed.toLocaleString()}\nRemaining profit: UGX ${(groupProfit - totalDistributed).toLocaleString()}`)) return;
+  Promise.all(members.map(m => db.ref('transactions').push({memberPhone: m.phone, memberName: m.name, type: 'profit_dist', amount: per, date: Date.now()})))
+    .then(() => toast(t('profitDistributed'), '#059669'));
 };
 window.loadMarkPaidInfo=function(){
   const idx=rotation.currentIndex||0,bene=members.find(m=>m.id===rotation.order?.[idx]);
