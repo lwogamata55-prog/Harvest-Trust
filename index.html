@@ -536,10 +536,9 @@ function loadAllData(){
   db.ref('transactions').on('value',snap=>{
     transactions=snap.val()?Object.entries(snap.val()).map(([id,tx])=>({...tx,id})):[];
     computePots(); 
-    console.log('💰 groupProfit updated:', groupProfit); // DEBUG
     if(currentScreen==='ledger') loadLedger('all'); 
     updateHomeRecent(); updateHomeUI();
-    if(currentScreen==='admin' && adminUnlocked && currentAdminTab==='savings') renderAdminPanel(); // re-render savings tab
+    if(currentScreen==='admin' && adminUnlocked && currentAdminTab==='savings') renderAdminPanel();
   });
   db.ref('rotation').on('value',snap=>{
     rotation=snap.val()||{order:members.map(m=>m.id),currentIndex:0,history:[]};
@@ -603,20 +602,18 @@ function updateHomeUI(){
 // ===== UI RENDERERS =====
 function getAvatarColor(n){ const c=['#b84510','#7a3a14','#1a6635','#9e4f1a','#d4760c']; return c[(n||'').charCodeAt(0)%c.length]; }
 const TX_ICONS={deposit:'💰',withdraw:'📤',fine:'⚡',welfare:'🤝',expense:'📋',payout:'✅',debt:'🧾'};
-function renderTxRow(tx, i) {
-  const m = members.find(m => m.phone === tx.memberPhone) || { name: tx.memberName || '?' };
-  const ico = TX_ICONS[tx.type] || '💫';
-  const d = tx.date ? new Date(tx.date).toLocaleDateString() : '';
-  // Admin edit button (only if adminUnlocked and not a payout)
+function renderTxRow(tx,i){
+  const m=members.find(m=>m.phone===tx.memberPhone)||{name:tx.memberName||'?'};
+  const ico=TX_ICONS[tx.type]||'💫';
+  const d=tx.date?new Date(tx.date).toLocaleDateString():'';
   const editBtn = (adminUnlocked && tx.type !== 'payout') 
-    ? `<button class="btn btn-sm btn-blue" style="margin-left:8px;" onclick="openEditTransaction('${tx.id}')">✏️</button>` 
-    : '';
-  return `<div class="txc" style="animation-delay:${(i || 0) * 0.04}s;">
+    ? `<button class="btn btn-sm btn-blue" style="margin-left:8px;" onclick="openEditTransaction('${tx.id}')">✏️</button>` : '';
+  return `<div class="txc" style="animation-delay:${(i||0)*0.04}s;">
     <div class="txc-icon txc-icon-dep">${ico}</div>
-    <div class="txc-info"><div class="txc-name">${m.name}</div><div class="txc-desc">${tx.description || tx.type}</div></div>
+    <div class="txc-info"><div class="txc-name">${m.name}</div><div class="txc-desc">${tx.description||tx.type}</div></div>
     <div style="display:flex; align-items:center;">
       <div>
-        <div class="txc-amount ${tx.type === 'deposit' || tx.type === 'payout' ? 'pos' : 'neg'}">UGX ${(+tx.amount).toLocaleString()}</div>
+        <div class="txc-amount ${tx.type==='deposit'||tx.type==='payout'?'pos':'neg'}">UGX ${(+tx.amount).toLocaleString()}</div>
         <div class="txc-date">${d}</div>
       </div>
       ${editBtn}
@@ -815,7 +812,7 @@ window.switchAdminTab=function(tab){
 function renderAdminPanel(){
   const container=document.getElementById('admin-tab-content-container'); if(!container)return;
   let html='';
-   if(currentAdminTab==='savings'){
+  if(currentAdminTab==='savings'){
     html = `<div class="card">
       <div class="sec-h" style="margin-top:0;">⚙️ Daily Configuration</div>
       <div class="fgrp"><label class="flbl">${t('dailyAmount')}</label><input type="number" id="admin-daily" class="inp" value="${settings.dailyAmount||2500}"></div>
@@ -827,7 +824,6 @@ function renderAdminPanel(){
         Net daily: <strong>UGX ${getNetDaily().toLocaleString()}</strong> &nbsp;·&nbsp; Weekly pool: <strong>UGX ${computeTotalWeekly().toLocaleString()}</strong>
       </div>
     </div>
-    
     <div class="card" style="margin-top:0;">
       <div class="sec-h" style="margin-top:0;">🏦 Available Profit</div>
       <div style="display:flex; align-items:center; gap:12px;">
@@ -839,7 +835,7 @@ function renderAdminPanel(){
       </div>
       <button class="btn btn-green btn-full" style="margin-top:14px;" onclick="distributeProfit()">🎉 Distribute Profit Now</button>
     </div>`;
-    } else if(currentAdminTab==='notice'){
+  } else if(currentAdminTab==='notice'){
     html=`<div class="card">
       <div class="sec-h" style="margin-top:0;">📢 ${t('notice')}</div>
       <div class="fgrp"><label class="flbl">${t('message')}</label><textarea id="admin-notice-text" class="inp" rows="4">${settings.noticeText||''}</textarea></div>
@@ -847,38 +843,26 @@ function renderAdminPanel(){
       <button class="btn btn-blue btn-full" onclick="updateNotice()">💾 ${t('save')}</button>
     </div>`;
   } else if(currentAdminTab==='harvest'){
-    html=`<div class="card"><div class="sec-h">🌾 ${t('harvest')}</div>
-      <button class="btn btn-blue btn-full" onclick="openOv('ov-daily');loadDailyList()">📋 ${t('dailySavings')}</button>
-      <button class="btn btn-amber btn-full" onclick="openOv('ov-add-tx');populateMemberDropdowns()">➕ ${t('addTransaction')}</button>
-      <!-- EDIT TRANSACTION OVERLAY -->
-<div class="ov" id="ov-edit-tx" onclick="maybeClose(event,'ov-edit-tx')">
-  <div class="bs">
-    <div class="bs-title">✏️ Edit Transaction</div>
-    <input type="hidden" id="edit-tx-id">
-    <div class="fgrp"><label class="flbl">Member</label><select id="edit-tx-member" class="inp"><option value="">Select member</option></select></div>
-    <div class="fgrp"><label class="flbl">Type</label><select id="edit-tx-type" class="inp"><option value="deposit">Deposit</option><option value="withdraw">Withdrawal</option><option value="fine">Fine</option><option value="welfare">Welfare</option><option value="expense">Expense</option></select></div>
-    <div class="fgrp"><label class="flbl">Amount</label><input type="number" id="edit-tx-amount" class="inp" placeholder="Amount"></div>
-    <div class="fgrp"><label class="flbl">Description</label><input type="text" id="edit-tx-desc" class="inp" placeholder="Description"></div>
-    <button class="btn btn-blue btn-full" onclick="saveEditedTransaction()">💾 Update</button>
-    <button class="btn btn-sec btn-full" onclick="closeOv('ov-edit-tx')" data-i18n="cancel">Cancel</button>
-  </div>
-</div>
-      <button class="btn btn-green btn-full" onclick="openOv('ov-mark-paid');loadMarkPaidInfo()">✅ ${t('markPayout')}</button>
-      <button class="btn btn-purple btn-full" onclick="openOv('ov-rot-manage');buildDragRotation()">🔄 ${t('rotationOrder')}</button>
-      <button class="btn btn-sec btn-full" onclick="openOv('ov-cover');buildCoverDaysList();populateMemberDropdowns()">📅 ${t('coverMissedDays')}</button>
-      <button class="btn btn-sec btn-full" onclick="openOv('ov-reminder')">📢 ${t('groupReminder')}</button>
+    html=`<div class="card">
+      <div class="sec-h" style="margin-top:0;">🌾 Quick Actions</div>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <button class="btn btn-blue btn-full" onclick="openOv('ov-daily');loadDailyList()">📋 ${t('dailySavings')}</button>
+        <button class="btn btn-amber btn-full" onclick="openOv('ov-add-tx');populateMemberDropdowns()">➕ ${t('addTransaction')}</button>
+        <button class="btn btn-green btn-full" onclick="openOv('ov-mark-paid');loadMarkPaidInfo()">✅ ${t('markPayout')}</button>
+        <button class="btn btn-purple btn-full" onclick="openOv('ov-rot-manage');buildDragRotation()">🔄 ${t('rotationOrder')}</button>
+        <button class="btn btn-sec btn-full" onclick="openOv('ov-cover');buildCoverDaysList();populateMemberDropdowns()">📅 ${t('coverMissedDays')}</button>
+        <button class="btn btn-sec btn-full" onclick="openOv('ov-reminder')">📢 ${t('groupReminder')}</button>
+      </div>
     </div>`;
-    } else if(currentAdminTab==='users'){
+  } else if(currentAdminTab==='users'){
     html=`<div class="card">
       <div class="sec-h" style="margin-top:0;">➕ Add Member</div>
       <button class="btn btn-blue btn-full" onclick="openOv('ov-add-mbr')">👤 ${t('addMember')}</button>
     </div>
-    
     <div class="card">
       <div class="sec-h" style="margin-top:0;">📝 Pending Applications <span id="apps-badge" class="payment-badge" style="display:none;">0</span></div>
       <button class="btn btn-green btn-full" onclick="openOv('ov-apps');loadApplications()">📋 View & Approve</button>
     </div>
-    
     <div class="card">
       <div class="sec-h" style="margin-top:0;">👥 All Members</div>
       <div id="admin-members-list"></div>
@@ -893,19 +877,19 @@ function renderAdminPanel(){
         <button class="btn btn-sec btn-full" onclick="openOv('ov-add-exp')">📤 ${t('expense')}</button>
       </div>
     </div>`;
-   } else if(currentAdminTab==='notificationsTab'){
+  } else if(currentAdminTab==='notificationsTab'){
     html=`<div class="card">
       <div class="sec-h" style="margin-top:0;">🔔 ${t('notifications')}</div>
       <div class="fgrp"><label class="flbl">Member</label><select id="notif-member" class="inp"><option value="">${t('selectMember')}</option>${members.filter(m=>m.approved&&m.phone!=='admin').map(m=>`<option value="${m.id}">${m.name}</option>`).join('')}</select></div>
       <div class="fgrp"><label class="flbl">Message</label><textarea id="notif-msg" class="inp" rows="3" placeholder="${t('message')}"></textarea></div>
       <button class="btn btn-blue btn-full" onclick="sendNotificationToMember()">📨 ${t('sendNotification')}</button>
     </div>`;
-    } else if(currentAdminTab==='support'){
+  } else if(currentAdminTab==='support'){
     html=`<div class="card">
       <div class="sec-h" style="margin-top:0;">💬 ${t('support')}</div>
       <div id="support-conversations"></div>
     </div>`;
-    } else if(currentAdminTab==='settings'){
+  } else if(currentAdminTab==='settings'){
     html=`<div class="card">
       <div class="sec-h" style="margin-top:0;">⚙️ ${t('settings')}</div>
       <div style="display:flex; flex-direction:column; gap:8px;">
@@ -960,9 +944,66 @@ window.sendNotificationToMember=function(){
   }).then(()=>{toast(t('notificationSent'),'#059669');document.getElementById('notif-msg').value='';});
 };
 
+// ===== EDIT MEMBER & TRANSACTION =====
+window.openEditMember = function(id) {
+  const m = members.find(m => m.id === id);
+  if (!m) return;
+  document.getElementById('edit-member-id').value = id;
+  document.getElementById('edit-mbr-name').value = m.name || '';
+  document.getElementById('edit-mbr-phone').value = m.phone || '';
+  document.getElementById('edit-mbr-photo').value = m.photoURL || '';
+  document.getElementById('edit-mbr-join').value = m.joinDate || '';
+  openOv('ov-edit-member');
+};
+window.updateMember = async function() {
+  const id = document.getElementById('edit-member-id').value;
+  const name = document.getElementById('edit-mbr-name').value.trim();
+  const phone = document.getElementById('edit-mbr-phone').value.trim();
+  const photoURL = document.getElementById('edit-mbr-photo').value.trim();
+  const joinDate = document.getElementById('edit-mbr-join').value;
+  if (!name || !phone) return toast(t('fillAllFields'), '#dc2626');
+  await db.ref('members/' + id).update({ name, phone, photoURL, joinDate });
+  toast('Member updated', '#059669');
+  closeOv('ov-edit-member');
+};
+window.openEditTransaction = function(txId) {
+  const tx = transactions.find(t => t.id === txId);
+  if (!tx) return;
+  document.getElementById('edit-tx-id').value = txId;
+  populateMemberDropdowns();
+  setTimeout(() => {
+    const sel = document.getElementById('edit-tx-member');
+    if (sel) sel.value = tx.memberPhone || '';
+    document.getElementById('edit-tx-type').value = tx.type || 'deposit';
+    document.getElementById('edit-tx-amount').value = tx.amount || 0;
+    document.getElementById('edit-tx-desc').value = tx.description || '';
+  }, 100);
+  openOv('ov-edit-tx');
+};
+window.saveEditedTransaction = function() {
+  const id = document.getElementById('edit-tx-id').value;
+  const phone = document.getElementById('edit-tx-member').value;
+  const type = document.getElementById('edit-tx-type').value;
+  const amount = +document.getElementById('edit-tx-amount').value;
+  const desc = document.getElementById('edit-tx-desc').value.trim();
+  if (!phone || !type || !amount) return toast(t('fillAllFields'), '#dc2626');
+  const m = members.find(m => m.phone === phone);
+  if (!m) return toast('Member not found', '#dc2626');
+  db.ref('transactions/' + id).update({
+    memberPhone: phone,
+    memberName: m.name,
+    type: type,
+    amount: amount,
+    description: desc || type
+  }).then(() => {
+    toast('Transaction updated', '#059669');
+    closeOv('ov-edit-tx');
+  });
+};
+
 // ===== TRANSACTION & ADMIN ACTIONS =====
 window.populateMemberDropdowns=function(){
-  ['tx-member','fine-member','welfare-member','debt-member','cover-member'].forEach(id=>{
+  ['tx-member','fine-member','welfare-member','debt-member','cover-member','edit-tx-member'].forEach(id=>{
     const sel=document.getElementById(id);if(!sel)return;
     sel.innerHTML='<option value="">'+t('selectMember')+'</option>'+members.map(m=>`<option value="${m.phone}">${m.name}</option>`).join('');
   });
@@ -1104,66 +1145,6 @@ window.addMember=function(){
     closeOv('ov-add-mbr');
   });
 };
-  // Open edit member modal and populate fields
-window.openEditMember = function(id) {
-  const m = members.find(m => m.id === id);
-  if (!m) return;
-  document.getElementById('edit-member-id').value = id;
-  document.getElementById('edit-mbr-name').value = m.name || '';
-  document.getElementById('edit-mbr-phone').value = m.phone || '';
-  document.getElementById('edit-mbr-photo').value = m.photoURL || '';
-  document.getElementById('edit-mbr-join').value = m.joinDate || '';
-  openOv('ov-edit-member');
-};
-// Open edit transaction modal
-window.openEditTransaction = function(txId) {
-  const tx = transactions.find(t => t.id === txId);
-  if (!tx) return;
-  document.getElementById('edit-tx-id').value = txId;
-  populateMemberDropdowns(); // ensure member dropdown is filled
-  setTimeout(() => {
-    const sel = document.getElementById('edit-tx-member');
-    if (sel) sel.value = tx.memberPhone || '';
-    document.getElementById('edit-tx-type').value = tx.type || 'deposit';
-    document.getElementById('edit-tx-amount').value = tx.amount || 0;
-    document.getElementById('edit-tx-desc').value = tx.description || '';
-  }, 100);
-  openOv('ov-edit-tx');
-};
-
-// Save edited transaction
-window.saveEditedTransaction = function() {
-  const id = document.getElementById('edit-tx-id').value;
-  const phone = document.getElementById('edit-tx-member').value;
-  const type = document.getElementById('edit-tx-type').value;
-  const amount = +document.getElementById('edit-tx-amount').value;
-  const desc = document.getElementById('edit-tx-desc').value.trim();
-  if (!phone || !type || !amount) return toast(t('fillAllFields'), '#dc2626');
-  const m = members.find(m => m.phone === phone);
-  if (!m) return toast('Member not found', '#dc2626');
-  db.ref('transactions/' + id).update({
-    memberPhone: phone,
-    memberName: m.name,
-    type: type,
-    amount: amount,
-    description: desc || type
-  }).then(() => {
-    toast('Transaction updated', '#059669');
-    closeOv('ov-edit-tx');
-  });
-};
-// Save edited member
-window.updateMember = async function() {
-  const id = document.getElementById('edit-member-id').value;
-  const name = document.getElementById('edit-mbr-name').value.trim();
-  const phone = document.getElementById('edit-mbr-phone').value.trim();
-  const photoURL = document.getElementById('edit-mbr-photo').value.trim();
-  const joinDate = document.getElementById('edit-mbr-join').value;
-  if (!name || !phone) return toast(t('fillAllFields'), '#dc2626');
-  await db.ref('members/' + id).update({ name, phone, photoURL, joinDate });
-  toast('Member updated', '#059669');
-  closeOv('ov-edit-member');
-};
 window.deleteMember=function(id){if(confirm(t('confirmDelete'))){db.ref('members/'+id).remove();toast(t('memberDeleted'),'#dc2626');}};
 window.loadSettings=function(){
   document.getElementById('set-groupname').value=settings.groupName||'';
@@ -1250,3 +1231,5 @@ window.onload=()=>{
   setTimeout(()=>applyTranslations(),500);
 };
 </script>
+</body>
+</html>
