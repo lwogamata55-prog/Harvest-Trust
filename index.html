@@ -386,7 +386,21 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 <div class="ov" id="ov-settings" onclick="maybeClose(event,'ov-settings')"><div class="bs"><div class="bs-title">⚙️ Group Settings</div><div class="fgrp"><label class="flbl">Group Name</label><input type="text" id="set-groupname" class="inp" placeholder="Group Name"></div><div class="fgrp"><label class="flbl">Daily Amount</label><input type="number" id="set-daily" class="inp" placeholder="Daily Amount"></div><div class="fgrp"><label class="flbl">Welfare Deduction</label><input type="number" id="set-welfare-amount" class="inp" placeholder="Welfare Deduction"></div><div class="fgrp"><label class="flbl">Fine Deduction</label><input type="number" id="set-fine-contribution" class="inp" placeholder="Fine Deduction"></div><div class="fgrp"><label class="flbl">Default Fine</label><input type="number" id="set-fine" class="inp" placeholder="Default Fine"></div><div class="fgrp"><label class="flbl">WhatsApp Link</label><input type="url" id="set-whatsapp" class="inp" placeholder="WhatsApp Link"></div><div class="fgrp"><label class="flbl">Banner URL</label><input type="url" id="set-banner-url" class="inp" placeholder="Banner URL"></div><button class="btn btn-blue btn-full" onclick="doSaveSettings()">💾 Save</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-settings')">Cancel</button></div></div>
 <div class="ov" id="ov-assign-debt" onclick="maybeClose(event,'ov-assign-debt')"><div class="bs"><div class="bs-title">🧾 Assign Debt</div><div class="fgrp"><label class="flbl">Member</label><select id="debt-member" class="inp"><option value="">Select member</option></select></div><div class="fgrp"><label class="flbl">Amount</label><input type="number" id="debt-amount" class="inp" placeholder="Amount"></div><div class="fgrp"><label class="flbl">Reason</label><input type="text" id="debt-reason" class="inp" placeholder="Reason"></div><button class="btn btn-red btn-full" onclick="assignDebt()">🧾 Assign</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-assign-debt')">Cancel</button></div></div>
 <div class="ov" id="ov-add-mbr" onclick="maybeClose(event,'ov-add-mbr')"><div class="bs"><div class="bs-title">👤 Add Member</div><div class="fgrp"><label class="flbl">Full Name</label><input type="text" id="mbr-name" class="inp" placeholder="Full Name"></div><div class="fgrp"><label class="flbl">Phone</label><input type="tel" id="mbr-phone" class="inp" placeholder="Phone number"></div><div class="fgrp"><label class="flbl">Password (optional)</label><input type="password" id="mbr-pw" class="inp" placeholder="Default: last 4 digits of phone"></div><div class="fgrp"><label class="flbl">Join Date</label><input type="date" id="mbr-join" class="inp"></div><button class="btn btn-blue btn-full" onclick="addMember()">✅ Add Member</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-add-mbr')">Cancel</button></div></div>
+<!-- EDIT MEMBER OVERLAY -->
+<div class="ov" id="ov-edit-member" onclick="maybeClose(event,'ov-edit-member')">
+  <div class="bs">
+    <div class="bs-title">✏️ Edit Member</div>
+    <input type="hidden" id="edit-member-id">
+    <div class="fgrp"><label class="flbl">Full Name</label><input type="text" id="edit-mbr-name" class="inp" placeholder="Full Name"></div>
+    <div class="fgrp"><label class="flbl">Phone</label><input type="tel" id="edit-mbr-phone" class="inp" placeholder="Phone"></div>
+    <div class="fgrp"><label class="flbl">Photo URL (optional)</label><input type="url" id="edit-mbr-photo" class="inp" placeholder="https://..."></div>
+    <div class="fgrp"><label class="flbl">Join Date</label><input type="date" id="edit-mbr-join" class="inp"></div>
+    <button class="btn btn-blue btn-full" onclick="updateMember()">💾 Save Changes</button>
+    <button class="btn btn-sec btn-full" onclick="closeOv('ov-edit-member')" data-i18n="cancel">Cancel</button>
+  </div>
+</div>  
 <div class="ov" id="ov-reminder" onclick="maybeClose(event,'ov-reminder')"><div class="bs"><div class="bs-title">📢 Group Reminder</div><div class="fgrp"><label class="flbl">Banner URL (optional)</label><input type="url" id="reminder-banner" class="inp" placeholder="Banner URL (optional)"></div><div class="fgrp"><label class="flbl">Message</label><textarea id="reminder-msg" class="inp" rows="6">🌿 *HARVEST TRUST REMINDER* 🌿
+  
 
 Dear members, this is your reminder to make your daily savings.
 
@@ -589,13 +603,24 @@ function updateHomeUI(){
 // ===== UI RENDERERS =====
 function getAvatarColor(n){ const c=['#b84510','#7a3a14','#1a6635','#9e4f1a','#d4760c']; return c[(n||'').charCodeAt(0)%c.length]; }
 const TX_ICONS={deposit:'💰',withdraw:'📤',fine:'⚡',welfare:'🤝',expense:'📋',payout:'✅',debt:'🧾'};
-function renderTxRow(tx,i){
-  const m=members.find(m=>m.phone===tx.memberPhone)||{name:tx.memberName||'?'};
-  const ico=TX_ICONS[tx.type]||'💫';
-  const d=tx.date?new Date(tx.date).toLocaleDateString():'';
-  return `<div class="txc" style="animation-delay:${(i||0)*0.04}s;">
-    <div class="txc-icon txc-icon-dep">${ico}</div><div class="txc-info"><div class="txc-name">${m.name}</div><div class="txc-desc">${tx.description||tx.type}</div></div>
-    <div><div class="txc-amount ${tx.type==='deposit'||tx.type==='payout'?'pos':'neg'}">UGX ${(+tx.amount).toLocaleString()}</div><div class="txc-date">${d}</div></div>
+function renderTxRow(tx, i) {
+  const m = members.find(m => m.phone === tx.memberPhone) || { name: tx.memberName || '?' };
+  const ico = TX_ICONS[tx.type] || '💫';
+  const d = tx.date ? new Date(tx.date).toLocaleDateString() : '';
+  // Admin edit button (only if adminUnlocked and not a payout)
+  const editBtn = (adminUnlocked && tx.type !== 'payout') 
+    ? `<button class="btn btn-sm btn-blue" style="margin-left:8px;" onclick="openEditTransaction('${tx.id}')">✏️</button>` 
+    : '';
+  return `<div class="txc" style="animation-delay:${(i || 0) * 0.04}s;">
+    <div class="txc-icon txc-icon-dep">${ico}</div>
+    <div class="txc-info"><div class="txc-name">${m.name}</div><div class="txc-desc">${tx.description || tx.type}</div></div>
+    <div style="display:flex; align-items:center;">
+      <div>
+        <div class="txc-amount ${tx.type === 'deposit' || tx.type === 'payout' ? 'pos' : 'neg'}">UGX ${(+tx.amount).toLocaleString()}</div>
+        <div class="txc-date">${d}</div>
+      </div>
+      ${editBtn}
+    </div>
   </div>`;
 }
 function loadLedger(filter){
@@ -829,6 +854,19 @@ function renderAdminPanel(){
     html=`<div class="card"><div class="sec-h">🌾 ${t('harvest')}</div>
       <button class="btn btn-blue btn-full" onclick="openOv('ov-daily');loadDailyList()">📋 ${t('dailySavings')}</button>
       <button class="btn btn-amber btn-full" onclick="openOv('ov-add-tx');populateMemberDropdowns()">➕ ${t('addTransaction')}</button>
+      <!-- EDIT TRANSACTION OVERLAY -->
+<div class="ov" id="ov-edit-tx" onclick="maybeClose(event,'ov-edit-tx')">
+  <div class="bs">
+    <div class="bs-title">✏️ Edit Transaction</div>
+    <input type="hidden" id="edit-tx-id">
+    <div class="fgrp"><label class="flbl">Member</label><select id="edit-tx-member" class="inp"><option value="">Select member</option></select></div>
+    <div class="fgrp"><label class="flbl">Type</label><select id="edit-tx-type" class="inp"><option value="deposit">Deposit</option><option value="withdraw">Withdrawal</option><option value="fine">Fine</option><option value="welfare">Welfare</option><option value="expense">Expense</option></select></div>
+    <div class="fgrp"><label class="flbl">Amount</label><input type="number" id="edit-tx-amount" class="inp" placeholder="Amount"></div>
+    <div class="fgrp"><label class="flbl">Description</label><input type="text" id="edit-tx-desc" class="inp" placeholder="Description"></div>
+    <button class="btn btn-blue btn-full" onclick="saveEditedTransaction()">💾 Update</button>
+    <button class="btn btn-sec btn-full" onclick="closeOv('ov-edit-tx')" data-i18n="cancel">Cancel</button>
+  </div>
+</div>
       <button class="btn btn-green btn-full" onclick="openOv('ov-mark-paid');loadMarkPaidInfo()">✅ ${t('markPayout')}</button>
       <button class="btn btn-purple btn-full" onclick="openOv('ov-rot-manage');buildDragRotation()">🔄 ${t('rotationOrder')}</button>
       <button class="btn btn-sec btn-full" onclick="openOv('ov-cover');buildCoverDaysList();populateMemberDropdowns()">📅 ${t('coverMissedDays')}</button>
@@ -868,7 +906,13 @@ function renderAdminPanel(){
 }
 function updateAdminMembersList(){
   const list=document.getElementById('admin-members-list');if(!list)return;
-  list.innerHTML=members.map(m=>`<div class="mc" style="padding:10px;"><div>${m.name}</div><div>${m.phone}</div><button class="btn btn-sm btn-red" onclick="deleteMember('${m.id}')">🗑️</button></div>`).join('');
+  list.innerHTML=members.map(m=>`
+    <div class="mc" style="padding:10px;">
+      <div style="flex:1;"><strong>${m.name}</strong><br><span class="micro">${m.phone}</span></div>
+      <button class="btn btn-sm btn-blue" style="margin-right:4px;" onclick="openEditMember('${m.id}')">✏️</button>
+      <button class="btn btn-sm btn-red" onclick="deleteMember('${m.id}')">🗑️</button>
+    </div>
+  `).join('');
 }
 function renderSupportConversations(){
   const container=document.getElementById('support-conversations');if(!container)return;
@@ -1045,6 +1089,66 @@ window.addMember=function(){
     toast(t('memberAdded'),'#059669');
     closeOv('ov-add-mbr');
   });
+};
+  // Open edit member modal and populate fields
+window.openEditMember = function(id) {
+  const m = members.find(m => m.id === id);
+  if (!m) return;
+  document.getElementById('edit-member-id').value = id;
+  document.getElementById('edit-mbr-name').value = m.name || '';
+  document.getElementById('edit-mbr-phone').value = m.phone || '';
+  document.getElementById('edit-mbr-photo').value = m.photoURL || '';
+  document.getElementById('edit-mbr-join').value = m.joinDate || '';
+  openOv('ov-edit-member');
+};
+// Open edit transaction modal
+window.openEditTransaction = function(txId) {
+  const tx = transactions.find(t => t.id === txId);
+  if (!tx) return;
+  document.getElementById('edit-tx-id').value = txId;
+  populateMemberDropdowns(); // ensure member dropdown is filled
+  setTimeout(() => {
+    const sel = document.getElementById('edit-tx-member');
+    if (sel) sel.value = tx.memberPhone || '';
+    document.getElementById('edit-tx-type').value = tx.type || 'deposit';
+    document.getElementById('edit-tx-amount').value = tx.amount || 0;
+    document.getElementById('edit-tx-desc').value = tx.description || '';
+  }, 100);
+  openOv('ov-edit-tx');
+};
+
+// Save edited transaction
+window.saveEditedTransaction = function() {
+  const id = document.getElementById('edit-tx-id').value;
+  const phone = document.getElementById('edit-tx-member').value;
+  const type = document.getElementById('edit-tx-type').value;
+  const amount = +document.getElementById('edit-tx-amount').value;
+  const desc = document.getElementById('edit-tx-desc').value.trim();
+  if (!phone || !type || !amount) return toast(t('fillAllFields'), '#dc2626');
+  const m = members.find(m => m.phone === phone);
+  if (!m) return toast('Member not found', '#dc2626');
+  db.ref('transactions/' + id).update({
+    memberPhone: phone,
+    memberName: m.name,
+    type: type,
+    amount: amount,
+    description: desc || type
+  }).then(() => {
+    toast('Transaction updated', '#059669');
+    closeOv('ov-edit-tx');
+  });
+};
+// Save edited member
+window.updateMember = async function() {
+  const id = document.getElementById('edit-member-id').value;
+  const name = document.getElementById('edit-mbr-name').value.trim();
+  const phone = document.getElementById('edit-mbr-phone').value.trim();
+  const photoURL = document.getElementById('edit-mbr-photo').value.trim();
+  const joinDate = document.getElementById('edit-mbr-join').value;
+  if (!name || !phone) return toast(t('fillAllFields'), '#dc2626');
+  await db.ref('members/' + id).update({ name, phone, photoURL, joinDate });
+  toast('Member updated', '#059669');
+  closeOv('ov-edit-member');
 };
 window.deleteMember=function(id){if(confirm(t('confirmDelete'))){db.ref('members/'+id).remove();toast(t('memberDeleted'),'#dc2626');}};
 window.loadSettings=function(){
