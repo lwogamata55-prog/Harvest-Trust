@@ -295,8 +295,8 @@ select.inp option{background:#0a1628;color:var(--t)}
 <!-- LION SPLASH -->
 <div id="lion-splash">
   <div class="lion-container">
-    <img class="lion-img" src="https://image2url.com/r2/default/gifs/1773758382752-d0289f80-5a67-4e09-bc0e-8f4405ba5f27.gif" alt="Lion" onerror="this.style.display='none';document.getElementById('lion-fallback').style.display='block'">
-    <div id="lion-fallback" style="display:none;font-size:5rem;text-align:center;animation:lionBreathe 2s infinite">🦁</div>
+    <img class="lion-img" src="https://image2url.com/r2/default/gifs/1773758382752-d0289f80-5a67-4e09-bc0e-8f4405ba5f27.gif" alt="Lion" onerror="this.style.display='none'; document.getElementById('lion-fallback').style.display='flex';">
+<div id="lion-fallback" style="display:none; font-size:5rem; text-align:center; animation:lionBreathe 2s infinite; justify-content:center;">🦁</div>
     <div class="lion-ground"></div><div class="lion-dust"><div></div><div></div><div></div><div></div><div></div></div>
   </div>
   <div class="lion-text"><div class="main"><span>Harvest Trust</span></div><div class="sub" id="lion-sub">Loading your pride…</div></div>
@@ -622,12 +622,18 @@ window.handlePhotoInput=function(input,previewId,dataId){
 };
 
 // ===== FIREBASE =====
-function initFirebase(){
-  try{
-    if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);
-    db=firebase.database();
+function initFirebase() {
+  console.log("Initializing Firebase...");
+  try {
+    if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.database();
+    console.log("Firebase connected");
     loadAllData();
-  }catch(e){console.error(e);toast('Firebase error','#ef4444');}
+  } catch(e) {
+    console.error("Firebase init error", e);
+    toast("Firebase connection failed. Check console.", "#ef4444");
+    forceShowLogin(); // fallback
+  }
 }
 function loadAllData(){
   if(!db)return;
@@ -1614,14 +1620,41 @@ window.goTab=function(tab,btn){
 // ===== SPLASH =====
 const splashMsgs=['Loading your pride…','Connecting to hive…','Fetching balances…','Almost there…'];
 let mIdx=0;
-const subEl=document.getElementById('lion-sub');
-if(subEl){
-  const mi=setInterval(()=>{mIdx=(mIdx+1)%splashMsgs.length;subEl.innerText=splashMsgs[mIdx];},1200);
-  setTimeout(()=>{
+// === SPLASH with error recovery ===
+const splashEl = document.getElementById('lion-splash');
+const loginScreen = document.getElementById('login-screen');
+let splashDone = false;
+
+function forceShowLogin() {
+  if (splashDone) return;
+  splashDone = true;
+  if (splashEl) {
+    splashEl.classList.add('out');
+    setTimeout(() => {
+      splashEl.style.display = 'none';
+      if (loginScreen) loginScreen.classList.remove('hidden');
+    }, 800);
+  } else {
+    if (loginScreen) loginScreen.classList.remove('hidden');
+  }
+}
+
+// Set a hard timeout to show login regardless of Firebase (6 seconds max)
+setTimeout(forceShowLogin, 6000);
+
+// Normal splash animation with 4.5s transition
+let mIdx = 0;
+const subEl = document.getElementById('lion-sub');
+if (subEl) {
+  const mi = setInterval(() => {
+    mIdx = (mIdx + 1) % splashMsgs.length;
+    subEl.innerText = splashMsgs[mIdx];
+  }, 1200);
+  
+  setTimeout(() => {
     clearInterval(mi);
-    document.getElementById('lion-splash').classList.add('out');
-    setTimeout(()=>{document.getElementById('lion-splash').style.display='none';document.getElementById('login-screen').classList.remove('hidden');},800);
-  },4500);
+    forceShowLogin();
+  }, 4500);
 }
 window.onload=()=>{
   initFirebase();
