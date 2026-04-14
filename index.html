@@ -119,7 +119,21 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 @keyframes badgePop{from{transform:scale(0)}to{transform:scale(1)}}
 /* ===== CONTENT & TABS ===== */
 #content{flex:1;overflow:hidden;position:relative}
-.tab{position:absolute;inset:0;overflow-y:auto;padding:16px 14px calc(var(--nav) + 60px);opacity:0;pointer-events:none;transform:translateY(20px) scale(0.99);transition:opacity 0.35s var(--ease-smooth),transform 0.35s var(--ease-spring)}.tab.on{opacity:1;pointer-events:all;transform:translateY(0) scale(1)}
+.tab {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  padding: 16px 14px calc(var(--nav) + 60px);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(20px) scale(0.99);
+  transition: opacity 0.35s var(--ease-smooth), transform 0.35s var(--ease-spring);
+}
+.tab.on {
+  opacity: 1;
+  pointer-events: all;
+  transform: translateY(0) scale(1);
+}
 /* ===== BOTTOM NAV ===== */
 #nav{position:absolute;bottom:0;left:0;right:0;height:var(--nav);display:flex;background:rgba(255,252,248,0.97);backdrop-filter:blur(28px);border-top:1px solid rgba(184,69,16,0.08);padding-bottom:env(safe-area-inset-bottom);z-index:20;box-shadow:0 -4px 20px rgba(0,0,0,0.06)}
 .ni{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:none;color:var(--t3);font-size:0.5rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;cursor:pointer;border:none;transition:all 0.25s var(--ease-spring);padding-top:6px;position:relative;overflow:hidden}.ni:active{transform:scale(0.92)}.ni.on{color:var(--blue)}.ni .ico{font-size:1.25rem;transition:transform 0.3s var(--ease-spring),filter 0.3s}.ni.on .ico{transform:scale(1.2) translateY(-2px);filter:drop-shadow(0 2px 4px rgba(184,69,16,0.3))}.ni-indicator{position:absolute;bottom:4px;left:50%;transform:translateX(-50%) scaleX(0);width:24px;height:3px;border-radius:99px;background:linear-gradient(90deg,var(--blue),var(--amber));transition:transform 0.3s var(--ease-spring)}.ni.on .ni-indicator{transform:translateX(-50%) scaleX(1)}
@@ -1268,17 +1282,51 @@ window.openWhatsAppReminder=function(){ /* as before */ };
 window.copyReminderMessage=function(){ /* as before */ };
 window.unlockAdmin=function(){ if(document.getElementById('adm-pwd').value===ADMIN_PASSWORD){ adminUnlocked=true; document.getElementById('adm-lock').classList.add('hidden'); document.getElementById('adm-panel').classList.remove('hidden'); currentAdminTab='savings'; document.querySelectorAll('.admin-tab').forEach(t=>t.classList.remove('active')); document.querySelector('[data-tab="savings"]').classList.add('active'); renderAdminPanel(); toast(t('adminUnlocked'),'#059669'); } else toast(t('incorrectAdminPassword'),'#dc2626'); };
 window.lockAdmin=function(){ adminUnlocked=false; document.getElementById('adm-lock').classList.remove('hidden'); document.getElementById('adm-panel').classList.add('hidden'); toast(t('adminLocked'),'#2563eb'); };
-window.goTab=function(tab,btn){
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
-  document.getElementById('t-'+tab).classList.add('on');
-  if(btn){ document.querySelectorAll('.ni').forEach(b=>b.classList.remove('on')); btn.classList.add('on'); }
-  currentScreen=tab;
-  if(tab==='home'){ updateHomeRecent(); updateHomeUI(); }
-  if(tab==='ledger') loadLedger('all');
-  if(tab==='account') updateAccountUI();
-  if(tab==='admin'){
-    if(currentUser?.isAdmin&&adminUnlocked){ document.getElementById('adm-lock').classList.add('hidden'); document.getElementById('adm-panel').classList.remove('hidden'); renderAdminPanel(); }
-    else{ document.getElementById('adm-lock').classList.remove('hidden'); document.getElementById('adm-panel').classList.add('hidden'); }
+// ===== TAB NAVIGATION (FIXED) =====
+window.goTab = function(tab, btn) {
+  // Remove 'on' class from ALL tabs
+  document.querySelectorAll('.tab').forEach(t => {
+    t.classList.remove('on');
+  });
+  
+  // Find the target tab
+  const targetTab = document.getElementById('t-' + tab);
+  if (!targetTab) {
+    console.error('Tab not found: t-' + tab);
+    return;
+  }
+  
+  // Add 'on' class to target tab
+  targetTab.classList.add('on');
+  
+  // Update bottom nav active state
+  if (btn) {
+    document.querySelectorAll('.ni').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+  }
+  
+  currentScreen = tab;
+  
+  // Refresh content based on tab
+  if (tab === 'home') {
+    updateHomeRecent();
+    updateHomeUI();
+  }
+  if (tab === 'ledger') {
+    loadLedger('all');
+  }
+  if (tab === 'account') {
+    updateAccountUI();
+  }
+  if (tab === 'admin') {
+    if (currentUser?.isAdmin && adminUnlocked) {
+      document.getElementById('adm-lock').classList.add('hidden');
+      document.getElementById('adm-panel').classList.remove('hidden');
+      renderAdminPanel();
+    } else {
+      document.getElementById('adm-lock').classList.remove('hidden');
+      document.getElementById('adm-panel').classList.add('hidden');
+    }
   }
 };
 
