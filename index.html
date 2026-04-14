@@ -636,6 +636,15 @@ function loadAllData(){
     members=snap.val()?Object.entries(snap.val()).map(([id,m])=>({...m,id})):[];
     computePots();updateHomeUI();updateAdminMembersList();updateAccountBalances();
   });
+  db.ref('carouselNotifs').on('value', snap => {
+  carouselNotifs = snap.val() ? Object.entries(snap.val()).map(([id, n]) => ({ ...n, id })) : [];
+  if (carouselNotifs.length === 0) {
+    ensureCarouselNotices(); // will add default and trigger again
+  } else {
+    renderCarousel();
+  }
+  if (currentScreen === 'admin' && adminUnlocked && currentAdminTab === 'notice') renderAdminTab();
+});
   db.ref('transactions').on('value',snap=>{
     transactions=snap.val()?Object.entries(snap.val()).map(([id,tx])=>({...tx,id})):[];
     computePots();if(currentScreen==='ledger')loadLedger('all');updateHomeRecent();updateHomeUI();updateAccountBalances();
@@ -660,6 +669,18 @@ function loadAllData(){
   db.ref('carouselNotifs').on('value',snap=>{
     carouselNotifs=snap.val()?Object.entries(snap.val()).map(([id,n])=>({...n,id})):[];
     renderCarousel();
+    function ensureCarouselNotices() {
+    if (carouselNotifs.length === 0) {
+    // Add a default welcome notice
+    const defaultNotice = {
+      text: '🌾 Welcome to Harvest Trust! Grow together, rotate wealth.',
+      icon: '🌾',
+      imageData: '',
+      id: Date.now()
+    };
+    db.ref('carouselNotifs').push(defaultNotice);
+  }
+}
     if(currentScreen==='admin'&&adminUnlocked&&currentAdminTab==='notice')renderAdminTab();
   });
 }
@@ -722,18 +743,25 @@ function updateAccountBalances(){
 }
 
 // ===== CAROUSEL =====
-function renderCarousel(){
-  const wrapper=document.getElementById('carousel-wrapper');
-  const track=document.getElementById('carousel-track');
-  const dots=document.getElementById('carousel-dots');
-  if(!wrapper||!track||!dots)return;
-  if(!carouselNotifs.length){wrapper.style.display='none';clearInterval(carouselTimer);return;}
-  wrapper.style.display='block';
-  track.innerHTML=carouselNotifs.map(n=>{
-    return '<div class="c-slide"><div class="c-icon">'+(n.icon||'📢')+'</div><div class="c-body"><div class="c-title">Notice</div><div class="c-text">'+n.text+'</div>'+(n.imageData?'<img src="'+n.imageData+'" class="c-image">':'')+'</div></div>';
+function renderCarousel() {
+  const wrapper = document.getElementById('carousel-wrapper');
+  const track = document.getElementById('carousel-track');
+  const dots = document.getElementById('carousel-dots');
+  if (!wrapper || !track || !dots) return;
+  
+  // Always show carousel, even if empty (show placeholder)
+  wrapper.style.display = 'block';
+  
+  let slides = carouselNotifs.length ? carouselNotifs : [{ text: 'No active notices. Admin can add one.', icon: '📢', imageData: '' }];
+  track.innerHTML = slides.map(n => {
+    return `<div class="c-slide"><div class="c-icon">${n.icon || '📢'}</div><div class="c-body"><div class="c-title">Notice</div><div class="c-text">${n.text}</div>${n.imageData ? `<img src="${n.imageData}" class="c-image">` : ''}</div></div>`;
   }).join('');
-  dots.innerHTML=carouselNotifs.map((_,i)=>'<button class="c-dot'+(i===0?' active':'')+'" onclick="goToSlide('+i+')"></button>').join('');
-  carouselIdx=0;updateCarouselPos();startCarouselTimer();
+  
+  dots.innerHTML = slides.map((_, i) => `<button class="c-dot ${i === 0 ? 'active' : ''}" onclick="goToSlide(${i})"></button>`).join('');
+  
+  carouselIdx = 0;
+  updateCarouselPos();
+  startCarouselTimer();
   // Touch support
   track.addEventListener('touchstart',e=>{cTouchStartX=e.touches[0].clientX;clearInterval(carouselTimer);},{passive:true});
   track.addEventListener('touchend',e=>{
@@ -752,7 +780,13 @@ function updateCarouselPos(){
   if(track)track.style.transform='translateX(-'+(carouselIdx*100)+'%)';
   document.querySelectorAll('.c-dot').forEach((d,i)=>d.classList.toggle('active',i===carouselIdx));
 }
-window.goToSlide=function(i){carouselIdx=i;updateCarouselPos();startCarouselTimer();};
+indow.goToSlide = function(i) {
+  carouselIdx = i;
+  updateCarouselPos();
+  // restart timer
+  clearInterval(carouselTimer);
+  startCarouselTimer();
+};
 window.addCarouselNotice=function(){
   if(carouselNotifs.length>=3)return toast('Maximum 3 carousel notices','#ef4444');
   const msg=document.getElementById('c-msg').value.trim();
@@ -1048,18 +1082,63 @@ window.openLoanRequestModal=function(){
   document.getElementById('loan-reason').value='';
   openOv('ov-loan-request');
 };
-window.submitLoanRequest=function(){
-  const amount=+document.getElementById('loan-amount').value;
-  const reason=document.getElementById('loan-reason').value.trim();
-  if(!amount||amount<=0){toast('Enter a valid amount','#ef4444');return;}
-  const maxLoan=Math.max(0,Math.floor(groupProfit*((loanSettings.maxLoanPercent||50)/100)));
-  if(maxLoan>0&&amount>maxLoan){toast('Max loan: UGX '+maxLoan.toLocaleString(),'#ef4444');return;}
-  const interest=loanSettings.interestRate||5;
+window.submitLoanRequest = function() {
+  const amount = parseFloat(document.getElementById('loan-amount').value);
+  const reason = document.getElementById('loan-reason').value.trim();
+  const amountEl = document.getElementById('loan-amount');
+  
+  if (!amount || amount <= 0) {
+    toast('Please enter a valid amount', '#ef4444');
+    amountEl.focus();
+    return;
+  }
+  
+  // Re-fetch latest profit and settings to be safe
+  computePots(); // recalc groupProfit and member balances
+  const maxLoanPercent = (loanSettings.maxLoanPercent || 50);
+  const maxLoan = Math.max(0, Math.floor(groupProfit * (maxLoanPercent / 100)));
+  
+  if (maxLoan > 0 && amount > maxLoan) {
+    toast(`Max loan is UGX ${maxLoan.toLocaleString()} (${maxLoanPercent}% of profit)`, '#ef4444');
+    return;
+  }
+  
+  if (groupProfit <= 0) {
+    toast('No profit available to borrow from yet', '#ef4444');
+    return;
+  }
+  
+  const interestRate = loanSettings.interestRate || 5;
+  const totalRepay = Math.floor(amount * (1 + interestRate / 100));
+  
+  // Show loading state on button
+  const btn = event?.target;
+  const originalText = btn?.innerText;
+  if (btn) btn.innerText = '⏳ Submitting...';
+  
   db.ref('loans').push({
-    memberId:currentUser.id,memberName:currentUser.name,memberPhone:currentUser.phone,
-    amount,interestRate:interest,totalRepay:Math.floor(amount*(1+interest/100)),
-    reason:reason||'Not specified',status:'pending',requestedAt:Date.now(),repaid:false
-  }).then(()=>{toast('Loan request submitted!','#10b981');closeOv('ov-loan-request');});
+    memberId: currentUser.id,
+    memberName: currentUser.name,
+    memberPhone: currentUser.phone,
+    amount: amount,
+    interestRate: interestRate,
+    totalRepay: totalRepay,
+    reason: reason || 'Not specified',
+    status: 'pending',
+    requestedAt: Date.now(),
+    repaid: false
+  }).then(() => {
+    toast(`Loan request of UGX ${amount.toLocaleString()} submitted!`, '#10b981');
+    closeOv('ov-loan-request');
+    // Clear fields
+    document.getElementById('loan-amount').value = '';
+    document.getElementById('loan-reason').value = '';
+  }).catch(err => {
+    console.error(err);
+    toast('Failed to submit loan request. Check console.', '#ef4444');
+  }).finally(() => {
+    if (btn) btn.innerText = originalText;
+  });
 };
 window.saveLoanSettings=function(){
   loanSettings.interestRate=+document.getElementById('loan-interest-rate').value;
