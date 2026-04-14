@@ -119,21 +119,8 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 @keyframes badgePop{from{transform:scale(0)}to{transform:scale(1)}}
 /* ===== CONTENT & TABS ===== */
 #content{flex:1;overflow:hidden;position:relative}
-.tab {
-  position: absolute;
-  inset: 0;
-  overflow-y: auto;
-  padding: 16px 14px calc(var(--nav) + 60px);
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(20px) scale(0.99);
-  transition: opacity 0.35s var(--ease-smooth), transform 0.35s var(--ease-spring);
-}
-.tab.on {
-  opacity: 1;
-  pointer-events: all;
-  transform: translateY(0) scale(1);
-}
+.tab{position:absolute;inset:0;overflow-y:auto;padding:16px 14px calc(var(--nav) + 60px);opacity:0;pointer-events:none;transform:translateY(20px) scale(0.99);transition:opacity 0.35s var(--ease-smooth),transform 0.35s var(--ease-spring);background:var(--bg)}
+.tab.on{opacity:1;pointer-events:all;transform:translateY(0) scale(1)}
 /* ===== BOTTOM NAV ===== */
 #nav{position:absolute;bottom:0;left:0;right:0;height:var(--nav);display:flex;background:rgba(255,252,248,0.97);backdrop-filter:blur(28px);border-top:1px solid rgba(184,69,16,0.08);padding-bottom:env(safe-area-inset-bottom);z-index:20;box-shadow:0 -4px 20px rgba(0,0,0,0.06)}
 .ni{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:none;color:var(--t3);font-size:0.5rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;cursor:pointer;border:none;transition:all 0.25s var(--ease-spring);padding-top:6px;position:relative;overflow:hidden}.ni:active{transform:scale(0.92)}.ni.on{color:var(--blue)}.ni .ico{font-size:1.25rem;transition:transform 0.3s var(--ease-spring),filter 0.3s}.ni.on .ico{transform:scale(1.2) translateY(-2px);filter:drop-shadow(0 2px 4px rgba(184,69,16,0.3))}.ni-indicator{position:absolute;bottom:4px;left:50%;transform:translateX(-50%) scaleX(0);width:24px;height:3px;border-radius:99px;background:linear-gradient(90deg,var(--blue),var(--amber));transition:transform 0.3s var(--ease-spring)}.ni.on .ni-indicator{transform:translateX(-50%) scaleX(1)}
@@ -145,23 +132,8 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 /* ===== NOTIFICATION CAROUSEL ===== */
 .notif-carousel{position:relative;margin-bottom:14px;border-radius:var(--r);overflow:hidden;box-shadow:var(--sh);background:var(--surf);border:1px solid rgba(184,69,16,0.12);}
 .carousel-inner{display:flex;transition:transform 0.5s var(--ease-spring);}
-.carousel-slide {
-  flex: 0 0 100%;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;  /* allow stacking */
-  align-items: flex-start;
-  gap: 8px;
-  background: linear-gradient(145deg, #fff5e6, #fdecd0);
-}
-.carousel-image {
-  width: 100%;
-  max-height: 140px;
-  object-fit: cover;
-  border-radius: 12px;
-  margin-top: 4px;
-  box-shadow: var(--sh);
-}
+.carousel-slide{flex:0 0 100%;padding:16px;display:flex;flex-direction:column;align-items:flex-start;gap:8px;background:linear-gradient(145deg, #fff5e6, #fdecd0);}
+.carousel-image{width:100%;max-height:140px;object-fit:cover;border-radius:12px;margin-top:4px;box-shadow:var(--sh);}
 .carousel-icon{font-size:2rem;}
 .carousel-text{flex:1;font-weight:600;color:var(--t2);}
 .carousel-dots{display:flex;justify-content:center;gap:6px;padding:8px;}
@@ -276,7 +248,8 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   </div>
     <div id="content">
     <!-- HOME TAB -->
-         <!-- Notice Carousel (Admin adds up to 3 notices with images) -->
+    <div id="t-home" class="tab on">
+      <!-- Notice Carousel (Admin adds up to 3 notices with images) -->
       <div class="notif-carousel" id="notif-carousel" style="display:none;">
         <div class="carousel-inner" id="carousel-inner"></div>
         <div class="carousel-dots" id="carousel-dots"></div>
@@ -480,33 +453,23 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 
 <div class="ov" id="ov-loan-settings" onclick="maybeClose(event,'ov-loan-settings')"><div class="bs"><div class="bs-title">⚙️ Loan Settings</div><div class="fgrp"><label class="flbl">Interest Rate (%)</label><input type="number" id="loan-interest-rate" class="inp" value="5" min="0" max="100" step="0.5"></div><div class="fgrp"><label class="flbl">Max Loan (% of Profit)</label><input type="number" id="loan-max-percent" class="inp" value="50" min="1" max="100"></div><button class="btn btn-blue btn-full" onclick="saveLoanSettings()">💾 Save Settings</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-loan-settings')" data-i18n="cancel">Cancel</button></div></div>
 
+<div class="ov" id="ov-notif-compose" onclick="maybeClose(event,'ov-notif-compose')"><div class="bs"><div class="bs-title">📢 Compose Notice</div><div class="fgrp"><label class="flbl">Message</label><textarea id="carousel-notif-msg" class="inp" rows="3" placeholder="Notice text..."></textarea></div><div class="fgrp"><label class="flbl">Icon (emoji)</label><input type="text" id="carousel-notif-icon" class="inp" value="📢" maxlength="2"></div>
+<div class="fgrp"><label class="flbl">Image (optional)</label>
+  <div class="drag-zone" id="carousel-drag-zone" onclick="document.getElementById('carousel-file-input').click()">
+    <span>🖼️ Drag & drop or tap to upload image</span>
+    <input type="file" id="carousel-file-input" accept="image/*" style="display:none;" onchange="handleCarouselFileSelect(this)">
+    <img id="carousel-preview" class="image-preview" style="display:none;">
+  </div>
+  <input type="hidden" id="carousel-image-data">
+</div>
+<button class="btn btn-blue btn-full" onclick="addCarouselNotification()">➕ Add to Carousel</button>
+<button class="btn btn-sec btn-full" onclick="closeOv('ov-notif-compose')" data-i18n="cancel">Cancel</button></div></div>
+
 <div class="ov" id="ov-reminder" onclick="maybeClose(event,'ov-reminder')"><div class="bs"><div class="bs-title" data-i18n="groupReminder">📢 Group Reminder</div><div class="fgrp"><label class="flbl">Banner URL (optional)</label><input type="url" id="reminder-banner" class="inp" data-i18n-placeholder="bannerUrlOptional" placeholder="Banner URL (optional)"></div><div class="fgrp"><label class="flbl">Message</label><textarea id="reminder-msg" class="reminder-textarea" rows="6">🌿 *HARVEST TRUST REMINDER* 🌿
 
 Dear members, this is your reminder to make your daily savings.
 
 *Current beneficiary:* {beneficiary}</textarea></div><button class="btn btn-green btn-full" onclick="openWhatsAppReminder()" data-i18n="sendViaWhatsApp">📱 Send via WhatsApp</button><button class="btn btn-blue btn-full" onclick="copyReminderMessage()" data-i18n="copyMessage">📋 Copy Message</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-reminder')" data-i18n="close">Close</button></div></div>
-
-<!-- COMPOSE CAROUSEL NOTICE (with image upload) -->
-<div class="ov" id="ov-notif-compose" onclick="maybeClose(event,'ov-notif-compose')">
-  <div class="bs">
-    <div class="bs-title">📢 Compose Notice</div>
-    <div class="fgrp"><label class="flbl">Message</label><textarea id="carousel-notif-msg" class="inp" rows="3" placeholder="Notice text..."></textarea></div>
-    <div class="fgrp"><label class="flbl">Icon (emoji)</label><input type="text" id="carousel-notif-icon" class="inp" value="📢" maxlength="2"></div>
-    
-    <!-- Drag & Drop Image Upload -->
-    <div class="fgrp"><label class="flbl">Image (optional)</label>
-      <div class="drag-zone" id="carousel-drag-zone" onclick="document.getElementById('carousel-file-input').click()">
-        <span>🖼️ Drag & drop or tap to upload image</span>
-        <input type="file" id="carousel-file-input" accept="image/*" style="display:none;" onchange="handleCarouselFileSelect(this)">
-        <img id="carousel-preview" class="image-preview" style="display:none;">
-      </div>
-      <input type="hidden" id="carousel-image-data">
-    </div>
-    
-    <button class="btn btn-blue btn-full" onclick="addCarouselNotification()">➕ Add to Carousel</button>
-    <button class="btn btn-sec btn-full" onclick="closeOv('ov-notif-compose')" data-i18n="cancel">Cancel</button>
-  </div>
-</div>
 <script>
 'use strict';
 // ===== VERSION =====
@@ -524,7 +487,7 @@ const FIREBASE_CONFIG = {
   appId: "1:59557732077:web:aa79eb14010d05728176e4"
 };
 
-// ===== TRANSLATIONS (English only) =====
+// ===== TRANSLATIONS (English only for brevity; full set available) =====
 const translations = {
   en: {
     appName:'🌾 Harvest Trust',tagline:'Grow together · rotate wealth',member:'Member',admin:'Admin',
@@ -553,21 +516,21 @@ const translations = {
     addMember:'👤 Add Member',joinDate:'Join Date',groupReminder:'📢 Group Reminder',
     bannerUrlOptional:'Banner URL (optional)',sendViaWhatsApp:'📱 Send via WhatsApp',copyMessage:'📋 Copy Message',
     editProfile:'Edit Profile',changePassword:'Change Password',newPassword:'New 4-digit PIN',
-    currentPassword:'Current PIN',languageSelect:'Select Language',english:'English',
+    currentPassword:'Current PIN',languageSelect:'Select Language',english:'English',luganda:'Luganda',kiswahili:'Kiswahili',
     helpTitle:'Help Center',typeMessage:'Type your message...',sendMessage:'Send',adminWillReply:'Admin will reply soon.',
     noNotifications:'No notifications',markRead:'Mark as read',delete:'Delete',sendNotification:'Send Notification',
     message:'Message',send:'Send',supportMessages:'Support Messages',reply:'Reply',
     profileUpdated:'Profile updated. New PIN is last 4 digits.',pinChanged:'PIN changed.',incorrectPin:'Incorrect PIN.',
     enter4Digit:'Enter 4-digit PIN.',fillAllFields:'Fill all fields.',memberAdded:'Member added.',
     applicationSubmitted:'Application submitted.',invalidLogin:'Invalid password or not approved.',
-    notApproved:'Your account is pending approval.',adminUnlocked:'Admin unlocked.',adminLocked:'Admin locked.',
-    incorrectAdminPassword:'Incorrect admin password.',transactionAdded:'Transaction added.',
-    depositRecorded:'Deposit recorded.',fineApplied:'Fine applied.',welfareRecorded:'Welfare recorded.',
-    expenseRecorded:'Expense recorded.',debtAssigned:'Debt assigned.',profitDistributed:'Profit distributed.',
-    payoutComplete:'Payout complete.',rotationSaved:'Rotation saved.',coverDaysSaved:'Cover days saved.',
-    settingsSaved:'Settings saved.',noticeUpdated:'Notice updated.',savingsSettingsSaved:'Savings settings saved.',
-    memberDeleted:'Member deleted.',applicationApproved:'approved!',linkCopied:'Link copied!',
-    csvDownloaded:'CSV downloaded!',reminderSent:'Reminder sent!',messageCopied:'Message copied!',
+    notApproved:'Your account is pending approval. Please wait for admin approval.',
+    adminUnlocked:'Admin unlocked.',adminLocked:'Admin locked.',incorrectAdminPassword:'Incorrect admin password.',
+    transactionAdded:'Transaction added.',depositRecorded:'Deposit recorded.',fineApplied:'Fine applied.',
+    welfareRecorded:'Welfare recorded.',expenseRecorded:'Expense recorded.',debtAssigned:'Debt assigned.',
+    profitDistributed:'Profit distributed.',payoutComplete:'Payout complete.',rotationSaved:'Rotation saved.',
+    coverDaysSaved:'Cover days saved.',settingsSaved:'Settings saved.',noticeUpdated:'Notice updated.',
+    savingsSettingsSaved:'Savings settings saved.',memberDeleted:'Member deleted.',applicationApproved:'approved!',
+    linkCopied:'Link copied!',csvDownloaded:'CSV downloaded!',reminderSent:'Reminder sent!',messageCopied:'Message copied!',
     noMembers:'No members yet.',noTransactions:'No transactions.',noMessages:'No messages',noBeneficiary:'No beneficiary',
     noProfit:'No profit to distribute',confirmDelete:'Delete this member?',confirmReset:'Reset everything?',
     confirmResetData:'Reset data but keep members?',noPending:'No pending applications',notificationSent:'Notification sent!',
@@ -589,11 +552,12 @@ function applyTranslations(){
   if(currentUser) updateAccountUI();
   updateHomeUI();
 }
+function changeLanguage(lang){ currentLang=lang; localStorage.setItem('ht_lang',lang); applyTranslations(); }
 
 // ===== GLOBAL STATE =====
 let db=null;
 let members=[],transactions=[],rotation={order:[],currentIndex:0,history:[]};
-let settings={groupName:'Harvest Trust',dailyAmount:2500,welfareAmount:500,fineContribution:500,fineAmount:5000,whatsappLink:'',bannerUrl:'',bannerData:'',noticeText:'Welcome!',noticeImage:'',noticeImageData:''};
+let settings={groupName:'Harvest Trust',dailyAmount:2500,welfareAmount:500,fineContribution:500,fineAmount:5000,whatsappLink:'',bannerUrl:'',bannerData:'',noticeText:'Welcome to Harvest Trust!',noticeImage:'',noticeImageData:''};
 let currentUser=null,adminUnlocked=false,currentAdminTab='savings';
 let dailyChecked={},dragOrder=[],selectedCoverDays={};
 let memberBalances={},memberDebts={};
@@ -601,7 +565,7 @@ let cashFromDeposits=0,groupProfit=0;
 let notifications={},supportMessages={};
 let loanSettings={interestRate:5,maxLoanPercent:50};
 let loans=[];
-let carouselNotifs=[]; // {id,text,icon}
+let carouselNotifs=[];
 let carouselIndex=0,carouselInterval=null;
 let currentScreen='login';
 const ADMIN_PASSWORD='admin123';
@@ -629,38 +593,7 @@ function buildDepositTransactions(member,amount,ts,desc){
   return writes;
 }
 
-// ===== IMAGE HANDLING (Drag & Drop / Base64) =====
-function setupDragDrop(zoneId, inputId, previewId, hiddenFieldId){
-  const zone=document.getElementById(zoneId);
-  const input=document.getElementById(inputId);
-  const preview=document.getElementById(previewId);
-  if(!zone||!input) return;
-  zone.addEventListener('dragover',e=>{ e.preventDefault(); zone.classList.add('dragover'); });
-  zone.addEventListener('dragleave',()=> zone.classList.remove('dragover'));
-  zone.addEventListener('drop',e=>{
-    e.preventDefault(); zone.classList.remove('dragover');
-    const file=e.dataTransfer.files[0];
-    if(file&&file.type.startsWith('image/')){
-      const reader=new FileReader();
-      reader.onload=ev=>{
-        if(preview){ preview.src=ev.target.result; preview.style.display='block'; }
-        if(hiddenFieldId){ const hf=document.getElementById(hiddenFieldId); if(hf) hf.value=ev.target.result; }
-      };
-      reader.readAsDataURL(file);
-    }
-  });
-  input.addEventListener('change',function(){
-    const file=this.files[0];
-    if(file){
-      const reader=new FileReader();
-      reader.onload=ev=>{
-        if(preview){ preview.src=ev.target.result; preview.style.display='block'; }
-        if(hiddenFieldId){ const hf=document.getElementById(hiddenFieldId); if(hf) hf.value=ev.target.result; }
-      };
-      reader.readAsDataURL(file);
-    }
-  });
-}
+// ===== IMAGE HANDLING =====
 window.handleSignupPhotoSelect=function(input){
   const file=input.files[0];
   if(file){
@@ -704,6 +637,30 @@ window.handleEditPhotoSelect=function(input){
       document.getElementById('edit-photo-preview').src=e.target.result;
       document.getElementById('edit-photo-preview').style.display='block';
       document.getElementById('edit-mbr-photo').value=e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+};
+window.handleCarouselFileSelect=function(input){
+  const file=input.files[0];
+  if(file){
+    const reader=new FileReader();
+    reader.onload=e=>{
+      document.getElementById('carousel-preview').src=e.target.result;
+      document.getElementById('carousel-preview').style.display='block';
+      document.getElementById('carousel-image-data').value=e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+};
+window.handleNoticeFileSelect=function(input){
+  const file=input.files[0];
+  if(file){
+    const reader=new FileReader();
+    reader.onload=e=>{
+      document.getElementById('notice-preview').src=e.target.result;
+      document.getElementById('notice-preview').style.display='block';
+      document.getElementById('admin-notice-image-data').value=e.target.result;
     };
     reader.readAsDataURL(file);
   }
@@ -801,24 +758,18 @@ function updateHomeUI(){
   } else { document.getElementById('weekly-payee-name').innerText='—'; }
 }
 
-// ===== NOTIFICATION CAROUSEL =====
+// ===== CAROUSEL =====
 function renderCarousel(){
-  const container = document.getElementById('notif-carousel');
-  const inner = document.getElementById('carousel-inner');
-  const dots = document.getElementById('carousel-dots');
-  if(!carouselNotifs.length){ container.style.display = 'none'; return; }
-  container.style.display = 'block';
-  inner.innerHTML = carouselNotifs.map(n => {
-    const imgHtml = n.imageData ? `<img src="${n.imageData}" class="carousel-image" style="width:100%; max-height:120px; object-fit:cover; border-radius:12px; margin-top:8px;">` : '';
-    return `<div class="carousel-slide" style="flex-direction:column; align-items:flex-start;">
-      <div style="display:flex; align-items:center; gap:12px; width:100%;">
-        <span class="carousel-icon">${n.icon||'📢'}</span>
-        <span class="carousel-text" style="flex:1;">${n.text}</span>
-      </div>
-      ${imgHtml}
-    </div>`;
+  const container=document.getElementById('notif-carousel');
+  const inner=document.getElementById('carousel-inner');
+  const dots=document.getElementById('carousel-dots');
+  if(!carouselNotifs.length){ container.style.display='none'; return; }
+  container.style.display='block';
+  inner.innerHTML=carouselNotifs.map(n=>{
+    const imgHtml=n.imageData?`<img src="${n.imageData}" class="carousel-image">`:'';
+    return `<div class="carousel-slide"><div style="display:flex;align-items:center;gap:12px;width:100%;"><span class="carousel-icon">${n.icon||'📢'}</span><span class="carousel-text">${n.text}</span></div>${imgHtml}</div>`;
   }).join('');
-  dots.innerHTML = carouselNotifs.map((_, i) => `<div class="carousel-dot ${i===0?'active':''}" onclick="goToCarouselSlide(${i})"></div>`).join('');
+  dots.innerHTML=carouselNotifs.map((_,i)=>`<div class="carousel-dot ${i===0?'active':''}" onclick="goToCarouselSlide(${i})"></div>`).join('');
   startCarousel();
 }
 function startCarousel(){
@@ -841,33 +792,20 @@ window.goToCarouselSlide=function(i){
   updateCarouselPosition();
   if(carouselInterval){ clearInterval(carouselInterval); carouselInterval=setInterval(()=>{ carouselIndex=(carouselIndex+1)%carouselNotifs.length; updateCarouselPosition(); },5000); }
 };
-window.handleCarouselFileSelect = function(input) {
-  const file = input.files[0];
-  if (file) {
-    const reader = new FileReader();
-    reader.onload = e => {
-      document.getElementById('carousel-preview').src = e.target.result;
-      document.getElementById('carousel-preview').style.display = 'block';
-      document.getElementById('carousel-image-data').value = e.target.result;
-    };
-    reader.readAsDataURL(file);
-  }
-};
-window.addCarouselNotification = function() {
-  const msg = document.getElementById('carousel-notif-msg').value.trim();
-  const icon = document.getElementById('carousel-notif-icon').value.trim() || '📢';
-  const imageData = document.getElementById('carousel-image-data').value;
-  if (!msg) return toast('Enter a message', '#dc2626');
-  if (carouselNotifs.length >= 3) return toast('Maximum 3 notices', '#dc2626');
-  const newNotif = { text: msg, icon: icon, imageData: imageData || null, id: Date.now() };
+window.addCarouselNotification=function(){
+  const msg=document.getElementById('carousel-notif-msg').value.trim();
+  const icon=document.getElementById('carousel-notif-icon').value.trim()||'📢';
+  const imageData=document.getElementById('carousel-image-data').value;
+  if(!msg) return toast('Enter a message','#dc2626');
+  if(carouselNotifs.length>=3) return toast('Maximum 3 notices','#dc2626');
+  const newNotif={text:msg,icon:icon,imageData:imageData||null,id:Date.now()};
   db.ref('carouselNotifs').push(newNotif);
   closeOv('ov-notif-compose');
-  // Clear the form
-  document.getElementById('carousel-notif-msg').value = '';
-  document.getElementById('carousel-notif-icon').value = '📢';
-  document.getElementById('carousel-preview').style.display = 'none';
-  document.getElementById('carousel-image-data').value = '';
-  toast('Notice added to carousel', '#059669');
+  document.getElementById('carousel-notif-msg').value='';
+  document.getElementById('carousel-notif-icon').value='📢';
+  document.getElementById('carousel-preview').style.display='none';
+  document.getElementById('carousel-image-data').value='';
+  toast('Notice added','#059669');
 };
 window.removeCarouselNotif=function(id){
   db.ref('carouselNotifs').child(id).remove();
@@ -912,7 +850,6 @@ function updateAccountUI(){
   av.style.background=`linear-gradient(145deg,${getAvatarColor(currentUser.name)},var(--purple))`;
   av.innerText=currentUser.name.charAt(0).toUpperCase();
   document.getElementById('hdr-sub').innerText=currentUser.isAdmin?'Admin ✦':currentUser.name.split(' ')[0];
-  // Referral
   const refBox=document.getElementById('referral-box');
   if(!currentUser.isAdmin){
     refBox.style.display='block';
@@ -1126,9 +1063,9 @@ function renderAdminPanel(){
       <div class="fgrp"><textarea id="notif-msg" class="inp" rows="3" placeholder="${t('message')}"></textarea></div>
       <button class="btn btn-blue btn-full" onclick="sendNotificationToMember()">📨 ${t('sendNotification')}</button>
     </div>
-    <div class="card"><div class="sec-h">📢 Carousel Notifications</div>
+    <div class="card"><div class="sec-h">📢 Carousel Notices</div>
       <div id="carousel-list">${carouselNotifs.map(n=>`<div class="mc"><span>${n.icon} ${n.text}</span><button class="btn btn-sm btn-red" onclick="removeCarouselNotif('${n.id}')">🗑️</button></div>`).join('')}</div>
-      <button class="btn btn-blue btn-full" onclick="openOv('ov-notif-compose')">➕ Add Carousel Notification</button>
+      <button class="btn btn-blue btn-full" onclick="openOv('ov-notif-compose')">➕ Add Carousel Notice</button>
     </div>`;
   } else if(currentAdminTab==='support'){
     html=`<div class="card"><div class="sec-h">💬 Support</div><div id="support-conversations"></div></div>`;
@@ -1140,7 +1077,6 @@ function renderAdminPanel(){
     </div>`;
   }
   container.innerHTML=html;
-  if(currentAdminTab==='notice') setupDragDrop('notice-drag-zone','notice-file-input','notice-preview','admin-notice-image-data');
   if(currentAdminTab==='users') updateAdminMembersList();
   if(currentAdminTab==='support') renderSupportConversations();
 }
@@ -1206,31 +1142,124 @@ window.updateMember=async function(){
   await db.ref('members/'+id).update({name,phone,joinDate,photoData});
   toast('Member updated','#059669'); closeOv('ov-edit-member');
 };
-window.handleNoticeFileSelect=function(input){ const file=input.files[0]; if(file){ const reader=new FileReader(); reader.onload=e=>{ document.getElementById('notice-preview').src=e.target.result; document.getElementById('notice-preview').style.display='block'; document.getElementById('admin-notice-image-data').value=e.target.result; }; reader.readAsDataURL(file); } };
 window.updateNotice=function(){
   settings.noticeText=document.getElementById('admin-notice-text').value;
   settings.noticeImageData=document.getElementById('admin-notice-image-data').value;
   db.ref('settings').update({noticeText:settings.noticeText,noticeImageData:settings.noticeImageData});
   applySettings(); toast(t('noticeUpdated'),'#059669');
 };
-window.populateMemberDropdowns=function(){ /* as before */ };
-window.saveSavingsSettings=function(){ /* as before */ };
-window.loadDailyList=function(){ /* as before */ };
-window.toggleDaily=function(phone){ /* as before */ };
-window.saveDaily=function(){ /* as before */ };
-window.addTransaction=function(){ /* as before */ };
-window.addFine=function(){ /* as before */ };
-window.addWelfare=function(){ /* as before */ };
-window.addExpense=function(){ /* as before */ };
-window.assignDebt=function(){ /* as before */ };
-window.distributeProfit=function(){ /* as before */ };
-window.loadMarkPaidInfo=function(){ /* as before */ };
-window.confirmMarkPaid=function(){ /* as before */ };
-window.buildDragRotation=function(){ dragOrder=[...rotation.order]; renderDragList(); };
-function renderDragList(){ /* as before */ }
-window.saveRotationOrder=function(){ /* as before */ };
-window.buildCoverDaysList=function(){ /* as before */ };
-window.saveCoverDays=function(){ /* as before */ };
+window.populateMemberDropdowns=function(){
+  ['tx-member','fine-member','welfare-member','debt-member','cover-member','edit-tx-member'].forEach(id=>{
+    const sel=document.getElementById(id);if(!sel)return;
+    sel.innerHTML='<option value="">'+t('selectMember')+'</option>'+members.map(m=>`<option value="${m.phone}">${m.name}</option>`).join('');
+  });
+};
+window.saveSavingsSettings=function(){
+  settings.dailyAmount=+document.getElementById('admin-daily').value;
+  settings.welfareAmount=+document.getElementById('admin-welfare').value;
+  settings.fineContribution=+document.getElementById('admin-finecontrib').value;
+  settings.fineAmount=+document.getElementById('admin-fine').value;
+  db.ref('settings').update({dailyAmount:settings.dailyAmount,welfareAmount:settings.welfareAmount,fineContribution:settings.fineContribution,fineAmount:settings.fineAmount});
+  toast(t('savingsSettingsSaved'),'#059669');renderAdminPanel();updateHomeUI();
+};
+window.loadDailyList=function(){
+  const list=document.getElementById('daily-list');
+  list.innerHTML=members.map(m=>`<div class="daily-check" onclick="toggleDaily('${m.phone}')"><div class="dc-box" id="daily-${m.phone.replace(/\W/g,'_')}">✓</div><span>${m.name}</span></div>`).join('');
+};
+window.toggleDaily=function(phone){
+  const box=document.getElementById('daily-'+phone.replace(/\W/g,'_'));
+  const p=box.closest('.daily-check');
+  if(p.classList.contains('checked')){p.classList.remove('checked');delete dailyChecked[phone];}
+  else{p.classList.add('checked');dailyChecked[phone]=true;}
+};
+window.saveDaily=function(){
+  const phones=Object.keys(dailyChecked);if(!phones.length)return toast(t('selectMember'),'#dc2626');
+  const da=settings.dailyAmount||2500;const writes=[];
+  phones.forEach(phone=>{const m=members.find(m=>m.phone===phone);if(m)buildDepositTransactions(m,da,Date.now(),'Daily savings').forEach(w=>writes.push(db.ref('transactions').push(w)));});
+  Promise.all(writes).then(()=>{toast(t('depositRecorded'),'#059669');dailyChecked={};closeOv('ov-daily');});
+};
+window.addTransaction=function(){
+  const phone=document.getElementById('tx-member').value,type=document.getElementById('tx-type').value,amount=+document.getElementById('tx-amount').value,desc=document.getElementById('tx-desc').value;
+  const m=members.find(m=>m.phone===phone);if(!m||!amount)return toast(t('selectMember'),'#dc2626');
+  if(type==='deposit'){
+    buildDepositTransactions(m,amount,Date.now(),desc).reduce((p,w)=>p.then(()=>db.ref('transactions').push(w)),Promise.resolve()).then(()=>{toast(t('depositRecorded'),'#059669');closeOv('ov-add-tx');});
+  } else {
+    db.ref('transactions').push({memberPhone:phone,memberName:m.name,type,amount,description:desc,date:Date.now()}).then(()=>{toast(t('transactionAdded'),'#059669');closeOv('ov-add-tx');});
+  }
+};
+window.addFine=function(){
+  const phone=document.getElementById('fine-member').value,reason=document.getElementById('fine-reason').value,amount=+document.getElementById('fine-amount').value;
+  const m=members.find(m=>m.phone===phone);if(!m||!amount)return toast(t('selectMember'),'#dc2626');
+  db.ref('transactions').push({memberPhone:phone,memberName:m.name,type:'fine',amount,description:reason,date:Date.now()}).then(()=>{toast(t('fineApplied'),'#d97706');closeOv('ov-add-fine');});
+};
+window.addWelfare=function(){
+  const phone=document.getElementById('welfare-member').value,desc=document.getElementById('welfare-desc').value,amount=+document.getElementById('welfare-amount').value;
+  const m=members.find(m=>m.phone===phone);if(!m||!amount)return toast(t('selectMember'),'#dc2626');
+  db.ref('transactions').push({memberPhone:phone,memberName:m.name,type:'welfare',amount,description:desc,date:Date.now()}).then(()=>{toast(t('welfareRecorded'),'#7c3aed');closeOv('ov-add-welfare');});
+};
+window.addExpense=function(){
+  const desc=document.getElementById('exp-desc').value,amount=+document.getElementById('exp-amount').value;
+  if(!desc||!amount)return toast(t('fillAllFields'),'#dc2626');
+  db.ref('transactions').push({type:'expense',amount,description:desc,date:Date.now()}).then(()=>{toast(t('expenseRecorded'),'#dc2626');closeOv('ov-add-exp');});
+};
+window.assignDebt=function(){
+  const phone=document.getElementById('debt-member').value,amount=+document.getElementById('debt-amount').value,reason=document.getElementById('debt-reason').value;
+  const m=members.find(m=>m.phone===phone);if(!m||!amount)return toast(t('selectMember'),'#dc2626');
+  db.ref('transactions').push({memberPhone:phone,memberName:m.name,type:'debt',amount,description:reason,date:Date.now()}).then(()=>{toast(t('debtAssigned'),'#dc2626');closeOv('ov-assign-debt');});
+};
+window.distributeProfit=function(){
+  if(groupProfit<=0)return toast(t('noProfit'),'#dc2626');
+  const per=Math.floor(groupProfit/members.length);if(per<=0)return toast(t('noProfit'),'#dc2626');
+  const totalDistributed=per*members.length;
+  if(!confirm(`Distribute UGX ${per.toLocaleString()} to each of ${members.length} members?\nTotal: UGX ${totalDistributed.toLocaleString()}\nRemaining profit: UGX ${(groupProfit-totalDistributed).toLocaleString()}`))return;
+  Promise.all(members.map(m=>db.ref('transactions').push({memberPhone:m.phone,memberName:m.name,type:'profit_dist',amount:per,date:Date.now()}))).then(()=>toast(t('profitDistributed'),'#059669'));
+};
+window.loadMarkPaidInfo=function(){
+  const idx=rotation.currentIndex||0,bene=members.find(m=>m.id===rotation.order[idx]);
+  const el=document.getElementById('mark-paid-info');
+  if(!bene){el.innerHTML='<div class="muted">'+t('noBeneficiary')+'</div>';return;}
+  const target=getNetDaily()*7*members.length,debt=memberDebts[bene.phone]||0,net=Math.max(0,target-debt);
+  el.innerHTML=`<strong>${bene.name}</strong><br>Full: UGX ${target.toLocaleString()}<br>Debt: UGX ${debt.toLocaleString()}<br>Net: UGX ${net.toLocaleString()}<br>Cash: UGX ${cashFromDeposits.toLocaleString()}`;
+};
+window.confirmMarkPaid=function(){
+  const idx=rotation.currentIndex||0,bene=members.find(m=>m.id===rotation.order[idx]);if(!bene)return;
+  const target=getNetDaily()*7*members.length,debt=memberDebts[bene.phone]||0,net=Math.max(0,target-debt);
+  const writes=[db.ref('transactions').push({memberPhone:bene.phone,memberName:bene.name,type:'payout',amount:net,description:'Weekly payout',date:Date.now()})];
+  if(debt>0)writes.push(db.ref('transactions').push({memberPhone:bene.phone,memberName:bene.name,type:'debt_cleared',amount:debt,description:'Debt cleared',date:Date.now()+1}));
+  Promise.all(writes).then(()=>{
+    const ni=((rotation.currentIndex||0)+1)%rotation.order.length;
+    db.ref('rotation').update({currentIndex:ni,history:[...(rotation.history||[]),{memberId:bene.id,amount:net,date:Date.now()}]});
+    toast(t('payoutComplete'),'#059669');closeOv('ov-mark-paid');
+  });
+};
+window.buildDragRotation=function(){dragOrder=[...rotation.order];renderDragList();};
+function renderDragList(){
+  const c=document.getElementById('rot-drag-list');c.innerHTML='';
+  dragOrder.forEach((id,i)=>{
+    const m=members.find(m=>m.id===id)||{name:'?'};
+    const d=document.createElement('div');d.className='rot-drag-item';d.draggable=true;
+    d.innerHTML=`<span class="drag-handle">⠿</span> ${m.name}`;
+    d.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain',i);d.classList.add('dragging');});
+    d.addEventListener('dragend',()=>d.classList.remove('dragging'));
+    d.addEventListener('dragover',e=>e.preventDefault());
+    d.addEventListener('drop',e=>{e.preventDefault();const from=+e.dataTransfer.getData('text/plain');if(from===i)return;const moved=dragOrder.splice(from,1)[0];dragOrder.splice(i,0,moved);renderDragList();});
+    c.appendChild(d);
+  });
+}
+window.saveRotationOrder=function(){ db.ref('rotation').update({order:dragOrder,currentIndex:0}).then(()=>{toast(t('rotationSaved'),'#059669');closeOv('ov-rot-manage');}); };
+window.buildCoverDaysList=function(){
+  const c=document.getElementById('cover-days-list');c.innerHTML='';selectedCoverDays={};
+  for(let i=0;i<14;i++){ const d=new Date(Date.now()-i*86400000); const dk=_isoDate(d); const r=document.createElement('div'); r.className='daily-check'; r.setAttribute('data-date',dk); r.onclick=()=>toggleCoverDay(dk,r); r.innerHTML=`<div class="dc-box">✓</div><span>${d.toLocaleDateString()}</span>`; c.appendChild(r); }
+};
+function toggleCoverDay(dk,row){if(selectedCoverDays[dk]){delete selectedCoverDays[dk];row.classList.remove('checked');}else{selectedCoverDays[dk]=true;row.classList.add('checked');}updateSelectedChips();}
+function updateSelectedChips(){document.getElementById('selected-days-chips').innerHTML=Object.keys(selectedCoverDays).map(dk=>`<div class="cover-chip">${dk}</div>`).join('');}
+window.addCustomCoverDate=function(){const dk=document.getElementById('custom-date-picker').value;if(dk){selectedCoverDays[dk]=true;updateSelectedChips();}};
+window.saveCoverDays=function(){
+  const phone=document.getElementById('cover-member').value;const m=members.find(m=>m.phone===phone);if(!m)return;
+  const da=settings.dailyAmount||2500;const writes=[];
+  Object.keys(selectedCoverDays).forEach(dk=>{buildDepositTransactions(m,da,new Date(dk).getTime(),'Cover: '+dk).forEach(w=>writes.push(db.ref('transactions').push(w)));});
+  Promise.all(writes).then(()=>{toast(t('coverDaysSaved'),'#059669');closeOv('ov-cover');});
+};
 window.loadApplications=function(){
   db.ref('applications').orderByChild('status').equalTo('pending').once('value',snap=>{
     const apps=snap.val()?Object.entries(snap.val()).map(([k,v])=>({...v,key:k})):[];
@@ -1278,55 +1307,24 @@ window.doSaveSettings=function(){
 window.resetGroup=function(){ if(confirm(t('confirmReset'))){ db.ref('members').remove(); db.ref('transactions').remove(); db.ref('rotation').remove(); location.reload(); } };
 window.resetDataKeepMembers=function(){ if(confirm(t('confirmResetData'))){ db.ref('transactions').remove(); db.ref('rotation').remove(); location.reload(); } };
 window.exportCSV=function(){ /* as before */ };
-window.openWhatsAppReminder=function(){ /* as before */ };
-window.copyReminderMessage=function(){ /* as before */ };
+window.openWhatsAppReminder=function(){ const msg=document.getElementById('reminder-msg').value; window.open('https://api.whatsapp.com/send?text='+encodeURIComponent(msg),'_blank'); };
+window.copyReminderMessage=function(){ navigator.clipboard?.writeText(document.getElementById('reminder-msg').value); toast(t('messageCopied'),'#2563eb'); };
 window.unlockAdmin=function(){ if(document.getElementById('adm-pwd').value===ADMIN_PASSWORD){ adminUnlocked=true; document.getElementById('adm-lock').classList.add('hidden'); document.getElementById('adm-panel').classList.remove('hidden'); currentAdminTab='savings'; document.querySelectorAll('.admin-tab').forEach(t=>t.classList.remove('active')); document.querySelector('[data-tab="savings"]').classList.add('active'); renderAdminPanel(); toast(t('adminUnlocked'),'#059669'); } else toast(t('incorrectAdminPassword'),'#dc2626'); };
 window.lockAdmin=function(){ adminUnlocked=false; document.getElementById('adm-lock').classList.remove('hidden'); document.getElementById('adm-panel').classList.add('hidden'); toast(t('adminLocked'),'#2563eb'); };
+
 // ===== TAB NAVIGATION (FIXED) =====
-window.goTab = function(tab, btn) {
-  // Remove 'on' class from ALL tabs
-  document.querySelectorAll('.tab').forEach(t => {
-    t.classList.remove('on');
-  });
-  
-  // Find the target tab
-  const targetTab = document.getElementById('t-' + tab);
-  if (!targetTab) {
-    console.error('Tab not found: t-' + tab);
-    return;
-  }
-  
-  // Add 'on' class to target tab
-  targetTab.classList.add('on');
-  
-  // Update bottom nav active state
-  if (btn) {
-    document.querySelectorAll('.ni').forEach(b => b.classList.remove('on'));
-    btn.classList.add('on');
-  }
-  
-  currentScreen = tab;
-  
-  // Refresh content based on tab
-  if (tab === 'home') {
-    updateHomeRecent();
-    updateHomeUI();
-  }
-  if (tab === 'ledger') {
-    loadLedger('all');
-  }
-  if (tab === 'account') {
-    updateAccountUI();
-  }
-  if (tab === 'admin') {
-    if (currentUser?.isAdmin && adminUnlocked) {
-      document.getElementById('adm-lock').classList.add('hidden');
-      document.getElementById('adm-panel').classList.remove('hidden');
-      renderAdminPanel();
-    } else {
-      document.getElementById('adm-lock').classList.remove('hidden');
-      document.getElementById('adm-panel').classList.add('hidden');
-    }
+window.goTab=function(tab,btn){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));
+  const targetTab=document.getElementById('t-'+tab);
+  if(targetTab) targetTab.classList.add('on');
+  if(btn){ document.querySelectorAll('.ni').forEach(b=>b.classList.remove('on')); btn.classList.add('on'); }
+  currentScreen=tab;
+  if(tab==='home'){ updateHomeRecent(); updateHomeUI(); }
+  if(tab==='ledger') loadLedger('all');
+  if(tab==='account') updateAccountUI();
+  if(tab==='admin'){
+    if(currentUser?.isAdmin&&adminUnlocked){ document.getElementById('adm-lock').classList.add('hidden'); document.getElementById('adm-panel').classList.remove('hidden'); renderAdminPanel(); }
+    else{ document.getElementById('adm-lock').classList.remove('hidden'); document.getElementById('adm-panel').classList.add('hidden'); }
   }
 };
 
