@@ -131,7 +131,23 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 /* ===== NOTIFICATION CAROUSEL ===== */
 .notif-carousel{position:relative;margin-bottom:14px;border-radius:var(--r);overflow:hidden;box-shadow:var(--sh);background:var(--surf);border:1px solid rgba(184,69,16,0.12);}
 .carousel-inner{display:flex;transition:transform 0.5s var(--ease-spring);}
-.carousel-slide{flex:0 0 100%;padding:16px;display:flex;align-items:center;gap:12px;background:linear-gradient(145deg, #fff5e6, #fdecd0);}
+.carousel-slide {
+  flex: 0 0 100%;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;  /* allow stacking */
+  align-items: flex-start;
+  gap: 8px;
+  background: linear-gradient(145deg, #fff5e6, #fdecd0);
+}
+.carousel-image {
+  width: 100%;
+  max-height: 140px;
+  object-fit: cover;
+  border-radius: 12px;
+  margin-top: 4px;
+  box-shadow: var(--sh);
+}
 .carousel-icon{font-size:2rem;}
 .carousel-text{flex:1;font-weight:600;color:var(--t2);}
 .carousel-dots{display:flex;justify-content:center;gap:6px;padding:8px;}
@@ -246,8 +262,7 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   </div>
     <div id="content">
     <!-- HOME TAB -->
-    <div id="t-home" class="tab on">
-      <!-- Notification Carousel -->
+         <!-- Notice Carousel (Admin adds up to 3 notices with images) -->
       <div class="notif-carousel" id="notif-carousel" style="display:none;">
         <div class="carousel-inner" id="carousel-inner"></div>
         <div class="carousel-dots" id="carousel-dots"></div>
@@ -457,7 +472,27 @@ Dear members, this is your reminder to make your daily savings.
 
 *Current beneficiary:* {beneficiary}</textarea></div><button class="btn btn-green btn-full" onclick="openWhatsAppReminder()" data-i18n="sendViaWhatsApp">📱 Send via WhatsApp</button><button class="btn btn-blue btn-full" onclick="copyReminderMessage()" data-i18n="copyMessage">📋 Copy Message</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-reminder')" data-i18n="close">Close</button></div></div>
 
-<div class="ov" id="ov-notif-compose" onclick="maybeClose(event,'ov-notif-compose')"><div class="bs"><div class="bs-title">📢 Compose Notification</div><div class="fgrp"><label class="flbl">Message</label><textarea id="carousel-notif-msg" class="inp" rows="3" placeholder="Notification text..."></textarea></div><div class="fgrp"><label class="flbl">Icon (emoji)</label><input type="text" id="carousel-notif-icon" class="inp" value="📢" maxlength="2"></div><button class="btn btn-blue btn-full" onclick="addCarouselNotification()">➕ Add to Carousel</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-notif-compose')" data-i18n="cancel">Cancel</button></div></div>
+<!-- COMPOSE CAROUSEL NOTICE (with image upload) -->
+<div class="ov" id="ov-notif-compose" onclick="maybeClose(event,'ov-notif-compose')">
+  <div class="bs">
+    <div class="bs-title">📢 Compose Notice</div>
+    <div class="fgrp"><label class="flbl">Message</label><textarea id="carousel-notif-msg" class="inp" rows="3" placeholder="Notice text..."></textarea></div>
+    <div class="fgrp"><label class="flbl">Icon (emoji)</label><input type="text" id="carousel-notif-icon" class="inp" value="📢" maxlength="2"></div>
+    
+    <!-- Drag & Drop Image Upload -->
+    <div class="fgrp"><label class="flbl">Image (optional)</label>
+      <div class="drag-zone" id="carousel-drag-zone" onclick="document.getElementById('carousel-file-input').click()">
+        <span>🖼️ Drag & drop or tap to upload image</span>
+        <input type="file" id="carousel-file-input" accept="image/*" style="display:none;" onchange="handleCarouselFileSelect(this)">
+        <img id="carousel-preview" class="image-preview" style="display:none;">
+      </div>
+      <input type="hidden" id="carousel-image-data">
+    </div>
+    
+    <button class="btn btn-blue btn-full" onclick="addCarouselNotification()">➕ Add to Carousel</button>
+    <button class="btn btn-sec btn-full" onclick="closeOv('ov-notif-compose')" data-i18n="cancel">Cancel</button>
+  </div>
+</div>
 <script>
 'use strict';
 // ===== VERSION =====
@@ -754,15 +789,22 @@ function updateHomeUI(){
 
 // ===== NOTIFICATION CAROUSEL =====
 function renderCarousel(){
-  const container=document.getElementById('notif-carousel');
-  const inner=document.getElementById('carousel-inner');
-  const dots=document.getElementById('carousel-dots');
-  if(!carouselNotifs.length){ container.style.display='none'; return; }
-  container.style.display='block';
-  inner.innerHTML=carouselNotifs.map(n=>`
-    <div class="carousel-slide"><span class="carousel-icon">${n.icon||'📢'}</span><span class="carousel-text">${n.text}</span></div>
-  `).join('');
-  dots.innerHTML=carouselNotifs.map((_,i)=>`<div class="carousel-dot ${i===0?'active':''}" onclick="goToCarouselSlide(${i})"></div>`).join('');
+  const container = document.getElementById('notif-carousel');
+  const inner = document.getElementById('carousel-inner');
+  const dots = document.getElementById('carousel-dots');
+  if(!carouselNotifs.length){ container.style.display = 'none'; return; }
+  container.style.display = 'block';
+  inner.innerHTML = carouselNotifs.map(n => {
+    const imgHtml = n.imageData ? `<img src="${n.imageData}" class="carousel-image" style="width:100%; max-height:120px; object-fit:cover; border-radius:12px; margin-top:8px;">` : '';
+    return `<div class="carousel-slide" style="flex-direction:column; align-items:flex-start;">
+      <div style="display:flex; align-items:center; gap:12px; width:100%;">
+        <span class="carousel-icon">${n.icon||'📢'}</span>
+        <span class="carousel-text" style="flex:1;">${n.text}</span>
+      </div>
+      ${imgHtml}
+    </div>`;
+  }).join('');
+  dots.innerHTML = carouselNotifs.map((_, i) => `<div class="carousel-dot ${i===0?'active':''}" onclick="goToCarouselSlide(${i})"></div>`).join('');
   startCarousel();
 }
 function startCarousel(){
@@ -785,16 +827,33 @@ window.goToCarouselSlide=function(i){
   updateCarouselPosition();
   if(carouselInterval){ clearInterval(carouselInterval); carouselInterval=setInterval(()=>{ carouselIndex=(carouselIndex+1)%carouselNotifs.length; updateCarouselPosition(); },5000); }
 };
-window.addCarouselNotification=function(){
-  const msg=document.getElementById('carousel-notif-msg').value.trim();
-  const icon=document.getElementById('carousel-notif-icon').value.trim()||'📢';
-  if(!msg) return toast('Enter a message','#dc2626');
-  if(carouselNotifs.length>=3) return toast('Maximum 3 notifications','#dc2626');
-  const newNotif={text:msg,icon:icon,id:Date.now()};
+window.handleCarouselFileSelect = function(input) {
+  const file = input.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      document.getElementById('carousel-preview').src = e.target.result;
+      document.getElementById('carousel-preview').style.display = 'block';
+      document.getElementById('carousel-image-data').value = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+};
+window.addCarouselNotification = function() {
+  const msg = document.getElementById('carousel-notif-msg').value.trim();
+  const icon = document.getElementById('carousel-notif-icon').value.trim() || '📢';
+  const imageData = document.getElementById('carousel-image-data').value;
+  if (!msg) return toast('Enter a message', '#dc2626');
+  if (carouselNotifs.length >= 3) return toast('Maximum 3 notices', '#dc2626');
+  const newNotif = { text: msg, icon: icon, imageData: imageData || null, id: Date.now() };
   db.ref('carouselNotifs').push(newNotif);
   closeOv('ov-notif-compose');
-  document.getElementById('carousel-notif-msg').value='';
-  toast('Notification added to carousel','#059669');
+  // Clear the form
+  document.getElementById('carousel-notif-msg').value = '';
+  document.getElementById('carousel-notif-icon').value = '📢';
+  document.getElementById('carousel-preview').style.display = 'none';
+  document.getElementById('carousel-image-data').value = '';
+  toast('Notice added to carousel', '#059669');
 };
 window.removeCarouselNotif=function(id){
   db.ref('carouselNotifs').child(id).remove();
