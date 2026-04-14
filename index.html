@@ -295,6 +295,7 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
           <div class="menu-item" onclick="openSecurityModal()"><span class="menu-icon">🔐</span><span class="menu-label" data-i18n="security">Security</span><span class="menu-arrow">›</span></div>
           <div class="menu-item" onclick="openNotificationsModal()"><span class="menu-icon">🔔</span><span class="menu-label" data-i18n="notifications">Notifications</span><span class="menu-arrow">›</span></div>
           <div class="menu-item" onclick="openLanguageModal()"><span class="menu-icon">🌐</span><span class="menu-label" data-i18n="language">Language</span><span class="menu-arrow">›</span></div>
+          <div class="menu-item" onclick="openLoanRequestModal()"><span class="menu-icon">💰</span><span class="menu-label">Request Loan</span><span class="menu-arrow">›</span></div>
           <div class="menu-item" onclick="openHelpModal()"><span class="menu-icon">❓</span><span class="menu-label" data-i18n="helpCenter">Help Center</span><span class="menu-arrow">›</span></div>
         </div>
 
@@ -391,6 +392,27 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 
 <div class="ov" id="ov-reminder" onclick="maybeClose(event,'ov-reminder')"><div class="bs"><div class="bs-title" data-i18n="groupReminder">📢 Group Reminder</div><div class="fgrp"><label class="flbl">Banner URL (optional)</label><input type="url" id="reminder-banner" class="inp" data-i18n-placeholder="bannerUrlOptional" placeholder="Banner URL (optional)"></div><div class="fgrp"><label class="flbl">Message</label><textarea id="reminder-msg" class="reminder-textarea" rows="6">🌿 *HARVEST TRUST REMINDER* 🌿
 
+<!-- LOAN REQUEST OVERLAY (for members) -->
+<div class="ov" id="ov-loan-request" onclick="maybeClose(event,'ov-loan-request')"><div class="bs"><div class="bs-title">💰 Request Loan</div>
+    <div id="loan-info" class="hint-box"></div>
+    <div class="fgrp"><label class="flbl">Amount (UGX)</label><input type="number" id="loan-amount" class="inp" placeholder="Enter amount"></div>
+    <div class="fgrp"><label class="flbl">Reason (optional)</label><input type="text" id="loan-reason" class="inp" placeholder="e.g. Emergency"></div>
+    <button class="btn btn-amber btn-full" onclick="submitLoanRequest()">📨 Submit Request</button>
+    <button class="btn btn-sec btn-full" onclick="closeOv('ov-loan-request')" data-i18n="cancel">Cancel</button>
+  </div>
+</div>
+
+<!-- LOAN SETTINGS OVERLAY (for admin) -->
+<div class="ov" id="ov-loan-settings" onclick="maybeClose(event,'ov-loan-settings')">
+  <div class="bs">
+    <div class="bs-title">⚙️ Loan Settings</div>
+    <div class="fgrp"><label class="flbl">Interest Rate (%)</label><input type="number" id="loan-interest-rate" class="inp" value="5" min="0" max="100" step="0.5"></div>
+    <div class="fgrp"><label class="flbl">Max Loan (% of Profit)</label><input type="number" id="loan-max-percent" class="inp" value="50" min="1" max="100"></div>
+    <button class="btn btn-blue btn-full" onclick="saveLoanSettings()">💾 Save Settings</button>
+    <button class="btn btn-sec btn-full" onclick="closeOv('ov-loan-settings')" data-i18n="cancel">Cancel</button>
+  </div>
+</div>
+  
 Dear members, this is your reminder to make your daily savings.
 
 *Current beneficiary:* {beneficiary}</textarea></div><button class="btn btn-green btn-full" onclick="openWhatsAppReminder()" data-i18n="sendViaWhatsApp">📱 Send via WhatsApp</button><button class="btn btn-blue btn-full" onclick="copyReminderMessage()" data-i18n="copyMessage">📋 Copy Message</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-reminder')" data-i18n="close">Close</button></div></div>
@@ -475,6 +497,8 @@ function applyTranslations(){
 }
 
 // ===== GLOBAL STATE =====
+let loanSettings = { interestRate: 5, maxLoanPercent: 50 }; // % interest, % of profit max loan
+let loans = []; // will store loan transactions
 let db=null;
 let members=[],transactions=[],rotation={order:[],currentIndex:0,history:[]};
 let settings={groupName:'Harvest Trust',dailyAmount:2500,welfareAmount:500,fineContribution:500,fineAmount:5000,whatsappLink:'',bannerUrl:'',noticeText:'Welcome to Harvest Trust!',noticeImage:''};
@@ -547,6 +571,11 @@ function loadAllData(){
     const count=snap.val()?Object.keys(snap.val()).length:0;
     const badge=document.getElementById('apps-badge');if(badge) badge.style.display=count?'inline':'none';
   });
+  db.ref('loanSettings').on('value', snap => { if(snap.val()) loanSettings = snap.val(); });
+  db.ref('loans').on('value', snap => {
+  loans = snap.val() ? Object.entries(snap.val()).map(([id, l]) => ({...l, id})) : [];
+  if(currentScreen==='admin' && adminUnlocked && currentAdminTab==='savings') renderAdminPanel();
+});
   db.ref('notifications').on('value',snap=>{ notifications=snap.val()||{}; updateNotificationBadge(); });
   db.ref('supportMessages').on('value',snap=>{ supportMessages=snap.val()||{}; });
 }
@@ -563,6 +592,13 @@ function computePots(){
   let cash=0,profit=0; memberBalances={};memberDebts={};
   transactions.forEach(tx=>{
     const a=+(tx.amount)||0;
+    // Inside computePots(), after the existing forEach loop, add:
+loans.forEach(loan => {
+    if(loan.status === 'approved' && !loan.repaid) {
+    profit -= loan.amount; // loaned amount is taken from profit
+  }
+  // When repaid, the repayment transaction will add back via 'deposit' or custom type
+});
     if(tx.type==='deposit'){cash+=a;memberBalances[tx.memberPhone]=(memberBalances[tx.memberPhone]||0)+a;}
     else if(tx.type==='withdraw'){cash-=a;memberBalances[tx.memberPhone]=(memberBalances[tx.memberPhone]||0)-a;}
     else if(tx.type==='fine'){profit+=a;if(!tx.autoDeduction)memberDebts[tx.memberPhone]=(memberDebts[tx.memberPhone]||0)+a;}
@@ -998,7 +1034,97 @@ window.saveEditedTransaction = function() {
     closeOv('ov-edit-tx');
   });
 };
+// ===== LOAN FEATURES =====
+window.openLoanRequestModal = function() {
+  if(!currentUser || currentUser.isAdmin) return;
+  const maxLoan = Math.floor(groupProfit * (loanSettings.maxLoanPercent / 100));
+  const interest = loanSettings.interestRate;
+  const totalRepay = (amount) => amount * (1 + interest/100);
+  
+  document.getElementById('loan-info').innerHTML = `
+    <strong>Available Profit:</strong> UGX ${groupProfit.toLocaleString()}<br>
+    <strong>Max Loan:</strong> UGX ${maxLoan.toLocaleString()} (${loanSettings.maxLoanPercent}% of profit)<br>
+    <strong>Interest Rate:</strong> ${interest}%<br>
+    <small>You will repay: Loan Amount + ${interest}% interest</small>
+  `;
+  document.getElementById('loan-amount').max = maxLoan;
+  openOv('ov-loan-request');
+};
 
+window.submitLoanRequest = function() {
+  const amount = +document.getElementById('loan-amount').value;
+  const reason = document.getElementById('loan-reason').value.trim();
+  const maxLoan = Math.floor(groupProfit * (loanSettings.maxLoanPercent / 100));
+  if(!amount || amount <= 0) return toast('Enter a valid amount', '#dc2626');
+  if(amount > maxLoan) return toast(`Maximum loan is UGX ${maxLoan.toLocaleString()}`, '#dc2626');
+  
+  const interest = loanSettings.interestRate;
+  const totalRepay = amount * (1 + interest/100);
+  
+  // Create loan request (pending approval)
+  db.ref('loans').push({
+    memberId: currentUser.id,
+    memberName: currentUser.name,
+    memberPhone: currentUser.phone,
+    amount: amount,
+    interestRate: interest,
+    totalRepay: totalRepay,
+    reason: reason,
+    status: 'pending',
+    requestedAt: Date.now(),
+    repaid: false
+  }).then(() => {
+    toast('Loan request submitted for admin approval', '#059669');
+    closeOv('ov-loan-request');
+  });
+};
+
+// Admin: approve/reject loan
+window.approveLoan = function(loanId) {
+  db.ref('loans/' + loanId).once('value', snap => {
+    const loan = snap.val();
+    if(!loan) return;
+    if(groupProfit < loan.amount) return toast('Insufficient profit', '#dc2626');
+    
+    // Deduct from profit (will be reflected via computePots)
+    db.ref('loans/' + loanId).update({ status: 'approved', approvedAt: Date.now() });
+    
+    // Record as debt for the member
+    db.ref('transactions').push({
+      memberPhone: loan.memberPhone,
+      memberName: loan.memberName,
+      type: 'debt',
+      amount: loan.totalRepay,
+      description: `Loan principal UGX ${loan.amount.toLocaleString()} + ${loan.interestRate}% interest`,
+      date: Date.now()
+    });
+    
+    toast(`Loan approved for ${loan.memberName}`, '#059669');
+    closeModal(); // if in modal
+  });
+};
+
+window.rejectLoan = function(loanId) {
+  db.ref('loans/' + loanId).update({ status: 'rejected', rejectedAt: Date.now() });
+  toast('Loan rejected', '#dc2626');
+};
+
+// Admin: view loan settings
+window.openLoanSettings = function() {
+  document.getElementById('loan-interest-rate').value = loanSettings.interestRate;
+  document.getElementById('loan-max-percent').value = loanSettings.maxLoanPercent;
+  openOv('ov-loan-settings');
+};
+
+window.saveLoanSettings = function() {
+  const interest = +document.getElementById('loan-interest-rate').value;
+  const maxPercent = +document.getElementById('loan-max-percent').value;
+  if(isNaN(interest) || interest < 0 || isNaN(maxPercent) || maxPercent < 1) return toast('Invalid values', '#dc2626');
+  loanSettings = { interestRate: interest, maxLoanPercent: maxPercent };
+  db.ref('loanSettings').set(loanSettings);
+  toast('Loan settings saved', '#059669');
+  closeOv('ov-loan-settings');
+};
 // ===== TRANSACTION & ADMIN ACTIONS =====
 window.populateMemberDropdowns=function(){
   ['tx-member','fine-member','welfare-member','debt-member','cover-member','edit-tx-member'].forEach(id=>{
