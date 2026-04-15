@@ -1,4 +1,4 @@
-                                               <DESIGNED BY LWOGAMATA>
+DESIGNED BY LWOGAMATA
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -855,10 +855,18 @@ function loadAllData(){
     updateLoanIndicator();
   });
   db.ref('carouselNotifs').on('value', snap => {
-    carouselNotifs = snap.val() ? Object.entries(snap.val()).map(([id, n]) => ({ ...n, id })) : [];
-    renderCarousel();
-    if (currentScreen === 'admin' && adminUnlocked && currentAdminTab === 'notice') debouncedRenderAdminTab();
-  });
+  const raw = snap.val();
+  if (raw) {
+    carouselNotifs = Object.entries(raw).map(([id, n]) => ({ ...n, id }));
+  } else {
+    carouselNotifs = [];
+  }
+  console.log('Carousel notices updated:', carouselNotifs.length);
+  renderCarousel();
+  if (currentScreen === 'admin' && adminUnlocked && currentAdminTab === 'notice') {
+    renderAdminTab(); // Use immediate render, not debounced, for admin panel
+  }
+});
 }
 function applySettings(){
   document.getElementById('hdr-title').innerText = settings.groupName || t('app_name');
@@ -920,8 +928,14 @@ function renderCarousel() {
   const track = document.getElementById('carousel-track');
   const dots = document.getElementById('carousel-dots');
   if (!wrapper || !track || !dots) return;
+
+  // Always show carousel
   wrapper.style.display = 'block';
+
+  // Prepare slides: if no notices, show a default placeholder
   let slides = carouselNotifs.length ? carouselNotifs : [{ text: '🌾 No active notices. Admin can add one.', icon: '📢', imageData: '' }];
+
+  // Build track HTML
   track.innerHTML = slides.map(n => `
     <div class="c-slide">
       <div class="c-icon">${n.icon || '📢'}</div>
@@ -932,16 +946,20 @@ function renderCarousel() {
       </div>
     </div>
   `).join('');
+
+  // Build dots
   dots.innerHTML = slides.map((_, i) => `<button class="c-dot ${i === 0 ? 'active' : ''}" onclick="goToSlide(${i})"></button>`).join('');
+
+  // Reset index and position
   carouselIdx = 0;
   updateCarouselPos();
   startCarouselTimer();
 }
-function startCarouselTimer(){
-  if(carouselTimer) clearInterval(carouselTimer);
+function startCarouselTimer() {
+  if (carouselTimer) clearInterval(carouselTimer);
   const slides = carouselNotifs.length ? carouselNotifs : [{}];
-  if(slides.length <= 1) return;
-  carouselTimer = setInterval(()=>{
+  if (slides.length <= 1) return;
+  carouselTimer = setInterval(() => {
     carouselIdx = (carouselIdx + 1) % slides.length;
     updateCarouselPos();
   }, 5000);
@@ -951,30 +969,53 @@ function updateCarouselPos(){
   if(track) track.style.transform = `translateX(-${carouselIdx * 100}%)`;
   document.querySelectorAll('#carousel-dots .c-dot').forEach((d,i)=> d.classList.toggle('active', i === carouselIdx));
 }
-window.goToSlide = function(i){ carouselIdx = i; updateCarouselPos(); startCarouselTimer(); };
-window.addCarouselNotice = function(){
-  if(carouselNotifs.length >= 5) return toast('Maximum 5 notices', '#ef4444');
+window.goToSlide = function(i) {
+  carouselIdx = i;
+  updateCarouselPos();
+  startCarouselTimer();
+};
+window.addCarouselNotice = function() {
+  if (carouselNotifs.length >= 5) {
+    toast('Maximum 5 notices', '#ef4444');
+    return;
+  }
   const msg = document.getElementById('c-msg').value.trim();
-  if(!msg) return toast(t('fill_all_fields'), '#ef4444');
+  if (!msg) {
+    toast('Enter a message', '#ef4444');
+    return;
+  }
   const icon = document.getElementById('c-icon').value || '📢';
   const imgData = document.getElementById('c-image-data').value;
-  db.ref('carouselNotifs').push({ text: msg, icon: icon, imageData: imgData || null, id: Date.now() }).then(()=>{
+
+  // Push to Firebase – the listener will automatically update UI
+  db.ref('carouselNotifs').push({
+    text: msg,
+    icon: icon,
+    imageData: imgData || null,
+    id: Date.now()
+  }).then(() => {
     toast('Carousel notice added!', '#10b981');
     closeOv('ov-carousel-compose');
+    // Clear form
     document.getElementById('c-msg').value = '';
     document.getElementById('c-icon').value = '📢';
     document.getElementById('c-preview').style.display = 'none';
     document.getElementById('c-image-data').value = '';
-    if(currentAdminTab === 'notice') renderAdminTab();
-  }).catch(err=>{ console.error(err); toast('Add failed', '#ef4444'); });
+    // No need to call renderCarousel() – listener will trigger it
+  }).catch(err => {
+    console.error(err);
+    toast('Add failed', '#ef4444');
+  });
 };
-window.removeCarouselNotice = function(id){
-  if(!id) return;
-  db.ref('carouselNotifs/' + id).remove().then(()=>{
+window.removeCarouselNotice = function(id) {
+  if (!id) return;
+  db.ref('carouselNotifs/' + id).remove().then(() => {
     toast('Notice deleted', '#ef4444');
-    if(currentAdminTab === 'notice') renderAdminTab();
-    renderCarousel();
-  }).catch(err=>{ console.error(err); toast('Delete failed', '#ef4444'); });
+    // Listener will re-render automatically
+  }).catch(err => {
+    console.error(err);
+    toast('Delete failed', '#ef4444');
+  });
 };
 function refreshCarouselPayee(){ renderCarousel(); }
 
@@ -1603,6 +1644,11 @@ setTimeout(forceShowLogin,6000);
 const lionImg = document.querySelector('.lion-img');
 if(lionImg){ lionImg.onerror = function(){ this.style.display='none'; const fb=document.getElementById('lion-fallback'); if(fb) fb.style.display='flex'; }; }
 window.onload = function(){ const savedLang = localStorage.getItem('ht_lang'); if(savedLang) currentLang = savedLang; applyLanguageToUI(); initFirebase(); };
+setTimeout(() => {
+  if (carouselNotifs.length === 0) {
+    renderCarousel(); // ensures placeholder shows
+  }
+}, 2000);
 </script>
 </body>
 </html>
