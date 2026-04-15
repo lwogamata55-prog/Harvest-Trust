@@ -1,4 +1,4 @@
-'''DESIGNED BY LWOGAMATA'''
+DESIGNED BY LWOGAMATA
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -750,6 +750,27 @@ function getNetDaily(){return Math.max(0,(settings.dailyAmount||2500)-((settings
 function computeTotalWeekly(){return getNetDaily()*7*members.length;}
 function getAvatarColor(n){const c=['#f59e0b','#10b981','#06b6d4','#8b5cf6','#ef4444','#ec4899'];return c[(n||'').charCodeAt(0)%c.length];}
 function escapeHtml(str){if(!str)return '';return str.replace(/[&<>]/g,m=>m==='&'?'&amp;':m==='<'?'&lt;':'&gt;');}
+// ===== DEBOUNCE HELPER =====
+function debounce(func, wait) {
+  let timeout;
+  return function executedFunction(...args) {
+    const later = () => {
+      clearTimeout(timeout);
+      func(...args);
+    };
+    clearTimeout(timeout);
+    timeout = setTimeout(later, wait);
+  };
+}
+
+// Create debounced versions of heavy UI update functions
+const debouncedUpdateHomeUI = debounce(updateHomeUI, 300);
+const debouncedUpdateAdminMembersList = debounce(updateAdminMembersList, 300);
+const debouncedRenderAdminTab = debounce(renderAdminTab, 300);
+const debouncedLoadLedger = debounce(() => {
+  if (currentScreen === 'ledger') loadLedger('all');
+}, 300);
+const debouncedUpdateHomeRecent = debounce(updateHomeRecent, 300);
 
 // ===== CORE FINANCE =====
 function computePots() {
@@ -863,41 +884,76 @@ function updateMemberPresence(){
     updateAdminMembersList();
   });
 }
-function loadAllData(){
-  if(!db)return;
-  db.ref('settings').on('value',snap=>{if(snap.val())settings={...settings,...snap.val()};applySettings();});
-  db.ref('members').on('value',snap=>{
-    members=snap.val()?Object.entries(snap.val()).map(([id,m])=>({...m,id})):[];
-    computePots();updateHomeUI();updateAdminMembersList();updateAccountBalances();
-    updateMemberPresence();updateLoanIndicator();
+function loadAllData() {
+  if (!db) return;
+
+  db.ref('settings').on('value', snap => {
+    if (snap.val()) settings = { ...settings, ...snap.val() };
+    applySettings();
   });
-  db.ref('transactions').on('value',snap=>{
-    transactions=snap.val()?Object.entries(snap.val()).map(([id,tx])=>({...tx,id})):[];
-    computePots();if(currentScreen==='ledger')loadLedger('all');updateHomeRecent();updateHomeUI();updateAccountBalances();
+
+  db.ref('members').on('value', snap => {
+    members = snap.val() ? Object.entries(snap.val()).map(([id, m]) => ({ ...m, id })) : [];
+    computePots();
+    debouncedUpdateHomeUI();
+    debouncedUpdateAdminMembersList();
+    updateAccountBalances();
+    updateMemberPresence();
     updateLoanIndicator();
   });
-  db.ref('rotation').on('value',snap=>{
-    rotation=snap.val()||{order:[],currentIndex:0,history:[]};
-    if(!rotation.order)rotation.order=[];
-    updateHomeUI();refreshCarouselPayee();
-  });
-  db.ref('applications').orderByChild('status').equalTo('pending').on('value',snap=>{
-    const count=snap.val()?Object.keys(snap.val()).length:0;
-    const badge=document.getElementById('apps-count');if(badge)badge.textContent=count;
-    const el=document.getElementById('apps-badge-wrap');if(el)el.style.display=count?'inline-flex':'none';
-  });
-  db.ref('notifications').on('value',snap=>{notifications=snap.val()||{};updateNotificationBadge();});
-  db.ref('supportMessages').on('value',snap=>{supportMessages=snap.val()||{};});
-  db.ref('loanSettings').on('value',snap=>{if(snap.val())loanSettings={...loanSettings,...snap.val()};});
-  db.ref('loans').on('value',snap=>{
-    loans=snap.val()?Object.entries(snap.val()).map(([id,l])=>({...l,id})):[];
-    if(currentScreen==='admin'&&adminUnlocked&&currentAdminTab==='savings')renderAdminTab();
+
+  db.ref('transactions').on('value', snap => {
+    transactions = snap.val() ? Object.entries(snap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
+    computePots();
+    debouncedUpdateHomeUI();
+    debouncedUpdateHomeRecent();
+    debouncedLoadLedger();
+    updateAccountBalances();
     updateLoanIndicator();
   });
-  db.ref('mainNotices').on('value',snap=>{
-    mainCarouselNotifs=snap.val()?Object.values(snap.val()):[];
+
+  db.ref('rotation').on('value', snap => {
+    rotation = snap.val() || { order: [], currentIndex: 0, history: [] };
+    if (!rotation.order) rotation.order = [];
+    updateHomeUI();
+    refreshCarouselPayee();
+  });
+
+  db.ref('applications').orderByChild('status').equalTo('pending').on('value', snap => {
+    const count = snap.val() ? Object.keys(snap.val()).length : 0;
+    const badge = document.getElementById('apps-count');
+    if (badge) badge.textContent = count;
+    const el = document.getElementById('apps-badge-wrap');
+    if (el) el.style.display = count ? 'inline-flex' : 'none';
+  });
+
+  db.ref('notifications').on('value', snap => {
+    notifications = snap.val() || {};
+    updateNotificationBadge();
+  });
+
+  db.ref('supportMessages').on('value', snap => {
+    supportMessages = snap.val() || {};
+  });
+
+  db.ref('loanSettings').on('value', snap => {
+    if (snap.val()) loanSettings = { ...loanSettings, ...snap.val() };
+  });
+
+  db.ref('loans').on('value', snap => {
+    loans = snap.val() ? Object.entries(snap.val()).map(([id, l]) => ({ ...l, id })) : [];
+    if (currentScreen === 'admin' && adminUnlocked && currentAdminTab === 'savings') {
+      debouncedRenderAdminTab();
+    }
+    updateLoanIndicator();
+  });
+
+  db.ref('mainNotices').on('value', snap => {
+    mainCarouselNotifs = snap.val() ? Object.values(snap.val()) : [];
     renderMainCarousel();
-    if(currentScreen==='admin'&&adminUnlocked&&currentAdminTab==='notice')renderAdminTab();
+    if (currentScreen === 'admin' && adminUnlocked && currentAdminTab === 'notice') {
+      debouncedRenderAdminTab();
+    }
   });
 }
 function applySettings(){
@@ -995,24 +1051,52 @@ function updateMainCarouselPos(){
   document.querySelectorAll('#main-carousel-dots .c-dot').forEach((d,i)=>d.classList.toggle('active',i===mainCarouselIdx));
 }
 window.goToMainSlide=function(i){mainCarouselIdx=i;updateMainCarouselPos();startMainCarouselTimer();};
-window.addCarouselNotice=function(){
-  if(mainCarouselNotifs.length>=5)return toast('Maximum 5 notices','#ef4444');
-  const msg=document.getElementById('c-msg').value.trim();
-  if(!msg)return toast(t('fill_all_fields'),'#ef4444');
-  const icon=document.getElementById('c-icon').value||'📢';
-  const imgData=document.getElementById('c-image-data').value;
-  db.ref('mainNotices').push({text:msg,icon,imageData:imgData||null,payee:'',id:Date.now()});
-  closeOv('ov-carousel-compose');
-  document.getElementById('c-msg').value='';
-  document.getElementById('c-icon').value='📢';
-  document.getElementById('c-preview').style.display='none';
-  document.getElementById('c-image-data').value='';
-  toast(t('notification_sent'),'#10b981');
+window.addCarouselNotice = function() {
+  if (mainCarouselNotifs.length >= 5) {
+    toast('Maximum 5 notices', '#ef4444');
+    return;
+  }
+  const msg = document.getElementById('c-msg').value.trim();
+  if (!msg) {
+    toast('Enter a message', '#ef4444');
+    return;
+  }
+  const icon = document.getElementById('c-icon').value || '📢';
+  const imgData = document.getElementById('c-image-data').value;
+  
+  db.ref('mainNotices').push({
+    text: msg,
+    icon: icon,
+    imageData: imgData || null,
+    payee: '',
+    id: Date.now()
+  }).then(() => {
+    toast('Carousel notice added!', '#10b981');
+    closeOv('ov-carousel-compose');
+    // Clear form
+    document.getElementById('c-msg').value = '';
+    document.getElementById('c-icon').value = '📢';
+    document.getElementById('c-preview').style.display = 'none';
+    document.getElementById('c-image-data').value = '';
+    // Refresh admin tab
+    if (currentAdminTab === 'notice') renderAdminTab();
+  }).catch(err => {
+    console.error(err);
+    toast('Add failed', '#ef4444');
+  });
 };
-window.removeCarouselNotice=function(id){
-  db.ref('mainNotices/'+id).remove();
-  toast(t('delete_btn'),'#ef4444');
-  renderAdminTab();
+window.removeCarouselNotice = function(id) {
+  if (!id) return;
+  db.ref('mainNotices/' + id).remove().then(() => {
+    toast('Notice deleted', '#ef4444');
+    // Refresh the admin notice tab if open
+    if (currentAdminTab === 'notice') renderAdminTab();
+    // Also refresh carousel on home
+    renderMainCarousel();
+  }).catch(err => {
+    console.error(err);
+    toast('Delete failed', '#ef4444');
+  });
 };
 function refreshCarouselPayee(){ renderMainCarousel(); }
 
@@ -1724,14 +1808,135 @@ window.saveEditedTransaction=function(){const id=document.getElementById('edit-t
 window.deleteTransaction=function(){const id=document.getElementById('edit-tx-id').value;if(!confirm(t('delete_btn')+'?'))return;db.ref('transactions/'+id).remove().then(()=>{toast(t('delete_btn'),'#ef4444');closeOv('ov-edit-tx');});};
 window.openEditMember=function(id){const m=members.find(m=>m.id===id);if(!m)return;document.getElementById('edit-member-id').value=id;document.getElementById('edit-mbr-name').value=m.name;document.getElementById('edit-mbr-phone').value=m.phone;document.getElementById('edit-mbr-join').value=m.joinDate||'';document.getElementById('edit-mbr-photo').value=m.photoData||'';const prev=document.getElementById('edit-photo-preview');if(m.photoData){prev.src=m.photoData;prev.style.display='block';}else{prev.src='';prev.style.display='none';}openOv('ov-edit-member');};
 window.updateMember=function(){const id=document.getElementById('edit-member-id').value;const name=document.getElementById('edit-mbr-name').value.trim();const phone=document.getElementById('edit-mbr-phone').value.trim();const join=document.getElementById('edit-mbr-join').value;const photoData=document.getElementById('edit-mbr-photo').value;if(!name||!phone){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('members/'+id).update({name,phone,joinDate:join,photoData:photoData||''}).then(()=>{toast(name+' '+t('update'),'#10b981');closeOv('ov-edit-member');});};
-window.deleteMember=function(id){const m=members.find(m=>m.id===id);if(!confirm(t('delete_btn')+' '+(m?.name||'this member')+'?'))return;db.ref('members/'+id).remove();toast(t('delete_btn'),'#ef4444');};
+window.deleteMember = function(id) {
+  const member = members.find(m => m.id === id);
+  if (!member) return;
+  if (!confirm(`Delete ${member.name}? This action cannot be undone.`)) return;
+  
+  // Delete member and all associated data
+  db.ref('members/' + id).remove().then(() => {
+    // Also delete their transactions? Optional: keep for history
+    toast(`${member.name} deleted`, '#ef4444');
+    // Refresh members list
+    updateAdminMembersList();
+    // If current user was deleted, log out
+    if (currentUser && currentUser.id === id) logout();
+  }).catch(err => {
+    console.error(err);
+    toast('Delete failed', '#ef4444');
+  });
+};
 window.populateMemberDropdowns=function(){['tx-member','fine-member','welfare-member','debt-member','cover-member'].forEach(sid=>{const sel=document.getElementById(sid);if(sel)sel.innerHTML='<option value="">'+t('select_member')+'</option>'+members.map(m=>'<option value="'+m.phone+'">'+m.name+'</option>').join('');});};
 window.saveSavingsSettings=function(){settings.dailyAmount=+document.getElementById('admin-daily').value;settings.welfareAmount=+document.getElementById('admin-welfare').value;settings.fineContribution=+document.getElementById('admin-finecontrib').value;settings.fineAmount=+document.getElementById('admin-fine').value;db.ref('settings').update({dailyAmount:settings.dailyAmount,welfareAmount:settings.welfareAmount,fineContribution:settings.fineContribution,fineAmount:settings.fineAmount});toast(t('save_rates'),'#10b981');renderAdminTab();updateHomeUI();};
-window.updateNotice=function(){settings.noticeText=document.getElementById('admin-notice-text').value;const imgData=document.getElementById('admin-notice-image-data').value;if(imgData)settings.noticeImageData=imgData;db.ref('settings').update({noticeText:settings.noticeText,noticeImageData:settings.noticeImageData});toast(t('publish_notice'),'#10b981');renderMainCarousel();};
+window.updateNotice = function() {
+  const noticeText = document.getElementById('admin-notice-text').value.trim();
+  const imgData = document.getElementById('admin-notice-image-data').value;
+  
+  if (!noticeText) {
+    toast('Enter notice message', '#ef4444');
+    return;
+  }
+  
+  // Update settings
+  settings.noticeText = noticeText;
+  if (imgData) settings.noticeImageData = imgData;
+  
+  db.ref('settings').update({
+    noticeText: settings.noticeText,
+    noticeImageData: settings.noticeImageData
+  }).then(() => {
+    toast('Notice published!', '#10b981');
+    // Update the main carousel (if no custom notices exist)
+    if (mainCarouselNotifs.length === 0) {
+      renderMainCarousel();
+    }
+    // Refresh the admin notice tab
+    if (currentAdminTab === 'notice') renderAdminTab();
+  }).catch(err => {
+    console.error(err);
+    toast('Publish failed', '#ef4444');
+  });
+};
 window.loadDailyList=function(){dailyChecked={};const list=document.getElementById('daily-list');list.innerHTML=members.map(m=>'<div class="daily-check" onclick="toggleDaily(\''+m.phone+'\')"><div class="dc-box" id="daily-'+m.phone.replace(/\W/g,'_')+'">✓</div><span>'+m.name+'</span></div>').join('');};
 window.toggleDaily=function(phone){const box=document.getElementById('daily-'+phone.replace(/\W/g,'_'));const p=box.closest('.daily-check');if(p.classList.contains('checked')){p.classList.remove('checked');delete dailyChecked[phone];}else{p.classList.add('checked');dailyChecked[phone]=true;}};
-window.saveDaily=function(){const phones=Object.keys(dailyChecked);if(!phones.length){toast(t('select_member'),'#ef4444');return;}const da=settings.dailyAmount||2500;const writes=[];phones.forEach(phone=>{const m=members.find(m=>m.phone===phone);if(m)buildDepositTransactions(m,da,Date.now(),'Daily savings').forEach(w=>writes.push(db.ref('transactions').push(w)));});Promise.all(writes).then(()=>{toast(t('save_deposits'),'#10b981');dailyChecked={};closeOv('ov-daily');});};
-window.addTransaction=function(){const phone=document.getElementById('tx-member').value,type=document.getElementById('tx-type').value,amount=+document.getElementById('tx-amount').value,desc=document.getElementById('tx-desc').value;const m=members.find(m=>m.phone===phone);if(!m||!amount){toast(t('fill_all_fields'),'#ef4444');return;}if(type==='deposit'){buildDepositTransactions(m,amount,Date.now(),desc).reduce((p,w)=>p.then(()=>db.ref('transactions').push(w)),Promise.resolve()).then(()=>{toast(t('save_deposits'),'#10b981');closeOv('ov-add-tx');});}else{db.ref('transactions').push({memberPhone:phone,memberName:m.name,type,amount,description:desc,date:Date.now()}).then(()=>{toast(t('add_transaction'),'#10b981');closeOv('ov-add-tx');});}};
+window.saveDaily = function() {
+  const phones = Object.keys(dailyChecked);
+  if (!phones.length) {
+    toast('Select at least one member', '#ef4444');
+    return;
+  }
+  const da = settings.dailyAmount || 2500;
+  const writes = [];
+  
+  phones.forEach(phone => {
+    const member = members.find(m => m.phone === phone);
+    if (member) {
+      buildDepositTransactions(member, da, Date.now(), 'Daily savings').forEach(tx => {
+        writes.push(db.ref('transactions').push(tx));
+      });
+    }
+  });
+  
+  Promise.all(writes).then(() => {
+    toast('Deposits saved! ✅', '#10b981');
+    dailyChecked = {};
+    closeOv('ov-daily');
+    // Force immediate refresh
+    computePots();
+    updateHomeUI();
+    if (currentScreen === 'ledger') loadLedger('all');
+  }).catch(err => {
+    console.error(err);
+    toast('Save failed', '#ef4444');
+  });
+};
+window.addTransaction = function() {
+  const phone = document.getElementById('tx-member').value;
+  const type = document.getElementById('tx-type').value;
+  const amount = parseFloat(document.getElementById('tx-amount').value);
+  const desc = document.getElementById('tx-desc').value;
+  const member = members.find(m => m.phone === phone);
+  
+  if (!member || !amount || amount <= 0) {
+    toast('Select member and enter valid amount', '#ef4444');
+    return;
+  }
+  
+  if (type === 'deposit') {
+    // Use buildDepositTransactions to handle auto deductions
+    const transactions = buildDepositTransactions(member, amount, Date.now(), desc);
+    Promise.all(transactions.map(tx => db.ref('transactions').push(tx)))
+      .then(() => {
+        toast('Deposit recorded!', '#10b981');
+        closeOv('ov-add-tx');
+        computePots();
+        updateHomeUI();
+        if (currentScreen === 'ledger') loadLedger('all');
+      })
+      .catch(err => {
+        console.error(err);
+        toast('Transaction failed', '#ef4444');
+      });
+  } else {
+    db.ref('transactions').push({
+      memberPhone: phone,
+      memberName: member.name,
+      type: type,
+      amount: amount,
+      description: desc || type,
+      date: Date.now()
+    }).then(() => {
+      toast('Transaction added!', '#10b981');
+      closeOv('ov-add-tx');
+      computePots();
+      updateHomeUI();
+      if (currentScreen === 'ledger') loadLedger('all');
+    }).catch(err => {
+      console.error(err);
+      toast('Transaction failed', '#ef4444');
+    });
+  }
+};
 window.addFine=function(){const phone=document.getElementById('fine-member').value,reason=document.getElementById('fine-reason').value,amount=+document.getElementById('fine-amount').value;const m=members.find(m=>m.phone===phone);if(!m||!amount){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('transactions').push({memberPhone:phone,memberName:m.name,type:'fine',amount,description:reason||'Fine',date:Date.now()}).then(()=>{toast(t('apply_fine_btn'),'#f59e0b');['fine-member','fine-reason','fine-amount'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});closeOv('ov-add-fine');});};
 window.addWelfare=function(){const phone=document.getElementById('welfare-member').value,desc=document.getElementById('welfare-desc').value,amount=+document.getElementById('welfare-amount').value;const m=members.find(m=>m.phone===phone);if(!m||!amount){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('transactions').push({memberPhone:phone,memberName:m.name,type:'welfare',amount,description:desc||'Welfare',date:Date.now()}).then(()=>{toast(t('record_welfare_btn'),'#8b5cf6');closeOv('ov-add-welfare');});};
 window.addExpense=function(){const desc=document.getElementById('exp-desc').value,amount=+document.getElementById('exp-amount').value;if(!desc||!amount){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('transactions').push({type:'expense',amount,description:desc,date:Date.now()}).then(()=>{toast(t('record_expense_btn'),'#ef4444');['exp-desc','exp-amount','exp-paidto'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});closeOv('ov-add-exp');});};
