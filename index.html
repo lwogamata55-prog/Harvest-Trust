@@ -130,6 +130,32 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .sdot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 2px rgba(16,185,129,0.2),0 0 8px rgba(16,185,129,0.6);animation:sdPulse 2.5s ease-in-out infinite}
 .hdr-btn{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);font-size:0.88rem;color:var(--t3);cursor:pointer;transition:all 0.2s var(--ease-spring)}.hdr-btn:hover{background:rgba(245,158,11,0.12);color:var(--gold);transform:translateY(-1px)}.hdr-btn:active{transform:scale(0.9)}
 .notification-badge{position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;border-radius:10px;padding:2px 6px;font-size:0.56rem;font-weight:700;border:2px solid var(--bg);animation:badgePop 0.3s var(--ease-spring)}
+.weekly-receiver-card {
+  background: linear-gradient(145deg, rgba(245,158,11,0.1), rgba(6,182,212,0.06), rgba(245,158,11,0.08));
+  border: 1px solid rgba(245,158,11,0.2);
+  border-radius: var(--r);
+  padding: 18px;
+  margin-bottom: 14px;
+  text-align: center;
+}
+.weekly-receiver-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--t3);
+  margin-bottom: 6px;
+}
+.weekly-receiver-name {
+  font-family: 'Syne', sans-serif;
+  font-size: 2rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--gold), var(--teal));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  line-height: 1.2;
+}
 #content{flex:1;overflow:hidden;position:relative}
 .tab{position:absolute;inset:0;overflow-y:auto;padding:16px 14px calc(var(--nav) + 56px);opacity:0;pointer-events:none;transform:translateY(22px) scale(0.99);transition:opacity 0.35s var(--ease-smooth),transform 0.35s var(--ease-spring)}.tab.on{opacity:1;pointer-events:all;transform:translateY(0) scale(1)}
 #nav{position:absolute;bottom:0;left:0;right:0;height:var(--nav);display:flex;background:rgba(6,14,26,0.92);backdrop-filter:blur(32px);border-top:1px solid rgba(255,255,255,0.06);padding-bottom:env(safe-area-inset-bottom);z-index:20;box-shadow:0 -4px 24px rgba(0,0,0,0.5)}
@@ -307,6 +333,10 @@ select.inp option{background:#0a1628;color:var(--t)}
 
   <div id="content">
     <div id="t-home" class="tab on">
+      <div class="weekly-receiver-card">
+  <div class="weekly-receiver-label">⭐ This Week's Receiver</div>
+  <div class="weekly-receiver-name" id="weekly-payee-name">—</div>
+</div>
       <div class="carousel-wrapper" id="carousel-wrapper">
         <div class="carousel-viewport">
           <div class="carousel-track" id="carousel-track"></div>
@@ -836,11 +866,11 @@ function loadAllData(){
     updateLoanIndicator();
   });
   db.ref('rotation').on('value', snap => {
-    rotation = snap.val() || { order: [], currentIndex: 0, history: [] };
-    if (!rotation.order) rotation.order = [];
-    updateHomeUI();
-    refreshCarouselPayee();
-  });
+  rotation = snap.val() || { order: [], currentIndex: 0, history: [] };
+  if (!rotation.order) rotation.order = [];
+  updateHomeUI();
+  refreshCarouselPayee(); // if you have that function
+});
   db.ref('applications').orderByChild('status').equalTo('pending').on('value', snap => {
     const count = snap.val() ? Object.keys(snap.val()).length : 0;
     const badge = document.getElementById('apps-count'); if (badge) badge.textContent = count;
