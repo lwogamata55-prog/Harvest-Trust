@@ -1419,6 +1419,18 @@ window.copyReferralLink=function(){
   const inp=document.getElementById('referral-link');inp.select();document.execCommand('copy');toast(t('link_copied'),'#06b6d4');
 };
 
+
+async function getMembersForLogin(){
+  if(members.length)return members;
+  const errEl=document.getElementById('login-error');
+  if(errEl)errEl.innerText='Connecting...';
+  if(!db)throw new Error('Firebase is not ready');
+  const snap=await db.ref('members').once('value');
+  members=snapshotToArray(snap);
+  refreshLiveViews('login-members');
+  return members;
+}
+
 let loginMode='member';
 let splashDone=false;
 function forceShowLogin(){
@@ -1445,7 +1457,7 @@ window.setLoginMode=function(mode){
   p.inputMode=mode==='member'?'numeric':'text';
   document.getElementById('login-error').innerText='';
 };
-window.doLogin=function(){
+window.doLogin=async function(){
   const pwd=document.getElementById('login-password').value.trim();
   const errEl=document.getElementById('login-error');
   if(!pwd){errEl.innerText=t('fill_all_fields');return;}
@@ -1453,10 +1465,16 @@ window.doLogin=function(){
     if(pwd===ADMIN_PASSWORD){currentUser={name:'Admin',phone:'admin',isAdmin:true};adminUnlocked=true;showMainApp();}
     else errEl.innerText=t('incorrect_admin');
   }else{
-    const match=members.find(m=>m.phone&&m.phone.slice(-4)===pwd);
-    if(!match){errEl.innerText=t('fill_all_fields');return;}
-    if(match.approved===false){showPendingScreen(match);return;}
-    currentUser={...match};localStorage.setItem('ht_user',JSON.stringify(currentUser));adminUnlocked=false;showMainApp();
+    try{
+      const list=await getMembersForLogin();
+      const match=list.find(m=>m.phone&&m.phone.slice(-4)===pwd);
+      if(!match){errEl.innerText='Member not found or PIN is wrong';return;}
+      if(match.approved===false){showPendingScreen(match);return;}
+      currentUser={...match};localStorage.setItem('ht_user',JSON.stringify(currentUser));adminUnlocked=false;showMainApp();
+    }catch(e){
+      console.error(e);
+      errEl.innerText='Still connecting. Try again in a moment.';
+    }
   }
 };
 function showPendingScreen(m){
