@@ -241,7 +241,109 @@ select.inp option{background:#0a1628;color:var(--t)}
 .pill-green{background:rgba(16,185,129,0.15);color:var(--green);border:1px solid rgba(16,185,129,0.25)}
 .pill-amber{background:rgba(245,158,11,0.15);color:var(--amber);border:1px solid rgba(245,158,11,0.25)}
 .pill-red{background:rgba(239,68,68,0.15);color:var(--red);border:1px solid rgba(239,68,68,0.25)}
-
+/* Ranking leaderboard styles */
+.ranking-leaderboard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+.ranking-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--card);
+  border: 1px solid var(--br);
+  border-radius: 20px;
+  padding: 12px 16px;
+  transition: transform 0.2s var(--ease-spring), box-shadow 0.2s;
+}
+.ranking-row:hover {
+  transform: translateX(5px);
+  box-shadow: var(--sh);
+}
+.rank-gold {
+  background: linear-gradient(135deg, rgba(255,215,0,0.15), rgba(255,215,0,0.05));
+  border-left: 4px solid #ffd700;
+}
+.rank-silver {
+  background: linear-gradient(135deg, rgba(192,192,192,0.15), rgba(192,192,192,0.05));
+  border-left: 4px solid #c0c0c0;
+}
+.rank-bronze {
+  background: linear-gradient(135deg, rgba(205,127,50,0.15), rgba(205,127,50,0.05));
+  border-left: 4px solid #cd7f32;
+}
+.ranking-rank {
+  font-size: 1.8rem;
+  font-weight: 800;
+  min-width: 48px;
+  text-align: center;
+  font-family: 'Syne', sans-serif;
+}
+.ranking-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: white;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+.ranking-info {
+  flex: 1;
+  min-width: 0;
+}
+.ranking-name {
+  font-weight: 700;
+  font-size: 1rem;
+  margin-bottom: 2px;
+}
+.ranking-phone {
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-family: 'JetBrains Mono', monospace;
+  margin-bottom: 6px;
+}
+.ranking-progress-bar {
+  background: rgba(255,255,255,0.1);
+  border-radius: 20px;
+  height: 6px;
+  width: 100%;
+  overflow: hidden;
+  margin: 5px 0;
+}
+.ranking-progress-fill {
+  background: linear-gradient(90deg, var(--gold), var(--teal));
+  height: 100%;
+  border-radius: 20px;
+  transition: width 0.4s ease;
+}
+.ranking-deposit {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--gold);
+  margin-top: 4px;
+}
+.ranking-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+@media (max-width: 560px) {
+  .ranking-rank { font-size: 1.3rem; min-width: 36px; }
+  .ranking-avatar { width: 40px; height: 40px; font-size: 1.1rem; }
+  .ranking-row { padding: 10px 12px; }
+  .ranking-name { font-size: 0.85rem; }
+  .ranking-phone { font-size: 0.6rem; }
+  .ranking-deposit { font-size: 0.7rem; }
+  .btn-sm { padding: 5px 8px; font-size: 0.7rem; }
+}
 :root{
   --bg:#050314;--bg2:#10123d;--bg3:#16255a;--bg4:#030712;
   --surf:rgba(255,255,255,0.09);--surf2:rgba(255,255,255,0.055);
@@ -541,6 +643,7 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
           <div class="admin-tab" data-tab="users" onclick="switchAdminTab('users')">👥 Users</div>
           <div class="admin-tab" data-tab="fines" onclick="switchAdminTab('fines')">⚡ Fines</div>
           <div class="admin-tab" data-tab="notify" onclick="switchAdminTab('notify')">🔔 Notify</div>
+          <div class="admin-tab" data-tab="ranking" onclick="switchAdminTab('ranking')">🏆 Ranking</div>
           <div class="admin-tab" data-tab="support" onclick="switchAdminTab('support')">💬 Support</div>
           <div class="admin-tab" data-tab="settings" onclick="switchAdminTab('settings')">⚙️ Settings</div>
         </div>
@@ -2093,6 +2196,50 @@ function renderAdminTab(){
     c.innerHTML=`<div class="card"><div class="sec-h">${t('fines_finances')}</div><button class="btn btn-amber btn-full" onclick="openOv('ov-add-fine');populateMemberDropdowns()">${t('apply_fine')}</button><button class="btn btn-red btn-full" onclick="openOv('ov-assign-debt');populateMemberDropdowns()">${t('assign_debt')}</button><button class="btn btn-green btn-full" onclick="openOv('ov-add-welfare');populateMemberDropdowns()">${t('record_welfare')}</button><button class="btn btn-sec btn-full" onclick="openOv('ov-add-exp')">${t('record_expense')}</button></div>`;
   }else if(currentAdminTab==='notify'){
     c.innerHTML=`<div class="card"><div class="sec-h">${t('send_notification')}</div><div class="fgrp"><label class="flbl">${t('recipient')}</label><select id="notif-member" class="inp"><option value="">Select member…</option><option value="__all__">${t('all_members_option')}</option>${members.filter(m=>m.approved!==false).map(m=>'<option value="'+m.id+'">'+m.name+'</option>').join('')}</select></div><div class="fgrp"><label class="flbl">${t('message_label')}</label><textarea id="notif-msg" class="inp" rows="3" placeholder="${t('message_placeholder')}"></textarea></div><button class="btn btn-gold btn-full" onclick="sendNotification()">${t('send_notification')}</button></div>`;
+  } else if (currentAdminTab === 'ranking') {
+  // Calculate total deposits per member
+  const memberStats = members.filter(m => m.approved).map(member => {
+    let totalDeposits = 0;
+    transactions.forEach(tx => {
+      if (tx.memberPhone === member.phone && tx.type === 'deposit') {
+        totalDeposits += tx.amount;
+      }
+    });
+    return { ...member, totalDeposits };
+  });
+  // Sort descending
+  memberStats.sort((a, b) => b.totalDeposits - a.totalDeposits);
+  const maxDeposit = memberStats[0]?.totalDeposits || 1;
+  
+  // Build ranking HTML
+  let rankingHtml = `
+    <div class="card">
+      <div class="sec-h">🏆 Member Leaderboard</div>
+      <div class="ranking-leaderboard">
+  `;
+  
+  memberStats.forEach((m, idx) => {
+    const rank = idx + 1;
+    let medalIcon = '';
+    let rankClass = '';
+    if (rank === 1) { medalIcon = '🥇'; rankClass = 'rank-gold'; }
+    else if (rank === 2) { medalIcon = '🥈'; rankClass = 'rank-silver'; }
+    else if (rank === 3) { medalIcon = '🥉'; rankClass = 'rank-bronze'; }
+    else { medalIcon = `${rank}`; rankClass = 'rank-regular'; }
+    
+    const depositPercent = (m.totalDeposits / maxDeposit) * 100;
+    const avatarLetter = m.name.charAt(0).toUpperCase();
+    const whatsappUrl = `https://wa.me/${m.phone.replace(/\D/g, '')}`;
+    
+    rankingHtml += `
+      <div class="ranking-row ${rankClass}">
+        <div class="ranking-rank">${medalIcon}</div>
+        <div class="ranking-avatar" style="background: linear-gradient(135deg, ${getAvatarColor(m.name)}, #8b5cf6);">${avatarLetter}</div>
+        <div class="ranking-info">
+          <div class="ranking-name">${escapeHtml(m.name)}</div>
+          <div class="ranking-phone">${escapeHtml(m.phone)}</div>
+          <div class="ranking-progress-bar">
+            <div class="ranking-progress-fill" style="width: ${depositPercent}%;"></div></div><div class="ranking-deposit">UGX ${m.totalDeposits.toLocaleString()}</div></div><div class="ranking-actions"><a href="tel:${m.phone}" class="btn btn-sm btn-teal" title="Call">📞</a><a href="${whatsappUrl}" target="_blank" class="btn btn-sm btn-green" title="WhatsApp">💬</a></div></div>`;});rankingHtml += `</div><div class="micro muted" style="margin-top: 16px; text-align: center;">🏅 Ranking based on total deposits (saving discipline). Top savers get medals.</div></div>`;c.innerHTML = rankingHtml;
   }else if(currentAdminTab==='support'){
     const entries=Object.keys(supportMessages).map(uid=>({uid,user:members.find(m=>m.id===uid),msgs:supportMessages[uid]})).filter(e=>e.user&&e.msgs?.length);
     c.innerHTML=`<div class="card"><div class="sec-h">${t('support_messages')} <span class="pill-badge pill-teal">${entries.length}</span></div><div id="support-list">${entries.length?entries.map(({uid,user,msgs})=>'<div onclick="openSupportChatModal(\''+uid+'\')" class="mc" style="cursor:pointer"><div style="flex:1"><div class="mc-name">'+user.name+'</div><div class="mc-phone">'+(msgs[msgs.length-1]?.text?.slice(0,45)||'')+'…</div></div><span style="color:var(--t3)">›</span></div>').join(''):'<div class="empty-state"><div class="empty-state-text">'+t('no_notifications')+'</div></div>'}</div></div>`;
