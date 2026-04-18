@@ -455,7 +455,20 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
 @media (prefers-reduced-motion:reduce){.btn.shatter-pop,.auth-btn.shatter-pop,.auth-toggle-btn.shatter-pop,.lf-btn.shatter-pop,.admin-tab.shatter-pop,.ni.shatter-pop,.menu-item.shatter-pop,.daily-check.shatter-pop{animation:none!important}.button-shard{display:none!important}}
 
 .theme-preview{border:1px solid var(--br);border-radius:16px;padding:12px;background:var(--card);box-shadow:var(--sh);display:flex;align-items:center;gap:10px}.theme-dot{width:30px;height:30px;border-radius:999px;background:linear-gradient(135deg,var(--gold),var(--gold2));box-shadow:0 4px 14px var(--gold3)}.theme-preview-text{font-size:.76rem;color:var(--t2);line-height:1.35}.theme-note{font-size:.7rem;color:var(--t3);margin-top:6px;line-height:1.45}
-
+/* Make Wallet icon 3x larger (ChapChap style) */
+#ni-wallet .ico {
+  font-size: 3.6rem !important;     /* 3x normal (normal ~1.2rem) */
+  transform: translateY(-8px);
+  line-height: 1;
+  display: inline-block;
+}
+#ni-wallet {
+  overflow: visible !important;     /* prevent clipping */
+  padding-top: 0;
+}
+#ni-wallet.on .ico {
+  transform: scale(1.1) translateY(-10px) !important;
+}
 </style>
 </head>
 <body>
@@ -567,8 +580,6 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
         <div class="rot-pool-row"><span id="rot-days-left">—</span><span id="rot-pct-txt">0%</span></div>
         <div id="rot-order-chips" style="margin-top:12px;display:flex;flex-wrap:wrap;gap:3px;"></div>
       </div>
-      <div class="sec-h">Recent Activity</div>
-      <div id="home-recent"></div>
     </div>
 
     <div id="t-ledger" class="tab">
@@ -660,11 +671,12 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
   </div>
 
   <div id="nav">
-    <button class="ni on" id="ni-home" onclick="goTab('home',this)"><div class="ico">🏠</div><span>Home</span><div class="ni-bar"></div></button>
-    <button class="ni" id="ni-ledger" onclick="goTab('ledger',this)"><div class="ico">📒</div><span>Ledger</span><div class="ni-bar"></div></button>
-    <button class="ni" id="ni-account" onclick="goTab('account',this)"><div class="ico">👤</div><span>Account</span><div class="ni-bar"></div></button>
-    <button class="ni" id="ni-admin" onclick="goTab('admin',this)"><div class="ico">🔐</div><span>Admin</span><div class="ni-bar"></div></button>
-  </div>
+  <button class="ni" id="ni-home" onclick="goTab('home',this)"><div class="ico">🏠</div><span>Home</span><div class="ni-bar"></div></button>
+  <button class="ni" id="ni-ledger" onclick="goTab('ledger',this)"><div class="ico">📒</div><span>Ledger</span><div class="ni-bar"></div></button>
+  <button class="ni" id="ni-wallet" onclick="goTab('wallet',this)"><div class="ico">💼</div><span>Wallet</span><div class="ni-bar"></div></button>
+  <button class="ni" id="ni-account" onclick="goTab('account',this)"><div class="ico">👤</div><span>Account</span><div class="ni-bar"></div></button>
+  <button class="ni" id="ni-admin" onclick="goTab('admin',this)"><div class="ico">🔐</div><span>Admin</span><div class="ni-bar"></div></button>
+</div>
 </div>
 
 <div class="ov" id="ov-daily" onclick="maybeClose(event,'ov-daily')"><div class="bs"><div class="bs-title">📋 Daily Savings</div><div id="daily-split-info" class="hint-box"></div><div style="font-size:0.76rem;margin-bottom:12px;color:var(--t2);">Check members who paid today — <strong style="color:var(--gold)">UGX <span id="daily-rate">2500</span></strong></div><div id="daily-list"></div><button class="btn btn-gold btn-full" onclick="saveDaily()">💾 Save Deposits</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-daily')">Cancel</button></div></div>
@@ -710,7 +722,11 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
     <button class="btn btn-sec btn-full" onclick="closeOv('ov-loan-settings')">Cancel</button>
   </div>
 </div>
-<div class="ov" id="ov-carousel-compose" onclick="maybeClose(event,'ov-carousel-compose')"><div class="bs"><div class="bs-title">➕ Add Carousel Notice</div><div class="fgrp"><label class="flbl">Icon (emoji)</label><input type="text" id="c-icon" class="inp" value="📢" maxlength="2" style="text-align:center;font-size:1.5rem"></div><div class="fgrp"><label class="flbl">Message</label><textarea id="c-msg" class="inp" rows="3" placeholder="Type your notice here..."></textarea></div><div class="fgrp"><label class="flbl">Image (optional)</label><div class="drag-zone" onclick="document.getElementById('c-file-input').click()"><span>🖼️ Tap to upload an image</span><input type="file" id="c-file-input" accept="image/*" style="display:none" onchange="handlePhotoInput(this,'c-preview','c-image-data')"><img id="c-preview" class="image-preview" style="display:none"></div><input type="hidden" id="c-image-data"></div><button class="btn btn-gold btn-full" onclick="addCarouselNotice()">➕ Add Notice</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-carousel-compose')">Cancel</button></div></div>
+<div class="ov" id="ov-carousel-compose" onclick="maybeClose(event,'ov-carousel-compose')"><div class="bs"><div class="bs-title">➕ Add Carousel Notice</div><div class="fgrp"><label class="flbl">Icon (emoji)</label><input type="text" id="c-icon" class="inp" value="📢" maxlength="2" style="text-align:center;font-size:1.5rem"></div><div class="fgrp">
+  <label class="flbl">Message</label>
+  <textarea id="c-msg" class="inp" rows="3" placeholder="Type your notice here..." maxlength="100"></textarea>
+  <div class="micro" style="text-align:right; margin-top:4px;" id="msg-counter">0/100</div>
+</div><div class="fgrp"><label class="flbl">Image (optional)</label><div class="drag-zone" onclick="document.getElementById('c-file-input').click()"><span>🖼️ Tap to upload an image</span><input type="file" id="c-file-input" accept="image/*" style="display:none" onchange="handlePhotoInput(this,'c-preview','c-image-data')"><img id="c-preview" class="image-preview" style="display:none"></div><input type="hidden" id="c-image-data"></div><button class="btn btn-gold btn-full" onclick="addCarouselNotice()">➕ Add Notice</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-carousel-compose')">Cancel</button></div></div>
 <div class="ov" id="ov-reminder" onclick="maybeClose(event,'ov-reminder')"><div class="bs"><div class="bs-title">📢 Group Reminder</div><div class="fgrp"><label class="flbl">Message</label><textarea id="reminder-msg" class="inp" rows="7">🌿 *HARVEST TRUST REMINDER* 🌿
 
 Dear members, this is your reminder to make your daily savings contribution.
@@ -1405,28 +1421,29 @@ function updateLoanIndicator(){
     }
   }
 }
-function renderMainCarousel(){
-  const track=document.getElementById('main-carousel-track');
-  const dots=document.getElementById('main-carousel-dots');
-  if(!track||!dots)return;
-  let slides=mainCarouselNotifs.length?mainCarouselNotifs:[];
-  if(!slides.length){
-    slides=[{text:settings.noticeText||t('notice_label'),imageData:settings.noticeImageData||'',payee:''}];
+function renderMainCarousel() {
+  const track = document.getElementById('main-carousel-track');
+  const dots = document.getElementById('main-carousel-dots');
+  if (!track || !dots) return;
+
+  let slides = mainCarouselNotifs.length ? mainCarouselNotifs : [];
+  if (!slides.length) {
+    slides = [{ text: settings.noticeText || t('notice_label'), imageData: settings.noticeImageData || '' }];
   }
-  const currentPayee=rotation.order?.length? (members.find(m=>m.id===rotation.order[rotation.currentIndex||0])?.name||'—'):'—';
-  track.innerHTML=slides.map(s=>{
-    const payeeName=s.payee||currentPayee;
-    return `<div class="c-slide">
+
+  track.innerHTML = slides.map(s => `
+    <div class="c-slide">
       <div>
-        <div class="payee-name">${escapeHtml(payeeName)}</div>
         <div class="notice-title">${t('notice_label')}</div>
-        <div class="notice-content">${escapeHtml(s.text)}</div>
-        ${s.imageData?`<img src="${s.imageData}" class="notice-image">`:''}
+        <div class="notice-content">${escapeHtml(truncateText(s.text, 30))}</div>
+        ${s.imageData ? `<img src="${s.imageData}" class="notice-image">` : ''}
       </div>
-    </div>`;
-  }).join('');
-  dots.innerHTML=slides.map((_,i)=>`<button class="c-dot ${i===0?'active':''}" onclick="goToMainSlide(${i})"></button>`).join('');
-  mainCarouselIdx=0;
+    </div>
+  `).join('');
+
+  dots.innerHTML = slides.map((_, i) => `<button class="c-dot ${i === 0 ? 'active' : ''}" onclick="goToMainSlide(${i})"></button>`).join('');
+
+  mainCarouselIdx = 0;
   updateMainCarouselPos();
   startMainCarouselTimer();
 }
@@ -1495,6 +1512,35 @@ window.removeCarouselNotice = function(id) {
 function refreshCarouselPayee(){ renderMainCarousel(); }
 
 const TX_ICONS={deposit:'💰',withdraw:'📤',fine:'⚡',welfare:'🤝',expense:'📋',payout:'✅',debt:'🧾',debt_cleared:'✔️',profit_dist:'🎉',loan_disbursement:'💸',loan_repayment:'💳',loan_adjustment:'📈'};
+// Update character counter for carousel message
+function updateMsgCounter() {
+  const textarea = document.getElementById('c-msg');
+  const counter = document.getElementById('msg-counter');
+  if (textarea && counter) {
+    const len = textarea.value.length;
+    counter.innerText = len + '/100';
+  }
+}
+
+// Attach event listener when modal is opened
+function attachMsgCounterListener() {
+  const textarea = document.getElementById('c-msg');
+  if (textarea) {
+    textarea.removeEventListener('input', updateMsgCounter);
+    textarea.addEventListener('input', updateMsgCounter);
+    updateMsgCounter(); // initial count
+  }
+}
+
+// Call attachMsgCounterListener every time the modal is opened
+// Override openOv to also attach listener when opening ov-carousel-compose
+const originalOpenOv = window.openOv;
+window.openOv = function(id) {
+  originalOpenOv(id);
+  if (id === 'ov-carousel-compose') {
+    setTimeout(attachMsgCounterListener, 50); // wait for DOM
+  }
+};
 function renderTxRow(tx,i){
   const m=members.find(m=>m.phone===tx.memberPhone)||{name:tx.memberName||'?'};
   const ico=TX_ICONS[tx.type]||'💫';
@@ -2247,6 +2293,11 @@ function renderAdminTab(){
     c.innerHTML=`<div class="card"><div class="sec-h">${t('configuration')}</div><button class="btn btn-gold btn-full" onclick="openOv('ov-settings');loadSettings()">${t('group_settings')}</button><button class="btn btn-amber btn-full" onclick="openOv('ov-loan-settings');loadLoanSettings()">${t('loan_settings')}</button><button class="btn btn-teal btn-full" onclick="exportCSV()">${t('export_csv')}</button><button class="btn btn-sec btn-full" onclick="distributeProfit()">${t('distribute_profit')}</button></div>`;
   }
   if(currentAdminTab==='users') db.ref('applications').orderByChild('status').equalTo('pending').once('value',snap=>{const c=snap.val()?Object.keys(snap.val()).length:0;const bw=document.getElementById('apps-badge-wrap');if(bw)bw.style.display=c?'inline-flex':'none';if(document.getElementById('apps-count'))document.getElementById('apps-count').textContent=c;});
+}
+function truncateText(text, maxLength) {
+  if (!text) return '';
+  if (text.length <= maxLength) return text;
+  return text.substring(0, maxLength) + '…';
 }
 function updateAdminMembersList(){
   const list=document.getElementById('admin-members-list');if(!list)return;
