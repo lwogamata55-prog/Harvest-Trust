@@ -241,6 +241,25 @@ select.inp option{background:#0a1628;color:var(--t)}
 .pill-green{background:rgba(16,185,129,0.15);color:var(--green);border:1px solid rgba(16,185,129,0.25)}
 .pill-amber{background:rgba(245,158,11,0.15);color:var(--amber);border:1px solid rgba(245,158,11,0.25)}
 .pill-red{background:rgba(239,68,68,0.15);color:var(--red);border:1px solid rgba(239,68,68,0.25)}
+.falling-letter {
+  display: inline-block;
+  font-family: 'Syne', sans-serif;
+  font-size: 2rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--gold), var(--teal));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  opacity: 0;
+  transform: translateY(-100vh);
+  animation: fallLetter 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+}
+@keyframes fallLetter {
+  0% { opacity: 0; transform: translateY(-100vh) rotate(-8deg); }
+  70% { opacity: 1; transform: translateY(6px) rotate(2deg); }
+  100% { opacity: 1; transform: translateY(0) rotate(0); }
+}
+
 /* Ranking leaderboard styles */
 .ranking-leaderboard {
   display: flex;
@@ -596,6 +615,13 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
       </div>
       <div id="ledger-list"></div>
     </div>
+    <div id="t-wallet" class="tab">
+  <div class="card" style="text-align: center; padding: 60px 20px;">
+    <div style="font-size: 4rem; margin-bottom: 16px;">💼</div>
+    <div id="comingSoonContainer" style="min-height: 100px;"></div>
+    <p class="muted" style="margin-top: 8px;">Wallet features are under development. Stay tuned!</p>
+  </div>
+</div>
 
     <div id="t-account" class="tab">
       <div class="account-header">
@@ -673,6 +699,7 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
   <div id="nav">
   <button class="ni" id="ni-home" onclick="goTab('home',this)"><div class="ico">🏠</div><span>Home</span><div class="ni-bar"></div></button>
   <button class="ni" id="ni-ledger" onclick="goTab('ledger',this)"><div class="ico">📒</div><span>Ledger</span><div class="ni-bar"></div></button>
+  <button class="ni" id="ni-wallet" onclick="goTab('wallet',this)"><div class="ico">💼</div><span>Wallet</span><div class="ni-bar"></div></button>
   <button class="ni" id="ni-account" onclick="goTab('account',this)"><div class="ico">👤</div><span>Account</span><div class="ni-bar"></div></button>
   <button class="ni" id="ni-admin" onclick="goTab('admin',this)"><div class="ico">🔐</div><span>Admin</span><div class="ni-bar"></div></button>
 </div>
@@ -2581,6 +2608,24 @@ function renderDragList(){const c=document.getElementById('rot-drag-list');c.inn
 window.saveRotationOrder=function(){db.ref('rotation').update({order:dragOrder,currentIndex:0}).then(()=>{toast(t('save_order'),'#10b981');closeOv('ov-rot-manage');});};
 window.buildCoverDaysList=function(){const c=document.getElementById('cover-days-list');c.innerHTML='';selectedCoverDays={};for(let i=0;i<14;i++){const d=new Date(Date.now()-i*86400000);const dk=_isoDate(d);const r=document.createElement('div');r.className='daily-check';r.onclick=()=>toggleCoverDay(dk,r);r.innerHTML='<div class="dc-box">✓</div><span>'+d.toLocaleDateString()+'</span>';c.appendChild(r);}};
 function toggleCoverDay(dk,row){if(selectedCoverDays[dk]){delete selectedCoverDays[dk];row.classList.remove('checked');}else{selectedCoverDays[dk]=true;row.classList.add('checked');}updateSelectedChips();}
+function animateComingSoon() {
+  const container = document.getElementById("comingSoonContainer");
+  if (!container) return;
+  const text = "Coming Soon";
+  const letters = text.split("");
+  // Clear previous content
+  container.innerHTML = "";
+  // Add each letter with a delay
+  letters.forEach((letter, i) => {
+    if (letter === " ") {
+      container.innerHTML += `<span style="width: 8px;"></span>`;
+    } else {
+      container.innerHTML += `<span class="falling-letter" style="animation-delay: ${i * 0.08}s;">${letter}</span>`;
+    }
+  });
+  // Remove any stale data-animated attribute
+  container.removeAttribute("data-animated");
+}
 function updateSelectedChips(){document.getElementById('selected-days-chips').innerHTML=Object.keys(selectedCoverDays).map(dk=>'<div class="cover-chip">'+dk+'</div>').join('');}
 window.addCustomCoverDate=function(){const dk=document.getElementById('custom-date-picker').value;if(dk){selectedCoverDays[dk]=true;updateSelectedChips();}};
 window.saveCoverDays = function() {const phone = document.getElementById('cover-member').value;const member = members.find(m => m.phone === phone);if (!member) {toast('Select a member', '#ef4444');return;}const da = settings.dailyAmount || 2500;const interestRate = (loanSettings.coverInterestRate || loanSettings.interestRate || 5) / 100;const writes = [];Object.keys(selectedCoverDays).forEach(dk => {
@@ -2645,7 +2690,10 @@ window.openWhatsAppReminder=function(){let msg=document.getElementById('reminder
 window.copyReminderMessage=function(){let msg=document.getElementById('reminder-msg').value;const bene=members.find(m=>m.id===rotation.order?.[rotation.currentIndex||0]);msg=msg.replace('{beneficiary}',bene?.name||'—');navigator.clipboard?.writeText(msg);toast(t('copy_message'),'#06b6d4');};
 window.unlockAdmin=function(){if(document.getElementById('adm-pwd').value===ADMIN_PASSWORD){adminUnlocked=true;document.getElementById('adm-lock').classList.add('hidden');document.getElementById('adm-panel').classList.remove('hidden');document.getElementById('adm-pwd').value='';currentAdminTab='savings';document.querySelectorAll('.admin-tab').forEach(t=>t.classList.remove('active'));document.querySelector('[data-tab="savings"]')?.classList.add('active');renderAdminTab();toast(t('admin_unlocked'),'#10b981');}else{toast(t('incorrect_admin'),'#ef4444');document.getElementById('adm-pwd').value='';}};
 window.lockAdmin=function(){adminUnlocked=false;document.getElementById('adm-lock').classList.remove('hidden');document.getElementById('adm-panel').classList.add('hidden');toast(t('admin_locked'),'#06b6d4');};
-window.goTab=function(tab,btn){document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));document.getElementById('t-'+tab)?.classList.add('on');if(btn){document.querySelectorAll('.ni').forEach(b=>b.classList.remove('on'));btn.classList.add('on');}currentScreen=tab;if(tab==='home'){updateHomeRecent();updateHomeUI();}if(tab==='ledger')loadLedger('all');if(tab==='account'){updateAccountUI();updateAccountBalances();}if(tab==='admin'){if(currentUser?.isAdmin&&adminUnlocked){document.getElementById('adm-lock').classList.add('hidden');document.getElementById('adm-panel').classList.remove('hidden');renderAdminTab();}else{document.getElementById('adm-lock').classList.remove('hidden');document.getElementById('adm-panel').classList.add('hidden');}}applyLanguageToUI();};
+window.goTab=function(tab,btn){document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));document.getElementById('t-'+tab)?.classList.add('on');if(btn){document.querySelectorAll('.ni').forEach(b=>b.classList.remove('on'));btn.classList.add('on');}currentScreen=tab;if(tab==='home'){updateHomeRecent();updateHomeUI();}if(tab==='ledger')loadLedger('all');if(tab==='account'){updateAccountUI();updateAccountBalances();}if(tab==='admin'){if(currentUser?.isAdmin&&adminUnlocked){document.getElementById('adm-lock').classList.add('hidden');document.getElementById('adm-panel').classList.remove('hidden');renderAdminTab();}else{document.getElementById('adm-lock').classList.remove('hidden');document.getElementById('adm-panel').classList.add('hidden');}}applyLanguageToUI();if (tab === 'wallet') {
+    setTimeout(animateComingSoon, 100); // wait for DOM to render
+  }
+};
 function showModal(content,title){const ov=document.createElement('div');ov.className='ov on';const bs=document.createElement('div');bs.className='bs';if(title){const h=document.createElement('div');h.className='bs-title';h.innerText=title;bs.appendChild(h);}const body=document.createElement('div');body.innerHTML=typeof content==='string'?content:'';if(typeof content!=='string')body.appendChild(content);bs.appendChild(body);const cb=document.createElement('button');cb.className='btn btn-sec btn-full';cb.style.marginTop='10px';cb.innerText=t('close');cb.onclick=()=>ov.remove();bs.appendChild(cb);ov.appendChild(bs);ov.onclick=e=>{if(e.target===ov)ov.remove();};document.body.appendChild(ov);window.currentModal=ov;}
 function showModalEl(el,title){const ov=document.createElement('div');ov.className='ov on';const bs=document.createElement('div');bs.className='bs';if(title){const h=document.createElement('div');h.className='bs-title';h.innerText=title;bs.appendChild(h);}bs.appendChild(el);const cb=document.createElement('button');cb.className='btn btn-sec btn-full';cb.style.marginTop='10px';cb.innerText=t('cancel');cb.onclick=()=>ov.remove();bs.appendChild(cb);ov.appendChild(bs);ov.onclick=e=>{if(e.target===ov)ov.remove();};document.body.appendChild(ov);window.currentModal=ov;}
 function closeModal(){if(window.currentModal)window.currentModal.remove();}
