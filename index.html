@@ -2327,6 +2327,7 @@ function renderAdminTab(){
       if (!activeByMember[l.memberId]) {
         activeByMember[l.memberId] = {
           memberName: l.memberName,
+          memberPhone: l.memberPhone,
           totalPrincipal: 0,
           totalRepay: 0,
           weightedInterest: 0,
@@ -2346,11 +2347,14 @@ function renderAdminTab(){
   return `<div class="card"><div class="sec-h">${t('active_loans')} <span class="pill-badge pill-green">${entries.length}</span></div>
     ${entries.map(([memberId, data]) => {
       const avgRate = data.totalPrincipal ? (data.weightedInterest / data.totalPrincipal).toFixed(1) : 0;
+      const balance = memberLoans[data.memberPhone] || 0;
+      const paid = Math.max(0, data.totalRepay - balance);
       return `
       <div class="mc">
         <div>
           <div class="mc-name">${data.memberName}</div>
-          <div class="mc-phone">Borrowed: UGX ${data.totalPrincipal.toLocaleString()} · ${avgRate}% · Repay: UGX ${data.totalRepay.toLocaleString()}</div>
+          <div class="mc-phone">Borrowed: UGX ${data.totalPrincipal.toLocaleString()} · ${avgRate}%</div>
+          <div class="mc-phone">Repay: UGX ${data.totalRepay.toLocaleString()} · Paid: UGX ${paid.toLocaleString()} · Balance: UGX ${balance.toLocaleString()}</div>
           <div class="micro">Due: ${new Date(data.dueDate).toLocaleDateString()} · ${data.count} loan(s)</div>
         </div>
         <span class="pill-badge pill-green">${t('active')}</span>
