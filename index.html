@@ -688,6 +688,7 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
         <div class="danger-zone">
           <div class="danger-zone-label">⚠️ Danger Zone</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-sm btn-sec" onclick="refreshLoans()">⟳ Refresh Loans</button>
             <button class="btn btn-sm btn-sec" onclick="resetGroup()">🗑️ Full Reset</button>
             <button class="btn btn-sm btn-sec" onclick="resetDataKeepMembers()">🔄 Reset Data</button>
           </div>
@@ -1238,28 +1239,53 @@ function computePots() {
   groupProfit = profit;
   
   for (let phone in memberLoans) {
-    if (memberLoans[phone] === 0) {
-      updateLoanRepaidStatus(phone);
-    }
+  if (memberLoans[phone] === 0) {
+    console.log(`Loan balance zero for ${phone}, calling updateLoanRepaidStatus`);
+    updateLoanRepaidStatus(phone);}
   }
 }
 async function updateLoanRepaidStatus(phone) {
-  const snapshot = await db.ref('loans').orderByChild('memberPhone').equalTo(phone).once('value');
-  const freshLoans = snapshot.val() ? Object.entries(snapshot.val()).map(([id, l]) => ({ ...l, id })) : [];
+  console.log(`updateLoanRepaidStatus called for phone ${phone}`);
+  const member = members.find(m => m.phone === phone);
+  if (!member) {
+    console.log(`Member not found for phone ${phone}`);
+    return;
+  }
+  
+  // Get fresh loans from Firebase
+  const snap = await db.ref('loans').orderByChild('memberPhone').equalTo(phone).once('value');
+  const freshLoans = snap.val() ? Object.entries(snap.val()).map(([id, l]) => ({ ...l, id })) : [];
   const pendingRepayLoans = freshLoans.filter(l => l.status === 'approved' && !l.repaid);
-  if (pendingRepayLoans.length === 0) return;
+  if (pendingRepayLoans.length === 0) {
+    console.log(`No pending repay loans for ${member.name}`);
+    return;
+  }
   
   const outstanding = memberLoans[phone] || 0;
+  console.log(`Outstanding loan balance for ${member.name}: ${outstanding}`);
+  
   if (outstanding === 0) {
     for (let loan of pendingRepayLoans) {
+      console.log(`Marking loan ${loan.id} as repaid`);
       await db.ref('loans/' + loan.id).update({ repaid: true, repaidAt: Date.now() });
     }
-    toast(`${t('loan_request_title')} ${t('active')} ${pendingRepayLoans[0].memberName}`, '#10b981');
+    toast(`Loan cleared for ${member.name}`, '#10b981');
+    
+    // Force refresh loans array and admin UI
+    const allLoansSnap = await db.ref('loans').once('value');
+    loans = allLoansSnap.val() ? Object.entries(allLoansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
+    console.log(`Loans after refresh: ${loans.length}`);
     if (currentAdminTab === 'savings') renderAdminTab();
     if (currentScreen === 'account') updateAccountBalances();
+  } else {
+    console.log(`Outstanding not zero: ${outstanding}`);
   }
 }
-
+async function refreshLoans() {
+  const snap = await db.ref('loans').on('value', snap => {
+  loans = snap.val() ? Object.entries(snap.val()).map(([id, l]) => ({ ...l, id })) : [];
+  if (currentScreen === 'admin' && adminUnlocked && currentAdminTab ==='savings') renderAdminTab();updateLoanIndicator();});
+}
 function buildDepositTransactions(member,amount,ts,desc){
   const welf=settings.welfareAmount||0, fineContrib=settings.fineContribution||0;
   let writes=[]; let rem=amount; const now=ts||Date.now();
@@ -2261,7 +2287,7 @@ window.switchAdminTab=function(tab){currentAdminTab=tab;document.querySelectorAl
 function renderAdminTab(){
   const c=document.getElementById('admin-content');if(!c)return;
   const pendingLoans=loans.filter(l=>l.status==='pending');
-  const activeLoans=loans.filter(l=>l.status==='approved'&&!l.repaid);
+  const activeLoans = loans.filter(l => l.status === 'approved' && !l.repaid);
   if(currentAdminTab==='savings'){
     c.innerHTML=`<div class="card"><div class="sec-h">${t('daily_rates')}</div><div class="fgrp"><label class="flbl">${t('daily_amount')}</label><input type="number" id="admin-daily" class="inp" value="${settings.dailyAmount||2500}"></div><div class="fgrp"><label class="flbl">${t('welfare_deduction')}</label><input type="number" id="admin-welfare" class="inp" value="${settings.welfareAmount||0}"></div><div class="fgrp"><label class="flbl">${t('fine_contribution')}</label><input type="number" id="admin-finecontrib" class="inp" value="${settings.fineContribution||0}"></div><div class="fgrp"><label class="flbl">${t('default_fine')}</label><input type="number" id="admin-fine" class="inp" value="${settings.fineAmount||5000}"></div><button class="btn btn-gold btn-full" onclick="saveSavingsSettings()">${t('save_rates')}</button><div class="hint-box" style="margin-top:8px">${t('net_daily')}: <strong>UGX ${getNetDaily().toLocaleString()}</strong> · ${t('weekly_pool')}: <strong>UGX ${computeTotalWeekly().toLocaleString()}</strong></div></div>
     <div class="card"><div class="sec-h">${t('profit_pool_card')}</div><div style="display:flex;align-items:center;gap:14px;margin-bottom:14px"><div style="width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,var(--green),#059669);display:flex;align-items:center;justify-content:center;font-size:1.6rem">💰</div><div><div style="font-family:'JetBrains Mono',monospace;font-size:1.6rem;font-weight:700;color:${groupProfit<0?'var(--red)':'var(--green)'}">UGX ${groupProfit.toLocaleString()}</div><div class="micro">${t('per_member')}: ~UGX ${members.length?Math.floor(groupProfit/members.length).toLocaleString():'0'}</div></div></div><button class="btn btn-green btn-full" onclick="distributeProfit()">${t('distribute_profit')}</button></div>
