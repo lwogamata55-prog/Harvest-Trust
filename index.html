@@ -1286,6 +1286,33 @@ async function refreshLoans() {
   loans = snap.val() ? Object.entries(snap.val()).map(([id, l]) => ({ ...l, id })) : [];
   if (currentScreen === 'admin' && adminUnlocked && currentAdminTab ==='savings') renderAdminTab();updateLoanIndicator();});
 }
+async function getOrCreateActiveLoan(memberId, memberPhone, memberName) {
+  // Find an existing active (approved, not repaid) loan for this member
+  let activeLoan = loans.find(l => l.memberId === memberId && l.status === 'approved' && !l.repaid);
+  if (activeLoan) return activeLoan;
+  
+  // Create a new loan record if none exists
+  const newLoanRef = db.ref('loans').push();
+  const newLoan = {
+    id: newLoanRef.key,
+    memberId: memberId,
+    memberName: memberName,
+    memberPhone: memberPhone,
+    amount: 0,
+    interestRate: 0,
+    totalRepay: 0,
+    reason: 'Combined loan',
+    status: 'approved',
+    requestedAt: Date.now(),
+    approvedAt: Date.now(),
+    dueDate: Date.now() + 30 * 86400000, // default 30 days
+    repaid: false,
+    penaltyApplied: false
+  };
+  await newLoanRef.set(newLoan);
+  loans.push(newLoan);
+  return newLoan;
+}
 function buildDepositTransactions(member,amount,ts,desc){
   const welf=settings.welfareAmount||0, fineContrib=settings.fineContribution||0;
   let writes=[]; let rem=amount; const now=ts||Date.now();
@@ -2505,27 +2532,55 @@ window.addTransaction = function() {
 window.addFine=function(){const phone=document.getElementById('fine-member').value,reason=document.getElementById('fine-reason').value,amount=+document.getElementById('fine-amount').value;const m=members.find(m=>m.phone===phone);if(!m||!amount){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('transactions').push({memberPhone:phone,memberName:m.name,type:'fine',amount,description:reason||'Fine',date:Date.now()}).then(()=>{toast(t('apply_fine_btn'),'#f59e0b');['fine-member','fine-reason','fine-amount'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});closeOv('ov-add-fine');});};
 window.addWelfare=function(){const phone=document.getElementById('welfare-member').value,desc=document.getElementById('welfare-desc').value,amount=+document.getElementById('welfare-amount').value;const m=members.find(m=>m.phone===phone);if(!m||!amount){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('transactions').push({memberPhone:phone,memberName:m.name,type:'welfare',amount,description:desc||'Welfare',date:Date.now()}).then(()=>{toast(t('record_welfare_btn'),'#8b5cf6');closeOv('ov-add-welfare');});};
 window.addExpense=function(){const desc=document.getElementById('exp-desc').value,amount=+document.getElementById('exp-amount').value;if(!desc||!amount){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('transactions').push({type:'expense',amount,description:desc,date:Date.now()}).then(()=>{toast(t('record_expense_btn'),'#ef4444');['exp-desc','exp-amount','exp-paidto'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});closeOv('ov-add-exp');});};
-window.assignDebt=function(){
-  const phone=document.getElementById('debt-member').value;
-  const amount=+document.getElementById('debt-amount').value;
-  const reason=document.getElementById('debt-reason').value;
-  const m=members.find(m=>m.phone===phone);
-  if(!m||!amount||amount<=0){toast(t('fill_all_fields'),'#ef4444');return;}
-  const rate=+(loanSettings.interestRate||0);
-  const totalRepay=Math.round(amount*(1+rate/100));
-  const interest=Math.max(0,totalRepay-amount);
-  const dueDate=Date.now()+((loanSettings.loanPeriodDays||30)*86400000);
-  const loanRef=db.ref('loans').push();
-  const principalRef=db.ref('transactions').push();
-  const updates={};
-  updates['loans/'+loanRef.key]={memberId:m.id,memberPhone:phone,memberName:m.name,amount,interestRate:rate,totalRepay,reason:reason||'Admin assigned debt',status:'approved',source:'admin_assigned_debt',requestedAt:Date.now(),approvedAt:Date.now(),dueDate,repaid:false};
-  updates['transactions/'+principalRef.key]={memberPhone:phone,memberName:m.name,type:'loan_disbursement',amount,description:(reason||'Admin assigned debt')+' · approved loan from profit pool',date:Date.now(),loanId:loanRef.key,adminAssignedDebt:true};
-  if(interest>0){
-    const interestRef=db.ref('transactions').push();
-    updates['transactions/'+interestRef.key]={memberPhone:phone,memberName:m.name,type:'loan_adjustment',amount:interest,description:'Interest on admin-assigned loan ('+rate+'%)',date:Date.now()+1,loanId:loanRef.key,adminAssignedDebt:true};
-  }
-  db.ref().update(updates).then(()=>{toast('Debt assigned as approved loan. Profit pool updated live.','#10b981');['debt-member','debt-amount','debt-reason'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});closeOv('ov-assign-debt');}).catch(err=>{console.error(err);toast('Failed to assign debt loan','#ef4444');});
-};
+function assignDebtAsLoan() {
+  const phone = document.getElementById("debtMember").value;
+  const principal = +document.getElementById("debtPrincipal").value;
+  const rate = +document.getElementById("debtInterestRate").value;
+  const due = document.getElementById("debtDueDate").value;
+  const reason = document.getElementById("debtReason").value;
+  const member = members.find(m => m.phone === phone);
+  if (!member || !principal || !due) return toast("Fill all fields", "#ef4444");
+  const totalRepay = Math.floor(principal * (1 + rate / 100));
+  const interest = totalRepay - principal;
+  
+  // Find or create active loan for this member
+  getOrCreateActiveLoan(member.id, member.phone, member.name).then(async (existingLoan) => {
+    const newAmount = (existingLoan.amount || 0) + principal;
+    const newTotalRepay = (existingLoan.totalRepay || 0) + totalRepay;
+    const newDueDate = Math.max(existingLoan.dueDate || 0, new Date(due).getTime());
+    
+    await db.ref('loans/' + existingLoan.id).update({
+      amount: newAmount,
+      totalRepay: newTotalRepay,
+      dueDate: newDueDate,
+      reason: reason || (existingLoan.reason || 'Combined loan')
+    });
+    
+    // Create transactions
+    db.ref('transactions').push({
+      memberPhone: phone,
+      memberName: member.name,
+      type: 'loan_disbursement',
+      amount: principal,
+      description: reason || "Admin assigned loan (principal)",
+      date: Date.now()
+    });
+    if (interest > 0) {
+      db.ref('transactions').push({
+        memberPhone: phone,
+        memberName: member.name,
+        type: 'loan_adjustment',
+        amount: interest,
+        description: `Interest on assigned loan (${rate}%)`,
+        date: Date.now() + 1
+      });
+    }
+    closeModal();
+    toast(`Debt added to ${member.name}. New total: UGX ${newTotalRepay.toLocaleString()}`, "#10b981");
+    computePots();
+    if (currentAdminTab === 'savings') renderAdminTab();
+  });
+}
 window.distributeProfit=function(){if(groupProfit<=0){toast(t('available_profit'),'#ef4444');return;}const per=Math.floor(groupProfit/members.length);if(per<=0){toast(t('available_profit'),'#ef4444');return;}if(!confirm(`${t('distribute_profit')} UGX ${per.toLocaleString()} ${t('per_member')}? ${t('full_amount')}: UGX ${(per*members.length).toLocaleString()}`))return;Promise.all(members.map(m=>db.ref('transactions').push({memberPhone:m.phone,memberName:m.name,type:'profit_dist',amount:per,description:'Profit distribution',date:Date.now()}))).then(()=>toast(t('distribute_profit'),'#10b981'));};
 window.loadMarkPaidInfo=function(){const idx=rotation.currentIndex||0;const bene=members.find(m=>m.id===rotation.order?.[idx]);const el=document.getElementById('mark-paid-info');if(!bene){el.innerHTML='<div class="muted">'+t('no_notifications')+'</div>';return;}const target=getNetDaily()*7*members.length,debt=memberDebts[bene.phone]||0,loan=memberLoans[bene.phone]||0,net=Math.max(0,target-debt-loan);el.innerHTML=`<div style="background:rgba(16,185,129,0.08);border-radius:14px;padding:14px;border:1px solid rgba(16,185,129,0.2)"><div style="font-family:Syne,sans-serif;font-size:1.1rem;font-weight:800;color:var(--gold);margin-bottom:12px">💰 ${bene.name}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:0.82rem"><div>${t('full_amount')}</div><div>UGX ${target.toLocaleString()}</div><div>${t('member_debt')}</div><div>- UGX ${debt.toLocaleString()}</div><div>${t('loan_request_title')}</div><div>- UGX ${loan.toLocaleString()}</div><div>${t('net_payout')}</div><div style="font-weight:700;color:var(--green)">UGX ${net.toLocaleString()}</div></div></div>`;};
 window.confirmMarkPaid=function(){
@@ -2545,88 +2600,67 @@ window.confirmMarkPaid=function(){
   updates['rotation/history']=history;
   db.ref().update(updates).then(()=>{toast(t('confirm_payout'),'#10b981');closeOv('ov-mark-paid');}).catch(err=>{console.error(err);toast('Failed to mark payout','#ef4444');});
 };
-window.confirmApproveLoan = async function() {
-  const loanId = document.getElementById('ov-approve-loan').getAttribute('data-loan-id');
+window.confirmApproveLoan = async function(loanId) {
   const loan = loans.find(l => l.id === loanId);
   if (!loan) return;
   
   const approvedAmount = parseFloat(document.getElementById('approve-amount').value);
   const interestRate = parseFloat(document.getElementById('approve-interest').value);
   const dueDateStr = document.getElementById('approve-due-date').value;
-  if (!approvedAmount || approvedAmount <= 0) {
-    toast('Enter a valid approved amount', '#ef4444');
-    return;
-  }
-  if (isNaN(interestRate) || interestRate < 0) {
-    toast('Enter a valid interest rate', '#ef4444');
-    return;
-  }
-  if (!dueDateStr) {
-    toast('Select a due date', '#ef4444');
-    return;
-  }
+  if (!approvedAmount || approvedAmount <= 0) return toast('Enter valid amount', '#ef4444');
+  if (isNaN(interestRate) || interestRate < 0) return toast('Enter valid interest rate', '#ef4444');
+  if (!dueDateStr) return toast('Select due date', '#ef4444');
   
   const dueDate = new Date(dueDateStr).getTime();
-  const totalRepay = Math.floor(approvedAmount * (1 + interestRate / 100));
+  const principal = approvedAmount;
+  const interest = Math.floor(principal * interestRate / 100);
+  const totalRepay = principal + interest;
   
-  // Check if amount exceeds available profit pool
-  computePots();
-  if (approvedAmount > groupProfit) {
-    toast(`Insufficient profit pool. Available: UGX ${groupProfit.toLocaleString()}`, '#ef4444');
-    return;
-  }
+  // Check if member already has an active loan
+  const existingLoan = await getOrCreateActiveLoan(loan.memberId, loan.memberPhone, loan.memberName);
   
-  // Update loan record
-  await db.ref('loans/' + loanId).update({
-    amount: approvedAmount,
-    interestRate: interestRate,
-    totalRepay: totalRepay,
-    dueDate: dueDate,
-    status: 'approved',
-    approvedAt: Date.now()
+  // Update the existing loan (add amounts)
+  const newAmount = (existingLoan.amount || 0) + principal;
+  const newTotalRepay = (existingLoan.totalRepay || 0) + totalRepay;
+  const newDueDate = Math.max(existingLoan.dueDate || 0, dueDate);
+  
+  await db.ref('loans/' + existingLoan.id).update({
+    amount: newAmount,
+    totalRepay: newTotalRepay,
+    dueDate: newDueDate,
+    // Optionally, you can update interestRate to a weighted average, but not necessary
   });
   
-  // Create transactions: principal and interest
-  const principal = approvedAmount;
-  const interest = totalRepay - principal;
-  
+  // Create transactions for the new portion
   db.ref('transactions').push({
     memberPhone: loan.memberPhone,
     memberName: loan.memberName,
     type: 'loan_disbursement',
     amount: principal,
-    description: `Loan principal: UGX ${principal.toLocaleString()} (${interestRate}% interest)`,
+    description: `Loan principal: UGX ${principal.toLocaleString()} (${interestRate}%)`,
     date: Date.now()
-  }).then(() => {
-    if (interest > 0) {
-      db.ref('transactions').push({
-        memberPhone: loan.memberPhone,
-        memberName: loan.memberName,
-        type: 'loan_adjustment',
-        amount: interest,
-        description: `Interest on loan of UGX ${principal.toLocaleString()} (${interestRate}%)`,
-        date: Date.now() + 1
-      });
-    }
-    // Send notification to member
-    db.ref('notifications/' + loan.memberId).once('value', nSnap => {
-      let arr = nSnap.val() || [];
-      arr.push({
-        id: Date.now(),
-        text: `✅ Loan approved: UGX ${principal.toLocaleString()} at ${interestRate}%. Total repay: UGX ${totalRepay.toLocaleString()}. Due: ${new Date(dueDate).toLocaleDateString()}`,
-        date: Date.now(),
-        read: false
-      });
-      db.ref('notifications/' + loan.memberId).set(arr);
-    });
-    toast(`Loan approved for UGX ${principal.toLocaleString()}!`, '#10b981');
-    closeOv('ov-approve-loan');
-    loadApplications();
-    if (currentAdminTab === 'savings') renderAdminTab();
-    computePots();
-    updateHomeUI();
-    updateAccountBalances();
   });
+  if (interest > 0) {
+    db.ref('transactions').push({
+      memberPhone: loan.memberPhone,
+      memberName: loan.memberName,
+      type: 'loan_adjustment',
+      amount: interest,
+      description: `Interest on loan (${interestRate}%)`,
+      date: Date.now() + 1
+    });
+  }
+  
+  // Delete the original pending loan request
+  await db.ref('loans/' + loanId).remove();
+  
+  toast(`Loan added to ${loan.memberName}. New total: UGX ${newTotalRepay.toLocaleString()}`, '#10b981');
+  closeOv('ov-approve-loan');
+  loadApplications();
+  if (currentAdminTab === 'savings') renderAdminTab();
+  computePots();
+  updateHomeUI();
+  updateAccountBalances();
 };
 
 window.buildDragRotation=function(){dragOrder=[...rotation.order];renderDragList();};
