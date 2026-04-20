@@ -716,7 +716,35 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
 <div class="ov" id="ov-mark-paid" onclick="maybeClose(event,'ov-mark-paid')"><div class="bs"><div class="bs-title">✅ Mark Payout</div><div id="mark-paid-info" style="margin-bottom:14px"></div><button class="btn btn-green btn-full" onclick="confirmMarkPaid()">✅ Confirm Payout</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-mark-paid')">Cancel</button></div></div>
 <div class="ov" id="ov-cover" onclick="maybeClose(event,'ov-cover')"><div class="bs"><div class="bs-title">📅 Cover Missed Days (Range)</div><div class="fgrp"><label class="flbl">Member</label><select id="cover-member" class="inp"><option value="">Select member</option></select></div><div class="row" style="gap: 12px;"><div class="fgrp" style="flex:1"><label class="flbl">Start Date</label><input type="date" id="cover-start-date" class="inp"></div><div class="fgrp" style="flex:1"><label class="flbl">End Date</label><input type="date" id="cover-end-date" class="inp"></div></div><div class="fgrp"><label class="flbl">Cover Interest Rate (%)</label><input type="number" id="cover-interest-rate" class="inp" step="0.5" min="0" value="5"><div class="micro">Interest charged per missed day (goes to profit pool).</div></div><div id="cover-summary" class="hint-box" style="display:none;"></div><button class="btn btn-gold btn-full" onclick="previewCoverRange()">🔍 Preview & Calculate</button><button class="btn btn-green btn-full" id="confirm-cover-btn" style="display:none;" onclick="confirmCoverRange()">✅ Confirm & Save</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-cover')">Cancel</button></div></div>
 <div class="ov" id="ov-apps" onclick="maybeClose(event,'ov-apps')"><div class="bs"><div class="bs-title">📝 Applications & Loans</div><div id="apps-list"></div><button class="btn btn-sec btn-full" style="margin-top:8px" onclick="closeOv('ov-apps')">Close</button></div></div>
-<div class="ov" id="ov-assign-debt" onclick="maybeClose(event,'ov-assign-debt')"><div class="bs"><div class="bs-title">🧾 Assign Debt</div><div class="fgrp"><label class="flbl">Member</label><select id="debt-member" class="inp"><option value="">Select member</option></select></div><div class="fgrp"><label class="flbl">Amount</label><input type="number" id="debt-amount" class="inp" placeholder="Amount"></div><div class="fgrp"><label class="flbl">Reason</label><input type="text" id="debt-reason" class="inp" placeholder="Reason"></div><button class="btn btn-red btn-full" onclick="assignDebt()">🧾 Assign</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-assign-debt')">Cancel</button></div></div>
+<div class="ov" id="ov-assign-debt" onclick="maybeClose(event,'ov-assign-debt')">
+  <div class="bs">
+    <div class="bs-title">🧾 Assign Debt (as Loan)</div>
+    <div class="fgrp">
+      <label class="flbl">Member</label>
+      <select id="debt-member" class="inp">
+        <option value="">Select member</option>
+      </select>
+    </div>
+    <div class="fgrp">
+      <label class="flbl">Principal Amount (UGX)</label>
+      <input type="number" id="debt-amount" class="inp" placeholder="Amount">
+    </div>
+    <div class="fgrp">
+      <label class="flbl">Interest Rate (%)</label>
+      <input type="number" id="debt-interest" class="inp" step="0.5" value="5">
+    </div>
+    <div class="fgrp">
+      <label class="flbl">Due Date</label>
+      <input type="date" id="debt-due-date" class="inp">
+    </div>
+    <div class="fgrp">
+      <label class="flbl">Reason (optional)</label>
+      <input type="text" id="debt-reason" class="inp" placeholder="Reason">
+    </div>
+    <button class="btn btn-red btn-full" onclick="assignDebtAsLoan()">🧾 Assign Debt</button>
+    <button class="btn btn-sec btn-full" onclick="closeOv('ov-assign-debt')">Cancel</button>
+  </div>
+</div>
 <div class="ov" id="ov-add-mbr" onclick="maybeClose(event,'ov-add-mbr')"><div class="bs"><div class="bs-title">👤 Add Member</div><div class="fgrp"><label class="flbl">Full Name</label><input type="text" id="mbr-name" class="inp" placeholder="Full Name"></div><div class="fgrp"><label class="flbl">Phone</label><input type="tel" id="mbr-phone" class="inp" placeholder="Phone number"></div><div class="fgrp"><label class="flbl">Password (optional)</label><input type="password" id="mbr-pw" class="inp" placeholder="Default: last 4 digits of phone"></div><div class="fgrp"><label class="flbl">Join Date</label><input type="date" id="mbr-join" class="inp"></div><div class="drag-zone" id="mbr-photo-zone" onclick="document.getElementById('mbr-photo-input').click()"><span>📸 Tap to upload photo (optional)</span><input type="file" id="mbr-photo-input" accept="image/*" style="display:none" onchange="handlePhotoInput(this,'mbr-photo-preview','mbr-photo-data')"><img id="mbr-photo-preview" class="image-preview" style="display:none"></div><input type="hidden" id="mbr-photo-data"><button class="btn btn-gold btn-full" onclick="addMember()">✅ Add Member</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-add-mbr')">Cancel</button></div></div>
 <div class="ov" id="ov-edit-member" onclick="maybeClose(event,'ov-edit-member')"><div class="bs"><div class="bs-title">✏️ Edit Member</div><input type="hidden" id="edit-member-id"><div class="fgrp"><label class="flbl">Full Name</label><input type="text" id="edit-mbr-name" class="inp" placeholder="Full Name"></div><div class="fgrp"><label class="flbl">Phone</label><input type="tel" id="edit-mbr-phone" class="inp" placeholder="Phone"></div><div class="drag-zone" id="edit-photo-zone" onclick="document.getElementById('edit-photo-input').click()"><span>📸 Tap to change photo</span><input type="file" id="edit-photo-input" accept="image/*" style="display:none" onchange="handlePhotoInput(this,'edit-photo-preview','edit-mbr-photo')"><img id="edit-photo-preview" class="image-preview" style="display:none"></div><input type="hidden" id="edit-mbr-photo"><div class="fgrp"><label class="flbl">Join Date</label><input type="date" id="edit-mbr-join" class="inp"></div><button class="btn btn-gold btn-full" onclick="updateMember()">💾 Save Changes</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-edit-member')">Cancel</button></div></div>
 <div class="ov" id="ov-settings" onclick="maybeClose(event,'ov-settings')"><div class="bs"><div class="bs-title">⚙️ Group Settings</div><div class="fgrp"><label class="flbl">Group Name</label><input type="text" id="set-groupname" class="inp" placeholder="Group Name"></div><div class="fgrp"><label class="flbl">Daily Amount</label><input type="number" id="set-daily" class="inp"></div><div class="fgrp"><label class="flbl">Welfare Deduction</label><input type="number" id="set-welfare-amount" class="inp"></div><div class="fgrp"><label class="flbl">Fine Contribution</label><input type="number" id="set-fine-contribution" class="inp"></div><div class="fgrp"><label class="flbl">Default Fine</label><input type="number" id="set-fine" class="inp"></div><div class="fgrp"><label class="flbl">WhatsApp Link</label><input type="url" id="set-whatsapp" class="inp" placeholder="https://chat.whatsapp.com/..."></div><div class="fgrp"><label class="flbl">Theme Mode</label><select id="set-theme-mode" class="inp" onchange="previewAdminTheme()"><option value="light">Light</option><option value="dark">Dark</option></select></div><div class="fgrp"><label class="flbl">Theme Color</label><select id="set-theme-color" class="inp" onchange="previewAdminTheme()"></select><div class="theme-note">Admin can choose from 14 color styles. Saving updates all members live.</div></div><div class="theme-preview"><div class="theme-dot"></div><div class="theme-preview-text"><strong id="theme-preview-name">Facebook Blue</strong><br><span>Live color preview for buttons, header, navigation and cards.</span></div></div><div class="fgrp"><label class="flbl">Group Banner</label><div class="drag-zone" onclick="document.getElementById('banner-file-input').click()"><span>🖼️ Tap to upload banner image</span><input type="file" id="banner-file-input" accept="image/*" style="display:none" onchange="handlePhotoInput(this,'banner-preview','set-banner-url')"><img id="banner-preview" class="image-preview" style="display:none"></div><input type="hidden" id="set-banner-url"></div><button class="btn btn-gold btn-full" onclick="doSaveSettings()">💾 Save Settings</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-settings')">Cancel</button></div></div>
@@ -1312,6 +1340,14 @@ async function getOrCreateActiveLoan(memberId, memberPhone, memberName) {
   await newLoanRef.set(newLoan);
   loans.push(newLoan);
   return newLoan;
+}
+function refreshUI() {
+  computePots();
+  updateHomeUI();
+  if (currentScreen === 'ledger') loadLedger('all');
+  if (currentScreen === 'account') updateAccountUI();
+  if (currentScreen === 'admin' && adminUnlocked) renderAdminTab();
+  updateNotificationBadge();
 }
 function buildDepositTransactions(member,amount,ts,desc){
   const welf=settings.welfareAmount||0, fineContrib=settings.fineContribution||0;
@@ -2469,7 +2505,15 @@ window.deleteMember = function(id) {
     toast('Delete failed', '#ef4444');
   });
 };
-window.populateMemberDropdowns=function(){['tx-member','fine-member','welfare-member','debt-member','cover-member'].forEach(sid=>{const sel=document.getElementById(sid);if(sel)sel.innerHTML='<option value="">'+t('select_member')+'</option>'+members.map(m=>'<option value="'+m.phone+'">'+m.name+'</option>').join('');});};
+window.populateMemberDropdowns = function() {
+  ['tx-member', 'fine-member', 'welfare-member', 'debt-member', 'cover-member'].forEach(sid => {
+    const sel = document.getElementById(sid);
+    if (sel) {
+      sel.innerHTML = '<option value="">Select member</option>' + 
+        members.filter(m => m.approved !== false).map(m => '<option value="' + m.phone + '">' + escapeHtml(m.name) + '</option>').join('');
+    }
+  });
+};
 window.saveSavingsSettings=function(){settings.dailyAmount=+document.getElementById('admin-daily').value;settings.welfareAmount=+document.getElementById('admin-welfare').value;settings.fineContribution=+document.getElementById('admin-finecontrib').value;settings.fineAmount=+document.getElementById('admin-fine').value;db.ref('settings').update({dailyAmount:settings.dailyAmount,welfareAmount:settings.welfareAmount,fineContribution:settings.fineContribution,fineAmount:settings.fineAmount});toast(t('save_rates'),'#10b981');renderAdminTab();updateHomeUI();};
 window.updateNotice = function() {
   const noticeText = document.getElementById('admin-notice-text').value.trim();
@@ -2581,57 +2625,86 @@ window.addTransaction = function() {
   }
 };
 window.addFine=function(){const phone=document.getElementById('fine-member').value,reason=document.getElementById('fine-reason').value,amount=+document.getElementById('fine-amount').value;const m=members.find(m=>m.phone===phone);if(!m||!amount){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('transactions').push({memberPhone:phone,memberName:m.name,type:'fine',amount,description:reason||'Fine',date:Date.now()}).then(()=>{toast(t('apply_fine_btn'),'#f59e0b');['fine-member','fine-reason','fine-amount'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});closeOv('ov-add-fine');});};
+
 window.addWelfare=function(){const phone=document.getElementById('welfare-member').value,desc=document.getElementById('welfare-desc').value,amount=+document.getElementById('welfare-amount').value;const m=members.find(m=>m.phone===phone);if(!m||!amount){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('transactions').push({memberPhone:phone,memberName:m.name,type:'welfare',amount,description:desc||'Welfare',date:Date.now()}).then(()=>{toast(t('record_welfare_btn'),'#8b5cf6');closeOv('ov-add-welfare');});};
 window.addExpense=function(){const desc=document.getElementById('exp-desc').value,amount=+document.getElementById('exp-amount').value;if(!desc||!amount){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('transactions').push({type:'expense',amount,description:desc,date:Date.now()}).then(()=>{toast(t('record_expense_btn'),'#ef4444');['exp-desc','exp-amount','exp-paidto'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});closeOv('ov-add-exp');});};
-function assignDebtAsLoan() {
-  const phone = document.getElementById("debtMember").value;
-  const principal = +document.getElementById("debtPrincipal").value;
-  const rate = +document.getElementById("debtInterestRate").value;
-  const due = document.getElementById("debtDueDate").value;
-  const reason = document.getElementById("debtReason").value;
-  const member = members.find(m => m.phone === phone);
-  if (!member || !principal || !due) return toast("Fill all fields", "#ef4444");
-  const totalRepay = Math.floor(principal * (1 + rate / 100));
-  const interest = totalRepay - principal;
+ window.assignDebtAsLoan = async function() {
+  console.log("assignDebtAsLoan called");
+  const phone = document.getElementById('debt-member')?.value;
+  const principal = parseFloat(document.getElementById('debt-amount')?.value);
+  const interestRate = parseFloat(document.getElementById('debt-interest')?.value);
+  const dueDateStr = document.getElementById('debt-due-date')?.value;
+  const reason = document.getElementById('debt-reason')?.value || 'Admin assigned debt';
   
-  // Find or create active loan for this member
-  getOrCreateActiveLoan(member.id, member.phone, member.name).then(async (existingLoan) => {
-    const newAmount = (existingLoan.amount || 0) + principal;
-    const newTotalRepay = (existingLoan.totalRepay || 0) + totalRepay;
-    const newDueDate = Math.max(existingLoan.dueDate || 0, new Date(due).getTime());
-    
-    await db.ref('loans/' + existingLoan.id).update({
-      amount: newAmount,
-      totalRepay: newTotalRepay,
-      dueDate: newDueDate,
-      reason: reason || (existingLoan.reason || 'Combined loan')
+  if (!phone) { toast('Select a member', '#ef4444'); return; }
+  if (!principal || principal <= 0) { toast('Enter valid principal amount', '#ef4444'); return; }
+  if (isNaN(interestRate) || interestRate < 0) { toast('Enter valid interest rate', '#ef4444'); return; }
+  if (!dueDateStr) { toast('Select a due date', '#ef4444'); return; }
+  
+  const member = members.find(m => m.phone === phone);
+  if (!member) { toast('Member not found', '#ef4444'); return; }
+  
+  const totalRepay = Math.floor(principal * (1 + interestRate / 100));
+  const interest = totalRepay - principal;
+  const dueDate = new Date(dueDateStr).getTime();
+  
+  try {
+    // Create loan record
+    const loanRef = db.ref('loans').push();
+    await loanRef.set({
+      id: loanRef.key,
+      memberId: member.id,
+      memberName: member.name,
+      memberPhone: phone,
+      amount: principal,
+      interestRate: interestRate,
+      totalRepay: totalRepay,
+      reason: reason,
+      status: 'approved',
+      requestedAt: Date.now(),
+      approvedAt: Date.now(),
+      dueDate: dueDate,
+      repaid: false,
+      penaltyApplied: false
     });
+    console.log("Loan record created");
     
-    // Create transactions
-    db.ref('transactions').push({
+    // Create loan disbursement transaction
+    await db.ref('transactions').push({
       memberPhone: phone,
       memberName: member.name,
       type: 'loan_disbursement',
       amount: principal,
-      description: reason || "Admin assigned loan (principal)",
+      description: `${reason} (principal)`,
       date: Date.now()
     });
+    
+    // Create interest adjustment transaction
     if (interest > 0) {
-      db.ref('transactions').push({
+      await db.ref('transactions').push({
         memberPhone: phone,
         memberName: member.name,
         type: 'loan_adjustment',
         amount: interest,
-        description: `Interest on assigned loan (${rate}%)`,
+        description: `Interest on assigned debt (${interestRate}%)`,
         date: Date.now() + 1
       });
     }
-    closeModal();
-    toast(`Debt added to ${member.name}. New total: UGX ${newTotalRepay.toLocaleString()}`, "#10b981");
+    
+    // Refresh local data
+    const loansSnap = await db.ref('loans').once('value');
+    loans = loansSnap.val() ? Object.entries(loansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
+    const txSnap = await db.ref('transactions').once('value');
+    transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
     computePots();
-    if (currentAdminTab === 'savings') renderAdminTab();
-  });
-}
+    refreshUI();
+    closeOv('ov-assign-debt');
+    toast(`Debt assigned: UGX ${principal.toLocaleString()} to ${member.name}`, '#10b981');
+  } catch (err) {
+    console.error("Error in assignDebtAsLoan:", err);
+    toast('Failed to assign debt. Check console.', '#ef4444');
+  }
+};
 window.distributeProfit=function(){if(groupProfit<=0){toast(t('available_profit'),'#ef4444');return;}const per=Math.floor(groupProfit/members.length);if(per<=0){toast(t('available_profit'),'#ef4444');return;}if(!confirm(`${t('distribute_profit')} UGX ${per.toLocaleString()} ${t('per_member')}? ${t('full_amount')}: UGX ${(per*members.length).toLocaleString()}`))return;Promise.all(members.map(m=>db.ref('transactions').push({memberPhone:m.phone,memberName:m.name,type:'profit_dist',amount:per,description:'Profit distribution',date:Date.now()}))).then(()=>toast(t('distribute_profit'),'#10b981'));};
 window.loadMarkPaidInfo=function(){const idx=rotation.currentIndex||0;const bene=members.find(m=>m.id===rotation.order?.[idx]);const el=document.getElementById('mark-paid-info');if(!bene){el.innerHTML='<div class="muted">'+t('no_notifications')+'</div>';return;}const target=getNetDaily()*7*members.length,debt=memberDebts[bene.phone]||0,loan=memberLoans[bene.phone]||0,net=Math.max(0,target-debt-loan);el.innerHTML=`<div style="background:rgba(16,185,129,0.08);border-radius:14px;padding:14px;border:1px solid rgba(16,185,129,0.2)"><div style="font-family:Syne,sans-serif;font-size:1.1rem;font-weight:800;color:var(--gold);margin-bottom:12px">💰 ${bene.name}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:0.82rem"><div>${t('full_amount')}</div><div>UGX ${target.toLocaleString()}</div><div>${t('member_debt')}</div><div>- UGX ${debt.toLocaleString()}</div><div>${t('loan_request_title')}</div><div>- UGX ${loan.toLocaleString()}</div><div>${t('net_payout')}</div><div style="font-weight:700;color:var(--green)">UGX ${net.toLocaleString()}</div></div></div>`;};
 window.confirmMarkPaid=function(){
