@@ -2349,15 +2349,24 @@ function renderAdminTab(){
       const avgRate = data.totalPrincipal ? (data.weightedInterest / data.totalPrincipal).toFixed(1) : 0;
       const balance = memberLoans[data.memberPhone] || 0;
       const paid = Math.max(0, data.totalRepay - balance);
+      const isOverdue = data.dueDate && data.dueDate < Date.now();
       return `
-      <div class="mc">
+      <div class="mc" style="border-left: 4px solid ${isOverdue ? 'var(--red)' : 'var(--green)'};">
         <div>
-          <div class="mc-name">${data.memberName}</div>
-          <div class="mc-phone">Borrowed: UGX ${data.totalPrincipal.toLocaleString()} · ${avgRate}%</div>
-          <div class="mc-phone">Repay: UGX ${data.totalRepay.toLocaleString()} · Paid: UGX ${paid.toLocaleString()} · Balance: UGX ${balance.toLocaleString()}</div>
-          <div class="micro">Due: ${new Date(data.dueDate).toLocaleDateString()} · ${data.count} loan(s)</div>
+          <div class="mc-name" style="font-size: 1rem; margin-bottom: 4px;">${data.memberName}</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 12px; margin: 6px 0;">
+            <span style="background: rgba(245,158,11,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--gold);">💰 Borrowed: UGX ${data.totalPrincipal.toLocaleString()}</span>
+            <span style="background: rgba(6,182,212,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--teal);">📈 Interest: ${avgRate}%</span>
+            <span style="background: rgba(251,146,60,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--amber);">💸 Repay: UGX ${data.totalRepay.toLocaleString()}</span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 12px; margin: 6px 0;">
+            <span style="background: rgba(34,197,94,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--green);">✅ Paid: UGX ${paid.toLocaleString()}</span>
+            <span style="background: ${balance > 0 ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)'}; padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: ${balance > 0 ? 'var(--red)' : 'var(--green)'};">⚖️ Balance: UGX ${balance.toLocaleString()}</span>
+            <span style="background: rgba(100,116,139,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.65rem; font-weight: 600; color: var(--t3);">📅 Due: ${new Date(data.dueDate).toLocaleDateString()}</span>
+            ${data.count > 1 ? `<span style="background: rgba(139,92,246,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.65rem; font-weight: 600; color: var(--purple);">📚 ${data.count} loans</span>` : ''}
+          </div>
         </div>
-        <span class="pill-badge pill-green">${t('active')}</span>
+        <span class="pill-badge pill-green">${isOverdue ? '⚠️ Overdue' : t('active')}</span>
       </div>
     `}).join('')}
   </div>`;
