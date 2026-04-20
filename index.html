@@ -2327,12 +2327,16 @@ function renderAdminTab(){
       if (!activeByMember[l.memberId]) {
         activeByMember[l.memberId] = {
           memberName: l.memberName,
+          totalPrincipal: 0,
           totalRepay: 0,
+          weightedInterest: 0,
           count: 0,
           dueDate: 0
         };
       }
+      activeByMember[l.memberId].totalPrincipal += l.amount;
       activeByMember[l.memberId].totalRepay += l.totalRepay;
+      activeByMember[l.memberId].weightedInterest += l.amount * (l.interestRate || 0);
       activeByMember[l.memberId].count++;
       if (l.dueDate > activeByMember[l.memberId].dueDate) activeByMember[l.memberId].dueDate = l.dueDate;
     }
@@ -2340,16 +2344,18 @@ function renderAdminTab(){
   const entries = Object.entries(activeByMember);
   if (!entries.length) return '';
   return `<div class="card"><div class="sec-h">${t('active_loans')} <span class="pill-badge pill-green">${entries.length}</span></div>
-    ${entries.map(([memberId, data]) => `
+    ${entries.map(([memberId, data]) => {
+      const avgRate = data.totalPrincipal ? (data.weightedInterest / data.totalPrincipal).toFixed(1) : 0;
+      return `
       <div class="mc">
         <div>
           <div class="mc-name">${data.memberName}</div>
-          <div class="mc-phone">UGX ${data.totalRepay.toLocaleString()} · ${data.count} loan(s)</div>
-          <div class="micro">Due: ${new Date(data.dueDate).toLocaleDateString()}</div>
+          <div class="mc-phone">Borrowed: UGX ${data.totalPrincipal.toLocaleString()} · ${avgRate}% · Repay: UGX ${data.totalRepay.toLocaleString()}</div>
+          <div class="micro">Due: ${new Date(data.dueDate).toLocaleDateString()} · ${data.count} loan(s)</div>
         </div>
         <span class="pill-badge pill-green">${t('active')}</span>
       </div>
-    `).join('')}
+    `}).join('')}
   </div>`;
 })()}`;
   } else if (currentAdminTab === 'notice') {   c.innerHTML = `<div class="card"><div class  ="sec-h">🎠 ${t('carousel_notices')} <spanclass="pill-badge pill-amber">${mainCarouselNotifs.length}/5</span></div><div id="main-carousel-admin-list" style="margin-bottom:12px">${mainCarouselNotifs.map(n => `<div class="mc"><div><div class="mc-name">${n.icon || '📢'} ${escapeHtml(n.text.slice(0,50))}${n.text.length > 50 ? '…' : ''}</div><div class="mc-phone">${n.imageData ? '📷 Image' : ''} ${n.payee ? `👤 ${escapeHtml(n.payee)}` : ''}</div></div><button class="btn btn-sm btn-red" onclick="removeCarouselNotice('${n.id}')">${t('delete_btn')}</button></div>`).join('')}</div>${mainCarouselNotifs.length < 5 ? `<button class="btn btn-teal btn-full" onclick="openOv('ov-carousel-compose')">${t('add_carousel')}</button>` : '<div class="hint-box" style="text-align:center;margin-bottom:0">Maximum 5 notices reached. Delete one to add more.</div>'}</div>`;
