@@ -2733,22 +2733,71 @@ window.addExpense=function(){const desc=document.getElementById('exp-desc').valu
 };
 window.distributeProfit=function(){if(groupProfit<=0){toast(t('available_profit'),'#ef4444');return;}const per=Math.floor(groupProfit/members.length);if(per<=0){toast(t('available_profit'),'#ef4444');return;}if(!confirm(`${t('distribute_profit')} UGX ${per.toLocaleString()} ${t('per_member')}? ${t('full_amount')}: UGX ${(per*members.length).toLocaleString()}`))return;Promise.all(members.map(m=>db.ref('transactions').push({memberPhone:m.phone,memberName:m.name,type:'profit_dist',amount:per,description:'Profit distribution',date:Date.now()}))).then(()=>toast(t('distribute_profit'),'#10b981'));};
 window.loadMarkPaidInfo=function(){const idx=rotation.currentIndex||0;const bene=members.find(m=>m.id===rotation.order?.[idx]);const el=document.getElementById('mark-paid-info');if(!bene){el.innerHTML='<div class="muted">'+t('no_notifications')+'</div>';return;}const target=getNetDaily()*7*members.length,debt=memberDebts[bene.phone]||0,loan=memberLoans[bene.phone]||0,net=Math.max(0,target-debt-loan);el.innerHTML=`<div style="background:rgba(16,185,129,0.08);border-radius:14px;padding:14px;border:1px solid rgba(16,185,129,0.2)"><div style="font-family:Syne,sans-serif;font-size:1.1rem;font-weight:800;color:var(--gold);margin-bottom:12px">💰 ${bene.name}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:0.82rem"><div>${t('full_amount')}</div><div>UGX ${target.toLocaleString()}</div><div>${t('member_debt')}</div><div>- UGX ${debt.toLocaleString()}</div><div>${t('loan_request_title')}</div><div>- UGX ${loan.toLocaleString()}</div><div>${t('net_payout')}</div><div style="font-weight:700;color:var(--green)">UGX ${net.toLocaleString()}</div></div></div>`;};
-window.confirmMarkPaid=function(){
-  const idx=rotation.currentIndex||0;
-  const bene=members.find(m=>m.id===rotation.order?.[idx]);
-  if(!bene){toast(t('select_member'),'#ef4444');return;}
-  const target=getNetDaily()*7*members.length;
-  const debt=memberDebts[bene.phone]||0;
-  const loan=memberLoans[bene.phone]||0;
-  const net=Math.max(0,target-debt-loan);
-  const txRef=db.ref('transactions').push();
-  const nextIndex=(idx+1)%(rotation.order?.length||1);
-  const history=[...(rotation.history||[]),{memberId:bene.id,memberName:bene.name,amount:net,date:Date.now()}];
-  const updates={};
-  updates['transactions/'+txRef.key]={memberPhone:bene.phone,memberName:bene.name,type:'payout',amount:net,description:'Weekly rotation payout',date:Date.now(),fullAmount:target,debtDeducted:debt,loanDeducted:loan};
-  updates['rotation/currentIndex']=nextIndex;
-  updates['rotation/history']=history;
-  db.ref().update(updates).then(()=>{toast(t('confirm_payout'),'#10b981');closeOv('ov-mark-paid');}).catch(err=>{console.error(err);toast('Failed to mark payout','#ef4444');});
+window.confirmMarkPaid = function() {
+  const idx = rotation.currentIndex || 0;
+  const bene = members.find(m => m.id === rotation.order?.[idx]);
+  if (!bene) { toast(t('select_member'), '#ef4444'); return; }
+  
+  const target = getNetDaily() * 7 * members.length;
+  const debt = memberDebts[bene.phone] || 0;
+  const loan = memberLoans[bene.phone] || 0;
+  const net = Math.max(0, target - debt - loan);
+  
+  const writes = [
+    db.ref('transactions').push({
+      memberPhone: bene.phone,
+      memberName: bene.name,
+      type: 'payout',
+      amount: net,
+      description: 'Weekly payout',
+      date: Date.now()
+    })
+  ];
+  if (debt > 0) {
+    writes.push(db.ref('transactions').push({
+      memberPhone: bene.phone,
+      memberName: bene.name,
+      type: 'debt_cleared',
+      amount: debt,
+      description: 'Debt cleared on payout',
+      date: Date.now() + 1
+    }));
+  }
+  if (loan > 0) {
+    writes.push(db.ref('transactions').push({
+      memberPhone: bene.phone,
+      memberName: bene.name,
+      type: 'loan_repayment',
+      amount: loan,
+      description: 'Loan cleared on payout',
+      date: Date.now() + 2
+    }));
+  }
+  
+  Promise.all(writes).then(async () => {
+    // Force refresh local transactions array
+    const txSnap = await db.ref('transactions').once('value');
+    transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
+    const loansSnap = await db.ref('loans').once('value');
+    loans = loansSnap.val() ? Object.entries(loansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
+    
+    computePots();
+    updateHomeUI();
+    updateAccountBalances();
+    if (currentScreen === 'ledger') loadLedger('all');
+    if (currentAdminTab === 'savings') renderAdminTab();
+    
+    // Update rotation index
+    const nextIndex = (idx + 1) % rotation.order.length;
+    await db.ref('rotation').update({ currentIndex: nextIndex });
+    rotation.currentIndex = nextIndex;
+    
+    toast('Payout completed! All debts and loans cleared.', '#10b981');
+    closeOv('ov-mark-paid');
+  }).catch(err => {
+    console.error(err);
+    toast('Failed to complete payout', '#ef4444');
+  });
 };
 window.confirmApproveLoan = async function(loanId) {
   const loan = loans.find(l => l.id === loanId);
