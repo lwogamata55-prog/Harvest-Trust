@@ -2319,7 +2319,39 @@ function renderAdminTab(){
     c.innerHTML=`<div class="card"><div class="sec-h">${t('daily_rates')}</div><div class="fgrp"><label class="flbl">${t('daily_amount')}</label><input type="number" id="admin-daily" class="inp" value="${settings.dailyAmount||2500}"></div><div class="fgrp"><label class="flbl">${t('welfare_deduction')}</label><input type="number" id="admin-welfare" class="inp" value="${settings.welfareAmount||0}"></div><div class="fgrp"><label class="flbl">${t('fine_contribution')}</label><input type="number" id="admin-finecontrib" class="inp" value="${settings.fineContribution||0}"></div><div class="fgrp"><label class="flbl">${t('default_fine')}</label><input type="number" id="admin-fine" class="inp" value="${settings.fineAmount||5000}"></div><button class="btn btn-gold btn-full" onclick="saveSavingsSettings()">${t('save_rates')}</button><div class="hint-box" style="margin-top:8px">${t('net_daily')}: <strong>UGX ${getNetDaily().toLocaleString()}</strong> · ${t('weekly_pool')}: <strong>UGX ${computeTotalWeekly().toLocaleString()}</strong></div></div>
     <div class="card"><div class="sec-h">${t('profit_pool_card')}</div><div style="display:flex;align-items:center;gap:14px;margin-bottom:14px"><div style="width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,var(--green),#059669);display:flex;align-items:center;justify-content:center;font-size:1.6rem">💰</div><div><div style="font-family:'JetBrains Mono',monospace;font-size:1.6rem;font-weight:700;color:${groupProfit<0?'var(--red)':'var(--green)'}">UGX ${groupProfit.toLocaleString()}</div><div class="micro">${t('per_member')}: ~UGX ${members.length?Math.floor(groupProfit/members.length).toLocaleString():'0'}</div></div></div><button class="btn btn-green btn-full" onclick="distributeProfit()">${t('distribute_profit')}</button></div>
     ${pendingLoans.length?`<div class="card"><div class="sec-h">${t('pending_loans')} <span class="pill-badge pill-amber">${pendingLoans.length}</span></div>${pendingLoans.map(l=>`<div class="mc"><div><div class="mc-name">${l.memberName}</div><div class="mc-phone">UGX ${l.amount.toLocaleString()} · Repay: UGX ${l.totalRepay.toLocaleString()} (${l.interestRate}%)</div><div class="micro">${l.reason}</div></div><div><button class="btn btn-sm btn-green" onclick="approveLoan('${l.id}')">✅</button><button class="btn btn-sm btn-red" onclick="rejectLoan('${l.id}')">✕</button></div></div>`).join('')}</div>`:''}
-    ${activeLoans.length?`<div class="card"><div class="sec-h">${t('active_loans')} <span class="pill-badge pill-green">${activeLoans.length}</span></div>${activeLoans.map(l=>`<div class="mc"><div><div class="mc-name">${l.memberName}</div><div class="mc-phone">UGX ${l.amount.toLocaleString()} · ${l.interestRate}% · Repay: UGX ${l.totalRepay.toLocaleString()}</div><div class="micro">Due: ${new Date(l.dueDate).toLocaleDateString()}</div></div><span class="pill-badge pill-green">${t('active')}</span></div>`).join('')}</div>`:''}`;
+    ${(() => {
+  // Group active loans by member
+  const activeByMember = {};
+  loans.forEach(l => {
+    if (l.status === 'approved' && !l.repaid) {
+      if (!activeByMember[l.memberId]) {
+        activeByMember[l.memberId] = {
+          memberName: l.memberName,
+          totalRepay: 0,
+          count: 0,
+          dueDate: 0
+        };
+      }
+      activeByMember[l.memberId].totalRepay += l.totalRepay;
+      activeByMember[l.memberId].count++;
+      if (l.dueDate > activeByMember[l.memberId].dueDate) activeByMember[l.memberId].dueDate = l.dueDate;
+    }
+  });
+  const entries = Object.entries(activeByMember);
+  if (!entries.length) return '';
+  return `<div class="card"><div class="sec-h">${t('active_loans')} <span class="pill-badge pill-green">${entries.length}</span></div>
+    ${entries.map(([memberId, data]) => `
+      <div class="mc">
+        <div>
+          <div class="mc-name">${data.memberName}</div>
+          <div class="mc-phone">UGX ${data.totalRepay.toLocaleString()} · ${data.count} loan(s)</div>
+          <div class="micro">Due: ${new Date(data.dueDate).toLocaleDateString()}</div>
+        </div>
+        <span class="pill-badge pill-green">${t('active')}</span>
+      </div>
+    `).join('')}
+  </div>`;
+})()}`;
   } else if (currentAdminTab === 'notice') {   c.innerHTML = `<div class="card"><div class  ="sec-h">🎠 ${t('carousel_notices')} <spanclass="pill-badge pill-amber">${mainCarouselNotifs.length}/5</span></div><div id="main-carousel-admin-list" style="margin-bottom:12px">${mainCarouselNotifs.map(n => `<div class="mc"><div><div class="mc-name">${n.icon || '📢'} ${escapeHtml(n.text.slice(0,50))}${n.text.length > 50 ? '…' : ''}</div><div class="mc-phone">${n.imageData ? '📷 Image' : ''} ${n.payee ? `👤 ${escapeHtml(n.payee)}` : ''}</div></div><button class="btn btn-sm btn-red" onclick="removeCarouselNotice('${n.id}')">${t('delete_btn')}</button></div>`).join('')}</div>${mainCarouselNotifs.length < 5 ? `<button class="btn btn-teal btn-full" onclick="openOv('ov-carousel-compose')">${t('add_carousel')}</button>` : '<div class="hint-box" style="text-align:center;margin-bottom:0">Maximum 5 notices reached. Delete one to add more.</div>'}</div>`;
   }else if(currentAdminTab==='harvest'){
     c.innerHTML=`<div class="card"><div class="sec-h">${t('harvest_actions')}</div><button class="btn btn-gold btn-full" onclick="openOv('ov-daily');loadDailyList()">${t('record_daily')}</button><button class="btn btn-teal btn-full" onclick="openOv('ov-add-tx');populateMemberDropdowns()">${t('add_transaction')}</button><button class="btn btn-green btn-full" onclick="openOv('ov-mark-paid');loadMarkPaidInfo()">${t('mark_payout')}</button><button class="btn btn-purple btn-full" onclick="openOv('ov-rot-manage');buildDragRotation()">${t('manage_rotation')}</button><button class="btn btn-sec btn-full" onclick="openOv('ov-cover');buildCoverDaysList();populateMemberDropdowns()">${t('cover_missed')}</button><button class="btn btn-sec btn-full" onclick="openOv('ov-reminder')">${t('send_reminder')}</button></div>`;
