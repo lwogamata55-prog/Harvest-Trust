@@ -715,6 +715,32 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
 <div class="ov" id="ov-rot-manage" onclick="maybeClose(event,'ov-rot-manage')"><div class="bs"><div class="bs-title">🔄 Rotation Order</div><div style="font-size:0.74rem;margin-bottom:12px;color:var(--t3);font-style:italic">Drag to reorder. Top = next payout.</div><div id="rot-drag-list"></div><div style="display:flex;gap:8px;margin-top:14px"><button class="btn btn-gold" style="flex:1" onclick="saveRotationOrder()">💾 Save Order</button><button class="btn btn-sec" style="flex:1" onclick="closeOv('ov-rot-manage')">Cancel</button></div></div></div>
 <div class="ov" id="ov-mark-paid" onclick="maybeClose(event,'ov-mark-paid')"><div class="bs"><div class="bs-title">✅ Mark Payout</div><div id="mark-paid-info" style="margin-bottom:14px"></div><button class="btn btn-green btn-full" onclick="confirmMarkPaid()">✅ Confirm Payout</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-mark-paid')">Cancel</button></div></div>
 <div class="ov" id="ov-cover" onclick="maybeClose(event,'ov-cover')"><div class="bs"><div class="bs-title">📅 Cover Missed Days (Range)</div><div class="fgrp"><label class="flbl">Member</label><select id="cover-member" class="inp"><option value="">Select member</option></select></div><div class="row" style="gap: 12px;"><div class="fgrp" style="flex:1"><label class="flbl">Start Date</label><input type="date" id="cover-start-date" class="inp"></div><div class="fgrp" style="flex:1"><label class="flbl">End Date</label><input type="date" id="cover-end-date" class="inp"></div></div><div class="fgrp"><label class="flbl">Cover Interest Rate (%)</label><input type="number" id="cover-interest-rate" class="inp" step="0.5" min="0" value="5"><div class="micro">Interest charged per missed day (goes to profit pool).</div></div><div id="cover-summary" class="hint-box" style="display:none;"></div><button class="btn btn-gold btn-full" onclick="previewCoverRange()">🔍 Preview & Calculate</button><button class="btn btn-green btn-full" id="confirm-cover-btn" style="display:none;" onclick="confirmCoverRange()">✅ Confirm & Save</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-cover')">Cancel</button></div></div>
+<div class="ov" id="ov-upcoming" onclick="maybeClose(event,'ov-upcoming')">
+  <div class="bs">
+    <div class="bs-title">📅 Upcoming Days Savings (Prepay)</div>
+    <div class="fgrp">
+      <label class="flbl">Member</label>
+      <select id="upcoming-member" class="inp">
+        <option value="">Select member</option>
+      </select>
+    </div>
+    <div class="row" style="gap: 12px;">
+      <div class="fgrp" style="flex:1">
+        <label class="flbl">Start Date</label>
+        <input type="date" id="upcoming-start-date" class="inp">
+      </div>
+      <div class="fgrp" style="flex:1">
+        <label class="flbl">End Date</label>
+        <input type="date" id="upcoming-end-date" class="inp">
+      </div>
+    </div>
+    <div id="upcoming-summary" class="hint-box" style="display:none;"></div>
+    <div id="upcoming-debt-warning" class="hint-box" style="display:none; background: rgba(239,68,68,0.1); border-color: var(--red);"></div>
+    <button class="btn btn-gold btn-full" onclick="previewUpcomingDays()">🔍 Preview & Calculate</button>
+    <button class="btn btn-green btn-full" id="confirm-upcoming-btn" style="display:none;" onclick="confirmUpcomingDays()">✅ Confirm & Save</button>
+    <button class="btn btn-sec btn-full" onclick="closeOv('ov-upcoming')">Cancel</button>
+  </div>
+</div>
 <div class="ov" id="ov-apps" onclick="maybeClose(event,'ov-apps')"><div class="bs"><div class="bs-title">📝 Applications & Loans</div><div id="apps-list"></div><button class="btn btn-sec btn-full" style="margin-top:8px" onclick="closeOv('ov-apps')">Close</button></div></div>
 <div class="ov" id="ov-assign-debt" onclick="maybeClose(event,'ov-assign-debt')">
   <div class="bs">
@@ -2409,7 +2435,7 @@ function renderAdminTab(){
 })()}`;
   } else if (currentAdminTab === 'notice') {   c.innerHTML = `<div class="card"><div class  ="sec-h">🎠 ${t('carousel_notices')} <spanclass="pill-badge pill-amber">${mainCarouselNotifs.length}/5</span></div><div id="main-carousel-admin-list" style="margin-bottom:12px">${mainCarouselNotifs.map(n => `<div class="mc"><div><div class="mc-name">${n.icon || '📢'} ${escapeHtml(n.text.slice(0,50))}${n.text.length > 50 ? '…' : ''}</div><div class="mc-phone">${n.imageData ? '📷 Image' : ''} ${n.payee ? `👤 ${escapeHtml(n.payee)}` : ''}</div></div><button class="btn btn-sm btn-red" onclick="removeCarouselNotice('${n.id}')">${t('delete_btn')}</button></div>`).join('')}</div>${mainCarouselNotifs.length < 5 ? `<button class="btn btn-teal btn-full" onclick="openOv('ov-carousel-compose')">${t('add_carousel')}</button>` : '<div class="hint-box" style="text-align:center;margin-bottom:0">Maximum 5 notices reached. Delete one to add more.</div>'}</div>`;
   }else if(currentAdminTab==='harvest'){
-    c.innerHTML=`<div class="card"><div class="sec-h">${t('harvest_actions')}</div><button class="btn btn-gold btn-full" onclick="openOv('ov-daily');loadDailyList()">${t('record_daily')}</button><button class="btn btn-teal btn-full" onclick="openOv('ov-add-tx');populateMemberDropdowns()">${t('add_transaction')}</button><button class="btn btn-green btn-full" onclick="openOv('ov-mark-paid');loadMarkPaidInfo()">${t('mark_payout')}</button><button class="btn btn-purple btn-full" onclick="openOv('ov-rot-manage');buildDragRotation()">${t('manage_rotation')}</button><button class="btn btn-sec btn-full" onclick="openOv('ov-cover');buildCoverDaysList();populateMemberDropdowns()">${t('cover_missed')}</button><button class="btn btn-sec btn-full" onclick="openOv('ov-reminder')">${t('send_reminder')}</button></div>`;
+    c.innerHTML=`<div class="card"><div class="sec-h">${t('harvest_actions')}</div><button class="btn btn-gold btn-full" onclick="openOv('ov-daily');loadDailyList()">${t('record_daily')}</button><button class="btn btn-teal btn-full" onclick="openOv('ov-add-tx');populateMemberDropdowns()">${t('add_transaction')}</button><button class="btn btn-green btn-full" onclick="openOv('ov-mark-paid');loadMarkPaidInfo()">${t('mark_payout')}</button><button class="btn btn-purple btn-full" onclick="openOv('ov-rot-manage');buildDragRotation()">${t('manage_rotation')}</button><button class="btn btn-sec btn-full" onclick="openOv('ov-cover');buildCoverDaysList();populateMemberDropdowns()">${t('cover_missed')}</button><button class="btn btn-teal btn-full" onclick="openUpcomingDays(); populateUpcomingMemberDropdown()">📅 Upcoming Days Savings (prepay)</button><button class="btn btn-sec btn-full" onclick="openOv('ov-reminder')">${t('send_reminder')}</button></div>`;
   }else if(currentAdminTab==='users'){
     c.innerHTML=`<div class="card"><div class="sec-h">${t('quick_actions')}</div><button class="btn btn-gold btn-full" onclick="openOv('ov-add-mbr')">${t('add_member')}</button><button class="btn btn-teal btn-full" onclick="openOv('ov-apps');loadApplications()">${t('view_applications')} <span id="apps-badge-wrap" style="display:none;background:var(--red);color:#fff;border-radius:99px;padding:1px 7px;font-size:0.65rem;font-weight:800;margin-left:4px"><span id="apps-count">0</span></span></button></div><div class="card"><div class="sec-h">${t('all_members')} <span class="pill-badge pill-green">${members.length}</span></div><div id="admin-members-list"></div></div>`;
     updateAdminMembersList();
@@ -2809,6 +2835,233 @@ function animateComingSoon() {
   });
   // Remove any stale data-animated attribute
   container.removeAttribute("data-animated");
+}
+function updateUpcomingNetDaily() {
+  const net = getNetDaily();
+  document.getElementById('upcoming-net-daily').innerText = net.toLocaleString();
+  const dailyInput = document.getElementById('upcoming-daily-amount');
+  if (dailyInput) dailyInput.value = settings.dailyAmount || 2500;
+}
+// Populate upcoming member dropdown
+function populateUpcomingMemberDropdown() {
+  const sel = document.getElementById('upcoming-member');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Select member</option>' + 
+    members.filter(m => m.approved).map(m => `<option value="${m.phone}">${escapeHtml(m.name)}</option>`).join('');
+}
+
+// Open upcoming modal
+window.openUpcomingDays = function() {
+  populateUpcomingMemberDropdown();
+  document.getElementById('upcoming-start-date').value = '';
+  document.getElementById('upcoming-end-date').value = '';
+  document.getElementById('upcoming-summary').style.display = 'none';
+  document.getElementById('upcoming-debt-warning').style.display = 'none';
+  document.getElementById('confirm-upcoming-btn').style.display = 'none';
+  openOv('ov-upcoming');
+};
+
+// Preview upcoming days
+window.previewUpcomingDays = function() {
+  const phone = document.getElementById('upcoming-member').value;
+  const member = members.find(m => m.phone === phone);
+  if (!member) { toast('Select a member', '#ef4444'); return; }
+  
+  const startDate = document.getElementById('upcoming-start-date').value;
+  const endDate = document.getElementById('upcoming-end-date').value;
+  if (!startDate || !endDate) { toast('Select start and end dates', '#ef4444'); return; }
+  if (new Date(startDate) > new Date(endDate)) { toast('End date must be after start date', '#ef4444'); return; }
+  
+  // Check if member has any debt or loan
+  const debt = memberDebts[member.phone] || 0;
+  const loan = memberLoans[member.phone] || 0;
+  if (debt > 0 || loan > 0) {
+    document.getElementById('upcoming-debt-warning').style.display = 'block';
+    document.getElementById('upcoming-debt-warning').innerHTML = `<span style="color:var(--red)">⚠️ Member has outstanding debt (UGX ${(debt+loan).toLocaleString()}). Please clear all debts before prepaying upcoming days.</span>`;
+    document.getElementById('confirm-upcoming-btn').style.display = 'none';
+    document.getElementById('upcoming-summary').style.display = 'none';
+    return;
+  } else {
+    document.getElementById('upcoming-debt-warning').style.display = 'none';
+  }
+  
+  // Calculate days
+  const days = [];
+  for (let d = new Date(startDate); d <= new Date(endDate); d.setDate(d.getDate() + 1)) {
+    days.push(new Date(d));
+  }
+  const dailyAmount = settings.dailyAmount || 2500;
+  const total = dailyAmount * days.length;
+  
+  const summaryDiv = document.getElementById('upcoming-summary');
+  summaryDiv.style.display = 'block';
+  summaryDiv.innerHTML = `
+    <div><strong>Days to prepay:</strong> ${days.length}</div>
+    <div><strong>Daily amount:</strong> UGX ${dailyAmount.toLocaleString()}</div>
+    <div><strong>Total to pay:</strong> UGX ${total.toLocaleString()}</div>
+    <div class="micro" style="margin-top:8px;">No interest will be charged. This will be added as deposits for the selected days.</div>
+  `;
+  document.getElementById('confirm-upcoming-btn').style.display = 'block';
+  // Store data for confirmation
+  window._upcomingData = { member, startDate, endDate, days, dailyAmount, total };
+};
+
+// Confirm and save upcoming days
+window.confirmUpcomingDays = async function() {
+  const data = window._upcomingData;
+  if (!data) return;
+  
+  // Double-check debt again before saving
+  const debt = memberDebts[data.member.phone] || 0;
+  const loan = memberLoans[data.member.phone] || 0;
+  if (debt > 0 || loan > 0) {
+    toast('Cannot prepay: Member has outstanding debt', '#ef4444');
+    return;
+  }
+  
+  const writes = [];
+  for (let d of data.days) {
+    const depositTxs = buildDepositTransactions(data.member, data.dailyAmount, d.getTime(), `Prepay for ${d.toISOString().slice(0,10)}`);
+    depositTxs.forEach(tx => writes.push(db.ref('transactions').push(tx)));
+  }
+  
+  try {
+    await Promise.all(writes);
+    toast(`Prepaid ${data.days.length} days for ${data.member.name}`, '#10b981');
+    closeOv('ov-upcoming');
+    computePots();
+    updateHomeUI();
+    if (currentScreen === 'ledger') loadLedger('all');
+  } catch (err) {
+    console.error(err);
+    toast('Failed to save prepayments', '#ef4444');
+  }
+};
+function previewUpcoming() {
+  const phone = document.getElementById('upcoming-member').value;
+  const start = document.getElementById('upcoming-start').value;
+  const end = document.getElementById('upcoming-end').value;
+  if (!phone || !start || !end) {
+    toast('Select member and date range', '#ef4444');
+    return;
+  }
+  const member = members.find(m => m.phone === phone);
+  if (!member) return;
+  
+  // Check if member has any debt (memberDebts + memberLoans)
+  const totalDebt = (memberDebts[phone] || 0) + (memberLoans[phone] || 0);
+  if (totalDebt > 0) {
+    toast('Cannot save upcoming days because member has outstanding debt. Clear debt first.', '#ef4444');
+    document.getElementById('upcoming-summary').innerHTML = `<div class="error">❌ Member has debt of ${formatMoney(totalDebt)}. Please clear debt before allowing prepayment.</div>`;
+    document.getElementById('confirm-upcoming-btn').style.display = 'none';
+    return;
+  }
+  
+  // Calculate days between start and end (inclusive)
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  if (startDate > endDate) {
+    toast('End date must be after start date', '#ef4444');
+    return;
+  }
+  if (startDate < new Date()) {
+    toast('Cannot prepay for past days', '#ef4444');
+    return;
+  }
+  
+  const days = [];
+  for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+    days.push(new Date(d));
+  }
+  const dailyAmount = settings.dailyAmount || 2500;
+  const totalPrincipal = dailyAmount * days.length;
+  
+  document.getElementById('upcoming-summary').style.display = 'block';
+  document.getElementById('upcoming-summary').innerHTML = `
+    <div><strong>Member:</strong> ${escapeHtml(member.name)}</div>
+    <div><strong>Days to prepay:</strong> ${days.length}</div>
+    <div><strong>Daily amount:</strong> ${formatMoney(dailyAmount)}</div>
+    <div><strong>Total to pay:</strong> ${formatMoney(totalPrincipal)}</div>
+    <div class="micro muted">No interest. Only daily amount (welfare/fine deductions apply automatically).</div>
+  `;
+  document.getElementById('confirm-upcoming-btn').style.display = 'block';
+  // Store data for confirmation
+  window.upcomingData = { phone, days, dailyAmount, totalPrincipal };
+}
+
+function confirmUpcoming() {
+  if (!window.upcomingData) return;
+  const { phone, days, dailyAmount } = window.upcomingData;
+  const member = members.find(m => m.phone === phone);
+  if (!member) return;
+  
+  // Re-check debt before proceeding
+  const totalDebt = (memberDebts[phone] || 0) + (memberLoans[phone] || 0);
+  if (totalDebt > 0) {
+    toast('Debt detected. Cannot prepay.', '#ef4444');
+    closeOv('ov-upcoming');
+    return;
+  }
+  
+  const writes = [];
+  days.forEach(d => {
+    const depositTxs = buildDepositTransactions(member, dailyAmount, d.getTime(), `Prepay for ${d.toISOString().slice(0,10)}`);
+    depositTxs.forEach(tx => writes.push(db.ref('transactions').push(tx)));
+  });
+  
+  Promise.all(writes).then(() => {
+    toast(`Prepaid ${days.length} days for ${member.name}`, '#10b981');
+    closeOv('ov-upcoming');
+    computePots();
+    refreshUI();
+  }).catch(err => {
+    console.error(err);
+    toast('Failed to save prepayments', '#ef4444');
+  });
+}
+
+function confirmUpcomingDays() {
+  const phone = document.getElementById('upcoming-member').value;
+  const member = members.find(m => m.phone === phone);
+  if (!member) return;
+  const startDate = document.getElementById('upcoming-start-date').value;
+  const endDate = document.getElementById('upcoming-end-date').value;
+  const days = dateRangeToDays(startDate, endDate);
+  const dailyAmount = settings.dailyAmount || 2500;
+  const writes = [];
+
+  days.forEach(d => {
+    // Use buildDepositTransactions to handle welfare/fine and debt/loan clearance
+    const depositTxs = buildDepositTransactions(member, dailyAmount, d.getTime(), `Upcoming savings for ${d.toISOString().slice(0,10)}`);
+    depositTxs.forEach(tx => writes.push(db.ref('transactions').push(tx)));
+  });
+
+  Promise.all(writes).then(() => {
+    toast(`Prepaid ${days.length} days for ${member.name}`, '#10b981');
+    closeOv('ov-upcoming-savings');
+    computePots();
+    updateHomeUI();
+    if (currentScreen === 'ledger') loadLedger('all');
+    // Reset form
+    document.getElementById('upcoming-start-date').value = '';
+    document.getElementById('upcoming-end-date').value = '';
+    document.getElementById('upcoming-summary').style.display = 'none';
+    document.getElementById('confirm-upcoming-btn').style.display = 'none';
+  }).catch(err => {
+    console.error(err);
+    toast('Failed to save prepayments', '#ef4444');
+  });
+}
+
+// Helper function to get array of dates between start and end (inclusive)
+function dateRangeToDays(startDate, endDate) {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const days = [];
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    days.push(new Date(d));
+  }
+  return days;
 }
 function updateSelectedChips(){document.getElementById('selected-days-chips').innerHTML=Object.keys(selectedCoverDays).map(dk=>'<div class="cover-chip">'+dk+'</div>').join('');}
 window.addCustomCoverDate=function(){const dk=document.getElementById('custom-date-picker').value;if(dk){selectedCoverDays[dk]=true;updateSelectedChips();}};
