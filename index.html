@@ -158,6 +158,23 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   background-clip: text;
   color: transparent;
 }
+.ledger-search .row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ledger-search .inp {
+  flex: 1;
+  min-width: 120px;
+}
+@media (max-width: 500px) {
+  .ledger-search .row {
+    flex-direction: column;
+  }
+  .ledger-search .btn {
+    width: 100%;
+  }
+}
 .stats-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
 .ss-tile{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:20px;padding:14px 8px 12px;display:flex;flex-direction:column;align-items:center;gap:5px;box-shadow:var(--sh);position:relative;overflow:hidden;transition:transform 0.2s var(--ease-spring),box-shadow 0.2s;animation:tileIn 0.5s var(--ease-spring) both}.ss-tile:nth-child(1){animation-delay:0.05s}.ss-tile:nth-child(2){animation-delay:0.1s}.ss-tile:nth-child(3){animation-delay:0.15s}.ss-tile:active{transform:scale(0.95)}.ss-tile::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:20px 20px 0 0}.ss-tile::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,0.04),transparent);pointer-events:none}.ss-t-gold::before{background:linear-gradient(90deg,#f59e0b,#d97706)}.ss-t-green::before{background:linear-gradient(90deg,#10b981,#059669)}.ss-t-teal::before{background:linear-gradient(90deg,#06b6d4,#0891b2)}.ss-ico{font-size:1.3rem;line-height:1}.ss-val{font-family:'JetBrains Mono',monospace;font-size:0.78rem;font-weight:700;line-height:1.2;text-align:center}.ss-lbl{font-size:0.46rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--t3)}.sv-gold{color:var(--gold)}.sv-green{color:var(--green)}.sv-teal{color:var(--teal)}
 .notice-banner.carousel-banner{background:linear-gradient(145deg,rgba(245,158,11,0.1),rgba(6,182,212,0.06),rgba(245,158,11,0.08));border:1px solid rgba(245,158,11,0.2);border-radius:var(--r);margin-bottom:14px;overflow:hidden;padding:0!important;position:relative}
@@ -603,6 +620,12 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
 
     <div id="t-ledger" class="tab">
       <div class="sec-h">Full Ledger</div>
+      <div class="ledger-search">
+  <div class="row" style="display: flex; gap: 8px; margin-bottom: 12px;">
+    <input type="text" id="ledger-search" class="inp" style="flex:1;" placeholder="Search by name, description or amount">
+    <button class="btn btn-sm btn-gold" onclick="applyLedgerFilters()">Search</button>
+    <button class="btn btn-sm btn-sec" onclick="clearLedgerFilters()">Clear</button>
+  </div></div>
       <div class="lfilter">
         <button class="lf-btn active" onclick="setLF('all',this)">All</button>
         <button class="lf-btn" onclick="setLF('deposit',this)">Deposits</button>
@@ -1703,6 +1726,65 @@ function loadLedger(f){
   if(!arr.length){list.innerHTML='<div class="empty-state"><div class="empty-state-icon">📒</div><div class="empty-state-text">'+t('filter_all')+'</div></div>';return;}
   list.innerHTML=arr.slice(0,100).map((tx,i)=>renderTxRow(tx,i)).join('');
 }
+// Global variables
+let ledgerFilter = 'all';
+let ledgerSearchText = "";
+
+function applyLedgerFilters() {
+  const search = document.getElementById("ledger-search").value.trim().toLowerCase();
+  ledgerSearchText = search;
+  loadLedger(ledgerFilter);
+}
+
+function clearLedgerFilters() {
+  document.getElementById("ledger-search").value = "";
+  ledgerSearchText = "";
+  loadLedger(ledgerFilter);
+}
+
+// Replace your existing loadLedger function
+function loadLedger(typeFilter) {
+  let filtered = transactions.slice();
+  
+  // Apply type filter
+  if (typeFilter !== 'all') {
+    filtered = filtered.filter(tx => tx.type === typeFilter);
+  }
+  
+  // Apply search text filter
+  if (ledgerSearchText) {
+    filtered = filtered.filter(tx => {
+      const member = members.find(m => m.phone === tx.memberPhone) || { name: tx.memberName || '' };
+      const amountStr = tx.amount.toString();
+      const desc = (tx.description || '').toLowerCase();
+      const name = (member.name || '').toLowerCase();
+      return name.includes(ledgerSearchText) || 
+             desc.includes(ledgerSearchText) || 
+             amountStr.includes(ledgerSearchText);
+    });
+  }
+  
+  // Sort by date descending (most recent first)
+  filtered.sort((a, b) => (b.date || 0) - (a.date || 0));
+  
+  const container = document.getElementById("ledger-list");
+  if (!filtered.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📒</div><div class="empty-state-text">No transactions match.</div></div>';
+    return;
+  }
+  
+  // Show first 100 transactions
+  const toRender = filtered.slice(0, 100);
+  container.innerHTML = toRender.map((tx, i) => renderTxRow(tx, i)).join('');
+}
+
+// Update setLF to set ledgerFilter and reload
+window.setLF = function(f, btn) {
+  document.querySelectorAll('.lf-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  ledgerFilter = f;
+  loadLedger(ledgerFilter);
+};
 function setLF(f,btn){document.querySelectorAll('.lf-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');loadLedger(f);}
 function updateHomeRecent(){
   const el=document.getElementById('home-recent');
