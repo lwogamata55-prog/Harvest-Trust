@@ -1170,20 +1170,13 @@ let lastProcessedDate = null;
 async function checkAndAssignDebts() {
   const todayStart = getTodayStart();
   const todayDateStr = new Date(todayStart).toISOString().slice(0,10);
-  
-  // If we already processed today, skip
   if (lastProcessedDate === todayDateStr) return;
-  
-  // Get current time
   const now = Date.now();
-  if (now < getNextMidnight() - 5000) return; // not yet midnight (allow 5 sec slack)
+  if (now < getNextMidnight() - 5000) return;
   
-  console.log("Midnight passed – assigning debts for", todayDateStr);
+  console.log("Midnight passed – assigning penalties for", todayDateStr);
   
-  // Find all approved members
   const activeMembers = members.filter(m => m.approved);
-  
-  // For each member, check if they have ANY deposit transaction today
   const depositToday = new Set();
   transactions.forEach(tx => {
     if (tx.type === 'deposit' && tx.date >= todayStart && tx.date <= todayStart + 86400000 - 1) {
@@ -1192,38 +1185,48 @@ async function checkAndAssignDebts() {
   });
   
   const dailyAmount = settings.dailyAmount || 2500;
-  const welfare = settings.welfareAmount || 0;
   const interestRate = (settings.interestRate || 5) / 100;
   const interestAmount = Math.round(dailyAmount * interestRate);
-  const totalDebt = dailyAmount + welfare + interestAmount;
   
   const writes = [];
   
   activeMembers.forEach(member => {
     if (!depositToday.has(member.phone)) {
-      // Add debt transaction
+      // 1. Debt for the daily amount
       writes.push(db.ref('transactions').push({
         memberPhone: member.phone,
         memberName: member.name,
         type: 'debt',
-        amount: totalDebt,
-        description: `Automatic debt for ${todayDateStr} (no deposit): daily ${dailyAmount} + welfare ${welfare} + interest ${interestAmount}`,
+        amount: dailyAmount,
+        description: `Auto penalty (daily) for ${todayDateStr} – no deposit`,
         date: Date.now(),
         autoMidnight: true
       }));
+      // 2. Interest portion -> profit pool
+      if (interestAmount > 0) {
+        writes.push(db.ref('transactions').push({
+          memberPhone: member.phone,
+          memberName: member.name,
+          type: 'fine',
+          amount: interestAmount,
+          description: `Auto penalty interest (${settings.interestRate}%) for ${todayDateStr} – no deposit`,
+          date: Date.now() + 1,
+          autoMidnight: true
+        }));
+      }
     }
   });
   
   if (writes.length) {
     await Promise.all(writes);
-    toast(`${writes.length} member(s) assigned automatic debt for ${todayDateStr}`, '#ef4444');
-    // Refresh data
+    toast(`${writes.length / 2} member(s) penalised (daily + interest) for ${todayDateStr}`, '#ef4444');
+    // Refresh local data
     const txSnap = await db.ref('transactions').once('value');
     transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
     computePots();
     refreshUI();
   } else {
-    console.log("All members made a deposit today – no debts assigned.");
+    console.log("All members deposited – no penalties.");
   }
   
   lastProcessedDate = todayDateStr;
