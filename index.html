@@ -606,7 +606,10 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
 </div>
 <div class="card" id="midnight-card" style="text-align: center; background: var(--bg3);">
   <div class="label">⏰ Next Debt Check</div>
-  <div id="midnight-timer" style="font-family: 'JetBrains Mono', monospace; font-size: 1.2rem; font-weight: 700; color: var(--gold);">--:--:--</div>
+  <div id="midnight-timer" style="font-family: 'JetBrains Mono', monospace; font-size: 1.2rem; font-weight: 700; color: var(--gold);">--:--:--</div><div class="card" id="warning-card" style="background: var(--red2); border-color: var(--red);">
+  <div class="label" style="color: var(--red);">⚠️ Today's Pending Deposits</div>
+  <div id="pending-deposit-list" style="margin-top: 8px; font-size: 0.8rem;"></div>
+</div>
   <div class="micro muted">Members without any deposit today will be charged daily amount + welfare + interest</div>
 </div>
       <div class="stats-strip">
@@ -1437,6 +1440,48 @@ function computePots() {
     updateLoanRepaidStatus(phone);}
   }
 }
+function updatePendingDepositWarning() {
+  const container = document.getElementById('pending-deposit-list');
+  if (!container) return;
+
+  const todayStart = new Date().setHours(0,0,0,0);
+  const todayEnd = new Date().setHours(23,59,59,999);
+  
+  // Find members who already deposited today
+  const depositedToday = new Set();
+  transactions.forEach(tx => {
+    if (tx.type === 'deposit' && tx.date >= todayStart && tx.date <= todayEnd && tx.memberPhone) {
+      depositedToday.add(tx.memberPhone);
+    }
+  });
+  
+  // Active members who have NOT deposited today
+  const pending = members.filter(m => m.approved && !depositedToday.has(m.phone));
+  
+  if (pending.length === 0) {
+    container.innerHTML = '<div class="micro" style="color: var(--green);">✅ All members have paid today. No penalties will be applied at midnight.</div>';
+    return;
+  }
+  
+  const dailyAmount = settings.dailyAmount || 2500;
+  const interestRate = (settings.interestRate || 5) / 100;
+  const interestAmount = Math.round(dailyAmount * interestRate);
+  const totalPenalty = dailyAmount + interestAmount;
+  
+  const listHtml = pending.map(m => `
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+      <span>${escapeHtml(m.name)}</span>
+      <span class="micro" style="color: var(--red);">⚠️ will be charged UGX ${totalPenalty.toLocaleString()} at midnight</span>
+    </div>
+  `).join('');
+  
+  container.innerHTML = `
+    <div class="micro" style="margin-bottom: 6px;">The following members have not deposited today:</div>
+    ${listHtml}
+    <div class="micro" style="margin-top: 8px;">They will be automatically charged <strong>daily amount + interest (${settings.interestRate}%)</strong> if they don't pay before the countdown ends.</div>
+  `;
+}
+
 async function updateLoanRepaidStatus(phone) {
   console.log(`updateLoanRepaidStatus called for phone ${phone}`);
   const member = members.find(m => m.phone === phone);
@@ -1680,7 +1725,7 @@ function updateHomeUI(){
       const cls=i<idx?'rot-chip-done':i===idx?'rot-chip-cur':'rot-chip-next';
       return '<span class="rot-chip '+cls+'">'+(i<idx?'✅':i===idx?'💰':'⏳')+' '+(i+1)+'. '+(m?.name||'?')+'</span>';
     }).join('');
-  }else{document.getElementById('weekly-payee-name').innerText='—';}
+  }else{document.getElementById('weekly-payee-name').innerText='—';}updatePendingDeposit
 }
 function updateAccountBalances(){
   if(!currentUser||currentUser.isAdmin)return;
