@@ -604,7 +604,11 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
   <div class="weekly-receiver-label">⭐ This Week's Receiver</div>
   <div class="weekly-receiver-name" id="weekly-payee-name">—</div>
 </div>
-
+<div class="card" id="midnight-card" style="text-align: center; background: var(--bg3);">
+  <div class="label">⏰ Next Debt Check</div>
+  <div id="midnight-timer" style="font-family: 'JetBrains Mono', monospace; font-size: 1.2rem; font-weight: 700; color: var(--gold);">--:--:--</div>
+  <div class="micro muted">Members without any deposit today will be charged daily amount + welfare + interest</div>
+</div>
       <div class="stats-strip">
         <div class="ss-tile ss-t-gold"><div class="ss-ico">💰</div><div class="ss-val sv-gold" id="total-weekly-display">UGX 0</div><div class="ss-lbl">Weekly Total</div></div>
         <div class="ss-tile ss-t-green"><div class="ss-ico">💎</div><div class="ss-val sv-green" id="available-display">UGX 0</div><div class="ss-lbl">Available</div></div>
@@ -1128,6 +1132,115 @@ const THEME_PALETTES={
   violet:{name:'Violet Glow',primary:'#7c3aed',primary2:'#5b21b6',accent:'#c084fc',success:'#22c55e'},
   blackgold:{name:'Black Gold',primary:'#ca8a04',primary2:'#854d0e',accent:'#facc15',success:'#22c55e'}
 };
+// Get the start of today (local midnight)
+function getTodayStart() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+// Get next midnight (today's midnight if not passed, else tomorrow's)
+function getNextMidnight() {
+  const now = new Date();
+  const midnight = new Date(now);
+  midnight.setHours(24, 0, 0, 0); // next midnight
+  return midnight.getTime();
+}
+
+// Update countdown timer on home page
+function updateMidnightTimer() {
+  const timerEl = document.getElementById('midnight-timer');
+  if (!timerEl) return;
+  const now = Date.now();
+  const next = getNextMidnight();
+  const diff = next - now;
+  if (diff <= 0) {
+    timerEl.textContent = "00:00:00";
+    return;
+  }
+  const hours = Math.floor(diff / 3600000);
+  const minutes = Math.floor((diff % 3600000) / 60000);
+  const seconds = Math.floor((diff % 60000) / 1000);
+  timerEl.textContent = `${hours.toString().padStart(2,'0')}:${minutes.toString().padStart(2,'0')}:${seconds.toString().padStart(2,'0')}`;
+}
+
+// Check if midnight has passed and we haven't processed today yet
+let lastProcessedDate = null;
+
+async function checkAndAssignDebts() {
+  const todayStart = getTodayStart();
+  const todayDateStr = new Date(todayStart).toISOString().slice(0,10);
+  
+  // If we already processed today, skip
+  if (lastProcessedDate === todayDateStr) return;
+  
+  // Get current time
+  const now = Date.now();
+  if (now < getNextMidnight() - 5000) return; // not yet midnight (allow 5 sec slack)
+  
+  console.log("Midnight passed – assigning debts for", todayDateStr);
+  
+  // Find all approved members
+  const activeMembers = members.filter(m => m.approved);
+  
+  // For each member, check if they have ANY deposit transaction today
+  const depositToday = new Set();
+  transactions.forEach(tx => {
+    if (tx.type === 'deposit' && tx.date >= todayStart && tx.date <= todayStart + 86400000 - 1) {
+      depositToday.add(tx.memberPhone);
+    }
+  });
+  
+  const dailyAmount = settings.dailyAmount || 2500;
+  const welfare = settings.welfareAmount || 0;
+  const interestRate = (settings.interestRate || 5) / 100;
+  const interestAmount = Math.round(dailyAmount * interestRate);
+  const totalDebt = dailyAmount + welfare + interestAmount;
+  
+  const writes = [];
+  
+  activeMembers.forEach(member => {
+    if (!depositToday.has(member.phone)) {
+      // Add debt transaction
+      writes.push(db.ref('transactions').push({
+        memberPhone: member.phone,
+        memberName: member.name,
+        type: 'debt',
+        amount: totalDebt,
+        description: `Automatic debt for ${todayDateStr} (no deposit): daily ${dailyAmount} + welfare ${welfare} + interest ${interestAmount}`,
+        date: Date.now(),
+        autoMidnight: true
+      }));
+    }
+  });
+  
+  if (writes.length) {
+    await Promise.all(writes);
+    toast(`${writes.length} member(s) assigned automatic debt for ${todayDateStr}`, '#ef4444');
+    // Refresh data
+    const txSnap = await db.ref('transactions').once('value');
+    transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
+    computePots();
+    refreshUI();
+  } else {
+    console.log("All members made a deposit today – no debts assigned.");
+  }
+  
+  lastProcessedDate = todayDateStr;
+  localStorage.setItem('lastDebtProcessDate', lastProcessedDate);
+}
+
+// Start the checker: runs every minute
+function startMidnightChecker() {
+  // Restore last processed date from localStorage
+  lastProcessedDate = localStorage.getItem('lastDebtProcessDate');
+  // Update timer every second
+  setInterval(updateMidnightTimer, 1000);
+  // Check every minute if midnight passed
+  setInterval(checkAndAssignDebts, 60000);
+  // Also run once on page load (in case midnight just passed)
+  setTimeout(checkAndAssignDebts, 5000);
+}
 function getThemePalette(key){return THEME_PALETTES[key]||THEME_PALETTES.facebook;}
 function buildThemeOptions(){return Object.entries(THEME_PALETTES).map(([key,p])=>'<option value="'+key+'">'+p.name+'</option>').join('');}
 function hexToRgba(hex,alpha){
@@ -3422,6 +3535,7 @@ window.onload = function() {
   applyLanguageToUI();
   initAndComplete();
 };
+startMidnightChecker();
 
 // Also ensure that if Firebase calls forceShowLogin, it doesn't conflict
 // Override forceShowLogin to use our new function
