@@ -2570,18 +2570,75 @@ window.updateNotice = function() {
     toast('Publish failed', '#ef4444');
   });
 };
-window.loadDailyList=function(){dailyChecked={};const list=document.getElementById('daily-list');list.innerHTML=members.map(m=>'<div class="daily-check" onclick="toggleDaily(\''+m.phone+'\')"><div class="dc-box" id="daily-'+m.phone.replace(/\W/g,'_')+'">✓</div><span>'+m.name+'</span></div>').join('');};
-window.toggleDaily=function(phone){const box=document.getElementById('daily-'+phone.replace(/\W/g,'_'));const p=box.closest('.daily-check');if(p.classList.contains('checked')){p.classList.remove('checked');delete dailyChecked[phone];}else{p.classList.add('checked');dailyChecked[phone]=true;}};
+window.loadDailyList = function() {
+  dailyChecked = {};
+  const list = document.getElementById('daily-list');
+  if (!list) return;
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayTimestamp = today.getTime();
+  const tomorrowTimestamp = todayTimestamp + 86400000;
+  
+  // Find members who already made a deposit today
+  const alreadySavedToday = new Set();
+  transactions.forEach(tx => {
+    if (tx.type === 'deposit' && tx.date >= todayTimestamp && tx.date < tomorrowTimestamp && tx.memberPhone) {
+      alreadySavedToday.add(tx.memberPhone);
+    }
+  });
+  
+  list.innerHTML = members.map(m => {
+    const saved = alreadySavedToday.has(m.phone);
+    if (saved) dailyChecked[m.phone] = true; // pre-check
+    return `
+      <div class="daily-check ${saved ? 'checked' : ''}" onclick="toggleDaily('${m.phone}')">
+        <div class="dc-box" id="daily-${m.phone.replace(/\W/g, '_')}">✓</div>
+        <span>${escapeHtml(m.name)} ${saved ? '<span style="color:var(--green); margin-left:6px;">✅</span>' : ''}</span>
+      </div>
+    `;
+  }).join('');
+};
+window.toggleDaily = function(phone) {
+  const box = document.getElementById('daily-' + phone.replace(/\W/g, '_'));
+  const p = box.closest('.daily-check');
+  if (p.classList.contains('checked')) {
+    p.classList.remove('checked');
+    delete dailyChecked[phone];
+  } else {
+    p.classList.add('checked');
+    dailyChecked[phone] = true;
+  }
+};
 window.saveDaily = function() {
   const phones = Object.keys(dailyChecked);
   if (!phones.length) {
     toast('Select at least one member', '#ef4444');
     return;
   }
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayTimestamp = today.getTime();
+  const tomorrowTimestamp = todayTimestamp + 86400000;
+  
+  // Find who already saved today
+  const alreadySavedToday = new Set();
+  transactions.forEach(tx => {
+    if (tx.type === 'deposit' && tx.date >= todayTimestamp && tx.date < tomorrowTimestamp && tx.memberPhone) {
+      alreadySavedToday.add(tx.memberPhone);
+    }
+  });
+  
   const da = settings.dailyAmount || 2500;
   const writes = [];
   
   phones.forEach(phone => {
+    if (alreadySavedToday.has(phone)) {
+      // Skip – already saved today
+      console.log(`${phone} already saved today, skipping`);
+      return;
+    }
     const member = members.find(m => m.phone === phone);
     if (member) {
       buildDepositTransactions(member, da, Date.now(), 'Daily savings').forEach(tx => {
@@ -2590,11 +2647,15 @@ window.saveDaily = function() {
     }
   });
   
+  if (writes.length === 0) {
+    toast('All selected members have already saved today', '#ef4444');
+    return;
+  }
+  
   Promise.all(writes).then(() => {
     toast('Deposits saved! ✅', '#10b981');
     dailyChecked = {};
     closeOv('ov-daily');
-    // Force immediate refresh
     computePots();
     updateHomeUI();
     if (currentScreen === 'ledger') loadLedger('all');
