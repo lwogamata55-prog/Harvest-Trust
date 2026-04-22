@@ -606,11 +606,11 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
 </div>
 <div class="card" id="midnight-card" style="text-align: center; background: var(--bg3);">
   <div class="label">⏰ Next Debt Check</div>
-  <div id="midnight-timer" style="font-family: 'JetBrains Mono', monospace; font-size: 1.2rem; font-weight: 700; color: var(--gold);">--:--:--</div><div class="card" id="warning-card" style="background: var(--red2); border-color: var(--red);">
-  <div class="label" style="color: var(--red);">⚠️ Today's Pending Deposits</div>
-  <div id="pending-deposit-list" style="margin-top: 8px; font-size: 0.8rem;"></div>
-</div>
-  <div class="micro muted">Members without any deposit today will be charged daily amount + welfare + interest</div>
+  <div style="display: flex; align-items: baseline; justify-content: center; gap: 12px; flex-wrap: wrap;">
+    <div id="midnight-timer" style="font-family: 'JetBrains Mono', monospace; font-size: 1.2rem; font-weight: 700; color: var(--gold);">--:--:--</div>
+    <div id="anniversary-counter" class="micro" style="background: var(--bg); padding: 2px 10px; border-radius: 99px; color: var(--t2);">🎂 -- days</div>
+  </div>
+  <div class="micro muted">Members without any deposit today will be charged daily amount + interest (no welfare).</div>
 </div>
       <div class="stats-strip">
         <div class="ss-tile ss-t-gold"><div class="ss-ico">💰</div><div class="ss-val sv-gold" id="total-weekly-display">UGX 0</div><div class="ss-lbl">Weekly Total</div></div>
@@ -803,7 +803,10 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
 </div>
 <div class="ov" id="ov-add-mbr" onclick="maybeClose(event,'ov-add-mbr')"><div class="bs"><div class="bs-title">👤 Add Member</div><div class="fgrp"><label class="flbl">Full Name</label><input type="text" id="mbr-name" class="inp" placeholder="Full Name"></div><div class="fgrp"><label class="flbl">Phone</label><input type="tel" id="mbr-phone" class="inp" placeholder="Phone number"></div><div class="fgrp"><label class="flbl">Password (optional)</label><input type="password" id="mbr-pw" class="inp" placeholder="Default: last 4 digits of phone"></div><div class="fgrp"><label class="flbl">Join Date</label><input type="date" id="mbr-join" class="inp"></div><div class="drag-zone" id="mbr-photo-zone" onclick="document.getElementById('mbr-photo-input').click()"><span>📸 Tap to upload photo (optional)</span><input type="file" id="mbr-photo-input" accept="image/*" style="display:none" onchange="handlePhotoInput(this,'mbr-photo-preview','mbr-photo-data')"><img id="mbr-photo-preview" class="image-preview" style="display:none"></div><input type="hidden" id="mbr-photo-data"><button class="btn btn-gold btn-full" onclick="addMember()">✅ Add Member</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-add-mbr')">Cancel</button></div></div>
 <div class="ov" id="ov-edit-member" onclick="maybeClose(event,'ov-edit-member')"><div class="bs"><div class="bs-title">✏️ Edit Member</div><input type="hidden" id="edit-member-id"><div class="fgrp"><label class="flbl">Full Name</label><input type="text" id="edit-mbr-name" class="inp" placeholder="Full Name"></div><div class="fgrp"><label class="flbl">Phone</label><input type="tel" id="edit-mbr-phone" class="inp" placeholder="Phone"></div><div class="drag-zone" id="edit-photo-zone" onclick="document.getElementById('edit-photo-input').click()"><span>📸 Tap to change photo</span><input type="file" id="edit-photo-input" accept="image/*" style="display:none" onchange="handlePhotoInput(this,'edit-photo-preview','edit-mbr-photo')"><img id="edit-photo-preview" class="image-preview" style="display:none"></div><input type="hidden" id="edit-mbr-photo"><div class="fgrp"><label class="flbl">Join Date</label><input type="date" id="edit-mbr-join" class="inp"></div><button class="btn btn-gold btn-full" onclick="updateMember()">💾 Save Changes</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-edit-member')">Cancel</button></div></div>
-<div class="ov" id="ov-settings" onclick="maybeClose(event,'ov-settings')"><div class="bs"><div class="bs-title">⚙️ Group Settings</div><div class="fgrp"><label class="flbl">Group Name</label><input type="text" id="set-groupname" class="inp" placeholder="Group Name"></div><div class="fgrp"><label class="flbl">Daily Amount</label><input type="number" id="set-daily" class="inp"></div><div class="fgrp"><label class="flbl">Welfare Deduction</label><input type="number" id="set-welfare-amount" class="inp"></div><div class="fgrp"><label class="flbl">Fine Contribution</label><input type="number" id="set-fine-contribution" class="inp"></div><div class="fgrp"><label class="flbl">Default Fine</label><input type="number" id="set-fine" class="inp"></div><div class="fgrp"><label class="flbl">WhatsApp Link</label><input type="url" id="set-whatsapp" class="inp" placeholder="https://chat.whatsapp.com/..."></div><div class="fgrp"><label class="flbl">Theme Mode</label><select id="set-theme-mode" class="inp" onchange="previewAdminTheme()"><option value="light">Light</option><option value="dark">Dark</option></select></div><div class="fgrp"><label class="flbl">Theme Color</label><select id="set-theme-color" class="inp" onchange="previewAdminTheme()"></select><div class="theme-note">Admin can choose from 14 color styles. Saving updates all members live.</div></div><div class="theme-preview"><div class="theme-dot"></div><div class="theme-preview-text"><strong id="theme-preview-name">Facebook Blue</strong><br><span>Live color preview for buttons, header, navigation and cards.</span></div></div><div class="fgrp"><label class="flbl">Group Banner</label><div class="drag-zone" onclick="document.getElementById('banner-file-input').click()"><span>🖼️ Tap to upload banner image</span><input type="file" id="banner-file-input" accept="image/*" style="display:none" onchange="handlePhotoInput(this,'banner-preview','set-banner-url')"><img id="banner-preview" class="image-preview" style="display:none"></div><input type="hidden" id="set-banner-url"></div><button class="btn btn-gold btn-full" onclick="doSaveSettings()">💾 Save Settings</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-settings')">Cancel</button></div></div>
+<div class="ov" id="ov-settings" onclick="maybeClose(event,'ov-settings')"><div class="bs"><div class="bs-title">⚙️ Group Settings</div><div class="fgrp"><label class="flbl">Group Name</label><input type="text" id="set-groupname" class="inp" placeholder="Group Name"></div><div class="fgrp"><label class="flbl">Daily Amount</label><input type="number" id="set-daily" class="inp"></div><div class="fgrp"><label class="flbl">Welfare Deduction</label><input type="number" id="set-welfare-amount" class="inp"></div><div class="fgrp"><label class="flbl">Fine Contribution</label><input type="number" id="set-fine-contribution" class="inp"></div><div class="fgrp"><label class="flbl">Default Fine</label><input type="number" id="set-fine" class="inp"></div><div class="input-field">
+  <label>Group Start Date (anniversary)</label>
+  <input type="date" id="groupStartDate" value="${settings.groupStartDate || ''}">
+</div><div class="fgrp"><label class="flbl">WhatsApp Link</label><input type="url" id="set-whatsapp" class="inp" placeholder="https://chat.whatsapp.com/..."></div><div class="fgrp"><label class="flbl">Theme Mode</label><select id="set-theme-mode" class="inp" onchange="previewAdminTheme()"><option value="light">Light</option><option value="dark">Dark</option></select></div><div class="fgrp"><label class="flbl">Theme Color</label><select id="set-theme-color" class="inp" onchange="previewAdminTheme()"></select><div class="theme-note">Admin can choose from 14 color styles. Saving updates all members live.</div></div><div class="theme-preview"><div class="theme-dot"></div><div class="theme-preview-text"><strong id="theme-preview-name">Facebook Blue</strong><br><span>Live color preview for buttons, header, navigation and cards.</span></div></div><div class="fgrp"><label class="flbl">Group Banner</label><div class="drag-zone" onclick="document.getElementById('banner-file-input').click()"><span>🖼️ Tap to upload banner image</span><input type="file" id="banner-file-input" accept="image/*" style="display:none" onchange="handlePhotoInput(this,'banner-preview','set-banner-url')"><img id="banner-preview" class="image-preview" style="display:none"></div><input type="hidden" id="set-banner-url"></div><button class="btn btn-gold btn-full" onclick="doSaveSettings()">💾 Save Settings</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-settings')">Cancel</button></div></div>
 <div class="ov" id="ov-loan-request" onclick="maybeClose(event,'ov-loan-request')"><div class="bs"><div class="bs-title">💰 Request Loan</div><div id="loan-info" class="hint-box"></div><div class="fgrp"><label class="flbl">Amount (UGX)</label><input type="number" id="loan-amount" class="inp" placeholder="Enter amount" min="1000"><div id="loan-amount-error" class="micro" style="margin-top:4px; min-height:20px;"></div></div><div class="fgrp"><label class="flbl">Reason (optional)</label><input type="text" id="loan-reason" class="inp" placeholder="e.g. Emergency, Medical"></div><button class="btn btn-amber btn-full" onclick="submitLoanRequest(event)">📨 Submit Loan Request</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-loan-request')">Cancel</button></div></div>
 <div class="ov" id="ov-loan-settings" onclick="maybeClose(event,'ov-loan-settings')">
   <div class="bs">
@@ -1141,8 +1144,36 @@ function getTodayStart() {
   d.setHours(0, 0, 0, 0);
   return d.getTime();
 }
+function getDaysUntilAnniversary() {
+  if (!settings.groupStartDate) return null;
+  const start = new Date(settings.groupStartDate);
+  if (isNaN(start.getTime())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const currentYear = today.getFullYear();
+  let anniversaryThisYear = new Date(currentYear, start.getMonth(), start.getDate());
+  if (anniversaryThisYear < today) {
+    anniversaryThisYear = new Date(currentYear + 1, start.getMonth(), start.getDate());
+  }
+  const diffTime = anniversaryThisYear - today;
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays;
+}
 
-// Get next midnight (today's midnight if not passed, else tomorrow's)
+function updateAnniversaryCounter() {
+  const el = document.getElementById('anniversary-counter');
+  if (!el) return;
+  const days = getDaysUntilAnniversary();
+  if (days === null) {
+    el.textContent = '🎂 -- days';
+    return;
+  }
+  if (days === 0) {
+    el.textContent = '🎂 Today!';
+  } else {
+    el.textContent = `🎂 ${days} day${days !== 1 ? 's' : ''}`;
+  }
+}
 function getNextMidnight() {
   const now = new Date();
   const midnight = new Date(now);
@@ -1241,8 +1272,12 @@ function startMidnightChecker() {
   // Restore last processed date from localStorage
   lastProcessedDate = localStorage.getItem('lastDebtProcessDate');
   // Update timer every second
-  setInterval(updateMidnightTimer, 1000);
-  // Check every minute if midnight passed
+ setInterval(() => {
+  if (currentScreen === 'home') {
+    updateMidnightTimer();
+    updateAnniversaryCounter();
+  }
+}, 1000);
   setInterval(checkAndAssignDebts, 60000);
   // Also run once on page load (in case midnight just passed)
   setTimeout(checkAndAssignDebts, 5000);
@@ -1440,48 +1475,6 @@ function computePots() {
     updateLoanRepaidStatus(phone);}
   }
 }
-function updatePendingDepositWarning() {
-  const container = document.getElementById('pending-deposit-list');
-  if (!container) return;
-
-  const todayStart = new Date().setHours(0,0,0,0);
-  const todayEnd = new Date().setHours(23,59,59,999);
-  
-  // Find members who already deposited today
-  const depositedToday = new Set();
-  transactions.forEach(tx => {
-    if (tx.type === 'deposit' && tx.date >= todayStart && tx.date <= todayEnd && tx.memberPhone) {
-      depositedToday.add(tx.memberPhone);
-    }
-  });
-  
-  // Active members who have NOT deposited today
-  const pending = members.filter(m => m.approved && !depositedToday.has(m.phone));
-  
-  if (pending.length === 0) {
-    container.innerHTML = '<div class="micro" style="color: var(--green);">✅ All members have paid today. No penalties will be applied at midnight.</div>';
-    return;
-  }
-  
-  const dailyAmount = settings.dailyAmount || 2500;
-  const interestRate = (settings.interestRate || 5) / 100;
-  const interestAmount = Math.round(dailyAmount * interestRate);
-  const totalPenalty = dailyAmount + interestAmount;
-  
-  const listHtml = pending.map(m => `
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-      <span>${escapeHtml(m.name)}</span>
-      <span class="micro" style="color: var(--red);">⚠️ will be charged UGX ${totalPenalty.toLocaleString()} at midnight</span>
-    </div>
-  `).join('');
-  
-  container.innerHTML = `
-    <div class="micro" style="margin-bottom: 6px;">The following members have not deposited today:</div>
-    ${listHtml}
-    <div class="micro" style="margin-top: 8px;">They will be automatically charged <strong>daily amount + interest (${settings.interestRate}%)</strong> if they don't pay before the countdown ends.</div>
-  `;
-}
-
 async function updateLoanRepaidStatus(phone) {
   console.log(`updateLoanRepaidStatus called for phone ${phone}`);
   const member = members.find(m => m.phone === phone);
@@ -1725,7 +1718,7 @@ function updateHomeUI(){
       const cls=i<idx?'rot-chip-done':i===idx?'rot-chip-cur':'rot-chip-next';
       return '<span class="rot-chip '+cls+'">'+(i<idx?'✅':i===idx?'💰':'⏳')+' '+(i+1)+'. '+(m?.name||'?')+'</span>';
     }).join('');
-  }else{document.getElementById('weekly-payee-name').innerText='—';}updatePendingDepositWarning();
+  }else{document.getElementById('weekly-payee-name').innerText='—';}updateAnniversaryCounter();updateAnniversaryCounter();
 }
 function updateAccountBalances(){
   if(!currentUser||currentUser.isAdmin)return;
@@ -3475,6 +3468,8 @@ window.doSaveSettings=function(){
   settings.welfareAmount=+document.getElementById('set-welfare-amount').value;
   settings.fineContribution=+document.getElementById('set-fine-contribution').value;
   settings.fineAmount=+document.getElementById('set-fine').value;
+  settings.groupStartDate = document.getElementById("groupStartDate").value;
+db.ref("settings").update({ groupStartDate: settings.groupStartDate });
   settings.whatsappLink=document.getElementById('set-whatsapp').value;
   settings.bannerData=document.getElementById('set-banner-url').value;
   settings.themeMode=document.getElementById('set-theme-mode')?.value||'light';
@@ -3490,7 +3485,7 @@ window.openWhatsAppReminder=function(){let msg=document.getElementById('reminder
 window.copyReminderMessage=function(){let msg=document.getElementById('reminder-msg').value;const bene=members.find(m=>m.id===rotation.order?.[rotation.currentIndex||0]);msg=msg.replace('{beneficiary}',bene?.name||'—');navigator.clipboard?.writeText(msg);toast(t('copy_message'),'#06b6d4');};
 window.unlockAdmin=function(){if(document.getElementById('adm-pwd').value===ADMIN_PASSWORD){adminUnlocked=true;document.getElementById('adm-lock').classList.add('hidden');document.getElementById('adm-panel').classList.remove('hidden');document.getElementById('adm-pwd').value='';currentAdminTab='savings';document.querySelectorAll('.admin-tab').forEach(t=>t.classList.remove('active'));document.querySelector('[data-tab="savings"]')?.classList.add('active');renderAdminTab();toast(t('admin_unlocked'),'#10b981');}else{toast(t('incorrect_admin'),'#ef4444');document.getElementById('adm-pwd').value='';}};
 window.lockAdmin=function(){adminUnlocked=false;document.getElementById('adm-lock').classList.remove('hidden');document.getElementById('adm-panel').classList.add('hidden');toast(t('admin_locked'),'#06b6d4');};
-window.goTab=function(tab,btn){document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));document.getElementById('t-'+tab)?.classList.add('on');if(btn){document.querySelectorAll('.ni').forEach(b=>b.classList.remove('on'));btn.classList.add('on');}currentScreen=tab;if(tab==='home'){updateHomeRecent();updateHomeUI();}if(tab==='ledger')loadLedger('all');if(tab==='account'){updateAccountUI();updateAccountBalances();}if(tab==='admin'){if(currentUser?.isAdmin&&adminUnlocked){document.getElementById('adm-lock').classList.add('hidden');document.getElementById('adm-panel').classList.remove('hidden');renderAdminTab();}else{document.getElementById('adm-lock').classList.remove('hidden');document.getElementById('adm-panel').classList.add('hidden');}}applyLanguageToUI();if (tab === 'wallet') {
+window.goTab=function(tab,btn){document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));document.getElementById('t-'+tab)?.classList.add('on');if(btn){document.querySelectorAll('.ni').forEach(b=>b.classList.remove('on'));btn.classList.add('on');}currentScreen=tab;if(tab==='home'){updateHomeRecent();updateHomeUI();updateAnniversaryCounter();}if(tab==='ledger')loadLedger('all');if(tab==='account'){updateAccountUI();updateAccountBalances();}if(tab==='admin'){if(currentUser?.isAdmin&&adminUnlocked){document.getElementById('adm-lock').classList.add('hidden');document.getElementById('adm-panel').classList.remove('hidden');renderAdminTab();}else{document.getElementById('adm-lock').classList.remove('hidden');document.getElementById('adm-panel').classList.add('hidden');}}applyLanguageToUI();if (tab === 'wallet') {
     setTimeout(animateComingSoon, 100); // wait for DOM to render
   }
 };
