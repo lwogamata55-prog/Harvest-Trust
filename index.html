@@ -2688,7 +2688,7 @@ function renderAdminTab(){
 })()}`;
   } else if (currentAdminTab === 'notice') {   c.innerHTML = `<div class="card"><div class  ="sec-h">🎠 ${t('carousel_notices')} <spanclass="pill-badge pill-amber">${mainCarouselNotifs.length}/5</span></div><div id="main-carousel-admin-list" style="margin-bottom:12px">${mainCarouselNotifs.map(n => `<div class="mc"><div><div class="mc-name">${n.icon || '📢'} ${escapeHtml(n.text.slice(0,50))}${n.text.length > 50 ? '…' : ''}</div><div class="mc-phone">${n.imageData ? '📷 Image' : ''} ${n.payee ? `👤 ${escapeHtml(n.payee)}` : ''}</div></div><button class="btn btn-sm btn-red" onclick="removeCarouselNotice('${n.id}')">${t('delete_btn')}</button></div>`).join('')}</div>${mainCarouselNotifs.length < 5 ? `<button class="btn btn-teal btn-full" onclick="openOv('ov-carousel-compose')">${t('add_carousel')}</button>` : '<div class="hint-box" style="text-align:center;margin-bottom:0">Maximum 5 notices reached. Delete one to add more.</div>'}</div>`;
   }else if(currentAdminTab==='harvest'){
-    c.innerHTML=`<div class="card"><div class="sec-h">${t('harvest_actions')}</div><button class="btn btn-gold btn-full" onclick="openOv('ov-daily');loadDailyList()">${t('record_daily')}</button><button class="btn btn-teal btn-full" onclick="openOv('ov-add-tx');populateMemberDropdowns()">${t('add_transaction')}</button><button class="btn btn-green btn-full" onclick="openOv('ov-mark-paid');loadMarkPaidInfo()">${t('mark_payout')}</button><button class="btn btn-purple btn-full" onclick="openOv('ov-rot-manage');buildDragRotation()">${t('manage_rotation')}</button><button class="btn btn-sec btn-full" onclick="openOv('ov-cover');buildCoverDaysList();populateMemberDropdowns()">${t('cover_missed')}</button><button class="btn btn-teal btn-full" onclick="openUpcomingDays(); populateUpcomingMemberDropdown()">📅 Upcoming Days Savings (prepay)</button><button class="btn btn-sec btn-full" onclick="openOv('ov-reminder')">${t('send_reminder')}</button></div>`;
+    c.innerHTML=`<div class="card"><div class="sec-h">${t('harvest_actions')}</div><button class="btn btn-gold btn-full" onclick="openOv('ov-daily');loadDailyList()">${t('record_daily')}</button><button class="btn btn-teal btn-full" onclick="openOv('ov-add-tx');populateMemberDropdowns()">${t('add_transaction')}</button><button class="btn btn-green btn-full" onclick="openOv('ov-mark-paid');loadMarkPaidInfo()">${t('mark_payout')}</button><button class="btn btn-purple btn-full" onclick="openOv('ov-rot-manage');buildDragRotation()">${t('manage_rotation')}</button><button class="btn btn-amber btn-full" onclick="advanceRotation()">⏩ Advance to Next Member</button><button class="btn btn-sec btn-full" onclick="openOv('ov-cover');buildCoverDaysList();populateMemberDropdowns()">${t('cover_missed')}</button><button class="btn btn-teal btn-full" onclick="openUpcomingDays(); populateUpcomingMemberDropdown()">📅 Upcoming Days Savings (prepay)</button><button class="btn btn-sec btn-full" onclick="openOv('ov-reminder')">${t('send_reminder')}</button></div>`;
   }else if(currentAdminTab==='users'){
     c.innerHTML=`<div class="card"><div class="sec-h">${t('quick_actions')}</div><button class="btn btn-gold btn-full" onclick="openOv('ov-add-mbr')">${t('add_member')}</button><button class="btn btn-teal btn-full" onclick="openOv('ov-apps');loadApplications()">${t('view_applications')} <span id="apps-badge-wrap" style="display:none;background:var(--red);color:#fff;border-radius:99px;padding:1px 7px;font-size:0.65rem;font-weight:800;margin-left:4px"><span id="apps-count">0</span></span></button></div><div class="card"><div class="sec-h">${t('all_members')} <span class="pill-badge pill-green">${members.length}</span></div><div id="admin-members-list"></div></div>`;
     updateAdminMembersList();
@@ -2783,6 +2783,29 @@ window.deleteMember = function(id) {
     console.error(err);
     toast('Delete failed', '#ef4444');
   });
+};
+window.advanceRotation = function() {
+  if (!rotation.order || rotation.order.length === 0) {
+    toast('No rotation order set', '#ef4444');
+    return;
+  }
+  const currentIndex = rotation.currentIndex || 0;
+  const nextIndex = (currentIndex + 1) % rotation.order.length;
+  const nextMember = members.find(m => m.id === rotation.order[nextIndex]);
+  if (!nextMember) {
+    toast('Next member not found', '#ef4444');
+    return;
+  }
+  if (confirm(`Advance rotation from ${members.find(m => m.id === rotation.order[currentIndex])?.name} to ${nextMember.name}? This does not affect money.`)) {
+    db.ref('rotation').update({ currentIndex: nextIndex }).then(() => {
+      toast(`Rotation advanced to ${nextMember.name}`, '#10b981');
+      updateHomeUI(); // refresh home page to show new payee
+      if (currentAdminTab === 'savings') renderAdminTab(); // refresh admin savings tab if open
+    }).catch(err => {
+      console.error(err);
+      toast('Failed to advance rotation', '#ef4444');
+    });
+  }
 };
 window.populateMemberDropdowns = function() {
   ['tx-member', 'fine-member', 'welfare-member', 'debt-member', 'cover-member'].forEach(sid => {
