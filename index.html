@@ -66,8 +66,6 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 @keyframes ovIn{from{opacity:0}to{opacity:1}}
 @keyframes bsIn{from{transform:translateY(100%)}to{transform:translateY(0)}}
 @keyframes onlinePulse{0%{opacity:0.5;transform:scale(0.8)}100%{opacity:1;transform:scale(1.2)}}
-#lion-splash{position:fixed;inset:0;z-index:10000;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(ellipse 120% 80% at 80% 0%,rgba(6,182,212,0.1) 0%,transparent 50%),radial-gradient(ellipse 80% 60% at 20% 100%,rgba(245,158,11,0.08) 0%,transparent 50%),#060e1a;transition:opacity 0.8s var(--ease-smooth),transform 0.8s var(--ease-smooth)}
-#lion-splash.out{opacity:0;transform:scale(1.1) translateY(-12px);pointer-events:none}
 .lion-container{position:relative;display:flex;flex-direction:column;align-items:center;animation:splashIn 0.6s var(--ease-spring)}
 .lion-img{width:200px;filter:drop-shadow(0 0 32px rgba(245,158,11,0.35));animation:lionBreathe 2s ease-in-out infinite}
 .lion-ground{width:280px;height:4px;margin-top:-4px;background:linear-gradient(90deg,transparent,rgba(245,158,11,0.5),rgba(255,255,255,0.1),rgba(245,158,11,0.5),transparent);border-radius:99px;animation:groundPulse 2s ease-in-out infinite}
@@ -187,6 +185,22 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   opacity: 0;
   transform: translateY(-100vh);
   animation: fallLetter 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+}
+@keyframes fall {
+  0% { opacity: 0; transform: translateY(-100vh); }
+  80% { opacity: 1; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes growFromGround {
+  0% { opacity: 0; transform: scale(0); }
+  70% { opacity: 1; transform: scale(1.2); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.fall-animation {
+  animation: fall 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+.grow-animation {
+  animation: growFromGround 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 @keyframes fallLetter {
   0% { opacity: 0; transform: translateY(-100vh) rotate(-8deg); }
@@ -590,32 +604,163 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
 </style>
 </head>
 <body>
-<div class="bg-orb bg-orb-1"></div><div class="bg-orb bg-orb-2"></div><div class="bg-orb bg-orb-3"></div>
-<div class="twrap" id="twrap"></div>
-
-<div id="lion-splash">
-  <div class="lion-container">
-    <img class="lion-img" src="https://image2url.com/r2/default/gifs/1773758382752-d0289f80-5a67-4e09-bc0e-8f4405ba5f27.gif" alt="Lion" onerror="this.style.display='none';document.getElementById('lion-fallback').style.display='flex'">
-    <div id="lion-fallback" style="display:none;font-size:5rem;text-align:center;animation:lionBreathe 2s infinite">🦁</div>
-    <div class="lion-ground"></div><div class="lion-dust"><div></div><div></div><div></div><div></div><div></div></div>
+<!-- Blank screen with sequential falling capital letters -->
+<div id="blank-screen" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #f0f2f5; z-index: 20000; display: flex; align-items: center; justify-content: center; flex-direction: column; text-align: center;">
+  <div id="falling-container" style="font-family: 'Syne', sans-serif; font-weight: 800; display: flex; flex-direction: column; align-items: center; gap: 20px;">
+    <!-- Row 1: Harvest -->
+    <div style="display: flex; gap: 4px; flex-wrap: wrap; justify-content: center;">
+      <span id="letter-h" class="fall-letter" style="font-size: 4rem; opacity: 0; display: inline-block;">H</span>
+      <span id="letters-arvest" style="display: flex; gap: 4px;"></span>
+    </div>
+    <!-- Row 2: Trust -->
+    <div style="display: flex; gap: 4px; flex-wrap: wrap; justify-content: center;">
+      <span id="letter-t" class="fall-letter" style="font-size: 4rem; opacity: 0; display: inline-block;">T</span>
+      <span id="letters-rust" style="display: flex; gap: 4px;"></span>
+    </div>
+    <!-- Row 3: Finance -->
+    <div style="display: flex; gap: 4px; flex-wrap: wrap; justify-content: center;">
+      <span id="letter-f" class="fall-letter" style="font-size: 4rem; opacity: 0; display: inline-block;">F</span>
+      <span id="letters-inance" style="display: flex; gap: 4px;"></span>
+    </div>
   </div>
-  <div class="lion-text"><div class="main"><span>Harvest Trust Finance</span></div><div class="sub" id="lion-sub">Loading your pride…</div></div>
-  <div class="lion-progress"><div class="bar"><div class="fill"></div></div></div>
-  <div class="lion-dots"><div></div><div></div><div></div></div>
-  <div class="lion-author">by Lwogamata</div><div class="lion-version">v2.0.0</div>
 </div>
 
+<style>
+.fall-letter {
+  display: inline-block;
+  font-family: 'Syne', sans-serif;
+  font-size: 4rem;
+  font-weight: 800;
+  color: #f59e0b;
+  opacity: 0;
+  transform: translateY(-100vh);
+  animation: elasticFall 0.8s cubic-bezier(0.34, 1.2, 0.64, 1) forwards;
+}
+.grow-letter {
+  display: inline-block;
+  font-family: 'Syne', sans-serif;
+  font-size: 4rem;
+  font-weight: 800;
+  color: #f59e0b;
+  transform: scale(0);
+  opacity: 0;
+  animation: grow 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+@keyframes elasticFall {
+  0% { opacity: 0; transform: translateY(-100vh) rotate(-10deg) scaleY(1); }
+  50% { opacity: 1; transform: translateY(20px) rotate(3deg) scaleY(0.75); }
+  65% { transform: translateY(-5px) rotate(-1deg) scaleY(1.1); }
+  80% { transform: translateY(3px) rotate(0.5deg) scaleY(0.95); }
+  100% { opacity: 1; transform: translateY(0) rotate(0) scaleY(1); }
+}
+@keyframes grow {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+</style>
+
+<script>
+(function() {
+  // Wait for DOM to be fully loaded
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', startAnimation);
+  } else {
+    startAnimation();
+  }
+  function startAnimation() {
+    const h = document.getElementById('letter-h');
+    const t = document.getElementById('letter-t');
+    const f = document.getElementById('letter-f');
+    const arvest = document.getElementById('letters-arvest');
+    const rust = document.getElementById('letters-rust');
+    const inance = document.getElementById('letters-inance');
+
+    // Safety: if any element is missing, log and exit
+    if (!h || !t || !f || !arvest || !rust || !inance) {
+      console.error('Blank screen elements missing – check IDs');
+      // Fallback: remove blank screen and show login immediately
+      const blank = document.getElementById('blank-screen');
+      if (blank) blank.style.display = 'none';
+      const login = document.getElementById('login-screen');
+      if (login) login.classList.remove('hidden');
+      return;
+    }
+
+    const lettersHarvest = ['a','r','v','e','s','t'];
+    const lettersTrust = ['r','u','s','t'];
+    const lettersFinance = ['i','n','a','n','c','e'];
+
+    function addFallingLetters(container, letters, startDelay, stagger = 80) {
+      setTimeout(() => {
+        letters.forEach((letter, idx) => {
+          setTimeout(() => {
+            const span = document.createElement('span');
+            span.className = 'fall-letter';
+            span.textContent = letter;
+            span.style.fontSize = '4rem';
+            span.style.animation = 'elasticFall 0.8s cubic-bezier(0.34,1.2,0.64,1) forwards';
+            container.appendChild(span);
+          }, idx * stagger);
+        });
+      }, startDelay);
+    }
+
+    function addGrowingLetters(container, letters, startDelay, stagger = 80) {
+      setTimeout(() => {
+        letters.forEach((letter, idx) => {
+          setTimeout(() => {
+            const span = document.createElement('span');
+            span.className = 'grow-letter';
+            span.textContent = letter;
+            span.style.fontSize = '4rem';
+            span.style.animation = 'grow 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards';
+            container.appendChild(span);
+          }, idx * stagger);
+        });
+      }, startDelay);
+    }
+
+    // 1. H falls
+    h.style.animation = 'elasticFall 0.8s cubic-bezier(0.34,1.2,0.64,1) forwards';
+    h.style.opacity = '1';
+    addFallingLetters(arvest, lettersHarvest, 900, 80);
+
+    // 2. T falls after "arvest" fully appears
+    setTimeout(() => {
+      t.style.animation = 'elasticFall 0.8s cubic-bezier(0.34,1.2,0.64,1) forwards';
+      t.style.opacity = '1';
+      addGrowingLetters(rust, lettersTrust, 800, 100);
+    }, 1600);
+
+    // 3. F falls after "rust" fully appears
+    setTimeout(() => {
+      f.style.animation = 'elasticFall 0.8s cubic-bezier(0.34,1.2,0.64,1) forwards';
+      f.style.opacity = '1';
+      addGrowingLetters(inance, lettersFinance, 800, 80);
+    }, 3000);
+
+    // 4. After 5 seconds, hide blank screen and show login
+    setTimeout(() => {
+      const blank = document.getElementById('blank-screen');
+      if (blank) blank.style.display = 'none';
+      const login = document.getElementById('login-screen');
+      if (login) login.classList.remove('hidden');
+    }, 5000);
+  }
+})();
+</script>
+<div class="bg-orb bg-orb-1"></div><div class="bg-orb bg-orb-2"></div><div class="bg-orb bg-orb-3"></div>
+<div class="twrap" id="twrap"></div>
 <div id="login-screen" class="auth-container hidden">
-  <div class="auth-deco auth-deco-1">🌾</div><div class="auth-deco auth-deco-2">💰</div><div class="auth-deco auth-deco-3">🦁</div>
+  <div class="auth-deco auth-deco-1">🌾</div>
+  <div class="auth-deco auth-deco-2">💰</div>
+  <div class="auth-deco auth-deco-3">🦁</div>
   <div class="auth-card">
     <div class="auth-brand"><div class="auth-brand-icon">🌿</div></div>
     <div class="auth-title">🌾 Harvest Trust Finance</div>
-    <div class="auth-subtitle">Grow together · rotate wealth</div>
-    <div class="auth-toggle">
-      <button class="auth-toggle-btn active" id="member-toggle" onclick="setLoginMode('member')">Member</button>
-      <button class="auth-toggle-btn" id="admin-toggle" onclick="setLoginMode('admin')">Admin</button>
-    </div>
-    <input type="password" id="login-password" class="auth-input" placeholder="Last 4 digits" maxlength="4" inputmode="numeric" onkeydown="if(event.key==='Enter')doLogin()">
+    <div class="auth-subtitle">Welcome to Harvest Trust Finance</div>
+    <input type="password" id="login-password" class="auth-input" placeholder="Enter Password" onkeydown="if(event.key==='Enter')doLogin()">
     <button class="auth-btn" onclick="doLogin()">🔓 Login</button>
     <div class="auth-link" onclick="showSignup()">Click here to sign up</div>
     <div class="auth-link" onclick="openForgotPassword()">Forgot password?</div>
@@ -656,20 +801,19 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
 </div>
 
 <div id="app">
-  <div id="hdr">
-    <div class="hdr-l">
-      <div class="hdr-logo" id="hdr-logo-wrap">🌿</div>
-      <div><div class="hdr-name" id="hdr-title">Harvest Trust Finance</div><div class="hdr-sub" id="hdr-sub">by Lwogamata</div></div>
-    </div>
-    <div class="hdr-r">
-      <div style="position:relative;cursor:pointer;" onclick="goTab('account',document.getElementById('ni-account'))">
-        <div class="sdot"></div>
-        <span id="notification-badge" class="notification-badge hidden">0</span>
-      </div>
-      <button class="hdr-btn" onclick="toggleShare()">⬆</button>
-      <button class="hdr-btn" onclick="logout()">🚪</button>
-    </div>
+ <div id="hdr">
+  <div class="hdr-l">
+    ...
   </div>
+  <div class="hdr-r">
+    <div style="position:relative;cursor:pointer;" onclick="goTab('account',document.getElementById('ni-account'))">
+      <div class="sdot"></div>
+      <span id="notification-badge" class="notification-badge hidden">0</span>
+    </div>
+    <button class="hdr-btn" onclick="toggleShare()">⬆</button>
+    <button class="hdr-btn" onclick="logout()">🚪</button>
+  </div>
+</div>
 <div id="tab-loading-overlay" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--bg); z-index: 9999; display: none; align-items: center; justify-content: center; flex-direction: column; text-align: center;">
   <div id="loading-letters-container" style="display: flex; flex-direction: column; align-items: center; gap: 16px;"></div>
 </div>
@@ -830,19 +974,44 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
   <button class="ni" id="ni-ledger" onclick="goTab('ledger',this)"><div class="ico">📒</div><span>Ledger</span><div class="ni-bar"></div></button>
  <button class="ni" id="ni-rewards" onclick="goTab('rewards',this)"><div class="ico">🏆</div><span>Rewards</span><div class="ni-bar"></div></button>
   <button class="ni" id="ni-account" onclick="goTab('account',this)"><div class="ico">👤</div><span>Account</span><div class="ni-bar"></div></button>
-  <button class="ni" id="ni-admin" onclick="goTab('admin',this)"><div class="ico">🔐</div><span>Admin</span><div class="ni-bar"></div></button>
 </div>
 </div>
-
-<div class="ov" id="ov-daily" onclick="maybeClose(event,'ov-daily')"><div class="bs"><div class="bs-title">📋 Daily Savings</div><div id="daily-split-info" class="hint-box"></div><div style="font-size:0.76rem;margin-bottom:12px;color:var(--t2);">Check members who paid today — <strong style="color:var(--gold)">UGX <span id="daily-rate">2500</span></strong></div><div id="daily-list"></div><button class="btn btn-gold btn-full" onclick="saveDaily()">💾 Save Deposits</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-daily')">Cancel</button></div></div>
-<div class="ov" id="ov-add-tx" onclick="maybeClose(event,'ov-add-tx')"><div class="bs"><div class="bs-title">➕ Add Transaction</div><div class="fgrp"><label class="flbl">Member</label><select id="tx-member" class="inp"><option value="">Select member</option></select></div><div class="fgrp"><label class="flbl">Type</label><select id="tx-type" class="inp"><option value="deposit">Deposit</option><option value="withdraw">Withdrawal</option><option value="fine">Fine</option><option value="welfare">Welfare</option><option value="expense">Expense</option></select></div><div class="fgrp"><label class="flbl">Amount</label><input type="number" id="tx-amount" class="inp" placeholder="Amount"></div><div class="fgrp"><label class="flbl">Description</label><input type="text" id="tx-desc" class="inp" placeholder="Description"></div><button class="btn btn-gold btn-full" onclick="addTransaction()">💾 Save</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-add-tx')">Cancel</button></div></div>
+<div class="ov" id="ov-add-tx" onclick="maybeClose(event,'ov-add-tx')">
+  <div class="bs">
+    <div class="bs-title">➕ Add Transaction</div>
+    <div class="fgrp">
+      <label class="flbl">Member</label>
+      <select id="tx-member" class="inp"></select>
+    </div>
+    <div class="fgrp">
+      <label class="flbl">Type</label>
+      <select id="tx-type" class="inp">
+        <option value="deposit">Deposit</option>
+        <option value="withdraw">Withdrawal</option>
+        <option value="fine">Fine</option>
+        <option value="welfare">Welfare</option>
+        <option value="expense">Expense</option>
+      </select>
+    </div>
+    <div class="fgrp">
+      <label class="flbl">Amount</label>
+      <input type="number" id="tx-amount" class="inp" placeholder="Amount">
+    </div>
+    <div class="fgrp">
+      <label class="flbl">Description</label>
+      <input type="text" id="tx-desc" class="inp" placeholder="Description">
+    </div>
+    <div id="tx-preview" class="hint-box" style="display: none;"></div>
+    <button class="btn btn-gold btn-full" onclick="addTransactionWithPreview()">💾 Save</button>
+    <button class="btn btn-sec btn-full" onclick="closeOv('ov-add-tx')">Cancel</button>
+  </div>
+</div>
 <div class="ov" id="ov-edit-tx" onclick="maybeClose(event,'ov-edit-tx')"><div class="bs"><div class="bs-title">✏️ Edit Transaction</div><input type="hidden" id="edit-tx-id"><div class="fgrp"><label class="flbl">Member</label><select id="edit-tx-member" class="inp"><option value="">Select member</option></select></div><div class="fgrp"><label class="flbl">Type</label><select id="edit-tx-type" class="inp"><option value="deposit">Deposit</option><option value="withdraw">Withdrawal</option><option value="fine">Fine</option><option value="welfare">Welfare</option><option value="expense">Expense</option></select></div><div class="fgrp"><label class="flbl">Amount</label><input type="number" id="edit-tx-amount" class="inp" placeholder="Amount"></div><div class="fgrp"><label class="flbl">Description</label><input type="text" id="edit-tx-desc" class="inp" placeholder="Description"></div><div style="display:flex;gap:8px;"><button class="btn btn-gold" style="flex:1" onclick="saveEditedTransaction()">💾 Update</button><button class="btn btn-red" style="flex:1" onclick="deleteTransaction()">🗑️ Delete</button></div><button class="btn btn-sec btn-full" style="margin-top:8px" onclick="closeOv('ov-edit-tx')">Cancel</button></div></div>
 <div class="ov" id="ov-add-fine" onclick="maybeClose(event,'ov-add-fine')"><div class="bs"><div class="bs-title">⚡ Add Fine</div><div class="fgrp"><label class="flbl">Member</label><select id="fine-member" class="inp"><option value="">Select member</option></select></div><div class="fgrp"><label class="flbl">Reason</label><input type="text" id="fine-reason" class="inp" placeholder="Reason"></div><div class="fgrp"><label class="flbl">Amount</label><input type="number" id="fine-amount" class="inp" placeholder="Amount"></div><button class="btn btn-amber btn-full" onclick="addFine()">⚡ Apply Fine</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-add-fine')">Cancel</button></div></div>
 <div class="ov" id="ov-add-welfare" onclick="maybeClose(event,'ov-add-welfare')"><div class="bs"><div class="bs-title">🤝 Welfare</div><div class="fgrp"><label class="flbl">Member</label><select id="welfare-member" class="inp"><option value="">Select member</option></select></div><div class="fgrp"><label class="flbl">Description</label><input type="text" id="welfare-desc" class="inp" placeholder="Description"></div><div class="fgrp"><label class="flbl">Amount</label><input type="number" id="welfare-amount" class="inp" placeholder="Amount"></div><button class="btn btn-green btn-full" onclick="addWelfare()">🤝 Record Welfare</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-add-welfare')">Cancel</button></div></div>
 <div class="ov" id="ov-add-exp" onclick="maybeClose(event,'ov-add-exp')"><div class="bs"><div class="bs-title">📤 Expense</div><div class="fgrp"><label class="flbl">Description</label><input type="text" id="exp-desc" class="inp" placeholder="Description"></div><div class="fgrp"><label class="flbl">Amount</label><input type="number" id="exp-amount" class="inp" placeholder="Amount"></div><div class="fgrp"><label class="flbl">Paid To</label><input type="text" id="exp-paidto" class="inp" placeholder="Paid To"></div><button class="btn btn-red btn-full" onclick="addExpense()">📤 Record Expense</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-add-exp')">Cancel</button></div></div>
 <div class="ov" id="ov-rot-manage" onclick="maybeClose(event,'ov-rot-manage')"><div class="bs"><div class="bs-title">🔄 Rotation Order</div><div style="font-size:0.74rem;margin-bottom:12px;color:var(--t3);font-style:italic">Drag to reorder. Top = next payout.</div><div id="rot-drag-list"></div><div style="display:flex;gap:8px;margin-top:14px"><button class="btn btn-gold" style="flex:1" onclick="saveRotationOrder()">💾 Save Order</button><button class="btn btn-sec" style="flex:1" onclick="closeOv('ov-rot-manage')">Cancel</button></div></div></div>
 <div class="ov" id="ov-mark-paid" onclick="maybeClose(event,'ov-mark-paid')"><div class="bs"><div class="bs-title">✅ Mark Payout</div><div id="mark-paid-info" style="margin-bottom:14px"></div><button class="btn btn-green btn-full" onclick="confirmMarkPaid()">✅ Confirm Payout</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-mark-paid')">Cancel</button></div></div>
-<div class="ov" id="ov-cover" onclick="maybeClose(event,'ov-cover')"><div class="bs"><div class="bs-title">📅 Cover Missed Days (Range)</div><div class="fgrp"><label class="flbl">Member</label><select id="cover-member" class="inp"><option value="">Select member</option></select></div><div class="row" style="gap: 12px;"><div class="fgrp" style="flex:1"><label class="flbl">Start Date</label><input type="date" id="cover-start-date" class="inp"></div><div class="fgrp" style="flex:1"><label class="flbl">End Date</label><input type="date" id="cover-end-date" class="inp"></div></div><div class="fgrp"><label class="flbl">Cover Interest Rate (%)</label><input type="number" id="cover-interest-rate" class="inp" step="0.5" min="0" value="5"><div class="micro">Interest charged per missed day (goes to profit pool).</div></div><div id="cover-summary" class="hint-box" style="display:none;"></div><button class="btn btn-gold btn-full" onclick="previewCoverRange()">🔍 Preview & Calculate</button><button class="btn btn-green btn-full" id="confirm-cover-btn" style="display:none;" onclick="confirmCoverRange()">✅ Confirm & Save</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-cover')">Cancel</button></div></div>
 <div class="ov" id="ov-upcoming" onclick="maybeClose(event,'ov-upcoming')">
   <div class="bs">
     <div class="bs-title">📅 Upcoming Days Savings (Prepay)</div>
@@ -993,14 +1162,6 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
   <textarea id="c-msg" class="inp" rows="3" placeholder="Type your notice here..." maxlength="100"></textarea>
   <div class="micro" style="text-align:right; margin-top:4px;" id="msg-counter">0/100</div>
 </div><div class="fgrp"><label class="flbl">Image (optional)</label><div class="drag-zone" onclick="document.getElementById('c-file-input').click()"><span>🖼️ Tap to upload an image</span><input type="file" id="c-file-input" accept="image/*" style="display:none" onchange="handlePhotoInput(this,'c-preview','c-image-data')"><img id="c-preview" class="image-preview" style="display:none"></div><input type="hidden" id="c-image-data"></div><button class="btn btn-gold btn-full" onclick="addCarouselNotice()">➕ Add Notice</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-carousel-compose')">Cancel</button></div></div>
-<div class="ov" id="ov-reminder" onclick="maybeClose(event,'ov-reminder')"><div class="bs"><div class="bs-title">📢 Group Reminder</div><div class="fgrp"><label class="flbl">Message</label><textarea id="reminder-msg" class="inp" rows="7">🌿 *HARVEST TRUST REMINDER* 🌿
-
-Dear members, this is your reminder to make your daily savings contribution.
-
-💰 *Current beneficiary:* {beneficiary}
-
-Please pay today. Thank you!</textarea></div><button class="btn btn-green btn-full" onclick="openWhatsAppReminder()">📱 Send via WhatsApp</button><button class="btn btn-gold btn-full" onclick="copyReminderMessage()">📋 Copy Message</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-reminder')">Close</button></div></div>
-<div class="ov" id="ov-support-chat" onclick="maybeClose(event,'ov-support-chat')"><div class="bs"><div class="bs-title" id="support-chat-title">💬 Support</div><div id="support-chat-messages" class="chat-messages" style="max-height:260px;overflow-y:auto;margin-bottom:12px;padding:8px;background:rgba(255,255,255,0.03);border-radius:12px;border:1px solid rgba(255,255,255,0.06)"></div><div style="display:flex;gap:8px"><input type="text" id="support-reply-input" class="inp" placeholder="Type reply..."><button class="btn btn-gold" onclick="sendSupportReply()">Send</button></div><button class="btn btn-sec btn-full" style="margin-top:8px" onclick="closeOv('ov-support-chat')">Close</button></div></div>
 <div class="ov" id="ov-forgot-password" onclick="maybeClose(event,'ov-forgot-password')">
   <div class="bs">
     <div class="bs-title">🔐 Reset Password</div>
@@ -1048,7 +1209,71 @@ Please pay today. Thank you!</textarea></div><button class="btn btn-green btn-fu
     <div class="micro muted">Please wait...</div>
   </div>
 </div>
+<div class="ov" id="ov-daily-summary" onclick="maybeClose(event,'ov-daily-summary')">
+  <div class="bs">
+    <div class="bs-title">📋 Daily Savings – Confirm Distribution</div>
+    <div id="daily-summary-content" style="max-height: 60vh; overflow-y: auto;"></div>
+    <div style="display: flex; gap: 12px; margin-top: 16px;">
+      <button class="btn btn-gold btn-full" onclick="confirmDailySavings()">✅ Confirm & Save</button>
+      <button class="btn btn-sec btn-full" onclick="closeOv('ov-daily-summary')">Cancel</button>
+    </div>
+  </div>
+</div>
 <script>
+// Immediately apply saved theme (light/dark) from localStorage before showing anything
+const savedThemeMode = localStorage.getItem('themeMode');
+const savedThemeColor = localStorage.getItem('themeColor');
+if (savedThemeMode === 'dark') {
+  document.body.classList.add('dark');
+} else {
+  document.body.classList.remove('dark');
+}
+// Also apply accent color if needed
+if (savedThemeColor && window.applyTheme) {
+  // if you have a function to apply accent, call it here
+  // but for background color, only mode matters.
+}
+setTimeout(() => {
+  const blank = document.getElementById('blank-screen');
+  if (blank) {
+    blank.style.opacity = '0';
+    setTimeout(() => {
+      blank.style.display = 'none';
+      // Now show lion splash
+      const lion = document.getElementById('lion-splash');
+      if (lion) lion.style.display = 'flex';
+    }, 500);
+  }
+}, 5000);
+setTimeout(() => {
+  const lion = document.getElementById('lion-splash');
+  if (lion && lion.style.display !== 'none') {
+    // Start the loading animation inside lion splash
+    const splashMsgs = ['Loading your pride…', 'Connecting to hive…', 'Fetching balances…', 'Almost there…'];
+    let idx = 0;
+    const subEl = document.getElementById('lion-sub');
+    if (subEl) {
+      const msgInterval = setInterval(() => {
+        idx = (idx + 1) % splashMsgs.length;
+        subEl.innerText = splashMsgs[idx];
+      }, 1200);
+      setTimeout(() => {
+        clearInterval(msgInterval);
+        // Hide lion splash and show login screen
+        lion.style.display = 'none';
+        const loginScreen = document.getElementById('login-screen');
+        if (loginScreen) loginScreen.classList.remove('hidden');
+      }, 4500);
+    } else {
+      // Fallback: force login after 4.5s
+      setTimeout(() => {
+        lion.style.display = 'none';
+        const loginScreen = document.getElementById('login-screen');
+        if (loginScreen) loginScreen.classList.remove('hidden');
+      }, 4500);
+    }
+  }
+}, 5300); // 5000 (blank) + 300 margin
 'use strict';
 const APP_VERSION='2.0.0';
 const FIREBASE_CONFIG={
@@ -1273,7 +1498,6 @@ let db=null;
 let members=[],transactions=[],rotation={order:[],currentIndex:0,history:[]};
 let settings={groupName:'Harvest Trust Finance',dailyAmount:2500,welfareAmount:500,fineContribution:500,fineAmount:5000,whatsappLink:'',bannerData:'',noticeText:'Welcome to Harvest Trust Finance!',noticeImageData:'',themeMode:'light',themeColor:'facebook'};
 let currentUser=null,adminUnlocked=false,currentAdminTab='savings';
-let dailyChecked={},dragOrder=[],selectedCoverDays={};
 let memberBalances={},memberDebts={},memberLoans={};
 let cashFromDeposits=0,groupProfit=0;
 let notifications={},supportMessages={};
@@ -1583,8 +1807,19 @@ function openOv(id){const el=document.getElementById(id);if(el)el.classList.add(
 function closeOv(id){const el=document.getElementById(id);if(el)el.classList.remove('on');}
 function maybeClose(ev,id){if(ev.target.classList.contains('ov'))closeOv(id);}
 function toggleShare(){navigator.clipboard?.writeText(window.location.href);toast(t('link_copied'),'#06b6d4');}
-function getNetDaily(){return Math.max(0,(settings.dailyAmount||2500)-((settings.welfareAmount||0)+(settings.fineContribution||0)));}
-function computeTotalWeekly(){return getNetDaily()*7*members.length;}
+// Used for weekly payout calculation (the amount the receiver gets)
+function getWeeklyNetDaily() {
+  return Math.max(0, settings.dailyAmount || 2500);
+}
+
+// Used for display (e.g., in admin savings tab) – includes welfare
+function getDisplayNetDaily() {
+  return (settings.dailyAmount || 2500) + (settings.welfareAmount || 0);
+}
+
+function computeTotalWeekly() {
+  return getWeeklyNetDaily() * 7 * members.filter(m => m.approved).length;
+}
 function getAvatarColor(n){const c=['#f59e0b','#10b981','#06b6d4','#8b5cf6','#ef4444','#ec4899'];return c[(n||'').charCodeAt(0)%c.length];}
 function escapeHtml(str){if(!str)return '';return str.replace(/[&<>]/g,m=>m==='&'?'&amp;':m==='<'?'&lt;':'&gt;');}
 // ===== DEBOUNCE HELPER =====
@@ -1630,8 +1865,6 @@ function computePots() {
   memberLoans[phone] = (memberLoans[phone] || 0) + a; }
     else if (tx.type === 'loan_interest') {
   memberLoans[phone] = (memberLoans[phone] || 0) + a; }
-    else if (tx.type === 'cover_interest') {
-  profit += a;}
     else if (tx.type === 'loan_repayment') {
   cash += a;
   const rem = Math.max(0, (memberLoans[phone] || 0) - a);
@@ -1772,19 +2005,96 @@ function refreshUI() {
   updateNotificationBadge();
   if (currentScreen === 'rewards') renderRewardsPage();
 }
-function buildDepositTransactions(member,amount,ts,desc){
-  const welf=settings.welfareAmount||0, fineContrib=settings.fineContribution||0;
-  let writes=[]; let rem=amount; const now=ts||Date.now();
-  if(welf>0&&rem>0){const a=Math.min(welf,rem);writes.push({memberPhone:member.phone,memberName:member.name,type:'welfare',amount:a,description:'Auto welfare',date:now,autoDeduction:true});rem-=a;}
-  if(fineContrib>0&&rem>0){const a=Math.min(fineContrib,rem);writes.push({memberPhone:member.phone,memberName:member.name,type:'fine',amount:a,description:'Auto fine',date:now+1,autoDeduction:true});rem-=a;}
-  let debtOwed=memberDebts[member.phone]||0;
-  if(debtOwed>0&&rem>0){const a=Math.min(debtOwed,rem);writes.push({memberPhone:member.phone,memberName:member.name,type:'debt_cleared',amount:a,description:'Debt repayment',date:now+2});rem-=a;}
-  let loanOwed=memberLoans[member.phone]||0;
-  if(loanOwed>0&&rem>0){const a=Math.min(loanOwed,rem);writes.push({memberPhone:member.phone,memberName:member.name,type:'loan_repayment',amount:a,description:'Loan repayment',date:now+3});rem-=a;}
-  if(rem>0)writes.push({memberPhone:member.phone,memberName:member.name,type:'deposit',amount:rem,description:desc||'Daily savings',date:now+4});
+/**
+ * Process a deposit amount, covering:
+ * - existing debts (fines/penalties)
+ * - current day's required savings (daily_amount + welfare + fine_contribution)
+ * - then future days sequentially until deposit is exhausted.
+ * Returns an array of transaction objects to write to Firebase.
+ */
+async function processDepositWithFutureDays(member, depositAmount, depositTimestamp, description) {
+  const writes = [];
+  let remaining = depositAmount;
+  const now = depositTimestamp || Date.now();
+  const todayStart = new Date(now).setHours(0,0,0,0);
+  
+  // Clear debts first
+  const debtOwed = memberDebts[member.phone] || 0;
+  if (debtOwed > 0 && remaining > 0) {
+    const a = Math.min(debtOwed, remaining);
+    writes.push({
+      memberPhone: member.phone, memberName: member.name,
+      type: 'debt_cleared', amount: a,
+      description: 'Debt repayment',
+      date: now,
+    });
+    remaining -= a;
+  }
+  
+  const dailyAmount = settings.dailyAmount || 2500;
+  const welfareAmount = settings.welfareAmount || 0;
+  const requiredPerDay = dailyAmount + welfareAmount;   // no fine
+  
+  let currentDayStart = todayStart;
+  let daysProcessed = 0;
+  const maxDays = 30;
+  
+  while (remaining > 0 && daysProcessed < maxDays) {
+    const dayStart = currentDayStart;
+    let alreadyPaidDaily = 0;
+    transactions.forEach(tx => {
+      if (tx.memberPhone === member.phone && tx.date >= dayStart && tx.date < dayStart + 86400000 && tx.type === 'deposit') {
+        alreadyPaidDaily += tx.amount;
+      }
+    });
+    const needed = Math.max(0, requiredPerDay - alreadyPaidDaily);
+    
+    if (needed <= 0) {
+      currentDayStart += 86400000;
+      daysProcessed++;
+      continue;
+    }
+    
+    const useForThisDay = Math.min(remaining, needed);
+    remaining -= useForThisDay;
+    
+    // Welfare only once per day
+    const alreadyHasWelfare = transactions.some(tx => 
+      tx.memberPhone === member.phone && tx.type === 'welfare' &&
+      tx.date >= dayStart && tx.date < dayStart + 86400000
+    );
+    if (!alreadyHasWelfare && welfareAmount > 0 && useForThisDay > 0) {
+      writes.push({
+        memberPhone: member.phone, memberName: member.name,
+        type: 'welfare', amount: Math.min(welfareAmount, useForThisDay),
+        description: `Auto welfare for ${new Date(dayStart).toLocaleDateString()}`,
+        date: dayStart + 500,
+        autoDeduction: true
+      });
+    }
+    
+    writes.push({
+      memberPhone: member.phone, memberName: member.name,
+      type: 'deposit', amount: useForThisDay,
+      description: description || `Daily savings for ${new Date(dayStart).toLocaleDateString()}`,
+      date: dayStart + 1500,
+    });
+    
+    currentDayStart += 86400000;
+    daysProcessed++;
+  }
+  
+  if (remaining > 0) {
+    writes.push({
+      memberPhone: member.phone, memberName: member.name,
+      type: 'deposit', amount: remaining,
+      description: 'Excess savings (beyond future days)',
+      date: now + 2000,
+    });
+  }
+  
   return writes;
 }
-
 window.handlePhotoInput=function(input,previewId,dataId){
   const file=input.files[0];
   if(!file)return;
@@ -2033,6 +2343,7 @@ function startMainCarouselTimer(){
     updateMainCarouselPos();
   },5000);
 }
+
 function updateMainCarouselPos(){
   const track=document.getElementById('main-carousel-track');
   if(track)track.style.transform=`translateX(-${mainCarouselIdx*100}%)`;
@@ -2088,7 +2399,7 @@ window.removeCarouselNotice = function(id) {
 };
 function refreshCarouselPayee(){ renderMainCarousel(); }
 
-const TX_ICONS={deposit:'💰',withdraw:'📤',fine:'⚡',welfare:'🤝',expense:'📋',payout:'✅',debt:'🧾',debt_cleared:'✔️',profit_dist:'🎉',loan_disbursement:'💸',loan_repayment:'💳',loan_adjustment:'📈',cover_interest: '💰'};
+const TX_ICONS={deposit:'💰',withdraw:'📤',fine:'⚡',welfare:'🤝',expense:'📋',payout:'✅',debt:'🧾',debt_cleared:'✔️',profit_dist:'🎉',loan_disbursement:'💸',loan_repayment:'💳',loan_adjustment:'📈'};
 // Update character counter for carousel message
 function updateMsgCounter() {
   const textarea = document.getElementById('c-msg');
@@ -2261,52 +2572,34 @@ async function getMembersForLogin(){
   refreshLiveViews('login-members');
   return members;
 }
-
-let loginMode='member';
 let splashDone=false;
-function forceShowLogin(){
-  if(splashDone)return;
-  splashDone=true;
-  const splash=document.getElementById('lion-splash');
-  if(splash){
-    splash.classList.add('out');
-    setTimeout(()=>{
-      splash.style.display='none';
-      document.getElementById('login-screen').classList.remove('hidden');
-    },800);
-  }else{
-    document.getElementById('login-screen').classList.remove('hidden');
+window.doLogin = function() {
+  const pwd = document.getElementById('login-password').value.trim();
+  const errEl = document.getElementById('login-error');
+  if (!pwd) { errEl.innerText = 'Please enter your PIN or admin password'; return; }
+  
+  // Check if it's admin password
+  const storedAdminPwd = settings.adminPassword || ADMIN_PASSWORD;
+  if (pwd === storedAdminPwd) {
+    currentUser = { name: 'Admin', phone: 'admin', isAdmin: true };
+    adminUnlocked = true;
+    showMainApp();
+    return;
   }
-}
-window.setLoginMode=function(mode){
-  loginMode=mode;
-  document.getElementById('member-toggle').classList.toggle('active',mode==='member');
-  document.getElementById('admin-toggle').classList.toggle('active',mode==='admin');
-  const p=document.getElementById('login-password');
-  p.placeholder=mode==='member'?t('login_placeholder_member'):t('login_placeholder_admin');
-  p.maxLength=mode==='member'?4:20;
-  p.inputMode=mode==='member'?'numeric':'text';
-  document.getElementById('login-error').innerText='';
-};
-window.doLogin=async function(){
-  const pwd=document.getElementById('login-password').value.trim();
-  const errEl=document.getElementById('login-error');
-  if(!pwd){errEl.innerText=t('fill_all_fields');return;}
-  if(loginMode==='admin'){
-    if(pwd===ADMIN_PASSWORD){currentUser={name:'Admin',phone:'admin',isAdmin:true};adminUnlocked=true;showMainApp();}
-    else errEl.innerText=t('incorrect_admin');
-  }else{
-    try{
-      const list=await getMembersForLogin();
-      const match=list.find(m=>m.phone&&m.phone.slice(-4)===pwd);
-      if(!match){errEl.innerText='Member not found or PIN is wrong';return;}
-      if(match.approved===false){showPendingScreen(match);return;}
-      currentUser={...match};localStorage.setItem('ht_user',JSON.stringify(currentUser));adminUnlocked=false;showMainApp();
-    }catch(e){
-      console.error(e);
-      errEl.innerText='Still connecting. Try again in a moment.';
-    }
+  
+  // Otherwise, treat as member PIN (last 4 digits)
+  const match = members.find(m => m.phone && m.phone.slice(-4) === pwd);
+  if (!match) {
+    errEl.innerText = 'No account found. Please sign up or check your PIN.';
+    return;
   }
+  if (match.approved === false) {
+    showPendingScreen(match);
+    return;
+  }
+  currentUser = match;
+  adminUnlocked = false;
+  showMainApp();
 };
 function showPendingScreen(m){
   document.getElementById('login-screen').classList.add('hidden');
@@ -3229,13 +3522,35 @@ window.confirmApproveLoan = async function() {
   if (currentAdminTab === 'savings') renderAdminTab();
   computePots(); updateHomeUI(); updateAccountBalances();
 };
+window.confirmDailySavings = async function() {
+  const members = window.pendingDailyMembers || [];
+  const da = window.pendingDailyAmount || 2500;
+  if (!members.length) { closeOv('ov-daily-summary'); return; }
+  
+  const writes = [];
+  for (const member of members) {
+    const depositTxs = await processDepositWithFutureDays(member, da, Date.now(), 'Daily savings');
+    for (const tx of depositTxs) {
+      writes.push(db.ref('transactions').push(tx));
+    }
+  }
+  
+  await Promise.all(writes);
+  toast(`${members.length} deposit(s) saved! ✅`, '#10b981');
+  closeOv('ov-daily-summary');
+  computePots();
+  updateHomeUI();
+  if (currentScreen === 'ledger') loadLedger('all');
+  if (currentScreen === 'account') updateAccountUI();
+  if (currentScreen === 'admin' && adminUnlocked && currentAdminTab === 'savings') renderAdminTab();
+};
 window.switchAdminTab=function(tab){currentAdminTab=tab;document.querySelectorAll('.admin-tab').forEach(t=>t.classList.remove('active'));document.querySelector(`.admin-tab[data-tab="${tab}"]`)?.classList.add('active');renderAdminTab();};
 function renderAdminTab(){
   const c=document.getElementById('admin-content');if(!c)return;
   const pendingLoans=loans.filter(l=>l.status==='pending');
   const activeLoans = loans.filter(l => l.status === 'approved' && !l.repaid);
   if(currentAdminTab==='savings'){
-    c.innerHTML=`<div class="card"><div class="sec-h">${t('daily_rates')}</div><div class="fgrp"><label class="flbl">${t('daily_amount')}</label><input type="number" id="admin-daily" class="inp" value="${settings.dailyAmount||2500}"></div><div class="fgrp"><label class="flbl">${t('welfare_deduction')}</label><input type="number" id="admin-welfare" class="inp" value="${settings.welfareAmount||0}"></div><div class="fgrp"><label class="flbl">${t('fine_contribution')}</label><input type="number" id="admin-finecontrib" class="inp" value="${settings.fineContribution||0}"></div><div class="fgrp"><label class="flbl">${t('default_fine')}</label><input type="number" id="admin-fine" class="inp" value="${settings.fineAmount||5000}"></div><button class="btn btn-gold btn-full" onclick="saveSavingsSettings()">${t('save_rates')}</button><div class="hint-box" style="margin-top:8px">${t('net_daily')}: <strong>UGX ${getNetDaily().toLocaleString()}</strong> · ${t('weekly_pool')}: <strong>UGX ${computeTotalWeekly().toLocaleString()}</strong></div></div>
+    c.innerHTML=`<div class="card"><div class="sec-h">${t('daily_rates')}</div><div class="fgrp"><label class="flbl">${t('daily_amount')}</label><input type="number" id="admin-daily" class="inp" value="${settings.dailyAmount||2500}"></div><div class="fgrp"><label class="flbl">${t('welfare_deduction')}</label><input type="number" id="admin-welfare" class="inp" value="${settings.welfareAmount||0}"></div><div class="fgrp"><label class="flbl">${t('fine_contribution')}</label><input type="number" id="admin-finecontrib" class="inp" value="${settings.fineContribution||0}"></div><div class="fgrp"><label class="flbl">${t('default_fine')}</label><input type="number" id="admin-fine" class="inp" value="${settings.fineAmount||5000}"></div><button class="btn btn-gold btn-full" onclick="saveSavingsSettings()">${t('save_rates')}</button><div class="hint-box" style="margin-top:8px">${t('net_daily')}: <strong>UGX ${getDisplayNetDaily().toLocaleString()}</strong> · ${t('weekly_pool')}: <strong>UGX ${computeTotalWeekly().toLocaleString()}</strong></div>
     <div class="card"><div class="sec-h">${t('profit_pool_card')}</div><div style="display:flex;align-items:center;gap:14px;margin-bottom:14px"><div style="width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,var(--green),#059669);display:flex;align-items:center;justify-content:center;font-size:1.6rem">💰</div><div><div style="font-family:'JetBrains Mono',monospace;font-size:1.6rem;font-weight:700;color:${groupProfit<0?'var(--red)':'var(--green)'}">UGX ${groupProfit.toLocaleString()}</div><div class="micro">${t('per_member')}: ~UGX ${members.length?Math.floor(groupProfit/members.length).toLocaleString():'0'}</div></div></div><button class="btn btn-green btn-full" onclick="distributeProfit()">${t('distribute_profit')}</button></div>
     ${pendingLoans.length?`<div class="card"><div class="sec-h">${t('pending_loans')} <span class="pill-badge pill-amber">${pendingLoans.length}</span></div>${pendingLoans.map(l=>`<div class="mc"><div><div class="mc-name">${l.memberName}</div><div class="mc-phone">UGX ${l.amount.toLocaleString()} · Repay: UGX ${l.totalRepay.toLocaleString()} (${l.interestRate}%)</div><div class="micro">${l.reason}</div></div><div><button class="btn btn-sm btn-green" onclick="approveLoan('${l.id}')">✅</button><button class="btn btn-sm btn-red" onclick="rejectLoan('${l.id}')">✕</button></div></div>`).join('')}</div>`:''}
     ${(() => {
@@ -3291,8 +3606,13 @@ function renderAdminTab(){
   </div>`;
 })()}`;
   } else if (currentAdminTab === 'notice') {   c.innerHTML = `<div class="card"><div class  ="sec-h">🎠 ${t('carousel_notices')} <spanclass="pill-badge pill-amber">${mainCarouselNotifs.length}/5</span></div><div id="main-carousel-admin-list" style="margin-bottom:12px">${mainCarouselNotifs.map(n => `<div class="mc"><div><div class="mc-name">${n.icon || '📢'} ${escapeHtml(n.text.slice(0,50))}${n.text.length > 50 ? '…' : ''}</div><div class="mc-phone">${n.imageData ? '📷 Image' : ''} ${n.payee ? `👤 ${escapeHtml(n.payee)}` : ''}</div></div><button class="btn btn-sm btn-red" onclick="removeCarouselNotice('${n.id}')">${t('delete_btn')}</button></div>`).join('')}</div>${mainCarouselNotifs.length < 5 ? `<button class="btn btn-teal btn-full" onclick="openOv('ov-carousel-compose')">${t('add_carousel')}</button>` : '<div class="hint-box" style="text-align:center;margin-bottom:0">Maximum 5 notices reached. Delete one to add more.</div>'}</div>`;
-  }else if(currentAdminTab==='harvest'){
-    c.innerHTML=`<div class="card"><div class="sec-h">${t('harvest_actions')}</div><button class="btn btn-gold btn-full" onclick="openOv('ov-daily');loadDailyList()">${t('record_daily')}</button><button class="btn btn-teal btn-full" onclick="openOv('ov-add-tx');populateMemberDropdowns()">${t('add_transaction')}</button><button class="btn btn-green btn-full" onclick="openOv('ov-mark-paid');loadMarkPaidInfo()">${t('mark_payout')}</button><button class="btn btn-purple btn-full" onclick="openOv('ov-rot-manage');buildDragRotation()">${t('manage_rotation')}</button><button class="btn btn-amber btn-full" onclick="advanceRotation()">⏩ Advance to Next Member</button><button class="btn btn-sec btn-full" onclick="openOv('ov-cover');buildCoverDaysList();populateMemberDropdowns()">${t('cover_missed')}</button><button class="btn btn-teal btn-full" onclick="openUpcomingDays(); populateUpcomingMemberDropdown()">📅 Upcoming Days Savings (prepay)</button><button class="btn btn-sec btn-full" onclick="openOv('ov-reminder')">${t('send_reminder')}</button></div>`;
+  } else if (currentAdminTab === 'harvest') {
+  c.innerHTML = `<div class="card">
+    <div class="sec-h">🌾 Harvest Actions</div>
+    <button class="btn btn-teal btn-full" onclick="openAddTransaction()">➕ Add Transaction</button>
+    <button class="btn btn-green btn-full" onclick="openOv('ov-mark-paid')">✅ Mark Weekly Payout</button>
+    <button class="btn btn-purple btn-full" onclick="openOv('ov-rot-manage')">🔄 Manage Rotation Order</button>
+  </div>`;
   } else if (currentAdminTab === 'users') {
   c.innerHTML = `
     <div class="card">
@@ -3496,105 +3816,33 @@ window.updateNotice = function() {
     toast('Publish failed', '#ef4444');
   });
 };
-window.loadDailyList = function() {
-  // Clear the selected members object
-  dailyChecked = {};
-  const list = document.getElementById('daily-list');
-  if (!list) return;
-
-  // Recalculate debts/loans
-  computePots();
-
-  // Find members who already deposited today
-  const todayStart = new Date().setHours(0, 0, 0, 0);
-  const todayEnd = new Date().setHours(23, 59, 59, 999);
-  const depositedToday = new Set();
-  transactions.forEach(tx => {
-    if (tx.type === 'deposit' && tx.date >= todayStart && tx.date <= todayEnd && tx.memberPhone) {
-      depositedToday.add(tx.memberPhone);
-    }
-  });
-
-  // Build the list
-  list.innerHTML = members.filter(m => m.approved).map(m => {
-    const totalOwed = (memberDebts[m.phone] || 0) + (memberLoans[m.phone] || 0);
-    const hasOwed = totalOwed > 0;
-    const note = hasOwed ? `<span class="micro" style="color: var(--red); margin-left: 8px;">⚠️ UGX ${totalOwed.toLocaleString()} owed first</span>` : '';
-
-    // Pre‑check if member already deposited today
-    const isChecked = depositedToday.has(m.phone);
-    if (isChecked) dailyChecked[m.phone] = true;
-
-    const checkedClass = isChecked ? 'checked' : '';
-
-    return `
-      <div class="daily-check ${checkedClass}" onclick="toggleDaily('${m.phone}')">
-        <div class="dc-box" id="daily-${m.phone.replace(/\W/g, '_')}">✓</div>
-        <span style="flex:1;">${escapeHtml(m.name)}</span>
-        ${note}
-      </div>
-    `;
-  }).join('');
-};
-window.toggleDaily = function(phone) {
-  const box = document.getElementById('daily-' + phone.replace(/\W/g, '_'));
-  const p = box.closest('.daily-check');
-  if (p.classList.contains('checked')) {
-    p.classList.remove('checked');
-    delete dailyChecked[phone];
-  } else {
-    p.classList.add('checked');
-    dailyChecked[phone] = true;
+function openAddTransaction() {
+  // Populate member dropdown
+  const memberSelect = document.getElementById('tx-member');
+  if (memberSelect) {
+    memberSelect.innerHTML = '<option value="">Select member</option>' +
+      members.filter(m => m.approved).map(m => `<option value="${m.phone}">${escapeHtml(m.name)}</option>`).join('');
   }
-};
-window.saveDaily = function() {
-  const phones = Object.keys(dailyChecked);
-  if (!phones.length) {
-    toast('Select at least one member', '#ef4444');
-    return;
-  }
-
-  // Get members who already deposited today
-  const alreadyDeposited = getMembersWithDepositToday();
-  const newPhones = phones.filter(phone => !alreadyDeposited.has(phone));
-
-  if (newPhones.length === 0) {
-    toast('All selected members already saved today', '#ef4444');
-    return;
-  }
-
-  const da = settings.dailyAmount || 2500;
-  const writes = [];
-
-  newPhones.forEach(phone => {
-    const member = members.find(m => m.phone === phone);
-    if (member) {
-      buildDepositTransactions(member, da, Date.now(), 'Daily savings').forEach(tx => {
-        writes.push(db.ref('transactions').push(tx));
-      });
-    }
-  });
-
-  Promise.all(writes).then(() => {
-    toast(`${newPhones.length} deposit(s) saved! ✅`, '#10b981');
-    dailyChecked = {};               // clear selection
-    closeOv('ov-daily');             // close modal
-    // Force UI refresh
-    computePots();
-    updateHomeUI();
-    if (currentScreen === 'ledger') loadLedger('all');
-    if (currentScreen === 'account') updateAccountUI();
-    if (currentScreen === 'admin' && adminUnlocked && currentAdminTab === 'savings') renderAdminTab();
-  }).catch(err => {
-    console.error(err);
-    toast('Failed to save deposits', '#ef4444');
-  });
-};
-window.addTransaction = function() {
-  const phone = document.getElementById('tx-member').value;
-  const type = document.getElementById('tx-type').value;
-  const amount = parseFloat(document.getElementById('tx-amount').value);
-  const desc = document.getElementById('tx-desc').value;
+  // Reset fields
+  const typeSelect = document.getElementById('tx-type');
+  const amountInput = document.getElementById('tx-amount');
+  const descInput = document.getElementById('tx-desc');
+  const previewDiv = document.getElementById('tx-preview');
+  if (typeSelect) typeSelect.value = 'deposit';
+  if (amountInput) amountInput.value = '';
+  if (descInput) descInput.value = '';
+  if (previewDiv) previewDiv.style.display = 'none';
+  
+  // Attach preview handler
+  attachDepositPreviewHandler();
+  
+  openOv('ov-add-tx');
+}
+window.addTransactionWithPreview = async function() {
+  const phone = document.getElementById('tx-member')?.value;
+  const type = document.getElementById('tx-type')?.value;
+  const amount = parseFloat(document.getElementById('tx-amount')?.value);
+  const desc = document.getElementById('tx-desc')?.value;
   const member = members.find(m => m.phone === phone);
   
   if (!member || !amount || amount <= 0) {
@@ -3603,39 +3851,27 @@ window.addTransaction = function() {
   }
   
   if (type === 'deposit') {
-    // Use buildDepositTransactions to handle auto deductions
-    const transactions = buildDepositTransactions(member, amount, Date.now(), desc);
-    Promise.all(transactions.map(tx => db.ref('transactions').push(tx)))
-      .then(() => {
-        toast('Deposit recorded!', '#10b981');
-        closeOv('ov-add-tx');
-        computePots();
-        updateHomeUI();
-        if (currentScreen === 'ledger') loadLedger('all');
-      })
-      .catch(err => {
-        console.error(err);
-        toast('Transaction failed', '#ef4444');
-      });
+    if (!confirm(`Confirm deposit of UGX ${amount.toLocaleString()} for ${member.name}? This will cover debts and future days.`)) return;
+    const depositTxs = await processDepositWithFutureDays(member, amount, Date.now(), desc || 'Manual deposit');
+    const writes = depositTxs.map(tx => db.ref('transactions').push(tx));
+    await Promise.all(writes);
+    toast('Deposit saved! ✅', '#10b981');
   } else {
-    db.ref('transactions').push({
+    // Other transaction types (withdraw, fine, welfare, expense)
+    await db.ref('transactions').push({
       memberPhone: phone,
       memberName: member.name,
       type: type,
       amount: amount,
       description: desc || type,
       date: Date.now()
-    }).then(() => {
-      toast('Transaction added!', '#10b981');
-      closeOv('ov-add-tx');
-      computePots();
-      updateHomeUI();
-      if (currentScreen === 'ledger') loadLedger('all');
-    }).catch(err => {
-      console.error(err);
-      toast('Transaction failed', '#ef4444');
     });
+    toast('Transaction saved! ✅', '#10b981');
   }
+  
+  closeOv('ov-add-tx');
+  computePots();
+  refreshUI();
 };
 window.addFine=function(){const phone=document.getElementById('fine-member').value,reason=document.getElementById('fine-reason').value,amount=+document.getElementById('fine-amount').value;const m=members.find(m=>m.phone===phone);if(!m||!amount){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('transactions').push({memberPhone:phone,memberName:m.name,type:'fine',amount,description:reason||'Fine',date:Date.now()}).then(()=>{toast(t('apply_fine_btn'),'#f59e0b');['fine-member','fine-reason','fine-amount'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});closeOv('ov-add-fine');});};
 
@@ -3885,8 +4121,7 @@ window.changeAdminPassword = function() {
 window.buildDragRotation=function(){dragOrder=[...rotation.order];renderDragList();};
 function renderDragList(){const c=document.getElementById('rot-drag-list');c.innerHTML='';dragOrder.forEach((id,i)=>{const m=members.find(m=>m.id===id)||{name:'?'};const d=document.createElement('div');d.className='rot-drag-item';d.draggable=true;d.innerHTML='<span class="drag-handle">⠿</span><span style="flex:1">'+(i===0?'💰 ':'')+(i+1)+'. '+m.name+'</span>'+(i===0?'<span class="pill-badge pill-amber">NEXT</span>':'');d.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain',i);d.classList.add('dragging');});d.addEventListener('dragend',()=>d.classList.remove('dragging'));d.addEventListener('dragover',e=>e.preventDefault());d.addEventListener('drop',e=>{e.preventDefault();const from=+e.dataTransfer.getData('text/plain');if(from===i)return;const moved=dragOrder.splice(from,1)[0];dragOrder.splice(i,0,moved);renderDragList();});c.appendChild(d);});}
 window.saveRotationOrder=function(){db.ref('rotation').update({order:dragOrder,currentIndex:0}).then(()=>{toast(t('save_order'),'#10b981');closeOv('ov-rot-manage');});};
-window.buildCoverDaysList=function(){const c=document.getElementById('cover-days-list');c.innerHTML='';selectedCoverDays={};for(let i=0;i<14;i++){const d=new Date(Date.now()-i*86400000);const dk=_isoDate(d);const r=document.createElement('div');r.className='daily-check';r.onclick=()=>toggleCoverDay(dk,r);r.innerHTML='<div class="dc-box">✓</div><span>'+d.toLocaleDateString()+'</span>';c.appendChild(r);}};
-function toggleCoverDay(dk,row){if(selectedCoverDays[dk]){delete selectedCoverDays[dk];row.classList.remove('checked');}else{selectedCoverDays[dk]=true;row.classList.add('checked');}updateSelectedChips();}
+window.buildCoverDaysList=function(){const c=document.getElementById('cover-days-list');c.innerHTML='';for(let i=0;i<14;i++){const d=new Date(Date.now()-i*86400000);const dk=_isoDate(d);const r=document.createElement('div');r.className='daily-check';r.onclick=()=>toggleCoverDay(dk,r);r.innerHTML='<div class="dc-box">✓</div><span>'+d.toLocaleDateString()+'</span>';c.appendChild(r);}};
 function animateFallingText(containerId, text, callback) {
   const container = document.getElementById(containerId);
   if (!container) return;
@@ -4131,8 +4366,6 @@ function dateRangeToDays(startDate, endDate) {
   }
   return days;
 }
-function updateSelectedChips(){document.getElementById('selected-days-chips').innerHTML=Object.keys(selectedCoverDays).map(dk=>'<div class="cover-chip">'+dk+'</div>').join('');}
-window.addCustomCoverDate=function(){const dk=document.getElementById('custom-date-picker').value;if(dk){selectedCoverDays[dk]=true;updateSelectedChips();}};
 window.saveCoverDays = function() {const phone = document.getElementById('cover-member').value;const member = members.find(m => m.phone === phone);if (!member) {toast('Select a member', '#ef4444');return;}const da = settings.dailyAmount || 2500;const interestRate = (loanSettings.coverInterestRate || loanSettings.interestRate || 5) / 100;const writes = [];Object.keys(selectedCoverDays).forEach(dk => {
     // 1. Regular deposit (handles debts/loans)
     const depositTransactions = buildDepositTransactions(member, da, new Date(dk).getTime(), 'Cover: ' + dk);
@@ -4223,7 +4456,6 @@ window.resetDataKeepMembers = function() {
 };
 window.exportCSV=function(){let csv='Date,Type,Member,Amount,Description\n';transactions.sort((a,b)=>(b.date||0)-(a.date||0)).forEach(tx=>{csv+=new Date(tx.date).toLocaleDateString()+','+tx.type+','+(tx.memberName||'')+','+tx.amount+','+(tx.description||'')+'\n';});const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='harvest-trust-finance-'+_isoDate(new Date())+'.csv';a.click();toast(t('csv_downloaded'),'#06b6d4');};
 window.openWhatsAppReminder=function(){let msg=document.getElementById('reminder-msg').value;const bene=members.find(m=>m.id===rotation.order?.[rotation.currentIndex||0]);msg=msg.replace('{beneficiary}',bene?.name||'—');window.open('https://api.whatsapp.com/send?text='+encodeURIComponent(msg),'_blank');};
-window.copyReminderMessage=function(){let msg=document.getElementById('reminder-msg').value;const bene=members.find(m=>m.id===rotation.order?.[rotation.currentIndex||0]);msg=msg.replace('{beneficiary}',bene?.name||'—');navigator.clipboard?.writeText(msg);toast(t('copy_message'),'#06b6d4');};
 window.unlockAdmin = function() {
   const entered = document.getElementById('adm-pwd').value;
   const storedPassword = settings.adminPassword || ADMIN_PASSWORD;
@@ -4294,70 +4526,17 @@ function showModalEl(el,title){const ov=document.createElement('div');ov.classNa
 function closeModal(){if(window.currentModal)window.currentModal.remove();}
 
 // ===== SPLASH & INITIALIZATION (FIXED) =====
-const splashMsgs = ['Loading your pride…', 'Connecting to hive…', 'Fetching balances…', 'Almost there…'];
-let mIdx = 0;
-let splashCompleted = false;
-let firebaseStarted = false;
-
-// Function to hide splash and show login (only once)
-function completeSplashAndShowLogin() {
-  if (splashCompleted) return;
-  splashCompleted = true;
-  const splash = document.getElementById('lion-splash');
-  if (splash) {
-    splash.classList.add('out');
-    setTimeout(() => {
-      splash.style.display = 'none';
-      const loginScreen = document.getElementById('login-screen');
-      if (loginScreen) loginScreen.classList.remove('hidden');
-    }, 800);
-  } else {
-    const loginScreen = document.getElementById('login-screen');
-    if (loginScreen) loginScreen.classList.remove('hidden');
-  }
-}
-
-// Rotate loading messages
-const subEl = document.getElementById('lion-sub');
-if (subEl) {
-  const msgInterval = setInterval(() => {
-    if (!splashCompleted) {
-      mIdx = (mIdx + 1) % splashMsgs.length;
-      subEl.innerText = splashMsgs[mIdx];
-    } else {
-      clearInterval(msgInterval);
-    }
-  }, 1200);
-}
-
-// Fallback 1: Show login after 5 seconds (splash animation time)
+// Wait for blank screen to finish, then start lion splash animation
 setTimeout(() => {
-  if (!splashCompleted) {
-    console.warn("Splash timeout – forcing login");
-    completeSplashAndShowLogin();
+  const blank = document.getElementById('blank-screen');
+  if (blank) {
+    blank.style.display = 'none';
+  }
+  const loginScreen = document.getElementById('login-screen');
+  if (loginScreen) {
+    loginScreen.classList.remove('hidden');
   }
 }, 5000);
-
-// Fallback 2: Extra safety after 8 seconds (in case the above fails)
-setTimeout(() => {
-  if (!splashCompleted) {
-    console.error("Emergency timeout – forcing login");
-    completeSplashAndShowLogin();
-  }
-}, 8000);
-
-// Handle lion image loading error
-const lionImg = document.querySelector('.lion-img');
-if (lionImg) {
-  lionImg.onerror = function() {
-    console.warn("Lion image failed to load, using fallback");
-    this.style.display = 'none';
-    const fallback = document.getElementById('lion-fallback');
-    if (fallback) fallback.style.display = 'flex';
-  };
-}
-
-// Initialize Firebase and then complete splash if Firebase is ready
 function initAndComplete() {
   initFirebase(); // this will load data and eventually call forceShowLogin? We'll override.
   // But we want to ensure login appears even if Firebase fails.
@@ -4795,6 +4974,88 @@ function showTabLoadingAnimation(text, callback) {
     if (callback) callback();
     loadingTimeout = null;
   }, 3000);
+}
+function attachDepositPreviewHandler() {
+  const typeSelect = document.getElementById('tx-type');
+  const amountInput = document.getElementById('tx-amount');
+  const memberSelect = document.getElementById('tx-member');
+  const previewDiv = document.getElementById('tx-preview');
+
+  // Remove old listeners to avoid duplicates
+  if (window._previewAttached) {
+    typeSelect?.removeEventListener('change', updatePreview);
+    amountInput?.removeEventListener('input', updatePreview);
+    memberSelect?.removeEventListener('change', updatePreview);
+  }
+  
+  function updatePreview() {
+    const type = typeSelect?.value;
+    const amount = parseFloat(amountInput?.value);
+    const memberPhone = memberSelect?.value;
+    if (type !== 'deposit' || !amount || amount <= 0 || !memberPhone) {
+      if (previewDiv) previewDiv.style.display = 'none';
+      return;
+    }
+    const member = members.find(m => m.phone === memberPhone);
+    if (!member) return;
+    
+    // Simulate distribution (same logic as before)
+    let remaining = amount;
+    const debtOwed = memberDebts[member.phone] || 0;
+    let debtUsed = Math.min(debtOwed, remaining);
+    remaining -= debtUsed;
+    
+    const dailyAmount = settings.dailyAmount || 2500;
+    const welfare = settings.welfareAmount || 0;
+    const fine = settings.fineContribution || 0;
+    const neededPerDay = dailyAmount + welfare + fine;
+    
+    const fullDays = Math.floor(remaining / neededPerDay);
+    remaining -= fullDays * neededPerDay;
+    const partialDayUsed = remaining; // remainder goes to next day
+    
+    let previewHtml = `<strong>💰 Distribution preview:</strong><br>`;
+    previewHtml += `• Debt repayment: UGX ${debtUsed.toLocaleString()}<br>`;
+    if (fullDays > 0) previewHtml += `• Full days covered: ${fullDays} day(s) (UGX ${(fullDays * neededPerDay).toLocaleString()})<br>`;
+    if (partialDayUsed > 0) previewHtml += `• Partial day (additional): UGX ${partialDayUsed.toLocaleString()}<br>`;
+    if (debtUsed + fullDays * neededPerDay + partialDayUsed < amount) {
+      previewHtml += `• Excess to balance: UGX ${(amount - (debtUsed + fullDays * neededPerDay + partialDayUsed)).toLocaleString()}<br>`;
+    }
+    previewHtml += `<div class="micro">Welfare and fine are deducted once per calendar day.</div>`;
+    previewDiv.innerHTML = previewHtml;
+    previewDiv.style.display = 'block';
+  }
+  
+  // Attach new listeners
+  typeSelect?.addEventListener('change', updatePreview);
+  amountInput?.addEventListener('input', updatePreview);
+  memberSelect?.addEventListener('change', updatePreview);
+  updatePreview();
+  window._previewAttached = true;
+}
+function promptAdminAccess() {
+  const password = prompt("Enter admin password to access panel:");
+  if (password === ADMIN_PASSWORD) {  // or compare with settings.adminPassword
+    adminUnlocked = true;
+    // Show the admin panel (which was previously hidden)
+    document.getElementById('adm-lock').classList.add('hidden');
+    document.getElementById('adm-panel').classList.remove('hidden');
+    // Optionally, switch to the admin page
+    goTab('admin', document.getElementById('ni-admin'));
+    toast("Admin panel unlocked", "#10b981");
+  } else {
+    toast("Incorrect password", "#ef4444");
+  }
+}
+// Show blank screen for 5 seconds, then reveal login
+const blankScreen = document.getElementById('blank-screen');
+const loginScreen = document.getElementById('login-screen');
+
+if (blankScreen && loginScreen) {
+  setTimeout(() => {
+    blankScreen.style.display = 'none';
+    loginScreen.classList.remove('hidden');
+  }, 5000);
 }
 </script>
 </body>
