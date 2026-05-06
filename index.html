@@ -811,7 +811,7 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
       <span id="notification-badge" class="notification-badge hidden">0</span>
     </div>
     <button class="hdr-btn" onclick="toggleShare()">⬆</button>
-    <button class="hdr-btn" onclick="logout()">🚪</button>
+    <button id="admin-door-btn" class="hdr-btn"  onclick="toggleAdminPanel()">🚪</button>
   </div>
 </div>
 <div id="tab-loading-overlay" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: var(--bg); z-index: 9999; display: none; align-items: center; justify-content: center; flex-direction: column; text-align: center;">
@@ -2615,6 +2615,7 @@ function showMainApp(){
   syncCurrentUserFromMembers();updateAccountUI();goTab('home',document.getElementById('ni-home'));
   setupPresence();
   applyLanguageToUI();
+  setAdminDoorVisibility();
 }
 // 10 group-relevant questions
 const securityQuestions = [
@@ -5057,6 +5058,36 @@ if (blankScreen && loginScreen) {
     loginScreen.classList.remove('hidden');
   }, 5000);
 }
+function setAdminDoorVisibility() {
+  const doorBtn = document.getElementById('admin-door-btn');
+  if (doorBtn) {
+    doorBtn.style.display = currentUser?.isAdmin ? 'flex' : 'none';
+  }
+}
+
+function toggleAdminPanel() {
+  const adminPage = document.getElementById('t-admin');
+  if (!adminPage) return;
+  // If admin page is already active, switch back to previous tab or just hide? We'll toggle active class.
+  // But simpler: go to admin tab if not already there
+  const isAdminActive = adminPage.classList.contains('on');
+  if (!isAdminActive) {
+    goTab('admin', null);
+  } else {
+    // Go back to home or previous tab? We'll store last non-admin tab.
+    const lastTab = localStorage.getItem('lastNonAdminTab') || 'home';
+    goTab(lastTab, null);
+  }
+}
+
+// Store last non-admin tab when switching away from admin
+const originalGoTab = window.goTab;
+window.goTab = function(tab, btn) {
+  if (tab !== 'admin' && tab !== 'manage') {
+    localStorage.setItem('lastNonAdminTab', tab);
+  }
+  originalGoTab(tab, btn);
+};
 </script>
 </body>
 </html>
