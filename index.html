@@ -7,6 +7,7 @@
 <title>Harvest Trust Finance v2.0 · Lwogamata</title>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -225,6 +226,30 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
   }
 }
 .stats-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+/* Statistics sub‑tabs */
+.stats-tab-btn {
+  background: transparent;
+  border: none;
+  padding: 8px 16px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--t3);
+  cursor: pointer;
+  border-radius: 24px;
+  transition: all 0.2s var(--ease-spring);
+}
+.stats-tab-btn.active {
+  background: linear-gradient(135deg, var(--gold), var(--gold2));
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(245,158,11,0.2);
+}
+.stats-tab-content {
+  animation: fadeIn 0.25s ease;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 .ss-tile{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:20px;padding:14px 8px 12px;display:flex;flex-direction:column;align-items:center;gap:5px;box-shadow:var(--sh);position:relative;overflow:hidden;transition:transform 0.2s var(--ease-spring),box-shadow 0.2s;animation:tileIn 0.5s var(--ease-spring) both}.ss-tile:nth-child(1){animation-delay:0.05s}.ss-tile:nth-child(2){animation-delay:0.1s}.ss-tile:nth-child(3){animation-delay:0.15s}.ss-tile:active{transform:scale(0.95)}.ss-tile::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:20px 20px 0 0}.ss-tile::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(255,255,255,0.04),transparent);pointer-events:none}.ss-t-gold::before{background:linear-gradient(90deg,#f59e0b,#d97706)}.ss-t-green::before{background:linear-gradient(90deg,#10b981,#059669)}.ss-t-teal::before{background:linear-gradient(90deg,#06b6d4,#0891b2)}.ss-ico{font-size:1.3rem;line-height:1}.ss-val{font-family:'JetBrains Mono',monospace;font-size:0.78rem;font-weight:700;line-height:1.2;text-align:center}.ss-lbl{font-size:0.46rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--t3)}.sv-gold{color:var(--gold)}.sv-green{color:var(--green)}.sv-teal{color:var(--teal)}
 .notice-banner.carousel-banner{background:linear-gradient(145deg,rgba(245,158,11,0.1),rgba(6,182,212,0.06),rgba(245,158,11,0.08));border:1px solid rgba(245,158,11,0.2);border-radius:var(--r);margin-bottom:14px;overflow:hidden;padding:0!important;position:relative}
 .carousel-banner .carousel-viewport{overflow:hidden}
@@ -588,21 +613,11 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
 
 .theme-preview{border:1px solid var(--br);border-radius:16px;padding:12px;background:var(--card);box-shadow:var(--sh);display:flex;align-items:center;gap:10px}.theme-dot{width:30px;height:30px;border-radius:999px;background:linear-gradient(135deg,var(--gold),var(--gold2));box-shadow:0 4px 14px var(--gold3)}.theme-preview-text{font-size:.76rem;color:var(--t2);line-height:1.35}.theme-note{font-size:.7rem;color:var(--t3);margin-top:6px;line-height:1.45}
 /* Make Wallet icon 3x larger (ChapChap style) */
-#ni-ledger .ico {
-  font-size: 1.2rem !important;     /* 3x normal (normal ~1.2rem) */
-  transform: translateY(-8px);
-  line-height: 1;
-  display: inline-block;
-}
-#ni-ledger {
-  overflow: visible !important;     /* prevent clipping */
-  padding-top: 0;
-}
-#ni-ledger.on .ico {
-  transform: scale(1.1) translateY(-10px) !important;
+#ni-admin {
+  display: none;
 }
 #ni-rewards .ico {
-  font-size: 1.2rem !important;     /* 3x normal (normal ~1.2rem) */
+  font-size: 3rem !important;     /* 3x normal (normal ~1.2rem) */
   transform: translateY(-8px);
   line-height: 1;
   display: inline-block;
@@ -617,32 +632,117 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
 </style>
 </head>
 <body>
-<!-- Blank screen with sequential falling capital letters -->
-<div id="blank-screen" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #f0f2f5; z-index: 20000; display: flex; align-items: center; justify-content: center; flex-direction: column; text-align: center;">
-  <div id="falling-container" style="font-family: 'Syne', sans-serif; font-weight: 800; display: flex; flex-direction: column; align-items: center; gap: 20px;">
+<style>
+/* Force small letters – 40% smaller than original 4rem = 1.6rem, plus extra reduction */
+#blank-screen .fall-letter,
+#blank-screen .grow-letter {
+  font-size: 2.5rem !important;
+  font-family: 'Syne', sans-serif !important;
+  font-weight: 800 !important;
+  color: #f59e0b !important;
+  display: inline-block !important;
+}
+#blank-screen .fall-letter {
+  opacity: 0;
+  transform: translateY(-100vh);
+  animation: elasticFallSmall 0.6s cubic-bezier(0.34, 1.2, 0.64, 1) forwards;
+}
+#blank-screen .grow-letter {
+  transform: scale(0);
+  opacity: 0;
+  animation: growSmall 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+@keyframes elasticFallSmall {
+  0% { opacity: 0; transform: translateY(-100vh) rotate(-10deg); }
+  50% { opacity: 1; transform: translateY(12px) rotate(2deg); }
+  70% { transform: translateY(-3px) rotate(-1deg); }
+  100% { opacity: 1; transform: translateY(0) rotate(0); }
+}
+@keyframes growSmall {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+#blank-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #f0f2f5;
+  z-index: 20000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  text-align: center;
+  padding: 10px;
+}
+#falling-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.word-row {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.letter-group {
+  display: flex;
+  gap: 2px;
+}
+</style>
+<div id="blank-screen">
+  <div id="falling-container">
     <!-- Row 1: Harvest -->
-    <div style="display: flex; gap: 4px; flex-wrap: wrap; justify-content: center;">
-      <span id="letter-h" class="fall-letter" style="font-size: 4rem; opacity: 0; display: inline-block;">H</span>
-      <span id="letters-arvest" style="display: flex; gap: 4px;"></span>
+    <div class="word-row">
+      <span id="letter-h" class="fall-letter">H</span>
+      <span id="letters-arvest" class="letter-group"></span>
     </div>
     <!-- Row 2: Trust -->
-    <div style="display: flex; gap: 4px; flex-wrap: wrap; justify-content: center;">
-      <span id="letter-t" class="fall-letter" style="font-size: 4rem; opacity: 0; display: inline-block;">T</span>
-      <span id="letters-rust" style="display: flex; gap: 4px;"></span>
+    <div class="word-row">
+      <span id="letter-t" class="fall-letter">T</span>
+      <span id="letters-rust" class="letter-group"></span>
     </div>
     <!-- Row 3: Finance -->
-    <div style="display: flex; gap: 4px; flex-wrap: wrap; justify-content: center;">
-      <span id="letter-f" class="fall-letter" style="font-size: 4rem; opacity: 0; display: inline-block;">F</span>
-      <span id="letters-inance" style="display: flex; gap: 4px;"></span>
+    <div class="word-row">
+      <span id="letter-f" class="fall-letter">F</span>
+      <span id="letters-inance" class="letter-group"></span>
     </div>
   </div>
 </div>
 
 <style>
+#lion-splash{position:fixed;inset:0;z-index:10000;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(ellipse 120% 80% at 80% 0%,rgba(6,182,212,0.1) 0%,transparent 50%),radial-gradient(ellipse 80% 60% at 20% 100%,rgba(245,158,11,0.08) 0%,transparent 50%),#060e1a;transition:opacity 0.8s var(--ease-smooth),transform 0.8s var(--ease-smooth)}
+#lion-splash.out{opacity:0;transform:scale(1.1) translateY(-12px);pointer-events:none}
+.lion-container{position:relative;display:flex;flex-direction:column;align-items:center;animation:splashIn 0.6s var(--ease-spring)}
+.lion-img{width:200px;filter:drop-shadow(0 0 32px rgba(245,158,11,0.35));animation:lionBreathe 2s ease-in-out infinite}
+.lion-ground{width:280px;height:4px;margin-top:-4px;background:linear-gradient(90deg,transparent,rgba(245,158,11,0.5),rgba(255,255,255,0.1),rgba(245,158,11,0.5),transparent);border-radius:99px;animation:groundPulse 2s ease-in-out infinite}
+.lion-dust{display:flex;gap:5px;margin-top:8px}
+.lion-dust div{width:7px;height:7px;border-radius:50%;background:rgba(245,158,11,0.4);animation:dustFly 1.8s ease-out infinite}
+.lion-dust div:nth-child(2){animation-delay:0.2s}.lion-dust div:nth-child(3){animation-delay:0.4s}.lion-dust div:nth-child(4){animation-delay:0.1s}.lion-dust div:nth-child(5){animation-delay:0.3s}
+.lion-text{margin-top:28px;text-align:center;animation:splashIn 0.6s 0.15s var(--ease-spring) both}
+.lion-text .main{font-family:'Syne',sans-serif;font-size:2.1rem;font-weight:800;letter-spacing:-0.5px}
+.lion-text .main span{background:linear-gradient(135deg,#f59e0b,#06b6d4,#f59e0b);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;background-size:200% 100%;animation:goldShine 3s linear infinite}
+.lion-text .sub{font-size:0.85rem;color:var(--t3);margin-top:6px;font-style:italic}
+.lion-progress{margin-top:28px;width:220px;animation:splashIn 0.6s 0.3s var(--ease-spring) both}
+.lion-progress .bar{height:3px;background:rgba(255,255,255,0.08);border-radius:99px;overflow:hidden}
+.lion-progress .fill{height:100%;background:linear-gradient(90deg,#f59e0b,#06b6d4,#8b5cf6,#06b6d4,#f59e0b);background-size:200% 100%;animation:fillBar 4s ease-out forwards,shimmer 1.5s linear infinite}
+.lion-dots{display:flex;justify-content:center;gap:8px;margin-top:14px;animation:splashIn 0.6s 0.4s var(--ease-spring) both}
+.lion-dots div{width:7px;height:7px;border-radius:50%;background:rgba(245,158,11,0.2);animation:dotPulse 1.4s ease-in-out infinite}
+.lion-dots div:nth-child(2){animation-delay:0.2s}.lion-dots div:nth-child(3){animation-delay:0.4s}
+.lion-author{font-family:'JetBrains Mono',monospace;font-size:0.7rem;color:var(--t3);margin-top:22px;opacity:0.6;animation:splashIn 0.6s 0.5s var(--ease-spring) both}
+.lion-version{font-size:0.65rem;color:var(--t3);margin-top:3px;opacity:0.4;animation:splashIn 0.6s 0.55s var(--ease-spring) both}
+
+#lion-splash,.auth-container,#pending-screen{background:linear-gradient(180deg,#e7f3ff 0%,#f0f2f5 45%,#ffffff 100%)}
+.auth-card,.pending-card,.lock-wrap,.card,.menu-section,.account-header,.notice-banner.carousel-banner,.rot-hero,.admin-header-strip,.ss-tile,.txc,.mc,.app-item,.daily-check{background:#ffffff!important;color:#050505;border:1px solid rgba(0,0,0,.08)!important;box-shadow:var(--sh)!important;backdrop-filter:none!important}
 .fall-letter {
   display: inline-block;
   font-family: 'Syne', sans-serif;
-  font-size: 4rem;
+  font-size: 1.5rem;
   font-weight: 800;
   color: #f59e0b;
   opacity: 0;
@@ -652,7 +752,7 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
 .grow-letter {
   display: inline-block;
   font-family: 'Syne', sans-serif;
-  font-size: 4rem;
+  font-size: 1.5rem;
   font-weight: 800;
   color: #f59e0b;
   transform: scale(0);
@@ -704,35 +804,32 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
     const lettersTrust = ['r','u','s','t'];
     const lettersFinance = ['i','n','a','n','c','e'];
 
-    function addFallingLetters(container, letters, startDelay, stagger = 80) {
+   function addFallingLetters(container, letters, startDelay, stagger = 60) {
+  setTimeout(() => {
+    letters.forEach((letter, idx) => {
       setTimeout(() => {
-        letters.forEach((letter, idx) => {
-          setTimeout(() => {
-            const span = document.createElement('span');
-            span.className = 'fall-letter';
-            span.textContent = letter;
-            span.style.fontSize = '4rem';
-            span.style.animation = 'elasticFall 0.8s cubic-bezier(0.34,1.2,0.64,1) forwards';
-            container.appendChild(span);
-          }, idx * stagger);
-        });
-      }, startDelay);
-    }
+        const span = document.createElement('span');
+        span.className = 'fall-letter';
+        span.textContent = letter;
+        // DO NOT set style.fontSize here – let CSS handle it
+        container.appendChild(span);
+      }, idx * stagger);
+    });
+  }, startDelay);
+}
 
-    function addGrowingLetters(container, letters, startDelay, stagger = 80) {
+function addGrowingLetters(container, letters, startDelay, stagger = 60) {
+  setTimeout(() => {
+    letters.forEach((letter, idx) => {
       setTimeout(() => {
-        letters.forEach((letter, idx) => {
-          setTimeout(() => {
-            const span = document.createElement('span');
-            span.className = 'grow-letter';
-            span.textContent = letter;
-            span.style.fontSize = '4rem';
-            span.style.animation = 'grow 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards';
-            container.appendChild(span);
-          }, idx * stagger);
-        });
-      }, startDelay);
-    }
+        const span = document.createElement('span');
+        span.className = 'grow-letter';
+        span.textContent = letter;
+        container.appendChild(span);
+      }, idx * stagger);
+    });
+  }, startDelay);
+}
 
     // 1. H falls
     h.style.animation = 'elasticFall 0.8s cubic-bezier(0.34,1.2,0.64,1) forwards';
@@ -764,6 +861,17 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
 })();
 </script>
 <div class="bg-orb bg-orb-1"></div><div class="bg-orb bg-orb-2"></div><div class="bg-orb bg-orb-3"></div>
+<div id="lion-splash">
+  <div class="lion-container">
+    <img class="lion-img" src="https://image2url.com/r2/default/gifs/1773758382752-d0289f80-5a67-4e09-bc0e-8f4405ba5f27.gif" alt="Lion" onerror="this.style.display='none';document.getElementById('lion-fallback').style.display='flex'">
+    <div id="lion-fallback" style="display:none;font-size:5rem;text-align:center;animation:lionBreathe 2s infinite">🦁</div>
+    <div class="lion-ground"></div><div class="lion-dust"><div></div><div></div><div></div><div></div><div></div></div>
+  </div>
+  <div class="lion-text"><div class="main"><span>Harvest Trust Finance</span></div><div class="sub" id="lion-sub">Loading your pride…</div></div>
+  <div class="lion-progress"><div class="bar"><div class="fill"></div></div></div>
+  <div class="lion-dots"><div></div><div></div><div></div></div>
+  <div class="lion-author">by Lwogamata</div><div class="lion-version">v2.0.0</div>
+</div>
 <div class="twrap" id="twrap"></div>
 <div id="login-screen" class="auth-container hidden">
   <div class="auth-deco auth-deco-1">🌾</div>
@@ -895,20 +1003,57 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
       </div>
       <div id="ledger-list"></div>
     </div>
-    <div id="t-rewards" class="tab">
-  <div class="card" style="text-align: center;">
-    <div class="sec-h">🏆 Rewards & Extra Pool</div>
-    <div id="rewards-summary" class="hint-box">Loading rewards data...</div>
-    <div id="rewards-list" class="rewards-grid"></div>
-    <div class="referral-box" id="referral-box" style="margin-top: 12px;">
-      <div class="label">👥 Refer & Earn</div>
-      <div class="micro" id="referral-code-display"></div>
-      <button class="btn btn-sm btn-teal" onclick="copyReferralLink()">📋 Copy Referral Code</button>
+    <div id="t-statistics" class="tab">
+  <div class="sec-h">📊 Reports & Insights</div>
+
+  <!-- Sub‑tabs navigation -->
+  <div class="stats-subtabs" style="display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--br); padding-bottom: 6px;">
+    <button class="stats-tab-btn active" data-stats-tab="leaderboard">🏆 Leaderboard</button>
+    <button class="stats-tab-btn" data-stats-tab="charts">📊 Charts</button>
+    <button class="stats-tab-btn" data-stats-tab="rewards">🎁 Rewards & Bonuses</button>
+  </div>
+
+  <!-- Leaderboard -->
+  <div id="stats-leaderboard" class="stats-tab-content active">
+    <div class="card">
+      <div class="sec-h">Member Ranking <span style="font-size: 0.6rem; font-weight: normal;">(progress bar relative to top saver)</span></div>
+      <div id="compact-leaderboard" class="ranking-leaderboard" style="max-height: 460px; overflow-y: auto;"></div>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div id="stats-charts" class="stats-tab-content" style="display: none;">
+    <!-- Deposits vs Others Pie Chart -->
+    <div class="card" style="margin-bottom: 16px;">
+      <div style="font-size: 0.7rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--t3); margin-bottom: 8px; text-align: center;">💰 Deposits vs Others (Full Group)</div>
+      <canvas id="depositPieChart" width="300" height="300" style="max-width: 100%; height: auto; margin: 0 auto;"></canvas>
+    </div>
+
+    <!-- Top Savers Bar Chart with pie chart inset -->
+    <div class="card" style="position: relative;">
+      <div style="font-size: 0.7rem; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--t3); margin-bottom: 8px; text-align: center;">🏦 Top Savers (Vertical Bars)</div>
+      <canvas id="topSaversBarChart" width="500" height="300" style="max-width: 100%; height: auto;"></canvas>
+      <!-- Small pie chart inset (corner) -->
+      <div style="position: absolute; top: 8px; right: 8px; width: 80px; height: 80px; background: rgba(0,0,0,0.6); border-radius: 50%; padding: 4px; backdrop-filter: blur(2px);">
+        <canvas id="insetPieChart" width="80" height="80" style="width: 100%; height: 100%;"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rewards & Bonuses -->
+  <div id="stats-rewards" class="stats-tab-content" style="display: none;">
+    <div class="card">
+      <div class="sec-h">🎁 Rewards & Extra Pool</div>
+      <div id="rewards-summary" class="hint-box">Loading rewards data...</div>
+      <div id="rewards-list" class="rewards-grid"></div>
+      <div class="referral-box" id="referral-box-stats" style="margin-top: 12px;">
+        <div class="label">👥 Refer & Earn</div>
+        <div class="micro" id="referral-code-display-stats"></div>
+        <button class="btn btn-sm btn-teal" onclick="copyReferralLinkStats()">📋 Copy Referral Code</button>
+      </div>
     </div>
   </div>
 </div>
-</div>
-
     <div id="t-account" class="tab">
       <div class="account-header">
         <div class="profile-row">
@@ -965,7 +1110,6 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
           <div class="admin-tab" data-tab="harvest" onclick="switchAdminTab('harvest')">🌾 Harvest</div>
           <div class="admin-tab" data-tab="users" onclick="switchAdminTab('users')">👥 Users</div>
           <div class="admin-tab" data-tab="fines" onclick="switchAdminTab('fines')">⚡ Fines</div>
-          <div class="admin-tab" data-tab="ranking" onclick="switchAdminTab('ranking')">🏆 Ranking</div>
           <div class="admin-tab" data-tab="settings" onclick="switchAdminTab('settings')">⚙️ Settings</div>
         </div>
         <div id="admin-content"></div>
@@ -984,8 +1128,11 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
    <div id="nav">
   <button class="ni" id="ni-home" onclick="goTab('home',this)"><div class="ico">🏠</div><span>Home</span><div class="ni-bar"></div></button>
   <button class="ni" id="ni-ledger" onclick="goTab('ledger',this)"><div class="ico">📒</div><span>Ledger</span><div class="ni-bar"></div></button>
- <button class="ni" id="ni-rewards" onclick="goTab('rewards',this)"><div class="ico">🏆</div><span>Rewards</span><div class="ni-bar"></div></button>
+ <button class="ni" id="ni-statistics" onclick="goTab('statistics',this)"><div class="ico">📊</div><span>Statistics</span><div class="ni-bar"></div></button>
   <button class="ni" id="ni-account" onclick="goTab('account',this)"><div class="ico">👤</div><span>Account</span><div class="ni-bar"></div></button>
+  <button class="ni" id="ni-admin" onclick="goTab('admin',this)"><div class="ico">🔐</div><span>Admin</span><div class="ni-bar"></div></button>
+</div>
+</div>
 </div>
 </div>
 <div class="ov" id="ov-add-tx" onclick="maybeClose(event,'ov-add-tx')">
@@ -2010,6 +2157,7 @@ function refreshUI() {
   if (currentScreen === 'admin' && adminUnlocked) renderAdminTab();
   updateNotificationBadge();
   if (currentScreen === 'rewards') renderRewardsPage();
+  if (currentScreen === 'statistics') renderStatistics();
 }
 /**
  * Process a deposit amount, covering:
@@ -2341,6 +2489,243 @@ function updateLoanIndicator(){
     }
   }
 }
+// ==================== STATISTICS TAB ====================
+let depositPieChart = null;
+let topSaversBarChart = null;
+let insetPieChart = null;
+
+function renderStatistics() {
+  if (!members.length) return;
+
+  const activeMembers = members.filter(m => m.approved);
+
+  // ---- Leaderboard (unchanged, full names) ----
+  const allStats = activeMembers.map(m => {
+    let dep = 0;
+    transactions.forEach(tx => { if (tx.memberPhone === m.phone && tx.type === 'deposit') dep += tx.amount; });
+    return { ...m, totalDeposits: dep };
+  });
+  allStats.sort((a, b) => b.totalDeposits - a.totalDeposits);
+  const maxDeposit = allStats[0]?.totalDeposits || 1;
+
+  let leaderHtml = '';
+  allStats.forEach((m, idx) => {
+    const percent = (m.totalDeposits / maxDeposit) * 100;
+    const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx+1}`;
+    leaderHtml += `
+      <div class="ranking-row" style="padding: 10px 12px;">
+        <div class="ranking-rank" style="min-width: 38px; font-size: 1.3rem;">${medal}</div>
+        <div class="ranking-avatar" style="width: 36px; height: 36px; font-size: 1rem; background: linear-gradient(135deg, ${getAvatarColor(m.name)}, #8b5cf6);">${m.name.charAt(0)}</div>
+        <div class="ranking-info" style="flex: 1;">
+          <div class="ranking-name" style="font-size: 0.85rem;">${escapeHtml(m.name)}</div>
+          <div class="ranking-progress-bar" style="margin: 4px 0;">
+            <div class="ranking-progress-fill" style="width: ${percent}%; background: linear-gradient(90deg, var(--gold), var(--teal));"></div>
+          </div>
+          <div class="ranking-deposit" style="font-size: 0.7rem;">${money(m.totalDeposits)}</div>
+        </div>
+        <div class="ranking-actions">
+          <a href="tel:${m.phone}" class="btn btn-sm btn-teal" style="padding: 4px 8px;">📞</a>
+        </div>
+      </div>
+    `;
+  });
+  document.getElementById('compact-leaderboard').innerHTML = leaderHtml || '<div class="muted">No deposits yet</div>';
+
+  // ---- Global totals for pie charts ----
+  let totalDeposits = 0, totalOther = 0;
+  transactions.forEach(tx => {
+    if (tx.type === 'deposit') totalDeposits += tx.amount;
+    else if (['fine', 'welfare', 'expense', 'payout', 'loan_disbursement'].includes(tx.type)) totalOther += tx.amount;
+  });
+
+  // Main pie chart (full size)
+  if (depositPieChart) depositPieChart.destroy();
+  const pieCtx = document.getElementById('depositPieChart').getContext('2d');
+  depositPieChart = new Chart(pieCtx, {
+    type: 'pie',
+    data: { labels: ['Deposits', 'Others (fines, expenses, payouts)'], datasets: [{ data: [totalDeposits, totalOther], backgroundColor: ['#10b981', '#f59e0b'] }] },
+    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } } } }
+  });
+
+  // Inset pie chart (small, same data)
+  if (insetPieChart) insetPieChart.destroy();
+  const insetCtx = document.getElementById('insetPieChart').getContext('2d');
+  insetPieChart = new Chart(insetCtx, {
+    type: 'pie',
+    data: { labels: ['Dep', 'Other'], datasets: [{ data: [totalDeposits, totalOther], backgroundColor: ['#10b981', '#f59e0b'] }] },
+    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false } } }
+  });
+
+  // ---- Bar chart: Top 8 savers with FULL NAMES (vertical bars) ----
+  // If you want ALL members (warning: very crowded), replace `.slice(0,8)` with the full array.
+   // ---- Bar chart: Top 8 savers with FULL NAMES (VERTICAL BARS) ----
+  const memberTotals = activeMembers.map(m => {
+    let dep = 0;
+    transactions.forEach(tx => { if (tx.memberPhone === m.phone && tx.type === 'deposit') dep += tx.amount; });
+    return { name: m.name, amount: dep };
+  });
+  memberTotals.sort((a, b) => b.amount - a.amount);
+  const topSavers = memberTotals.slice(0, 8);  // adjust number as needed
+
+  if (topSaversBarChart) topSaversBarChart.destroy();
+  const barCtx = document.getElementById('topSaversBarChart').getContext('2d');
+  topSaversBarChart = new Chart(barCtx, {
+    type: 'bar',
+    data: {
+      labels: topSavers.map(m => m.name),
+      datasets: [{ label: 'Total Deposits (UGX)', data: topSavers.map(m => m.amount), backgroundColor: '#f59e0b', borderRadius: 6 }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { position: 'top' },
+        tooltip: { callbacks: { label: (ctx) => `UGX ${ctx.raw.toLocaleString()}` } }
+      },
+      scales: {
+        x: {
+          ticks: {
+            autoSkip: true,
+            maxRotation: 45,
+            minRotation: 45,
+            font: { size: 10 }
+          }
+        },
+        y: {
+          beginAtZero: true,
+          ticks: { callback: v => 'UGX ' + v.toLocaleString() }
+        }
+      }
+    }
+  });
+
+  // ---- Loan stats (unchanged) ----
+  const activeLoans = loans.filter(l => l.status === 'approved' && !l.repaid);
+  let totalPrincipal = 0, totalInterest = 0, totalRepay = 0, totalRepaid = 0;
+  activeLoans.forEach(loan => {
+    totalPrincipal += loan.amount || 0;
+    totalInterest += (loan.totalRepay - loan.amount) || 0;
+    totalRepay += loan.totalRepay || 0;
+    const repaidAmount = (loan.amount + (loan.totalRepay - loan.amount)) - (memberLoans[loan.memberPhone] || 0);
+    totalRepaid += Math.max(0, repaidAmount);
+  });
+  document.getElementById('stat-active-loans').innerText = activeLoans.length;
+  document.getElementById('stat-loan-principal').innerHTML = money(totalPrincipal);
+  document.getElementById('stat-loan-interest').innerHTML = money(totalInterest);
+  document.getElementById('stat-loan-total').innerHTML = money(totalRepay);
+  document.getElementById('stat-loan-repaid').innerHTML = money(totalRepaid);
+
+  // ---- Consistency leaders (unchanged) ----
+  const consistencyScores = activeMembers.map(m => {
+    const days = new Set();
+    transactions.forEach(tx => {
+      if (tx.memberPhone === m.phone && tx.type === 'deposit') {
+        days.add(new Date(tx.date).toISOString().slice(0,10));
+      }
+    });
+    return { member: m, daysCount: days.size };
+  });
+  consistencyScores.sort((a, b) => b.daysCount - a.daysCount);
+  const topConsistency = consistencyScores.slice(0, 5);
+  let consHtml = `<div class="ranking-leaderboard" style="gap: 8px;">`;
+  topConsistency.forEach((item, i) => {
+    consHtml += `
+      <div class="ranking-row" style="padding: 8px 12px;">
+        <div class="ranking-rank" style="font-size: 1.2rem; min-width: 30px;">${i+1}</div>
+        <div class="ranking-info">
+          <div class="ranking-name">${escapeHtml(item.member.name)}</div>
+          <div class="ranking-deposit" style="font-size: 0.7rem;">${item.daysCount} day(s) with deposit</div>
+        </div>
+      </div>
+    `;
+  });
+  consHtml += `</div>`;
+  document.getElementById('consistency-list').innerHTML = consHtml || '<div class="muted">No data yet</div>';
+  renderRewardsContent(); // fills rewards data in the stats tab
+}
+function renderRewardsContent() {
+  const summaryDiv = document.getElementById('rewards-summary');
+  const listDiv = document.getElementById('rewards-list');
+  const referralDiv = document.getElementById('referral-code-display-stats');
+  if (!summaryDiv) return;
+
+  const data = calculateRewards();
+  if (!data || data.totalMembers === 0) {
+    summaryDiv.innerHTML = '<div class="muted">No active members yet.</div>';
+    listDiv.innerHTML = '';
+    return;
+  }
+
+  summaryDiv.innerHTML = `
+    <div><strong>Total Profit Pool:</strong> ${money(data.groupProfit)}</div>
+    <div><strong>Equal Share (${data.totalMembers} members):</strong> ${money(data.equalSharePerMember)} each</div>
+    <div><strong>Extra Rewards Pool (5 categories):</strong> ${money(data.rewardsPoolDisplay)}</div>
+  `;
+
+  let html = '<div class="rewards-grid">';
+  data.winners.forEach(winner => {
+    if (winner.eligible) {
+      html += `
+        <div class="reward-card">
+          <div class="reward-category">${winner.category}</div>
+          <div class="reward-member">${escapeHtml(winner.member.name)}</div>
+          <div class="reward-amount">${money(winner.amount)}</div>
+          <div class="micro muted">${winner.metric} points</div>
+        </div>
+      `;
+    } else {
+      html += `
+        <div class="reward-card" style="opacity: 0.7;">
+          <div class="reward-category">${winner.category}</div>
+          <div class="reward-member">— —</div>
+          <div class="reward-amount">UGX 0</div>
+          <div class="micro muted">No eligible member</div>
+        </div>
+      `;
+    }
+  });
+  html += '</div>';
+  listDiv.innerHTML = html;
+
+  if (currentUser && !currentUser.isAdmin) {
+    referralDiv.parentElement.style.display = 'block';
+    const code = currentUser.id?.slice(-6) || currentUser.phone?.slice(-4);
+    referralDiv.innerHTML = `<strong>Your Referral Code:</strong> ${code}`;
+  } else {
+    referralDiv.parentElement.style.display = 'none';
+  }
+}
+
+// Copy referral link (duplicate for stats tab)
+window.copyReferralLinkStats = function() {
+  const code = currentUser?.id?.slice(-6) || currentUser?.phone?.slice(-4);
+  if (code) {
+    navigator.clipboard.writeText(code);
+    toast('Referral code copied!', '#10b981');
+  }
+};
+//------THIS ENDS HERE-----------//
+// Statistics sub‑tab switching
+document.querySelectorAll('.stats-tab-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    const tabId = this.getAttribute('data-stats-tab');
+    // Update button active state
+    document.querySelectorAll('.stats-tab-btn').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+    // Hide all content containers
+    document.querySelectorAll('.stats-tab-content').forEach(div => div.style.display = 'none');
+    // Show selected container
+    const target = document.getElementById(`stats-${tabId}`);
+    if (target) target.style.display = 'block';
+    // Re‑render charts if needed (especially for pie/bar)
+    if (tabId === 'rewards') renderRewardsContent();
+    if (tabId === 'charts') {
+      // Re‑trigger chart rendering (the canvas might need redraw)
+      if (depositPieChart) depositPieChart.update();
+      if (topSaversBarChart) topSaversBarChart.update();
+    }
+  });
+});
 function renderMainCarousel() {
   const track = document.getElementById('main-carousel-track');
   const dots = document.getElementById('main-carousel-dots');
@@ -3533,6 +3918,7 @@ window.confirmDailySavings = async function() {
   if (currentScreen === 'ledger') loadLedger('all');
   if (currentScreen === 'account') updateAccountUI();
   if (currentScreen === 'admin' && adminUnlocked && currentAdminTab === 'savings') renderAdminTab();
+  if (currentScreen === 'statistics') renderStatistics();
 };
 window.switchAdminTab=function(tab){currentAdminTab=tab;document.querySelectorAll('.admin-tab').forEach(t=>t.classList.remove('active'));document.querySelector(`.admin-tab[data-tab="${tab}"]`)?.classList.add('active');renderAdminTab();};
 function renderAdminTab(){
@@ -4484,11 +4870,9 @@ window.goTab = function(tab, btn) {
     } else {
       document.getElementById('adm-lock').classList.remove('hidden');
       document.getElementById('adm-panel').classList.add('hidden');
-    }
-  }
-  if (tab === 'rewards') renderRewardsPage();
-  
+    }}
   applyLanguageToUI();
+  if (tab === 'statistics') renderStatistics();
 };
 function showModal(content, title) {
   const overlay = document.getElementById('ov-apps');
@@ -4587,23 +4971,43 @@ function getActivityCount(member) {
   return transactions.filter(tx => tx.memberPhone === member.phone).length;
 }
 
+// ========== REWARDS LOGIC (for Statistics tab) ==========
 function calculateRewards() {
   const activeMembers = members.filter(m => m.approved);
   if (activeMembers.length === 0) return null;
 
-  const equalSharePercent = 90;
-  const rewardsPercent = 10;
+  const rewardsPercent = 10; // 10% of profit pool goes to extra rewards
   let rewardsPool = Math.floor(groupProfit * rewardsPercent / 100);
   let equalShareTotal = groupProfit - rewardsPool;
 
-  const memberScores = activeMembers.map(m => ({
-    member: m,
-    consistency: getConsistencyScore(m),
-    totalDeposits: getTotalDeposits(m),
-    referrals: getReferralCount(m.id),
-    repaidLoans: getRepaidLoanCount(m.id),
-    activity: getActivityCount(m)
-  }));
+  // Calculate metrics for each member
+  const memberScores = activeMembers.map(m => {
+    let totalDeposits = 0;
+    let consistency = new Set();
+    let referrals = m.referralCount || 0;
+    let repaidLoans = 0;
+    let activity = 0;
+
+    transactions.forEach(tx => {
+      if (tx.memberPhone === m.phone && tx.type === 'deposit') {
+        totalDeposits += tx.amount;
+        consistency.add(new Date(tx.date).toISOString().slice(0,10));
+        activity++;
+      }
+    });
+    loans.forEach(loan => {
+      if (loan.memberId === m.id && loan.repaid === true) repaidLoans++;
+    });
+
+    return {
+      member: m,
+      totalDeposits,
+      consistency: consistency.size,
+      referrals,
+      repaidLoans,
+      activity
+    };
+  });
 
   const categoryDefs = [
     { name: '🏆 Top Saver', field: 'totalDeposits', percent: 0.30 },
@@ -4617,12 +5021,11 @@ function calculateRewards() {
   const usedMemberIds = new Set();
 
   for (let cat of categoryDefs) {
-    // Find best candidate with value > 0
     let best = null;
-    let bestValue = 0;
+    let bestValue = -1;
     for (let s of memberScores) {
       if (usedMemberIds.has(s.member.id)) continue;
-      const val = s[cat.field];
+      let val = s[cat.field];
       if (val > bestValue) {
         bestValue = val;
         best = s;
@@ -4638,11 +5041,9 @@ function calculateRewards() {
         eligible: true
       });
       usedMemberIds.add(best.member.id);
-      // Deduct from rewardsPool? No, we just display; actual distribution later.
     } else {
-      // No winner: amount goes to equal share
-      const amount = Math.floor(rewardsPool * cat.percent);
-      equalShareTotal += amount;
+      // No eligible member – add amount back to equal share
+      equalShareTotal += Math.floor(rewardsPool * cat.percent);
       winners.push({
         category: cat.name,
         member: null,
@@ -4653,9 +5054,7 @@ function calculateRewards() {
     }
   }
 
-  // Final equal share per member
   const equalSharePerMember = activeMembers.length ? Math.floor(equalShareTotal / activeMembers.length) : 0;
-
   return {
     equalSharePerMember,
     winners,
@@ -4665,15 +5064,19 @@ function calculateRewards() {
   };
 }
 
-function renderRewardsPage() {
+function renderRewardsContent() {
   const summaryDiv = document.getElementById('rewards-summary');
   const listDiv = document.getElementById('rewards-list');
+  const referralDiv = document.getElementById('referral-code-display-stats');
+  const referralBox = document.getElementById('referral-box-stats');
+
   if (!summaryDiv || !listDiv) return;
 
   const data = calculateRewards();
   if (!data || data.totalMembers === 0) {
     summaryDiv.innerHTML = '<div class="muted">No active members yet.</div>';
     listDiv.innerHTML = '';
+    if (referralBox) referralBox.style.display = 'none';
     return;
   }
 
@@ -4695,7 +5098,6 @@ function renderRewardsPage() {
         </div>
       `;
     } else {
-      // Placeholder for no eligible member
       html += `
         <div class="reward-card" style="opacity: 0.7;">
           <div class="reward-category">${winner.category}</div>
@@ -4709,16 +5111,26 @@ function renderRewardsPage() {
   html += '</div>';
   listDiv.innerHTML = html;
 
-  // Referral box (unchanged)
-  const referralBox = document.getElementById('referral-box');
-  if (currentUser && !currentUser.isAdmin) {
+  // Referral section
+  if (referralBox && currentUser && !currentUser.isAdmin) {
     referralBox.style.display = 'block';
     const code = currentUser.id?.slice(-6) || currentUser.phone?.slice(-4);
-    document.getElementById('referral-code-display').innerHTML = `<strong>Your Referral Code:</strong> ${code}`;
-  } else {
+    if (referralDiv) referralDiv.innerHTML = `<strong>Your Referral Code:</strong> ${code}`;
+  } else if (referralBox) {
     referralBox.style.display = 'none';
   }
 }
+
+// Copy referral link for stats tab
+window.copyReferralLinkStats = function() {
+  const code = currentUser?.id?.slice(-6) || currentUser?.phone?.slice(-4);
+  if (code) {
+    navigator.clipboard.writeText(code);
+    toast('Referral code copied!', '#10b981');
+  } else {
+    toast('No referral code available', '#ef4444');
+  }
+};
 window.copyReferralLink = function() {
   const input = document.getElementById('referral-link-display');
   if (input) {
