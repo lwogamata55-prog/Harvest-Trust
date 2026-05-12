@@ -1951,6 +1951,14 @@ let loanSettings = {
   overduePenalty: 2
 };
 let loans=[];
+function hasActiveLoanFromApplication() {
+  return loans.some(l => 
+    l.status === 'approved' && 
+    !l.repaid && 
+    l.loanQuestions &&          // only loans submitted via the application form have this array
+    l.loanQuestions.length > 0
+  );
+}
 let mainCarouselNotifs=[], mainCarouselIdx=0, mainCarouselTimer=null;
 let currentScreen='login';
 let memberPresence={};
@@ -2202,30 +2210,37 @@ function _showReceiverFrame() {
   const currentIdx = rotation.currentIndex || 0;
   const displayIdx = _receiverCycleIdx % total;
   const memberId = order[displayIdx];
-  const member = members.find(function(m){ return m.id === memberId; }) || { name: '—' };
-  const isCurrent = displayIdx === currentIdx;
-
+  const member = members.find(m => m.id === memberId);
+  
   const nameEl = document.getElementById('weekly-payee-name');
+  const infoEl = document.getElementById('payout-rotation-info');
+  const fillEl = document.getElementById('payout-progress-fill');
+  const lblEl = document.getElementById('payout-progress-label');
+
+  if (!member) {
+    if (nameEl) nameEl.innerText = '— (member removed)';
+    if (infoEl) infoEl.innerText = '⚠️ Member no longer in group';
+    if (fillEl) fillEl.style.width = '0%';
+    if (lblEl) lblEl.innerText = 'Invalid rotation';
+    return;
+  }
+  
+  const isCurrent = displayIdx === currentIdx;
   if (nameEl) {
     nameEl.style.opacity = '0';
     nameEl.style.transform = 'translateY(-10px)';
-    setTimeout(function() {
+    setTimeout(() => {
       nameEl.innerText = member.name;
       nameEl.style.color = isCurrent ? 'var(--gold)' : 'var(--t2)';
       nameEl.style.opacity = isCurrent ? '1' : '0.65';
       nameEl.style.transform = 'translateY(0)';
     }, 200);
   }
-
-  const infoEl = document.getElementById('payout-rotation-info');
   if (infoEl) {
     infoEl.innerText = isCurrent
       ? '⭐ Current receiver · #' + (displayIdx + 1) + ' of ' + total
       : 'Upcoming · #' + (displayIdx + 1) + ' of ' + total;
   }
-
-  const fillEl = document.getElementById('payout-progress-fill');
-  const lblEl = document.getElementById('payout-progress-label');
   if (fillEl) {
     const pct = total > 0 ? Math.round((currentIdx / total) * 100) : 0;
     fillEl.style.width = pct + '%';
@@ -2234,7 +2249,6 @@ function _showReceiverFrame() {
     lblEl.innerText = currentIdx + ' paid · ' + (total - currentIdx) + ' remaining';
   }
 }
-
 // ── isLedgerActive helper ─────────────────────────────────────────────────
 function isLedgerActive() {
   if (currentScreen === 'ledger') return true;
@@ -2464,11 +2478,10 @@ async function updateLoanRepaidStatus(phone) {
   console.log(`Outstanding loan balance for ${member.name}: ${outstanding}`);
   
   if (outstanding === 0) {
-    for (let loan of pendingRepayLoans) {
-      console.log(`Marking loan ${loan.id} as repaid`);
-      await db.ref('loans/' + loan.id).update({ repaid: true, repaidAt: Date.now() });
-    }
-    toast(`Loan cleared for ${member.name}`, '#10b981');
+  for (let loan of pendingRepayLoans) {
+    await db.ref('loans/' + loan.id).update({ repaid: true, repaidAt: Date.now() });
+  }
+  toast(`Loan cleared for ${member.name}`, '#10b981');
     
     // Force refresh loans array and admin UI
     const allLoansSnap = await db.ref('loans').once('value');
@@ -2784,11 +2797,12 @@ function loadAllData() {
   });
 
   // Main carousel notices
-  db.ref('mainNotices').on('value', snap => {
-    mainCarouselNotifs = snap.val() ? Object.values(snap.val()) : [];
-    renderMainCarousel();
-    if (currentScreen === 'admin' && adminUnlocked && currentAdminTab === 'notice') renderAdminTab();
-  });
+ db.ref('mainNotices').on('value', snap => {
+  const val = snap.val() || {};
+  mainCarouselNotifs = Object.entries(val).map(([key, notice]) => ({ ...notice, key }));
+  renderMainCarousel();
+  if (currentScreen === 'admin' && adminUnlocked && currentAdminTab === 'notice') renderAdminTab();
+});
 
   // Password reset requests – add if needed (not critical)
   // but we'll add for completeness
@@ -3183,36 +3197,28 @@ window.addCarouselNotice = function() {
   }
   const icon = document.getElementById('c-icon').value || '📢';
   const imgData = document.getElementById('c-image-data').value;
-  
   db.ref('mainNotices').push({
     text: msg,
     icon: icon,
     imageData: imgData || null,
-    payee: '',
-    id: Date.now()
+    payee: ''
   }).then(() => {
     toast('Carousel notice added!', '#10b981');
     closeOv('ov-carousel-compose');
-    // Clear form
     document.getElementById('c-msg').value = '';
     document.getElementById('c-icon').value = '📢';
     document.getElementById('c-preview').style.display = 'none';
     document.getElementById('c-image-data').value = '';
-    // Refresh admin tab
-    if (currentAdminTab === 'notice') renderAdminTab();
   }).catch(err => {
     console.error(err);
     toast('Add failed', '#ef4444');
   });
 };
-window.removeCarouselNotice = function(id) {
-  if (!id) return;
-  db.ref('mainNotices/' + id).remove().then(() => {
+window.removeCarouselNotice = function(key) {
+  if (!key) return;
+  db.ref('mainNotices/' + key).remove().then(() => {
     toast('Notice deleted', '#ef4444');
-    // Refresh the admin notice tab if open
-    if (currentAdminTab === 'notice') renderAdminTab();
-    // Also refresh carousel on home
-    renderMainCarousel();
+    // Refresh will happen automatically via listener
   }).catch(err => {
     console.error(err);
     toast('Delete failed', '#ef4444');
@@ -3241,15 +3247,6 @@ function attachMsgCounterListener() {
   }
 }
 
-// Call attachMsgCounterListener every time the modal is opened
-// Override openOv to also attach listener when opening ov-carousel-compose
-const originalOpenOv = window.openOv;
-window.openOv = function(id) {
-  originalOpenOv(id);
-  if (id === 'ov-carousel-compose') {
-    setTimeout(attachMsgCounterListener, 50); // wait for DOM
-  }
-};
 function renderTxRow(tx,i){
   const m=members.find(m=>m.phone===tx.memberPhone)||{name:tx.memberName||'?'};
   const ico=TX_ICONS[tx.type]||'💫';
@@ -3279,6 +3276,14 @@ function clearLedgerFilters() {
   document.getElementById("ledger-search").value = "";
   ledgerSearchText = "";
   loadLedger(ledgerFilter);
+}
+function cleanRotationOrder() {
+  if (!rotation.order || !members.length) return;
+  const validIds = new Set(members.filter(m => m.approved !== false).map(m => m.id));
+  const newOrder = rotation.order.filter(id => validIds.has(id));
+  if (newOrder.length !== rotation.order.length) {
+    db.ref('rotation').update({ order: newOrder, currentIndex: 0 });
+  }
 }
 
 // Replace your existing loadLedger function
@@ -3810,8 +3815,18 @@ window.openLoanSettings = function() {
   document.getElementById('loan-penalty').value = loanSettings.overduePenalty || 2;
   openOv('ov-loan-settings');
 };
-window.openLoanRequestModal = function() {
-  if (!currentUser || currentUser.isAdmin) return;
+
+window.openLoanRequestModal = async function() {
+  if (currentUser.isAdmin) { toast('Admin cannot request loans', '#ef4444'); return; }
+  
+  // Refresh loans from Firebase to ensure latest data
+  const snap = await db.ref('loans').once('value');
+  loans = snap.val() ? Object.entries(snap.val()).map(([id, l]) => ({ ...l, id })) : [];
+  
+  if (hasActiveLoanFromApplication()) {
+  toast('A loan requested through the application is still unpaid. No new requests allowed until it is repaid.', '#ef4444');
+  return;
+}
   computePots();
   
   // Calculate member's discipline limit
@@ -3862,7 +3877,15 @@ window.openLoanRequestModal = function() {
 
 let tempLoanData = null; // temporary storage before confirmation
 
-window.submitLoanWithQuestions = function() {
+window.submitLoanWithQuestions = async function() {
+  // Refresh loans from Firebase
+  const snap = await db.ref('loans').once('value');
+  loans = snap.val() ? Object.entries(snap.val()).map(([id, l]) => ({ ...l, id })) : [];
+  
+  if (hasActiveLoanFromApplication()) {
+  toast('A loan application is still active. Please wait until it is repaid.', '#ef4444');
+  return;
+}
   const amount = parseFloat(document.getElementById('loan-amount').value);
   const weeks = parseInt(document.getElementById('loan-weeks').value);
   if (!amount || amount <= 0) { toast('Enter a valid amount', '#ef4444'); return; }
@@ -3957,6 +3980,7 @@ window.finalSubmitLoan = function() {
     console.error(err); 
     toast('Failed to submit', '#ef4444');
   });
+  
 };
 
 window.saveLoanSettings = function() {
@@ -3987,43 +4011,55 @@ window.saveLoanSettings = function() {
 };
 
 window.approveLoan = function(lid) {
-  db.ref('loans/' + lid).once('value', snap => {
+  db.ref('loans/' + lid).once('value', async snap => {
     const loan = snap.val();
     if (!loan) return;
     if (loan.status !== 'pending') return toast('Loan already processed', '#ef4444');
+    
+    // Replace the global lock check with:
+if (hasActiveLoanFromApplication()) {
+  toast('Cannot approve: There is already an active loan from a previous application.', '#ef4444');
+  return;
+}
+    
     computePots();
     const principal = loan.amount;
     const interest = loan.totalRepay - principal;
     if (principal > groupProfit) {
-      toast('Insufficient profit pool', '#ef4444');
+      toast('Insufficient profit pool to disburse this loan.', '#ef4444');
       return;
     }
-    db.ref('loans/' + lid).update({ status: 'approved', approvedAt: Date.now() });
-    // Disburse principal
-    db.ref('transactions').push({
+    
+    await db.ref('loans/' + lid).update({ status: 'approved', approvedAt: Date.now() });
+    
+    // Disburse principal (reduces profit pool)
+    await db.ref('transactions').push({
       memberPhone: loan.memberPhone,
       memberName: loan.memberName,
       type: 'loan_disbursement',
       amount: principal,
       description: `Loan principal: UGX ${principal.toLocaleString()}`,
       date: Date.now()
-    }).then(() => {
-      // Add interest as a separate loan adjustment
-      if (interest > 0) {
-        db.ref('transactions').push({
-          memberPhone: loan.memberPhone,
-          memberName: loan.memberName,
-          type: 'loan_adjustment',
-          amount: interest,
-          description: `Interest on loan of UGX ${principal.toLocaleString()} (${loan.interestRate}%)`,
-          date: Date.now() + 1
-        });
-      }
-      // Send notification...
-      toast(`Loan approved!`, '#10b981');
-      computePots();
-      updateHomeUI();
     });
+    
+    if (interest > 0) {
+      await db.ref('transactions').push({
+        memberPhone: loan.memberPhone,
+        memberName: loan.memberName,
+        type: 'loan_adjustment',
+        amount: interest,
+        description: `Interest on loan of UGX ${principal.toLocaleString()} (${loan.interestRate}%)`,
+        date: Date.now() + 1
+      });
+    }
+    
+    toast(`Loan approved for ${loan.memberName}!`, '#10b981');
+    computePots();
+    updateHomeUI();
+    if (currentScreen === 'admin' && adminUnlocked) renderAdminTab();
+    if (currentScreen === 'statistics') renderStatistics();
+    // Refresh pending loans list if modal is open
+    if (document.getElementById('ov-apps')?.classList.contains('on')) loadApplications();
   });
 };
 window.rejectLoan=function(lid){
@@ -4285,62 +4321,83 @@ function renderAdminTab(){
   const pendingLoans=loans.filter(l=>l.status==='pending');
   const activeLoans = loans.filter(l => l.status === 'approved' && !l.repaid);
   if(currentAdminTab==='savings'){
-    c.innerHTML=`<div class="card"><div class="sec-h">${t('daily_rates')}</div><div class="fgrp"><label class="flbl">${t('daily_amount')}</label><input type="number" id="admin-daily" class="inp" value="${settings.dailyAmount||2500}"></div><div class="fgrp"><label class="flbl">${t('welfare_deduction')}</label><input type="number" id="admin-welfare" class="inp" value="${settings.welfareAmount||0}"></div><div class="fgrp"><label class="flbl">${t('fine_contribution')}</label><input type="number" id="admin-finecontrib" class="inp" value="${settings.fineContribution||0}"></div><div class="fgrp"><label class="flbl">${t('default_fine')}</label><input type="number" id="admin-fine" class="inp" value="${settings.fineAmount||5000}"></div><button class="btn btn-gold btn-full" onclick="saveSavingsSettings()">${t('save_rates')}</button><div class="hint-box" style="margin-top:8px">${t('net_daily')}: <strong>UGX ${getDisplayNetDaily().toLocaleString()}</strong> · ${t('weekly_pool')}: <strong>UGX ${computeTotalWeekly().toLocaleString()}</strong></div>
-    <div class="card"><div class="sec-h">${t('profit_pool_card')}</div><div style="display:flex;align-items:center;gap:14px;margin-bottom:14px"><div style="width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,var(--green),#059669);display:flex;align-items:center;justify-content:center;font-size:1.6rem">💰</div><div><div style="font-family:'JetBrains Mono',monospace;font-size:1.6rem;font-weight:700;color:${groupProfit<0?'var(--red)':'var(--green)'}">UGX ${groupProfit.toLocaleString()}</div><div class="micro">${t('per_member')}: ~UGX ${members.length?Math.floor(groupProfit/members.length).toLocaleString():'0'}</div></div></div><button class="btn btn-green btn-full" onclick="distributeProfit()">${t('distribute_profit')}</button></div>
+  c.innerHTML = `
+    <div class="card">
+      <div class="sec-h">🏦 Profit Pool</div>
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
+        <div style="width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,var(--green),#059669);display:flex;align-items:center;justify-content:center;font-size:1.6rem">💰</div>
+        <div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:1.6rem;font-weight:700;color:${groupProfit<0?'var(--red)':'var(--green)'}">UGX ${groupProfit.toLocaleString()}</div>
+          <div class="micro">${t('per_member')}: ~UGX ${members.length?Math.floor(groupProfit/members.length).toLocaleString():'0'}</div>
+        </div>
+      </div>
+      <button class="btn btn-green btn-full" onclick="previewProfitDistribution()">${t('distribute_profit')}</button>
+    </div>
     ${pendingLoans.length?`<div class="card"><div class="sec-h">${t('pending_loans')} <span class="pill-badge pill-amber">${pendingLoans.length}</span></div>${pendingLoans.map(l=>`<div class="mc"><div><div class="mc-name">${l.memberName}</div><div class="mc-phone">UGX ${l.amount.toLocaleString()} · Repay: UGX ${l.totalRepay.toLocaleString()} (${l.interestRate}%)</div><div class="micro">${l.reason}</div></div><div><button class="btn btn-sm btn-green" onclick="approveLoan('${l.id}')">✅</button><button class="btn btn-sm btn-red" onclick="rejectLoan('${l.id}')">✕</button></div></div>`).join('')}</div>`:''}
     ${(() => {
-  // Group active loans by member
-  const activeByMember = {};
-  loans.forEach(l => {
-    if (l.status === 'approved' && !l.repaid) {
-      if (!activeByMember[l.memberId]) {
-        activeByMember[l.memberId] = {
-          memberName: l.memberName,
-          memberPhone: l.memberPhone,
-          totalPrincipal: 0,
-          totalRepay: 0,
-          weightedInterest: 0,
-          count: 0,
-          dueDate: 0
-        };
-      }
-      activeByMember[l.memberId].totalPrincipal += l.amount;
-      activeByMember[l.memberId].totalRepay += l.totalRepay;
-      activeByMember[l.memberId].weightedInterest += l.amount * (l.interestRate || 0);
-      activeByMember[l.memberId].count++;
-      if (l.dueDate > activeByMember[l.memberId].dueDate) activeByMember[l.memberId].dueDate = l.dueDate;
-    }
-  });
-  const entries = Object.entries(activeByMember);
-  if (!entries.length) return '';
-  return `<div class="card"><div class="sec-h">${t('active_loans')} <span class="pill-badge pill-green">${entries.length}</span></div>
-    ${entries.map(([memberId, data]) => {
-      const avgRate = data.totalPrincipal ? (data.weightedInterest / data.totalPrincipal).toFixed(1) : 0;
-      const balance = memberLoans[data.memberPhone] || 0;
-      const paid = Math.max(0, data.totalRepay - balance);
-      const isOverdue = data.dueDate && data.dueDate < Date.now();
-      return `
-      <div class="mc" style="border-left: 4px solid ${isOverdue ? 'var(--red)' : 'var(--green)'};">
-        <div>
-          <div class="mc-name" style="font-size: 1rem; margin-bottom: 4px;">${data.memberName}</div>
-          <div style="display: flex; flex-wrap: wrap; gap: 12px; margin: 6px 0;">
-            <span style="background: rgba(245,158,11,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--gold);">💰 Borrowed: UGX ${data.totalPrincipal.toLocaleString()}</span>
-            <span style="background: rgba(6,182,212,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--teal);">📈 Interest: ${avgRate}%</span>
-            <span style="background: rgba(251,146,60,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--amber);">💸 Repay: UGX ${data.totalRepay.toLocaleString()}</span>
-          </div>
-          <div style="display: flex; flex-wrap: wrap; gap: 12px; margin: 6px 0;">
-            <span style="background: rgba(34,197,94,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--green);">✅ Paid: UGX ${paid.toLocaleString()}</span>
-            <span style="background: ${balance > 0 ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)'}; padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: ${balance > 0 ? 'var(--red)' : 'var(--green)'};">⚖️ Balance: UGX ${balance.toLocaleString()}</span>
-            <span style="background: rgba(100,116,139,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.65rem; font-weight: 600; color: var(--t3);">📅 Due: ${new Date(data.dueDate).toLocaleDateString()}</span>
-            ${data.count > 1 ? `<span style="background: rgba(139,92,246,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.65rem; font-weight: 600; color: var(--purple);">📚 ${data.count} loans</span>` : ''}
-          </div>
-        </div>
-        <span class="pill-badge pill-green">${isOverdue ? '⚠️ Overdue' : t('active')}</span>
-      </div>
-    `}).join('')}
-  </div>`;
-})()}`;
-  } else if (currentAdminTab === 'notice') {   c.innerHTML = `<div class="card"><div class  ="sec-h">🎠 ${t('carousel_notices')} <spanclass="pill-badge pill-amber">${mainCarouselNotifs.length}/5</span></div><div id="main-carousel-admin-list" style="margin-bottom:12px">${mainCarouselNotifs.map(n => `<div class="mc"><div><div class="mc-name">${n.icon || '📢'} ${escapeHtml(n.text.slice(0,50))}${n.text.length > 50 ? '…' : ''}</div><div class="mc-phone">${n.imageData ? '📷 Image' : ''} ${n.payee ? `👤 ${escapeHtml(n.payee)}` : ''}</div></div><button class="btn btn-sm btn-red" onclick="removeCarouselNotice('${n.id}')">${t('delete_btn')}</button></div>`).join('')}</div>${mainCarouselNotifs.length < 5 ? `<button class="btn btn-teal btn-full" onclick="openOv('ov-carousel-compose')">${t('add_carousel')}</button>` : '<div class="hint-box" style="text-align:center;margin-bottom:0">Maximum 5 notices reached. Delete one to add more.</div>'}</div>`;
+      const activeByMember = {};
+      loans.forEach(l => {
+        if (l.status === 'approved' && !l.repaid) {
+        const memberExists = members.some(m => m.id === l.memberId && m.approved !== false);
+  if (!memberExists) return;
+          if (!activeByMember[l.memberId]) {
+            activeByMember[l.memberId] = {
+              memberName: l.memberName,
+              memberPhone: l.memberPhone,
+              totalPrincipal: 0,
+              totalRepay: 0,
+              weightedInterest: 0,
+              count: 0,
+              dueDate: 0
+            };
+          }
+          activeByMember[l.memberId].totalPrincipal += l.amount;
+          activeByMember[l.memberId].totalRepay += l.totalRepay;
+          activeByMember[l.memberId].weightedInterest += l.amount * (l.interestRate || 0);
+          activeByMember[l.memberId].count++;
+          if (l.dueDate > activeByMember[l.memberId].dueDate) activeByMember[l.memberId].dueDate = l.dueDate;
+        }
+      });
+      const entries = Object.entries(activeByMember);
+      if (!entries.length) return '';
+      return `<div class="card"><div class="sec-h">${t('active_loans')} <span class="pill-badge pill-green">${entries.length}</span></div>
+        ${entries.map(([memberId, data]) => {
+          const member = members.find(m => m.id === memberId);
+          const memberName = member ? member.name : 'Deleted Member';
+          const avgRate = data.totalPrincipal ? (data.weightedInterest / data.totalPrincipal).toFixed(1) : 0;
+          const balance = memberLoans[data.memberPhone] || 0;
+          const paid = Math.max(0, data.totalRepay - balance);
+          const isOverdue = data.dueDate && data.dueDate < Date.now();
+          return `<div class="mc" style="border-left: 4px solid ${isOverdue ? 'var(--red)' : 'var(--green)'};">
+            <div>
+              <div class="mc-name" style="font-size: 1rem; margin-bottom: 4px;">${memberName}</div>
+              <div style="display: flex; flex-wrap: wrap; gap: 12px; margin: 6px 0;">
+                <span style="background: rgba(245,158,11,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--gold);">💰 Borrowed: UGX ${data.totalPrincipal.toLocaleString()}</span>
+                <span style="background: rgba(6,182,212,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--teal);">📈 Interest: ${avgRate}%</span>
+                <span style="background: rgba(251,146,60,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--amber);">💸 Repay: UGX ${data.totalRepay.toLocaleString()}</span>
+              </div>
+              <div style="display: flex; flex-wrap: wrap; gap: 12px; margin: 6px 0;">
+                <span style="background: rgba(34,197,94,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--green);">✅ Paid: UGX ${paid.toLocaleString()}</span>
+                <span style="background: ${balance > 0 ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)'}; padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: ${balance > 0 ? 'var(--red)' : 'var(--green)'};">⚖️ Balance: UGX ${balance.toLocaleString()}</span>
+                <span style="background: rgba(100,116,139,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.65rem; font-weight: 600; color: var(--t3);">📅 Due: ${new Date(data.dueDate).toLocaleDateString()}</span>
+                ${data.count > 1 ? `<span style="background: rgba(139,92,246,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.65rem; font-weight: 600; color: var(--purple);">📚 ${data.count} loans</span>` : ''}
+              </div>
+            </div>
+            <span class="pill-badge pill-green">${isOverdue ? '⚠️ Overdue' : t('active')}</span>
+          </div>`;
+        }).join('')}
+      </div>`;
+    })()}
+  `;
+  } else if (currentAdminTab === 'notice') {   c.innerHTML = `<div class="card"><div class  ="sec-h">🎠 ${t('carousel_notices')} <spanclass="pill-badge pill-amber">${mainCarouselNotifs.length}/5</span></div><div id="main-carousel-admin-list" style="margin-bottom:12px">${mainCarouselNotifs.map(n => `
+  <div class="mc">
+    <div>
+      <div class="mc-name">${n.icon || '📢'} ${escapeHtml(n.text.slice(0,50))}${n.text.length > 50 ? '…' : ''}</div>
+      <div class="mc-phone">${n.imageData ? '📷 Image' : ''} ${n.payee ? `👤 ${escapeHtml(n.payee)}` : ''}</div>
+    </div>
+    <button class="btn btn-sm btn-red" onclick="removeCarouselNotice('${n.key}')">${t('delete_btn')}</button>
+  </div>
+`).join('')}</div>${mainCarouselNotifs.length < 5 ? `<button class="btn btn-teal btn-full" onclick="openOv('ov-carousel-compose')">${t('add_carousel')}</button>` : '<div class="hint-box" style="text-align:center;margin-bottom:0">Maximum 5 notices reached. Delete one to add more.</div>'}</div>`;
   } else if (currentAdminTab === 'harvest') {
   c.innerHTML = `<div class="card">
     <div class="sec-h">🌾 Harvest Actions</div>
@@ -4442,9 +4499,16 @@ function renderAdminTab(){
           <div class="ranking-phone">${escapeHtml(m.phone)}</div>
           <div class="ranking-progress-bar">
             <div class="ranking-progress-fill" style="width: ${depositPercent}%;"></div></div><div class="ranking-deposit">UGX ${m.totalDeposits.toLocaleString()}</div></div><div class="ranking-actions"><a href="tel:${m.phone}" class="btn btn-sm btn-teal" title="Call">📞</a><a href="${whatsappUrl}" target="_blank" class="btn btn-sm btn-green" title="WhatsApp">💬</a></div></div>`;});rankingHtml += `</div><div class="micro muted" style="margin-top: 16px; text-align: center;">🏅 Ranking based on total deposits (saving discipline). Top savers get medals.</div></div>`;c.innerHTML = rankingHtml;
-  }else if(currentAdminTab==='settings'){
-    c.innerHTML=`<div class="card"><div class="sec-h">${t('configuration')}</div><button class="btn btn-gold btn-full" onclick="openOv('ov-settings');loadSettings()">${t('group_settings')}</button><button class="btn btn-amber btn-full" onclick="openOv('ov-loan-settings');loadLoanSettings()">${t('loan_settings')}</button><button class="btn btn-teal btn-full" onclick="exportCSV()">${t('export_csv')}</button><button class="btn btn-sec btn-full" onclick="distributeProfit()">${t('distribute_profit')}</button></div>`;
-  }
+  } else if(currentAdminTab==='settings'){
+  c.innerHTML = `
+    <div class="card">
+      <div class="sec-h">${t('configuration')}</div>
+      <button class="btn btn-gold btn-full" onclick="openOv('ov-settings');loadSettings()">${t('group_settings')}</button>
+      <button class="btn btn-amber btn-full" onclick="openOv('ov-loan-settings');loadLoanSettings()">${t('loan_settings')}</button>
+      <button class="btn btn-teal btn-full" onclick="exportCSV()">${t('export_csv')}</button>
+    </div>
+  `;
+}
   if(currentAdminTab==='users') db.ref('applications').orderByChild('status').equalTo('pending').once('value',snap=>{const c=snap.val()?Object.keys(snap.val()).length:0;const bw=document.getElementById('apps-badge-wrap');if(bw)bw.style.display=c?'inline-flex':'none';if(document.getElementById('apps-count'))document.getElementById('apps-count').textContent=c;});
 }
 function truncateText(text, maxLength) {
@@ -4782,6 +4846,11 @@ window.deleteMember = function(id) {
     if (confirm(`Delete ${member.name}? This action cannot be undone.`)) {
       db.ref('members/' + id).remove().then(() => {
         toast(`${member.name} deleted`, '#ef4444');
+        // Remove from rotation
+        if (rotation.order && rotation.order.includes(id)) {
+          const newOrder = rotation.order.filter(oid => oid !== id);
+          db.ref('rotation').update({ order: newOrder, currentIndex: 0 });
+        }
         updateAdminMembersList();
         if (currentUser && currentUser.id === id) logout();
         computePots(); refreshUI();
@@ -5056,94 +5125,263 @@ window.addExpense=function(){const desc=document.getElementById('exp-desc').valu
     toast('Failed to assign debt. Check console.', '#ef4444');
   }
 };
-window.distributeProfit = function() {
-  requirePasswordConfirmation(() => {
-    if (groupProfit <= 0) { toast('No profit to distribute', '#ef4444'); return; }
-    const membersList = members.filter(m => m.approved);
-    if (membersList.length === 0) { toast('No active members', '#ef4444'); return; }
-    const share = Math.floor(groupProfit / membersList.length);
-    if (share <= 0) { toast('Profit too small to distribute', '#ef4444'); return; }
-    const writes = membersList.map(m => db.ref('transactions').push({
-      memberPhone: m.phone, memberName: m.name,
-      type: 'profit_dist', amount: share,
-      description: 'Profit distribution', date: Date.now()
-    }));
-    Promise.all(writes).then(() => {
-      toast(`UGX ${share.toLocaleString()} distributed to ${membersList.length} members`, '#10b981');
-      computePots(); refreshUI();
+window.previewProfitDistribution = function() {
+  if (groupProfit <= 0) {
+    toast('No profit to distribute', '#ef4444');
+    return;
+  }
+  const membersList = members.filter(m => m.approved);
+  if (membersList.length === 0) {
+    toast('No active members', '#ef4444');
+    return;
+  }
+
+  // 5% rewards pool
+  const rewardsPercent = 5;
+  const rewardsPool = Math.floor(groupProfit * rewardsPercent / 100);
+  const equalShareTotal = groupProfit - rewardsPool;
+  const equalShare = Math.floor(equalShareTotal / membersList.length);
+
+  // Calculate rankings for rewards (top 5 categories)
+  const memberStats = membersList.map(m => {
+    let totalDeposits = 0;
+    let consistency = new Set();
+    let referrals = m.referralCount || 0;
+    let repaidLoans = 0;
+    let activity = 0;
+    transactions.forEach(tx => {
+      if (tx.memberPhone === m.phone && tx.type === 'deposit') {
+        totalDeposits += tx.amount;
+        consistency.add(new Date(tx.date).toISOString().slice(0,10));
+        activity++;
+      }
     });
+    loans.forEach(loan => {
+      if (loan.memberId === m.id && loan.repaid === true) repaidLoans++;
+    });
+    return { m, totalDeposits, consistency: consistency.size, referrals, repaidLoans, activity };
+  });
+
+  const categories = [
+    { name: '🏆 Top Saver', field: 'totalDeposits', percent: 0.30 },
+    { name: '📅 Most Consistent', field: 'consistency', percent: 0.25 },
+    { name: '👥 Top Referrer', field: 'referrals', percent: 0.20 },
+    { name: '💳 Best Loan Repayer', field: 'repaidLoans', percent: 0.15 },
+    { name: '⚡ Most Active', field: 'activity', percent: 0.10 }
+  ];
+
+  let winnersHtml = '';
+  let remainingRewards = rewardsPool;
+  const usedIds = new Set();
+  for (let cat of categories) {
+    let best = null;
+    let bestVal = -1;
+    for (let s of memberStats) {
+      if (usedIds.has(s.m.id)) continue;
+      let val = s[cat.field];
+      if (val > bestVal) { bestVal = val; best = s; }
+    }
+    let amount = 0;
+    if (best && bestVal > 0) {
+      amount = Math.floor(rewardsPool * cat.percent);
+      remainingRewards -= amount;
+      usedIds.add(best.m.id);
+      winnersHtml += `<div><strong>${cat.name}</strong>: ${escapeHtml(best.m.name)} → ${money(amount)}</div>`;
+    } else {
+      winnersHtml += `<div><strong>${cat.name}</strong>: No eligible member → amount added back to equal share</div>`;
+    }
+  }
+  // Any leftover from rounding goes to equal share
+  const finalEqualShare = equalShare + Math.floor(remainingRewards / membersList.length);
+  
+  const modalContent = `
+    <div style="margin-bottom: 16px;">
+      <div><strong>Total Profit Pool:</strong> ${money(groupProfit)}</div>
+      <div><strong>Equal share (95%):</strong> ${money(equalShare)} per member → will become ${money(finalEqualShare)} after rewards redistribution</div>
+      <div><strong>Rewards pool (5%):</strong> ${money(rewardsPool)}</div>
+    </div>
+    <div class="sec-h">🏅 Category Winners</div>
+    ${winnersHtml}
+    <div class="hint-box" style="margin-top: 12px;">Do you want to proceed with this distribution?</div>
+    <div style="display: flex; gap: 12px; margin-top: 16px;">
+      <button class="btn btn-green" onclick="executeProfitDistribution(${finalEqualShare}, ${rewardsPool}, '${escapeHtml(JSON.stringify(Array.from(usedIds)))}')">✅ Confirm & Distribute</button>
+      <button class="btn btn-sec" onclick="closeCurrentModal()">Cancel</button>
+    </div>
+  `;
+  showModal(modalContent, 'Profit Distribution Preview');
+};
+
+window.executeProfitDistribution = function(equalShareAmount, rewardsPool, winnersJson) {
+  requirePasswordConfirmation(async () => {
+    const membersList = members.filter(m => m.approved);
+    if (membersList.length === 0) return;
+    const writes = [];
+    // Equal share transactions
+    for (let m of membersList) {
+      writes.push(db.ref('transactions').push({
+        memberPhone: m.phone, memberName: m.name,
+        type: 'profit_dist', amount: equalShareAmount,
+        description: 'Profit equal share distribution', date: Date.now()
+      }));
+    }
+    // Reward transactions (we need to recalculate winners to avoid passing JSON)
+    const memberStats = membersList.map(m => {
+      let totalDeposits = 0;
+      let consistency = new Set();
+      let referrals = m.referralCount || 0;
+      let repaidLoans = 0;
+      let activity = 0;
+      transactions.forEach(tx => {
+        if (tx.memberPhone === m.phone && tx.type === 'deposit') {
+          totalDeposits += tx.amount;
+          consistency.add(new Date(tx.date).toISOString().slice(0,10));
+          activity++;
+        }
+      });
+      loans.forEach(loan => {
+        if (loan.memberId === m.id && loan.repaid === true) repaidLoans++;
+      });
+      return { m, totalDeposits, consistency: consistency.size, referrals, repaidLoans, activity };
+    });
+    const categories = [
+      { name: '🏆 Top Saver', field: 'totalDeposits', percent: 0.30 },
+      { name: '📅 Most Consistent', field: 'consistency', percent: 0.25 },
+      { name: '👥 Top Referrer', field: 'referrals', percent: 0.20 },
+      { name: '💳 Best Loan Repayer', field: 'repaidLoans', percent: 0.15 },
+      { name: '⚡ Most Active', field: 'activity', percent: 0.10 }
+    ];
+    const usedIds = new Set();
+    let remainingRewards = rewardsPool;
+    for (let cat of categories) {
+      let best = null;
+      let bestVal = -1;
+      for (let s of memberStats) {
+        if (usedIds.has(s.m.id)) continue;
+        let val = s[cat.field];
+        if (val > bestVal) { bestVal = val; best = s; }
+      }
+      if (best && bestVal > 0) {
+        let amount = Math.floor(rewardsPool * cat.percent);
+        remainingRewards -= amount;
+        usedIds.add(best.m.id);
+        writes.push(db.ref('transactions').push({
+          memberPhone: best.m.phone, memberName: best.m.name,
+          type: 'profit_dist', amount: amount,
+          description: `${cat.name} reward`, date: Date.now() + 1
+        }));
+      } else {
+        // Add back to equal share – already handled by equalShareAmount
+      }
+    }
+    await Promise.all(writes);
+    toast(`Profit distributed: ${money(equalShareAmount)} each + rewards!`, '#10b981');
+    computePots();
+    refreshUI();
+    closeCurrentModal();
   }, 'Distribute Profit');
 };
-window.loadMarkPaidInfo=function(){const idx=rotation.currentIndex||0;const bene=members.find(m=>m.id===rotation.order?.[idx]);const el=document.getElementById('mark-paid-info');if(!bene){el.innerHTML='<div class="muted">'+t('no_notifications')+'</div>';return;}const target=getNetDaily()*7*members.length,debt=memberDebts[bene.phone]||0,loan=memberLoans[bene.phone]||0,net=Math.max(0,target-debt-loan);el.innerHTML=`<div style="background:rgba(16,185,129,0.08);border-radius:14px;padding:14px;border:1px solid rgba(16,185,129,0.2)"><div style="font-family:Syne,sans-serif;font-size:1.1rem;font-weight:800;color:var(--gold);margin-bottom:12px">💰 ${bene.name}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:0.82rem"><div>${t('full_amount')}</div><div>UGX ${target.toLocaleString()}</div><div>${t('member_debt')}</div><div>- UGX ${debt.toLocaleString()}</div><div>${t('loan_request_title')}</div><div>- UGX ${loan.toLocaleString()}</div><div>${t('net_payout')}</div><div style="font-weight:700;color:var(--green)">UGX ${net.toLocaleString()}</div></div></div>`;};
-window.confirmMarkPaid = function() {
+window.loadMarkPaidInfo = function() {
   const idx = rotation.currentIndex || 0;
-  const bene = members.find(m => m.id === rotation.order?.[idx]);
-  if (!bene) { toast(t('select_member'), '#ef4444'); return; }
+  const beneId = rotation.order?.[idx];
+  const bene = members.find(m => m.id === beneId);
+  const el = document.getElementById('mark-paid-info');
+  if (!el) return;
   
-  const target = getNetDaily() * 7 * members.length;
+  if (!bene) {
+    el.innerHTML = '<div class="muted">No valid member scheduled for payout. Check rotation order.</div>';
+    return;
+  }
+  
+  const target = getNetDaily() * 7 * members.filter(m => m.approved).length;
   const debt = memberDebts[bene.phone] || 0;
   const loan = memberLoans[bene.phone] || 0;
   const net = Math.max(0, target - debt - loan);
   
-  const writes = [
-    db.ref('transactions').push({
-      memberPhone: bene.phone,
-      memberName: bene.name,
-      type: 'payout',
-      amount: net,
-      description: 'Weekly payout',
-      date: Date.now()
-    })
-  ];
-  if (debt > 0) {
-    writes.push(db.ref('transactions').push({
-      memberPhone: bene.phone,
-      memberName: bene.name,
-      type: 'debt_cleared',
-      amount: debt,
-      description: 'Debt cleared on payout',
-      date: Date.now() + 1
-    }));
-  }
-  if (loan > 0) {
-    writes.push(db.ref('transactions').push({
-      memberPhone: bene.phone,
-      memberName: bene.name,
-      type: 'loan_repayment',
-      amount: loan,
-      description: 'Loan cleared on payout',
-      date: Date.now() + 2
-    }));
-  }
-  
-  Promise.all(writes).then(async () => {
-    // Force refresh local transactions array
-    const txSnap = await db.ref('transactions').once('value');
-    transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
-    const loansSnap = await db.ref('loans').once('value');
-    loans = loansSnap.val() ? Object.entries(loansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
+  el.innerHTML = `
+    <div style="background:rgba(16,185,129,0.08);border-radius:14px;padding:14px;border:1px solid rgba(16,185,129,0.2)">
+      <div style="font-family:Syne,sans-serif;font-size:1.1rem;font-weight:800;color:var(--gold);margin-bottom:12px">💰 ${escapeHtml(bene.name)}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:0.82rem">
+        <div>${t('full_amount')}</div><div>UGX ${target.toLocaleString()}</div>
+        <div>${t('member_debt')}</div><div>- UGX ${debt.toLocaleString()}</div>
+        <div>${t('loan_request_title')}</div><div>- UGX ${loan.toLocaleString()}</div>
+        <div>${t('net_payout')}</div><div style="font-weight:700;color:var(--green)">UGX ${net.toLocaleString()}</div>
+      </div>
+    </div>
+  `;
+};
+window.confirmMarkPaid = function() {
+  requirePasswordConfirmation(() => {
+    const idx = rotation.currentIndex || 0;
+    const bene = members.find(m => m.id === rotation.order?.[idx]);
+    if (!bene) { toast(t('select_member'), '#ef4444'); return; }
     
-    computePots();
-    updateHomeUI();
-    updateAccountBalances();
-    if (isLedgerActive()) loadLedger('all');
-    if (currentAdminTab === 'savings') renderAdminTab();
+    const target = getNetDaily() * 7 * members.length;
+    const debt = memberDebts[bene.phone] || 0;
+    const loan = memberLoans[bene.phone] || 0;
+    const net = Math.max(0, target - debt - loan);
     
-    // Update rotation index
-    const nextIndex = (idx + 1) % rotation.order.length;
-    await db.ref('rotation').update({ currentIndex: nextIndex });
-    rotation.currentIndex = nextIndex;
+    const writes = [
+      db.ref('transactions').push({
+        memberPhone: bene.phone,
+        memberName: bene.name,
+        type: 'payout',
+        amount: net,
+        description: 'Weekly payout',
+        date: Date.now()
+      })
+    ];
+    if (debt > 0) {
+      writes.push(db.ref('transactions').push({
+        memberPhone: bene.phone,
+        memberName: bene.name,
+        type: 'debt_cleared',
+        amount: debt,
+        description: 'Debt cleared on payout',
+        date: Date.now() + 1
+      }));
+    }
+    if (loan > 0) {
+      writes.push(db.ref('transactions').push({
+        memberPhone: bene.phone,
+        memberName: bene.name,
+        type: 'loan_repayment',
+        amount: loan,
+        description: 'Loan cleared on payout',
+        date: Date.now() + 2
+      }));
+    }
     
-    toast('Payout completed! All debts and loans cleared.', '#10b981');
-    closeOv('ov-mark-paid');
-  }).catch(err => {
-    console.error(err);
-    toast('Failed to complete payout', '#ef4444');
-  });
+    Promise.all(writes).then(async () => {
+      const txSnap = await db.ref('transactions').once('value');
+      transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
+      const loansSnap = await db.ref('loans').once('value');
+      loans = loansSnap.val() ? Object.entries(loansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
+      computePots();
+      updateHomeUI();
+      updateAccountBalances();
+      if (isLedgerActive()) loadLedger('all');
+      if (currentAdminTab === 'savings') renderAdminTab();
+      const nextIndex = (idx + 1) % rotation.order.length;
+      await db.ref('rotation').update({ currentIndex: nextIndex });
+      rotation.currentIndex = nextIndex;
+      toast('Payout completed! All debts and loans cleared.', '#10b981');
+      closeOv('ov-mark-paid');
+    }).catch(err => {
+      console.error(err);
+      toast('Failed to complete payout', '#ef4444');
+    });
+  }, 'Mark Weekly Payout');
 };
 window.confirmApproveLoan = async function(loanId) {
   const loan = loans.find(l => l.id === loanId);
   if (!loan) return;
+  
+  // Global lock
+ if (hasActiveLoanFromApplication()) {
+  toast('Another loan application is still active.', '#ef4444');
+  closeOv('ov-approve-loan');
+  return;
+}
   
   const approvedAmount = parseFloat(document.getElementById('approve-amount').value);
   const interestRate = parseFloat(document.getElementById('approve-interest').value);
@@ -5152,28 +5390,38 @@ window.confirmApproveLoan = async function(loanId) {
   if (isNaN(interestRate) || interestRate < 0) return toast('Enter valid interest rate', '#ef4444');
   if (!dueDateStr) return toast('Select due date', '#ef4444');
   
+  // Check profit pool
+  computePots();
+  if (approvedAmount > groupProfit) {
+    toast('Insufficient profit pool to disburse this loan.', '#ef4444');
+    return;
+  }
+  
   const dueDate = new Date(dueDateStr).getTime();
   const principal = approvedAmount;
   const interest = Math.floor(principal * interestRate / 100);
   const totalRepay = principal + interest;
   
-  // Check if member already has an active loan
-  const existingLoan = await getOrCreateActiveLoan(loan.memberId, loan.memberPhone, loan.memberName);
+  // Check if member already has an active loan (double‑check)
+  const existingActive = loans.find(l => l.memberId === loan.memberId && l.status === 'approved' && !l.repaid);
+  if (existingActive) {
+    toast(`${loan.memberName} already has an active loan. Cannot approve another.`, '#ef4444');
+    closeOv('ov-approve-loan');
+    return;
+  }
   
-  // Update the existing loan (add amounts)
-  const newAmount = (existingLoan.amount || 0) + principal;
-  const newTotalRepay = (existingLoan.totalRepay || 0) + totalRepay;
-  const newDueDate = Math.max(existingLoan.dueDate || 0, dueDate);
-  
-  await db.ref('loans/' + existingLoan.id).update({
-    amount: newAmount,
-    totalRepay: newTotalRepay,
-    dueDate: newDueDate,
-    // Optionally, you can update interestRate to a weighted average, but not necessary
+  // Use the existing pending loan to create an approved loan
+  await db.ref('loans/' + loanId).update({
+    amount: principal,
+    interestRate: interestRate,
+    totalRepay: totalRepay,
+    status: 'approved',
+    approvedAt: Date.now(),
+    dueDate: dueDate
   });
   
-  // Create transactions for the new portion
-  db.ref('transactions').push({
+  // Disburse principal
+  await db.ref('transactions').push({
     memberPhone: loan.memberPhone,
     memberName: loan.memberName,
     type: 'loan_disbursement',
@@ -5182,7 +5430,7 @@ window.confirmApproveLoan = async function(loanId) {
     date: Date.now()
   });
   if (interest > 0) {
-    db.ref('transactions').push({
+    await db.ref('transactions').push({
       memberPhone: loan.memberPhone,
       memberName: loan.memberName,
       type: 'loan_adjustment',
@@ -5192,16 +5440,13 @@ window.confirmApproveLoan = async function(loanId) {
     });
   }
   
-  // Delete the original pending loan request
-  await db.ref('loans/' + loanId).remove();
-  
-  toast(`Loan added to ${loan.memberName}. New total: UGX ${newTotalRepay.toLocaleString()}`, '#10b981');
+  toast(`Loan approved for ${loan.memberName}!`, '#10b981');
   closeOv('ov-approve-loan');
-  loadApplications();
-  if (currentAdminTab === 'savings') renderAdminTab();
   computePots();
   updateHomeUI();
-  updateAccountBalances();
+  if (currentScreen === 'admin' && adminUnlocked) renderAdminTab();
+  if (currentScreen === 'statistics') renderStatistics();
+  loadApplications(); // refresh any open modal
 };
 window.changeAdminPassword = function() {
   const current = document.getElementById('admin-current-pwd').value;
@@ -5221,9 +5466,68 @@ window.changeAdminPassword = function() {
   }).catch(err => { console.error(err); toast('Failed to change password', '#ef4444'); });
 };
 window.dragOrder = [];
-window.buildDragRotation=function(){dragOrder = [...rotation.order];renderDragList();};
-function renderDragList(){const c=document.getElementById('rot-drag-list');c.innerHTML='';dragOrder.forEach((id,i)=>{const m=members.find(m=>m.id===id)||{name:'?'};const d=document.createElement('div');d.className='rot-drag-item';d.draggable=true;d.innerHTML='<span class="drag-handle">⠿</span><span style="flex:1">'+(i===0?'💰 ':'')+(i+1)+'. '+m.name+'</span>'+(i===0?'<span class="pill-badge pill-amber">NEXT</span>':'');d.addEventListener('dragstart',e=>{e.dataTransfer.setData('text/plain',i);d.classList.add('dragging');});d.addEventListener('dragend',()=>d.classList.remove('dragging'));d.addEventListener('dragover',e=>e.preventDefault());d.addEventListener('drop',e=>{e.preventDefault();const from=+e.dataTransfer.getData('text/plain');if(from===i)return;const moved=dragOrder.splice(from,1)[0];dragOrder.splice(i,0,moved);renderDragList();});c.appendChild(d);});}
-window.saveRotationOrder=function(){db.ref('rotation').update({order:dragOrder,currentIndex:0}).then(()=>{toast(t('save_order'),'#10b981');closeOv('ov-rot-manage');});};
+window.buildDragRotation = function() {
+  if (!rotation.order || rotation.order.length === 0) {
+    // Create default order from all approved members
+    const defaultOrder = members.filter(m => m.approved !== false).map(m => m.id);
+    dragOrder = defaultOrder;
+  } else {
+    // Filter out deleted members
+    const validIds = new Set(members.filter(m => m.approved !== false).map(m => m.id));
+    dragOrder = rotation.order.filter(id => validIds.has(id));
+    // If after filtering we have no members, fallback to default
+    if (dragOrder.length === 0 && members.length) {
+      dragOrder = members.filter(m => m.approved !== false).map(m => m.id);
+    }
+  }
+  renderDragList();
+};
+function renderDragList() {
+  const c = document.getElementById('rot-drag-list');
+  if (!c) return;
+  c.innerHTML = '';
+  if (!dragOrder.length) {
+    c.innerHTML = '<div class="empty-state">No members in rotation. Add members first.</div>';
+    return;
+  }
+  dragOrder.forEach((id, i) => {
+    const m = members.find(m => m.id === id);
+    // Skip if member no longer exists (shouldn't happen after filtering)
+    if (!m) return;
+    const d = document.createElement('div');
+    d.className = 'rot-drag-item';
+    d.draggable = true;
+    d.innerHTML = '<span class="drag-handle">⠿</span><span style="flex:1">' + (i === 0 ? '💰 ' : '') + (i + 1) + '. ' + escapeHtml(m.name) + '</span>' + (i === 0 ? '<span class="pill-badge pill-amber">NEXT</span>' : '');
+    d.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', i); d.classList.add('dragging'); });
+    d.addEventListener('dragend', () => d.classList.remove('dragging'));
+    d.addEventListener('dragover', e => e.preventDefault());
+    d.addEventListener('drop', e => {
+      e.preventDefault();
+      const from = +e.dataTransfer.getData('text/plain');
+      if (from === i) return;
+      const moved = dragOrder.splice(from, 1)[0];
+      dragOrder.splice(i, 0, moved);
+      renderDragList();
+    });
+    c.appendChild(d);
+  });
+}
+window.saveRotationOrder = function() {
+  if (!dragOrder.length) {
+    toast('No members to save', '#ef4444');
+    return;
+  }
+  db.ref('rotation').update({ order: dragOrder, currentIndex: 0 }).then(() => {
+    rotation.order = dragOrder;
+    rotation.currentIndex = 0;
+    toast(t('save_order'), '#10b981');
+    closeOv('ov-rot-manage');
+    updateHomeUI(); // refresh weekly receiver
+  }).catch(err => {
+    console.error(err);
+    toast('Failed to save order', '#ef4444');
+  });
+};
 window.buildCoverDaysList=function(){const c=document.getElementById('cover-days-list');c.innerHTML='';for(let i=0;i<14;i++){const d=new Date(Date.now()-i*86400000);const dk=_isoDate(d);const r=document.createElement('div');r.className='daily-check';r.onclick=()=>toggleCoverDay(dk,r);r.innerHTML='<div class="dc-box">✓</div><span>'+d.toLocaleDateString()+'</span>';c.appendChild(r);}};
 function animateFallingText(containerId, text, callback) {
   const container = document.getElementById(containerId);
@@ -5478,7 +5782,11 @@ window.saveCoverDays = function() {const phone = document.getElementById('cover-
     const interest = Math.round(da * interestRate);
     if (interest > 0) {writes.push(db.ref('transactions').push({memberPhone: member.phone,memberName: member.name,type: 'cover_interest',amount: interest,description: `Cover interest for ${dk} (${interestRate*100}%)`,date: new Date(dk).getTime() + 500 // slightly after deposit
         }));}});Promise.all(writes).then(() => {toast('Cover days saved! ✅', '#10b981');closeOv('ov-cover');computePots();updateHomeUI();if (isLedgerActive()) loadLedger('all');}).catch(err => {console.error(err);toast('Save failed', '#ef4444');});};
-window.addMember=function(){const name=document.getElementById('mbr-name').value.trim();const phone=document.getElementById('mbr-phone').value.trim();const pw=document.getElementById('mbr-pw').value.trim();const join=document.getElementById('mbr-join').value;const photo=document.getElementById('mbr-photo-data').value;if(!name||!phone){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('members').push({name,phone,password:pw||('HT'+phone.slice(-4)),approved:true,joinDate:join||new Date().toISOString().split('T')[0],photoData:photo||''}).then(ref=>{db.ref('rotation').update({order:[...rotation.order,ref.key]});['mbr-name','mbr-phone','mbr-pw','mbr-join','mbr-photo-data'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});const prev=document.getElementById('mbr-photo-preview');if(prev){prev.src='';prev.style.display='none';}closeOv('ov-add-mbr');toast(name+' '+t('add_member')+'! ✅','#10b981');});};
+window.addMember=function(){const name=document.getElementById('mbr-name').value.trim();const phone=document.getElementById('mbr-phone').value.trim();const pw=document.getElementById('mbr-pw').value.trim();const join=document.getElementById('mbr-join').value;const photo=document.getElementById('mbr-photo-data').value;if(!name||!phone){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('members').push({name,phone,password:pw||('HT'+phone.slice(-4)),approved:true,joinDate:join||new Date().toISOString().split('T')[0],photoData:photo||''}).then(ref=>{db.ref('rotation').update({order:[...rotation.order,ref.key]});['mbr-name','mbr-phone','mbr-pw','mbr-join','mbr-photo-data'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});const prev=document.getElementById('mbr-photo-preview');if(prev){prev.src='';prev.style.display='none';}closeOv('ov-add-mbr');toast(name+' '+t('add_member')+'! ✅','#10b981');});if (!rotation.order || rotation.order.length === 0) {
+  db.ref('rotation').update({ order: [ref.key], currentIndex: 0 });
+} else if (!rotation.order.includes(ref.key)) {
+  db.ref('rotation').update({ order: [...rotation.order, ref.key] });
+}};
 window.loadSettings=function(){
   document.getElementById('set-groupname').value=settings.groupName||'';
   document.getElementById('set-daily').value=settings.dailyAmount||2500;
@@ -5729,7 +6037,7 @@ function calculateRewards() {
   const activeMembers = members.filter(m => m.approved);
   if (activeMembers.length === 0) return null;
 
-  const rewardsPercent = 10; // 10% of profit pool goes to extra rewards
+  const rewardsPercent = 5; // Changed from 10 to 5
   let rewardsPool = Math.floor(groupProfit * rewardsPercent / 100);
   let equalShareTotal = groupProfit - rewardsPool;
 
@@ -5762,6 +6070,7 @@ function calculateRewards() {
     };
   });
 
+  // Same 5 categories, same percentages as profit preview
   const categoryDefs = [
     { name: '🏆 Top Saver', field: 'totalDeposits', percent: 0.30 },
     { name: '📅 Most Consistent', field: 'consistency', percent: 0.25 },
@@ -5816,7 +6125,6 @@ function calculateRewards() {
     rewardsPoolDisplay: rewardsPool
   };
 }
-
 function renderRewardsContent() {
   const summaryDiv = document.getElementById('rewards-summary');
   const listDiv = document.getElementById('rewards-list');
@@ -5833,16 +6141,11 @@ function renderRewardsContent() {
     return;
   }
 
-  summaryDiv.innerHTML = `
-    <div><strong>Total Profit Pool:</strong> ${money(data.groupProfit)}</div>
-    <div><strong>Equal Share (${data.totalMembers} members):</strong> ${money(data.equalSharePerMember)} each</div>
-    <div><strong>Extra Rewards Pool (5 categories):</strong> ${money(data.rewardsPoolDisplay)}</div>
-  `;
-
-  let html = '<div class="rewards-grid">';
+  // Build winners HTML exactly like the profit preview
+  let winnersHtml = '';
   data.winners.forEach(winner => {
     if (winner.eligible) {
-      html += `
+      winnersHtml += `
         <div class="reward-card">
           <div class="reward-category">${winner.category}</div>
           <div class="reward-member">${escapeHtml(winner.member.name)}</div>
@@ -5851,7 +6154,7 @@ function renderRewardsContent() {
         </div>
       `;
     } else {
-      html += `
+      winnersHtml += `
         <div class="reward-card" style="opacity: 0.7;">
           <div class="reward-category">${winner.category}</div>
           <div class="reward-member">— —</div>
@@ -5861,10 +6164,17 @@ function renderRewardsContent() {
       `;
     }
   });
-  html += '</div>';
-  listDiv.innerHTML = html;
 
-  // Referral section
+  summaryDiv.innerHTML = `
+    <div><strong>Total Profit Pool:</strong> ${money(data.groupProfit)}</div>
+    <div><strong>Equal Share (95%):</strong> ${money(data.equalSharePerMember)} per member</div>
+    <div><strong>Rewards Pool (5%):</strong> ${money(data.rewardsPoolDisplay)}</div>
+    <div class="micro muted" style="margin-top: 6px;">Rewards are distributed among top performers in 5 categories (Top Saver, Most Consistent, Top Referrer, Best Loan Repayer, Most Active).</div>
+  `;
+
+  listDiv.innerHTML = `<div class="rewards-grid">${winnersHtml}</div>`;
+
+  // Referral section (unchanged)
   if (referralBox && currentUser && !currentUser.isAdmin) {
     referralBox.style.display = 'block';
     const code = currentUser.id?.slice(-6) || currentUser.phone?.slice(-4);
@@ -5873,7 +6183,6 @@ function renderRewardsContent() {
     referralBox.style.display = 'none';
   }
 }
-
 // Copy referral link for stats tab
 window.copyReferralLinkStats = function() {
   const code = currentUser?.id?.slice(-6) || currentUser?.phone?.slice(-4);
@@ -5900,6 +6209,17 @@ function openForgotPassword() {
   showForgotStep();
   openOv('ov-forgot-password');
 }
+// Override openOv to build rotation list when opening ov-rot-manage
+const originalOpenOv = window.openOv;
+window.openOv = function(id) {
+  originalOpenOv(id);
+  if (id === 'ov-rot-manage') {
+    buildDragRotation();
+  }
+  if (id === 'ov-mark-paid') {
+    loadMarkPaidInfo();
+  }
+};
 
 function showForgotStep() {
   const container = document.getElementById('forgot-step-container');
