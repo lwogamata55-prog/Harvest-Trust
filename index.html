@@ -1863,6 +1863,13 @@ setTimeout(() => {
     <button class="btn btn-sec btn-full" onclick="closeOv('ov-edit-terms')">Cancel</button>
   </div>
 </div>
+<div class="ov" id="ov-notifications-popup" onclick="maybeClose(event,'ov-notifications-popup')">
+  <div class="bs">
+    <div class="bs-title">🔔 Notifications</div>
+    <div id="notifications-popup-list" style="max-height: 55vh; overflow-y: auto;"></div>
+    <button class="btn btn-sec btn-full" style="margin-top:12px" onclick="closeOv('ov-notifications-popup')">Close</button>
+  </div>
+</div>
 <script>
 // Immediately apply saved theme (light/dark) from localStorage before showing anything
 const savedThemeMode = localStorage.getItem('themeMode');
@@ -2155,6 +2162,7 @@ let loanSettings = {
   overduePenalty: 2
 };
 let loans=[];
+let notifications = {};
 function hasActiveLoanFromApplication() {
   return loans.some(l => 
     l.status === 'approved' && 
@@ -3020,18 +3028,18 @@ function loadAllData() {
     const el = document.getElementById('apps-badge-wrap');
     if (el) el.style.display = count ? 'inline-flex' : 'none';
   });
-
+  
   // Notifications
-  db.ref('notifications').on('value', snap => {
-    notifications = snap.val() || {};
-    updateNotificationBadge();
-  });
+ db.ref('notifications').on('value', snap => {
+  notifications = snap.val() || {};
+  updateNotificationBadge();
+});
 
   // Loan settings
   db.ref('loanSettings').on('value', snap => {
     if (snap.val()) loanSettings = { ...loanSettings, ...snap.val() };
   });
-
+  
   // Loans
   db.ref('loans').on('value', snap => {
     loans = snap.val() ? Object.entries(snap.val()).map(([id, l]) => ({ ...l, id })) : [];
@@ -3733,6 +3741,16 @@ function showMainApp() {
   goTab('home', document.getElementById('ni-home'));
   setupPresence();
   applyLanguageToUI();
+  // Auto‑open notifications popup if there are unread notifications
+if (currentUser && !currentUser.isAdmin) {
+  setTimeout(() => {
+    const userNotifs = notifications[currentUser.id] || [];
+    const unreadCount = userNotifs.filter(n => !n.read).length;
+    if (unreadCount > 0) {
+      showNotificationsPopup();
+    }
+  }, 800);
+}
   setAdminDoorVisibility();
   if (typeof hideTabLoading === 'function') hideTabLoading();
 }
@@ -4286,28 +4304,68 @@ window.openSecurityModal=function(){
   };
   showModalEl(content,t('change_pin'));
 };
-window.openNotificationsModal=function(){
-  if(!currentUser)return;
-  if(currentUser.isAdmin){
-    const allNotifs=members.filter(m=>!m.isAdmin).map(m=>{const n=notifications[m.id]||[];const unread=n.filter(x=>!x.read).length;return '<div style="padding:10px 12px;background:rgba(255,255,255,0.04);border-radius:12px;margin-bottom:7px;display:flex;justify-content:space-between;align-items:center;border:1px solid rgba(255,255,255,0.06)"><div><div style="font-weight:600;font-size:0.84rem">'+m.name+'</div><div style="font-size:0.66rem;color:var(--t3)">'+n.length+' total</div></div>'+( unread?'<span class="pill-badge pill-amber">'+unread+' new</span>':'')+'</div>';});
-    showModal('<div style="max-height:300px;overflow:auto">'+(allNotifs.join('')||'<div class="empty-state"><div class="empty-state-text">'+t('no_notifications')+'</div></div>')+'</div>',t('notifications'));
+window.openNotificationsModal = function() {
+  if (!currentUser) return;
+  if (currentUser.isAdmin) {
+    const adminNotifs = notifications.admin || [];
+    if (!adminNotifs.length) {
+      showModal('<div class="empty-state">No admin notifications</div>', 'Admin Notifications');
+      return;
+    }
+    let html = '<div style="max-height:320px;overflow:auto;display:flex;flex-direction:column;gap:8px">';
+    adminNotifs.slice().sort((a, b) => b.id - a.id).forEach(n => {
+      html += `<div style="padding:12px 14px;border-radius:13px;background:rgba(245,158,11,${n.read ? '0.04' : '0.1'});border:1.5px solid rgba(245,158,11,${n.read ? '0.06' : '0.2'})">`;
+      html += `<div style="font-size:0.84rem;font-weight:${n.read ? 400 : 600}">${escapeHtml(n.text)}</div>`;
+      html += `<div style="font-size:0.63rem;color:var(--t3);margin-top:4px">${new Date(n.date).toLocaleString()}</div>`;
+      html += `<div style="display:flex;gap:6px;margin-top:8px">`;
+      if (!n.read) html += `<button class="btn btn-sm btn-teal" onclick="markAdminNotifRead(${n.id})">✓ Mark Read</button>`;
+      html += `<button class="btn btn-sm btn-red" onclick="deleteAdminNotif(${n.id})">🗑️ Delete</button>`;
+      html += `</div></div>`;
+    });
+    html += '</div>';
+    showModal(html, 'Admin Notifications');
     return;
   }
-  const arr=notifications[currentUser.id]||[];
-  if(!arr.length){showModal('<div class="empty-state"><div class="empty-state-icon">🔔</div><div class="empty-state-text">'+t('no_notifications')+'</div></div>',t('notifications'));return;}
-  let html='<div style="max-height:320px;overflow:auto;display:flex;flex-direction:column;gap:8px">';
-  arr.slice().sort((a,b)=>b.id-a.id).forEach(n=>{
-    html+='<div style="padding:12px 14px;border-radius:13px;background:rgba(245,158,11,'+(n.read?'0.04':'0.1')+');border:1.5px solid rgba(245,158,11,'+(n.read?'0.06':'0.2')+')">';
-    html+='<div style="font-size:0.84rem;font-weight:'+(n.read?400:600)+'">'+n.text+'</div>';
-    html+='<div style="font-size:0.63rem;color:var(--t3);margin-top:4px">'+new Date(n.date).toLocaleString()+'</div>';
-    html+='<div style="display:flex;gap:6px;margin-top:8px">'+(n.read?'':'<button class="btn btn-sm btn-teal" onclick="markNotifRead('+n.id+')">'+t('mark_read')+'</button>')+'<button class="btn btn-sm btn-red" onclick="deleteNotif('+n.id+')">'+t('delete')+'</button></div>';
-    html+='</div>';
+  
+  // Member notifications (unchanged)
+  const arr = notifications[currentUser.id] || [];
+  if (!arr.length) {
+    showModal('<div class="empty-state"><div class="empty-state-icon">🔔</div><div class="empty-state-text">' + t('no_notifications') + '</div></div>', t('notifications'));
+    return;
+  }
+  let html = '<div style="max-height:320px;overflow:auto;display:flex;flex-direction:column;gap:8px">';
+  arr.slice().sort((a, b) => b.id - a.id).forEach(n => {
+    html += '<div style="padding:12px 14px;border-radius:13px;background:rgba(245,158,11,' + (n.read ? '0.04' : '0.1') + ');border:1.5px solid rgba(245,158,11,' + (n.read ? '0.06' : '0.2') + ')">';
+    html += '<div style="font-size:0.84rem;font-weight:' + (n.read ? 400 : 600) + '">' + n.text + '</div>';
+    html += '<div style="font-size:0.63rem;color:var(--t3);margin-top:4px">' + new Date(n.date).toLocaleString() + '</div>';
+    html += '<div style="display:flex;gap:6px;margin-top:8px">' + (n.read ? '' : '<button class="btn btn-sm btn-teal" onclick="markNotifRead(' + n.id + ')">' + t('mark_read') + '</button>') + '<button class="btn btn-sm btn-red" onclick="deleteNotif(' + n.id + ')">' + t('delete') + '</button></div>';
+    html += '</div>';
   });
-  html+='</div>';
-  showModal(html,t('notifications'));
+  html += '</div>';
+  showModal(html, t('notifications'));
 };
 window.markNotifRead=async function(id){const arr=notifications[currentUser.id]||[];const idx=arr.findIndex(n=>n.id===id);if(idx>-1){arr[idx].read=true;await db.ref('notifications/'+currentUser.id).set(arr);}closeModal();openNotificationsModal();};
 window.deleteNotif=async function(id){const f=(notifications[currentUser.id]||[]).filter(n=>n.id!==id);await db.ref('notifications/'+currentUser.id).set(f);closeModal();openNotificationsModal();};
+window.markAdminNotifRead = async function(id) {
+  const arr = notifications.admin || [];
+  const idx = arr.findIndex(n => n.id === id);
+  if (idx > -1) {
+    arr[idx].read = true;
+    await db.ref('notifications/admin').set(arr);
+    notifications.admin = arr;
+    updateNotificationBadge();
+    openNotificationsModal(); // refresh modal
+  }
+};
+
+window.deleteAdminNotif = async function(id) {
+  const arr = notifications.admin || [];
+  const newArr = arr.filter(n => n.id !== id);
+  await db.ref('notifications/admin').set(newArr);
+  notifications.admin = newArr;
+  updateNotificationBadge();
+  openNotificationsModal(); // refresh modal
+};
 window.openLanguageModal=function(){
   let html='<div style="display:flex;flex-direction:column;gap:8px">';
   html+=`<div onclick="setLanguage('en')" style="padding:14px 16px;border-radius:14px;background:rgba(255,255,255,${currentLang==='en'?'0.08':'0.04'});border:1.5px solid rgba(245,158,11,${currentLang==='en'?'0.4':'0.1'});cursor:pointer;display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600">${t('language_english')}</span>${currentLang==='en'?'<span style="color:var(--gold)">✓</span>':''}</div>`;
@@ -7056,6 +7114,63 @@ function showTabLoadingAnimation(text, callback) {
     loadingTimeout = null;
   }, 3000);
 }
+function showNotificationsPopup() {
+  if (!currentUser || currentUser.isAdmin) return;
+  const userNotifs = notifications[currentUser.id] || [];
+  const listDiv = document.getElementById('notifications-popup-list');
+  if (!listDiv) return;
+
+  if (userNotifs.length === 0) {
+    listDiv.innerHTML = '<div class="empty-state">No notifications</div>';
+    openOv('ov-notifications-popup');
+    return;
+  }
+
+  let html = '<div style="display:flex;flex-direction:column;gap:8px;">';
+  userNotifs.slice().sort((a, b) => b.id - a.id).forEach(n => {
+    html += `
+      <div style="padding:12px;border-radius:12px;background:${n.read ? 'rgba(255,255,255,0.04)' : 'rgba(245,158,11,0.1)'};border:1px solid ${n.read ? 'rgba(255,255,255,0.1)' : 'rgba(245,158,11,0.3)'}">
+        <div style="font-weight:${n.read ? '400' : '600'}">${escapeHtml(n.text)}</div>
+        <div class="micro muted" style="margin-top:4px">${new Date(n.date).toLocaleString()}</div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          ${!n.read ? `<button class="btn btn-sm btn-teal" onclick="markNotifReadPopup(${n.id})">✓ Mark Read</button>` : ''}
+          <button class="btn btn-sm btn-red" onclick="deleteNotifPopup(${n.id})">🗑️ Delete</button>
+        </div>
+      </div>
+    `;
+  });
+  html += '</div>';
+  listDiv.innerHTML = html;
+  openOv('ov-notifications-popup');
+}
+
+window.markNotifReadPopup = async function(id) {
+  const arr = notifications[currentUser.id] || [];
+  const idx = arr.findIndex(n => n.id === id);
+  if (idx > -1) {
+    arr[idx].read = true;
+    await db.ref('notifications/' + currentUser.id).set(arr);
+    notifications[currentUser.id] = arr;
+    updateNotificationBadge();
+    // Refresh popup content
+    showNotificationsPopup();
+    // If all read, close popup
+    if (arr.every(n => n.read)) closeOv('ov-notifications-popup');
+  }
+};
+
+window.deleteNotifPopup = async function(id) {
+  const arr = notifications[currentUser.id] || [];
+  const newArr = arr.filter(n => n.id !== id);
+  await db.ref('notifications/' + currentUser.id).set(newArr);
+  notifications[currentUser.id] = newArr;
+  updateNotificationBadge();
+  if (newArr.length === 0) {
+    closeOv('ov-notifications-popup');
+  } else {
+    showNotificationsPopup(); // refresh list
+  }
+};
 function attachDepositPreviewHandler() {
   // All preview logic lives in window.updateTxPreview — just wire up listeners
   // and trigger once so the preview is fresh when the modal opens.
