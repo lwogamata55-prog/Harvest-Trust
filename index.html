@@ -2754,7 +2754,44 @@ function getDaysActive(member) {
   const diff = Math.floor((today - join) / (1000 * 60 * 60 * 24));
   return Math.max(0, diff);
 }
-
+function getMemberStats(memberId) {
+  const member = members.find(m => m.id === memberId);
+  if (!member) return null;
+  
+  const daysActive = getDaysActive(member);
+  let totalContributions = 0;
+  transactions.forEach(tx => {
+    if (tx.memberPhone === member.phone && tx.type === 'deposit') {
+      totalContributions += tx.amount;
+    }
+  });
+  
+  // Prorated profit share if distributed today (based on days active)
+  const activeMembers = members.filter(m => m.approved);
+  let totalDaysAll = 0;
+  const daysMap = {};
+  for (let m of activeMembers) {
+    const days = getDaysActive(m);
+    daysMap[m.id] = days;
+    totalDaysAll += days;
+  }
+  let proratedShare = 0;
+  if (totalDaysAll > 0 && groupProfit > 0) {
+    proratedShare = Math.floor(groupProfit * daysMap[member.id] / totalDaysAll);
+  }
+  
+  const signupFeeStatus = member.feeCleared ? 'Paid ✅' : `Pending (${money(settings.signupFee || 0)})`;
+  
+  return {
+    name: member.name,
+    phone: member.phone,
+    daysActive,
+    totalContributions,
+    proratedShare,
+    signupFeeStatus,
+    joinDate: member.joinDate || 'Not recorded'
+  };
+}
 function updatePendingDepositWarning() {
   const container = document.getElementById('pending-deposit-list');
   if (!container) return;
@@ -5423,6 +5460,9 @@ function updateAdminMembersList() {
         <div class="mc-avatar" style="background:linear-gradient(135deg,${getAvatarColor(m.name)},#8b5cf6)">${m.name.charAt(0)}</div>
         <div style="flex:1; min-width:0;">
           <div class="mc-name">${m.name} ${isOnline ? '<span class="online-dot" title="Online"></span>' : '<span class="offline-dot" title="Offline"></span>'}</div>
+          <div style="margin-top: 4px;">
+  <span class="pill-badge pill-green">📅 ${getDaysActive(m)} days</span>
+</div>
           <div class="mc-phone">${m.phone}</div>
           <span class="pill-badge ${m.approved===false?'pill-amber':'pill-green'}" style="margin-top:3px">${m.approved===false?'Pending':'Active'}</span>
         </div>
@@ -5719,7 +5759,55 @@ window.deleteTransaction = function() {
     }
   }, 'Delete Transaction');
 };
-window.openEditMember=function(id){const m=members.find(m=>m.id===id);if(!m)return;document.getElementById('edit-member-id').value=id;document.getElementById('edit-mbr-name').value=m.name;document.getElementById('edit-mbr-phone').value=m.phone;document.getElementById('edit-mbr-join').value=m.joinDate||'';document.getElementById('edit-mbr-photo').value=m.photoData||'';const prev=document.getElementById('edit-photo-preview');if(m.photoData){prev.src=m.photoData;prev.style.display='block';}else{prev.src='';prev.style.display='none';}openOv('ov-edit-member');};
+window.openEditMember = function(id) {
+  const m = members.find(m => m.id === id);
+  if (!m) return;
+  const stats = getMemberStats(id);
+  
+  // Fill the edit form fields
+  document.getElementById('edit-member-id').value = id;
+  document.getElementById('edit-mbr-name').value = m.name;
+  document.getElementById('edit-mbr-phone').value = m.phone;
+  document.getElementById('edit-mbr-join').value = m.joinDate || '';
+  document.getElementById('edit-mbr-photo').value = m.photoData || '';
+  const prev = document.getElementById('edit-photo-preview');
+  if (m.photoData) {
+    prev.src = m.photoData;
+    prev.style.display = 'block';
+  } else {
+    prev.src = '';
+    prev.style.display = 'none';
+  }
+  
+  // Build stats card HTML
+  const statsHtml = `
+    <div class="card" style="margin: 16px 0; background: linear-gradient(135deg, rgba(245,158,11,0.1), rgba(6,182,212,0.05)); border: 1px solid rgba(245,158,11,0.2);">
+      <div class="sec-h" style="margin-top: 0;">📊 Member Financial Summary</div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+        <div><span class="micro muted">📅 Days Active</span><br><strong>${stats.daysActive} days</strong></div>
+        <div><span class="micro muted">💰 Total Deposits</span><br><strong>${money(stats.totalContributions)}</strong></div>
+        <div><span class="micro muted">🎯 Current Profit Share*</span><br><strong>${money(stats.proratedShare)}</strong></div>
+        <div><span class="micro muted">💳 Signup Fee</span><br><strong>${stats.signupFeeStatus}</strong></div>
+      </div>
+      <div class="micro muted" style="margin-top: 8px;">*If profit pool were distributed today (prorated by days active)</div>
+      <div class="micro muted">Joined: ${stats.joinDate}</div>
+    </div>
+  `;
+  
+  // Insert the stats card into the modal (above the save button)
+  const modalContent = document.querySelector('#ov-edit-member .bs');
+  let existingStats = document.getElementById('member-stats-card');
+  if (existingStats) existingStats.remove();
+  const statsCard = document.createElement('div');
+  statsCard.id = 'member-stats-card';
+  statsCard.innerHTML = statsHtml;
+  // Insert before the save button
+  const saveBtn = modalContent.querySelector('.btn-gold');
+  if (saveBtn) modalContent.insertBefore(statsCard, saveBtn);
+  
+  openOv('ov-edit-member');
+};
+
 window.updateMember=function(){const id=document.getElementById('edit-member-id').value;const name=document.getElementById('edit-mbr-name').value.trim();const phone=document.getElementById('edit-mbr-phone').value.trim();const join=document.getElementById('edit-mbr-join').value;const photoData=document.getElementById('edit-mbr-photo').value;if(!name||!phone){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('members/'+id).update({name,phone,joinDate:join,photoData:photoData||''}).then(()=>{toast(name+' '+t('update'),'#10b981');closeOv('ov-edit-member');});};
 window.deleteMember = function(id) {
   const member = members.find(m => m.id === id);
