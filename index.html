@@ -3492,58 +3492,115 @@ function renderStatistics() {
   renderRewardsContent(); // fills rewards data in the stats tab
 }
 function renderRewardsContent() {
+  // Force recalc from current transactions
+  computePots();
+  
   const summaryDiv = document.getElementById('rewards-summary');
   const listDiv = document.getElementById('rewards-list');
   const referralDiv = document.getElementById('referral-code-display-stats');
-  if (!summaryDiv) return;
+  const referralBox = document.getElementById('referral-box-stats');
 
-  const data = calculateRewards();
-  if (!data || data.totalMembers === 0) {
-    summaryDiv.innerHTML = '<div class="muted">No active members yet.</div>';
+  if (!summaryDiv || !listDiv) return;
+
+  // If no transactions yet, show loading message
+  if (transactions.length === 0) {
+    summaryDiv.innerHTML = '<div class="muted">Loading financial data...</div>';
     listDiv.innerHTML = '';
+    if (referralBox) referralBox.style.display = 'none';
     return;
   }
 
+  const activeMembers = members.filter(m => m.approved);
+  if (activeMembers.length === 0) {
+    summaryDiv.innerHTML = '<div class="muted">No active members yet.</div>';
+    listDiv.innerHTML = '';
+    if (referralBox) referralBox.style.display = 'none';
+    return;
+  }
+
+  const rewardsPercent = 5;
+  const rewardsPool = Math.floor(groupProfit * rewardsPercent / 100);
+  const proratedPool = groupProfit - rewardsPool;
+
+  // Calculate days active for average share (prorated)
+  let totalDays = 0;
+  for (let m of activeMembers) {
+    totalDays += getDaysActive(m);
+  }
+  let avgShare = 0;
+  if (totalDays === 0) {
+    avgShare = Math.floor(proratedPool / activeMembers.length);
+  } else {
+    avgShare = Math.floor(proratedPool / activeMembers.length);
+  }
+
+  // Calculate category winners (5% rewards)
+  const memberScores = activeMembers.map(m => {
+    let totalDeposits = 0;
+    let consistency = new Set();
+    let referrals = m.referralCount || 0;
+    let repaidLoans = 0;
+    let activity = 0;
+    transactions.forEach(tx => {
+      if (tx.memberPhone === m.phone && tx.type === 'deposit') {
+        totalDeposits += tx.amount;
+        consistency.add(new Date(tx.date).toISOString().slice(0, 10));
+        activity++;
+      }
+    });
+    loans.forEach(loan => {
+      if (loan.memberId === m.id && loan.repaid === true) repaidLoans++;
+    });
+    return { m, totalDeposits, consistency: consistency.size, referrals, repaidLoans, activity };
+  });
+
+  const categories = [
+    { name: '🏆 Top Saver', field: 'totalDeposits', percent: 0.30 },
+    { name: '📅 Most Consistent', field: 'consistency', percent: 0.25 },
+    { name: '👥 Top Referrer', field: 'referrals', percent: 0.20 },
+    { name: '💳 Best Loan Repayer', field: 'repaidLoans', percent: 0.15 },
+    { name: '⚡ Most Active', field: 'activity', percent: 0.10 }
+  ];
+
+  let winnersHtml = '';
+  let usedIds = new Set();
+  for (let cat of categories) {
+    let best = null;
+    let bestVal = -1;
+    for (let s of memberScores) {
+      if (usedIds.has(s.m.id)) continue;
+      let val = s[cat.field];
+      if (val > bestVal) { bestVal = val; best = s; }
+    }
+    let amount = 0;
+    if (best && bestVal > 0) {
+      amount = Math.floor(rewardsPool * cat.percent);
+      usedIds.add(best.m.id);
+      winnersHtml += `<div class="reward-card"><div class="reward-category">${cat.name}</div><div class="reward-member">${escapeHtml(best.m.name)}</div><div class="reward-amount">${money(amount)}</div><div class="micro muted">${bestVal} points</div></div>`;
+    } else {
+      winnersHtml += `<div class="reward-card" style="opacity:0.7;"><div class="reward-category">${cat.name}</div><div class="reward-member">— —</div><div class="reward-amount">UGX 0</div><div class="micro muted">No eligible member</div></div>`;
+    }
+  }
+
+  // Build summary
   summaryDiv.innerHTML = `
-    <div><strong>Total Profit Pool:</strong> ${money(data.groupProfit)}</div>
-    <div><strong>Equal Share (${data.totalMembers} members):</strong> ${money(data.equalSharePerMember)} each</div>
-    <div><strong>Extra Rewards Pool (5 categories):</strong> ${money(data.rewardsPoolDisplay)}</div>
+    <div><strong>Total Profit Pool:</strong> ${money(groupProfit)}</div>
+    <div><strong>Average Prorated Share (95%):</strong> ${money(avgShare)} per member (based on days active)</div>
+    <div><strong>Rewards Pool (5%):</strong> ${money(rewardsPool)} – awarded to top performers</div>
   `;
 
-  let html = '<div class="rewards-grid">';
-  data.winners.forEach(winner => {
-    if (winner.eligible) {
-      html += `
-        <div class="reward-card">
-          <div class="reward-category">${winner.category}</div>
-          <div class="reward-member">${escapeHtml(winner.member.name)}</div>
-          <div class="reward-amount">${money(winner.amount)}</div>
-          <div class="micro muted">${winner.metric} points</div>
-        </div>
-      `;
-    } else {
-      html += `
-        <div class="reward-card" style="opacity: 0.7;">
-          <div class="reward-category">${winner.category}</div>
-          <div class="reward-member">— —</div>
-          <div class="reward-amount">UGX 0</div>
-          <div class="micro muted">No eligible member</div>
-        </div>
-      `;
-    }
-  });
-  html += '</div>';
-  listDiv.innerHTML = html;
+  // Insert winners grid
+  listDiv.innerHTML = `<div class="rewards-grid">${winnersHtml}</div>`;
 
-  if (currentUser && !currentUser.isAdmin) {
-    referralDiv.parentElement.style.display = 'block';
+  // Referral section (only for members)
+  if (referralBox && currentUser && !currentUser.isAdmin) {
+    referralBox.style.display = 'block';
     const code = currentUser.id?.slice(-6) || currentUser.phone?.slice(-4);
-    referralDiv.innerHTML = `<strong>Your Referral Code:</strong> ${code}`;
-  } else {
-    referralDiv.parentElement.style.display = 'none';
+    if (referralDiv) referralDiv.innerHTML = `<strong>Your Referral Code:</strong> ${code}`;
+  } else if (referralBox) {
+    referralBox.style.display = 'none';
   }
 }
-
 // Copy referral link (duplicate for stats tab)
 window.copyReferralLinkStats = function() {
   const code = currentUser?.id?.slice(-6) || currentUser?.phone?.slice(-4);
@@ -5222,17 +5279,17 @@ function renderAdminTab(){
   const activeLoans = loans.filter(l => l.status === 'approved' && !l.repaid);
   if(currentAdminTab==='savings'){
   c.innerHTML = `
-    <div class="card">
-      <div class="sec-h">🏦 Profit Pool</div>
-      <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
-        <div style="width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,var(--green),#059669);display:flex;align-items:center;justify-content:center;font-size:1.6rem">💰</div>
-        <div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:1.6rem;font-weight:700;color:${groupProfit<0?'var(--red)':'var(--green)'}">UGX ${groupProfit.toLocaleString()}</div>
-          <div class="micro">${t('per_member')}: ~UGX ${members.length?Math.floor(groupProfit/members.length).toLocaleString():'0'}</div>
-        </div>
-      </div>
-      <button class="btn btn-green btn-full" onclick="previewProfitDistribution()">${t('distribute_profit')}</button>
+   <div class="card">
+  <div class="sec-h">🏦 Profit Pool</div>
+  <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
+    <div style="width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,var(--green),#059669);display:flex;align-items:center;justify-content:center;font-size:1.6rem">💰</div>
+    <div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:1.6rem;font-weight:700;color:${groupProfit<0?'var(--red)':'var(--green)'}">UGX ${groupProfit.toLocaleString()}</div>
+      <div class="micro">Prorated share (by days active) – use preview to see breakdown</div>
     </div>
+  </div>
+  <button class="btn btn-green btn-full" onclick="previewProfitDistribution()">${t('distribute_profit')}</button>
+</div>
     ${pendingLoans.length?`<div class="card"><div class="sec-h">${t('pending_loans')} <span class="pill-badge pill-amber">${pendingLoans.length}</span></div>${pendingLoans.map(l=>`<div class="mc"><div><div class="mc-name">${l.memberName}</div><div class="mc-phone">UGX ${l.amount.toLocaleString()} · Repay: UGX ${l.totalRepay.toLocaleString()} (${l.interestRate}%)</div><div class="micro">${l.reason}</div></div><div><button class="btn btn-sm btn-green" onclick="approveLoan('${l.id}')">✅</button><button class="btn btn-sm btn-red" onclick="rejectLoan('${l.id}')">✕</button></div></div>`).join('')}</div>`:''}
     ${(() => {
       const activeByMember = {};
@@ -6127,21 +6184,61 @@ window.previewProfitDistribution = function() {
 
   const rewardsPercent = 5;
   const rewardsPool = Math.floor(groupProfit * rewardsPercent / 100);
-  const equalShareTotal = groupProfit - rewardsPool;
+  const proratedPool = groupProfit - rewardsPool;
 
+  // Calculate days active for each member and total days
   let totalDays = 0;
-  const daysMap = {};
+  const memberData = [];
   for (let m of membersList) {
     const days = getDaysActive(m);
-    daysMap[m.id] = days;
     totalDays += days;
+    memberData.push({ member: m, days });
   }
 
-  const avgShare = totalDays === 0
-    ? Math.floor(equalShareTotal / membersList.length)
-    : Math.floor(equalShareTotal * (totalDays / membersList.length) / totalDays);
+  // If no days recorded (fallback to equal share)
+  let useEqualShare = (totalDays === 0);
+  let proratedShares = [];
+  for (let data of memberData) {
+    let share = 0;
+    if (useEqualShare) {
+      share = Math.floor(proratedPool / membersList.length);
+    } else {
+      share = Math.floor(proratedPool * data.days / totalDays);
+    }
+    proratedShares.push({ ...data, share });
+  }
+  // Sort by share descending for table
+  proratedShares.sort((a, b) => b.share - a.share);
 
-  // Calculate rewards winners (same as before)
+  // Build the table HTML
+  let tableHtml = `
+    <div style="max-height: 300px; overflow-y: auto; margin-bottom: 16px;">
+      <table style="width: 100%; border-collapse: collapse; font-size: 0.8rem;">
+        <thead>
+          <tr style="background: rgba(245,158,11,0.2);">
+            <th style="padding: 8px; text-align: left;">Member</th>
+            <th style="padding: 8px; text-align: center;">Days Active</th>
+            <th style="padding: 8px; text-align: right;">Prorated Share (UGX)</th>
+          </tr>
+        </thead>
+        <tbody>
+  `;
+  for (let item of proratedShares) {
+    tableHtml += `
+      <tr style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+        <td style="padding: 8px;">${escapeHtml(item.member.name)}</td>
+        <td style="padding: 8px; text-align: center;">${item.days}</td>
+        <td style="padding: 8px; text-align: right;">${money(item.share)}</td>
+      </tr>
+    `;
+  }
+  tableHtml += `
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  // Calculate rewards winners (5% pool) – same as before
   const memberScores = membersList.map(m => {
     let totalDeposits = 0;
     let consistency = new Set();
@@ -6185,20 +6282,20 @@ window.previewProfitDistribution = function() {
       usedIds.add(best.m.id);
       winnersHtml += `<div><strong>${cat.name}</strong>: ${escapeHtml(best.m.name)} → ${money(amount)}</div>`;
     } else {
-      winnersHtml += `<div><strong>${cat.name}</strong>: No eligible member → amount added back to equal share</div>`;
+      winnersHtml += `<div><strong>${cat.name}</strong>: No eligible member → amount added back to prorated pool</div>`;
     }
   }
 
   const modalContent = `
     <div style="margin-bottom: 16px;">
       <div><strong>Total Profit Pool:</strong> ${money(groupProfit)}</div>
-      <div><strong>95% Equal Share (prorated by days active):</strong> ~${money(avgShare)} per member average</div>
-      <div><strong>5% Rewards Pool:</strong> ${money(rewardsPool)}</div>
-      <div class="micro muted">Members with more days active receive a larger share.</div>
+      <div><strong>Prorated Distribution Pool (95%):</strong> ${money(proratedPool)} – distributed based on days active</div>
+      <div><strong>Rewards Pool (5%):</strong> ${money(rewardsPool)} – awarded to category winners</div>
     </div>
+    ${tableHtml}
     <div class="sec-h">🏅 Category Winners (5% rewards)</div>
     ${winnersHtml}
-    <div class="hint-box" style="margin-top: 12px;">Do you want to proceed with this distribution?</div>
+    <div class="hint-box" style="margin-top: 12px;">Confirm distribution? This action cannot be undone.</div>
     <div style="display: flex; gap: 12px; margin-top: 16px;">
       <button class="btn btn-green" onclick="executeProfitDistribution()">✅ Confirm & Distribute</button>
       <button class="btn btn-sec" onclick="closeCurrentModal()">Cancel</button>
@@ -7172,82 +7269,7 @@ function calculateRewards() {
     rewardsPoolDisplay: rewardsPool
   };
 }
-function renderRewardsContent() {
-  const summaryDiv = document.getElementById('rewards-summary');
-  const listDiv = document.getElementById('rewards-list');
-  const referralDiv = document.getElementById('referral-code-display-stats');
-  const referralBox = document.getElementById('referral-box-stats');
 
-  if (!summaryDiv || !listDiv) return;
-
-  const data = calculateRewards();
-  if (!data || data.totalMembers === 0) {
-    summaryDiv.innerHTML = '<div class="muted">No active members yet.</div>';
-    listDiv.innerHTML = '';
-    if (referralBox) referralBox.style.display = 'none';
-    return;
-  }
-
-  // Build winners HTML exactly like the profit preview
-  let winnersHtml = '';
-  data.winners.forEach(winner => {
-    if (winner.eligible) {
-      winnersHtml += `
-        <div class="reward-card">
-          <div class="reward-category">${winner.category}</div>
-          <div class="reward-member">${escapeHtml(winner.member.name)}</div>
-          <div class="reward-amount">${money(winner.amount)}</div>
-          <div class="micro muted">${winner.metric} points</div>
-        </div>
-      `;
-    } else {
-      winnersHtml += `
-        <div class="reward-card" style="opacity: 0.7;">
-          <div class="reward-category">${winner.category}</div>
-          <div class="reward-member">— —</div>
-          <div class="reward-amount">UGX 0</div>
-          <div class="micro muted">No eligible member</div>
-        </div>
-      `;
-    }
-  });
-
-  summaryDiv.innerHTML = `
-    <div><strong>Total Profit Pool:</strong> ${money(data.groupProfit)}</div>
-    <div><strong>Equal Share (95%):</strong> ${money(data.equalSharePerMember)} per member</div>
-    <div><strong>Rewards Pool (5%):</strong> ${money(data.rewardsPoolDisplay)}</div>
-    <div class="micro muted" style="margin-top: 6px;">Rewards are distributed among top performers in 5 categories (Top Saver, Most Consistent, Top Referrer, Best Loan Repayer, Most Active).</div>
-  `;
-
-  listDiv.innerHTML = `<div class="rewards-grid">${winnersHtml}</div>`;
-
-  // Referral section (unchanged)
-  if (referralBox && currentUser && !currentUser.isAdmin) {
-    referralBox.style.display = 'block';
-    const code = currentUser.id?.slice(-6) || currentUser.phone?.slice(-4);
-    if (referralDiv) referralDiv.innerHTML = `<strong>Your Referral Code:</strong> ${code}`;
-  } else if (referralBox) {
-    referralBox.style.display = 'none';
-  }
-}
-// Copy referral link for stats tab
-window.copyReferralLinkStats = function() {
-  const code = currentUser?.id?.slice(-6) || currentUser?.phone?.slice(-4);
-  if (code) {
-    navigator.clipboard.writeText(code);
-    toast('Referral code copied!', '#10b981');
-  } else {
-    toast('No referral code available', '#ef4444');
-  }
-};
-window.copyReferralLink = function() {
-  const input = document.getElementById('referral-link-display');
-  if (input) {
-    input.select();
-    document.execCommand('copy');
-    toast('Referral link copied!', '#10b981');
-  }
-};
 let forgotState = { step: 'phone', phone: '', memberId: null, revealedPin: '' };
 
 function openForgotPassword() {
