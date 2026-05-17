@@ -2375,13 +2375,14 @@ let lastProcessedDate = null;
 
 async function checkAndAssignDebts() {
   const todayStart = getTodayStart();
-  const todayDateStr = new Date(todayStart).toISOString().slice(0,10);
+  const todayDateStr = new Date(todayStart).toISOString().slice(0, 10);
   if (lastProcessedDate === todayDateStr) return;
+
   const now = Date.now();
   if (now < getNextMidnight() - 5000) return;
-  
+
   console.log("Midnight passed – assigning penalties for", todayDateStr);
-  
+
   const activeMembers = members.filter(m => m.approved);
   const depositToday = new Set();
   transactions.forEach(tx => {
@@ -2389,16 +2390,16 @@ async function checkAndAssignDebts() {
       depositToday.add(tx.memberPhone);
     }
   });
-  
+
   const dailyAmount = settings.dailyAmount || 2500;
-  const interestRate = (settings.interestRate || 5) / 100;
+  const interestRate = (settings.penaltyInterestRate || 5) / 100;
   const interestAmount = Math.round(dailyAmount * interestRate);
-  
+
   const writes = [];
-  
-  activeMembers.forEach(member => {
+
+  for (const member of activeMembers) {
     if (!depositToday.has(member.phone)) {
-      // 1. Debt for the daily amount
+      // 1. Debt for the missed daily amount (with autoMidnight flag)
       writes.push(db.ref('transactions').push({
         memberPhone: member.phone,
         memberName: member.name,
@@ -2408,21 +2409,21 @@ async function checkAndAssignDebts() {
         date: Date.now(),
         autoMidnight: true
       }));
-      // 2. Interest portion -> profit pool
+      // 2. Interest penalty added to profit pool (fine)
       if (interestAmount > 0) {
         writes.push(db.ref('transactions').push({
           memberPhone: member.phone,
           memberName: member.name,
           type: 'fine',
           amount: interestAmount,
-          description: `Auto penalty interest (${settings.interestRate}%) for ${todayDateStr} – no deposit`,
+          description: `Auto penalty interest (${settings.penaltyInterestRate}%) for ${todayDateStr} – no deposit`,
           date: Date.now() + 1,
           autoMidnight: true
         }));
       }
     }
-  });
-  
+  }
+
   if (writes.length) {
     await Promise.all(writes);
     toast(`${writes.length / 2} member(s) penalised (daily + interest) for ${todayDateStr}`, '#ef4444');
@@ -2434,11 +2435,28 @@ async function checkAndAssignDebts() {
   } else {
     console.log("All members deposited – no penalties.");
   }
-  
+
   lastProcessedDate = todayDateStr;
   localStorage.setItem('lastDebtProcessDate', lastProcessedDate);
 }
+function getTodaysDepositStatus() {
+  const todayStart = new Date().setHours(0, 0, 0, 0);
+  const todayEnd = todayStart + 86400000 - 1;
+  const hasActionToday = new Set();
 
+  transactions.forEach(tx => {
+    if (tx.date >= todayStart && tx.date <= todayEnd) {
+      // Any transaction for this member today counts as action
+      if (tx.memberPhone) {
+        hasActionToday.add(tx.memberPhone);
+      }
+    }
+  });
+
+  const allMembers = members.filter(m => m.approved);
+  const noAction = allMembers.filter(m => !hasActionToday.has(m.phone));
+  return { noAction, allCount: allMembers.length, actionCount: hasActionToday.size };
+}
 // Start the checker: runs every minute
 function startMidnightChecker() {
   // Restore last processed date from localStorage
@@ -5360,25 +5378,41 @@ function renderAdminTab(){
   const pendingLoans=loans.filter(l=>l.status==='pending');
   const activeLoans = loans.filter(l => l.status === 'approved' && !l.repaid);
   if(currentAdminTab==='savings'){
+  const { noAction, allCount, actionCount } = getTodaysDepositStatus();
+const pendingActivityHtml = noAction.length === 0 
+  ? `<div class="card" style="background: rgba(16,185,129,0.1); border-color: #10b981;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span style="font-size:1.5rem;">✅</span>
+        <div><strong>All members are up to date!</strong><br>${actionCount}/${allCount} have taken action today.</div>
+      </div>
+    </div>`
+  : `<div class="card" style="background: rgba(245,158,11,0.1); border-color: #f59e0b;">
+      <div style="margin-bottom:8px;"><strong>⚠️ No action yet (${noAction.length} members)</strong></div>
+      <div style="display:flex; flex-wrap:wrap; gap:6px;">
+        ${noAction.map(m => `<span class="pill-badge pill-amber" style="background:rgba(245,158,11,0.2);">⚠️ ${escapeHtml(m.name)}</span>`).join('')}
+      </div>
+      <div class="micro muted" style="margin-top:6px;">These members have neither deposited nor been auto‑penalised today. Auto‑penalty applies at midnight.</div>
+    </div>`;
   c.innerHTML = `
-   <div class="card">
-  <div class="sec-h">🏦 Profit Pool</div>
-  <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
-    <div style="width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,var(--green),#059669);display:flex;align-items:center;justify-content:center;font-size:1.6rem">💰</div>
-    <div>
-      <div style="font-family:'JetBrains Mono',monospace;font-size:1.6rem;font-weight:700;color:${groupProfit<0?'var(--red)':'var(--green)'}">UGX ${groupProfit.toLocaleString()}</div>
-      <div class="micro">Prorated share (by days active) – use preview to see breakdown</div>
+    <div class="card">
+      <div class="sec-h">🏦 Profit Pool</div>
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
+        <div style="width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,var(--green),#059669);display:flex;align-items:center;justify-content:center;font-size:1.6rem">💰</div>
+        <div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:1.6rem;font-weight:700;color:${groupProfit<0?'var(--red)':'var(--green)'}">UGX ${groupProfit.toLocaleString()}</div>
+          <div class="micro">Prorated share – use preview to see breakdown</div>
+        </div>
+      </div>
+      <button class="btn btn-green btn-full" onclick="previewProfitDistribution()">${t('distribute_profit')}</button>
     </div>
-  </div>
-  <button class="btn btn-green btn-full" onclick="previewProfitDistribution()">${t('distribute_profit')}</button>
-</div>
-    ${pendingLoans.length?`<div class="card"><div class="sec-h">${t('pending_loans')} <span class="pill-badge pill-amber">${pendingLoans.length}</span></div>${pendingLoans.map(l=>`<div class="mc"><div><div class="mc-name">${l.memberName}</div><div class="mc-phone">UGX ${l.amount.toLocaleString()} · Repay: UGX ${l.totalRepay.toLocaleString()} (${l.interestRate}%)</div><div class="micro">${l.reason}</div></div><div><button class="btn btn-sm btn-green" onclick="approveLoan('${l.id}')">✅</button><button class="btn btn-sm btn-red" onclick="rejectLoan('${l.id}')">✕</button></div></div>`).join('')}</div>`:''}
+    ${pendingActivityHtml}
+    ${pendingLoans.length ? `<div class="card"><div class="sec-h">${t('pending_loans')} <span class="pill-badge pill-amber">${pendingLoans.length}</span></div>${pendingLoans.map(l=>`<div class="mc"><div><div class="mc-name">${l.memberName}</div><div class="mc-phone">UGX ${l.amount.toLocaleString()} · Repay: UGX ${l.totalRepay.toLocaleString()} (${l.interestRate}%)</div><div class="micro">${l.reason}</div></div><div><button class="btn btn-sm btn-green" onclick="approveLoan('${l.id}')">✅</button><button class="btn btn-sm btn-red" onclick="rejectLoan('${l.id}')">✕</button></div></div>`).join('')}</div>` : ''}
     ${(() => {
       const activeByMember = {};
       loans.forEach(l => {
         if (l.status === 'approved' && !l.repaid) {
-        const memberExists = members.some(m => m.id === l.memberId && m.approved !== false);
-  if (!memberExists) return;
+          const memberExists = members.some(m => m.id === l.memberId && m.approved !== false);
+          if (!memberExists) return;
           if (!activeByMember[l.memberId]) {
             activeByMember[l.memberId] = {
               memberName: l.memberName,
@@ -6997,26 +7031,29 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
   const now = depositTimestamp || Date.now();
   const todayStart = new Date(now).setHours(0, 0, 0, 0);
 
-  // 1. Clear debts first
+  // Step 1 – Clear debts and loans first
   const debtOwed = memberDebts[member.phone] || 0;
   if (debtOwed > 0 && remaining > 0) {
     const a = Math.min(debtOwed, remaining);
     writes.push({
-      memberPhone: member.phone, memberName: member.name,
-      type: 'debt_cleared', amount: a,
+      memberPhone: member.phone,
+      memberName: member.name,
+      type: 'debt_cleared',
+      amount: a,
       description: 'Debt cleared from deposit',
       date: now,
     });
     remaining -= a;
   }
 
-  // 2. Repay loans second
   const loanOwed = memberLoans[member.phone] || 0;
   if (loanOwed > 0 && remaining > 0) {
     const a = Math.min(loanOwed, remaining);
     writes.push({
-      memberPhone: member.phone, memberName: member.name,
-      type: 'loan_repayment', amount: a,
+      memberPhone: member.phone,
+      memberName: member.name,
+      type: 'loan_repayment',
+      amount: a,
       description: 'Loan repaid from deposit',
       date: now + 1,
     });
@@ -7024,53 +7061,94 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
   }
 
   const dailyAmount = settings.dailyAmount || 2500;
-  const welfareAmount = settings.welfareAmount || 0;
+  const welfareAmount = settings.welfareAmount || 500; // assume 500 if not set
   const requiredPerDay = dailyAmount + welfareAmount;
 
-  // Determine the earliest unpaid day (starting from today)
   let currentDayStart = todayStart;
-  let maxDays = 60; // safety limit
-  while (remaining > 0 && maxDays-- > 0) {
-    // Check how much has already been deposited for this day
-    let alreadyPaid = 0;
+  let daysProcessed = 0;
+  const maxDays = 30;
+
+  while (remaining > 0 && daysProcessed < maxDays) {
+    const dayStart = currentDayStart;
+
+    // How much has already been deposited (daily savings) for this day?
+    let alreadyPaidDaily = 0;
     transactions.forEach(tx => {
-      if (tx.memberPhone === member.phone && tx.type === 'deposit') {
-        const txDay = new Date(tx.date).setHours(0, 0, 0, 0);
-        if (txDay === currentDayStart) alreadyPaid += tx.amount;
+      if (tx.memberPhone === member.phone && tx.date >= dayStart && tx.date < dayStart + 86400000 && tx.type === 'deposit') {
+        alreadyPaidDaily += tx.amount;
       }
     });
-    const needed = Math.max(0, requiredPerDay - alreadyPaid);
-    if (needed === 0) {
-      // This day is already fully covered, move to next day
+    // How much welfare already taken for this day?
+    const alreadyHasWelfare = transactions.some(tx =>
+      tx.memberPhone === member.phone && tx.type === 'welfare' &&
+      tx.date >= dayStart && tx.date < dayStart + 86400000
+    );
+
+    const neededDaily = Math.max(0, dailyAmount - alreadyPaidDaily);
+    const neededWelfare = alreadyHasWelfare ? 0 : welfareAmount;
+    const neededTotal = neededDaily + neededWelfare;
+
+    if (neededTotal === 0) {
       currentDayStart += 86400000;
+      daysProcessed++;
       continue;
     }
-    const used = Math.min(remaining, needed);
-    remaining -= used;
 
-    // Record this day's deposit with the date of the day being covered
-    writes.push({
-      memberPhone: member.phone, memberName: member.name,
-      type: 'deposit',
-      amount: used,
-      description: description || `Savings for ${new Date(currentDayStart).toLocaleDateString()}`,
-      date: currentDayStart + 3600000, // noon of that day
-    });
+    // Determine how much of remaining goes to daily and welfare
+    let dailyUse = 0;
+    let welfareUse = 0;
+    if (remaining >= neededTotal) {
+      dailyUse = neededDaily;
+      welfareUse = neededWelfare;
+      remaining -= neededTotal;
+    } else {
+      // Partial day – split proportionally? Simpler: first fill daily, then welfare if any left
+      dailyUse = Math.min(neededDaily, remaining);
+      remaining -= dailyUse;
+      if (remaining > 0 && !alreadyHasWelfare) {
+        welfareUse = Math.min(welfareAmount, remaining);
+        remaining -= welfareUse;
+      }
+    }
 
-    // If this day is not fully paid, we stop (partial day)
-    if (used < needed) break;
-    // Otherwise move to next day
+    // Create daily savings transaction (goes to member's available balance)
+    if (dailyUse > 0) {
+      writes.push({
+        memberPhone: member.phone,
+        memberName: member.name,
+        type: 'deposit',
+        amount: dailyUse,
+        description: description || `Daily savings for ${new Date(dayStart).toLocaleDateString()}`,
+        date: dayStart + 1500,
+      });
+    }
+
+    // Create welfare transaction (goes directly to profit pool)
+    if (welfareUse > 0) {
+      writes.push({
+        memberPhone: member.phone,
+        memberName: member.name,
+        type: 'welfare',
+        amount: welfareUse,
+        description: `Auto welfare for ${new Date(dayStart).toLocaleDateString()}`,
+        date: dayStart + 500,
+        autoDeduction: true,
+      });
+    }
+
     currentDayStart += 86400000;
+    daysProcessed++;
   }
 
-  // If any amount remains after covering many days, record as surplus (balance)
+  // Any leftover amount that doesn't complete a full day (or beyond max days)
   if (remaining > 0) {
     writes.push({
-      memberPhone: member.phone, memberName: member.name,
+      memberPhone: member.phone,
+      memberName: member.name,
       type: 'deposit',
       amount: remaining,
-      description: 'Excess savings (balance)',
-      date: now + 5000,
+      description: 'Excess savings (beyond future days)',
+      date: now + 2000,
     });
   }
 
@@ -7973,4 +8051,4 @@ document.addEventListener('click',function(e){
 </script>
 
 </body>
-</html>
+      </html>
