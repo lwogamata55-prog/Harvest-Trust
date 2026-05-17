@@ -210,6 +210,12 @@ body {
 .tab{position:absolute;inset:0;overflow-y:auto;padding:16px 14px calc(var(--nav) + 56px);opacity:0;pointer-events:none;transform:translateY(22px) scale(0.99);transition:opacity 0.35s var(--ease-smooth),transform 0.35s var(--ease-spring)}.tab.on{opacity:1;pointer-events:all;transform:translateY(0) scale(1)}
 #nav{position:absolute;bottom:0;left:0;right:0;height:var(--nav);display:flex;background:rgba(6,14,26,0.92);backdrop-filter:blur(32px);border-top:1px solid rgba(255,255,255,0.06);padding-bottom:env(safe-area-inset-bottom);z-index:20;box-shadow:0 -4px 24px rgba(0,0,0,0.5)}
 .ni{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:none;color:var(--t3);font-size:0.48rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;cursor:pointer;border:none;transition:all 0.25s var(--ease-spring);padding-top:6px;position:relative;overflow:hidden}.ni:active{transform:scale(0.9)}.ni.on{color:var(--gold)}.ni .ico{font-size:1.2rem;transition:transform 0.3s var(--ease-spring),filter 0.3s}.ni.on .ico{transform:scale(1.22) translateY(-2px);filter:drop-shadow(0 2px 6px rgba(245,158,11,0.5))}.ni-bar{position:absolute;bottom:4px;left:50%;transform:translateX(-50%) scaleX(0);width:24px;height:3px;border-radius:99px;background:linear-gradient(90deg,var(--gold),var(--teal));transition:transform 0.3s var(--ease-spring)}.ni.on .ni-bar{transform:translateX(-50%) scaleX(1)}
+#loan-turn-message {
+  background: rgba(0,0,0,0.3);
+  padding: 6px 12px;
+  border-radius: 30px;
+  backdrop-filter: blur(4px);
+}
 /* Bold error messages */
 #login-error, .micro.error-text, .toast[style*="red"] span {
   font-weight: 800 !important;
@@ -2787,6 +2793,11 @@ function getDaysActive(member) {
   const diff = Math.floor((today - join) / (1000 * 60 * 60 * 24));
   return Math.max(0, diff);
 }
+function getAllowedBorrowerIndex(receiverIndex, totalMembers) {
+  // Returns the index of the member allowed to borrow for a given receiver index.
+  // For 10 members: 0 ↔ 9, 1 ↔ 8, 2 ↔ 7, 3 ↔ 6, 4 ↔ 5.
+  return totalMembers - 1 - receiverIndex;
+}
 function generateRepaymentSchedule(principal, interestRate, weeks, startDate) {
   const totalRepay = principal + Math.floor(principal * interestRate / 100);
   const weeklyPayment = Math.ceil(totalRepay / weeks);
@@ -3269,6 +3280,51 @@ function updateHomeUI(){
     profitsDisplay.className='ss-val '+(groupProfit<0?'':'sv-teal');
     profitsDisplay.style.color=groupProfit<0?'var(--red)':'';
   }
+// Show paired borrowing message on home card
+const receiverCard = document.querySelector('.weekly-receiver-card');
+if (receiverCard && currentUser && !currentUser.isAdmin) {
+  const rotationList = rotation.order || [];
+  const total = rotationList.length;
+  if (total === 0) return;
+  const receiverIndex = rotation.currentIndex || 0;
+  const allowedBorrowerIndex = getAllowedBorrowerIndex(receiverIndex, total);
+  const allowedBorrowerId = rotationList[allowedBorrowerIndex];
+  const allowedBorrower = members.find(m => m.id === allowedBorrowerId);
+  const isSelfPair = (allowedBorrowerIndex === receiverIndex);
+  
+  let msgDiv = document.getElementById('loan-turn-message');
+  if (!msgDiv) {
+    msgDiv = document.createElement('div');
+    msgDiv.id = 'loan-turn-message';
+    msgDiv.style.marginTop = '12px';
+    msgDiv.style.padding = '8px 12px';
+    msgDiv.style.borderRadius = '24px';
+    msgDiv.style.fontSize = '0.75rem';
+    msgDiv.style.fontWeight = '600';
+    msgDiv.style.textAlign = 'center';
+    msgDiv.style.backdropFilter = 'blur(4px)';
+    receiverCard.appendChild(msgDiv);
+  }
+  
+  const isAllowedBorrower = (currentUser.id === allowedBorrowerId);
+  const isReceiver = (currentUser.id === rotationList[receiverIndex]);
+  
+  if (isAllowedBorrower) {
+    msgDiv.style.background = 'linear-gradient(135deg, rgba(245,158,11,0.9), rgba(6,182,212,0.9))';
+    msgDiv.style.color = '#fff';
+    msgDiv.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+    msgDiv.innerHTML = '⭐ It’s your turn to borrow this week! Click "Request Loan" above.';
+  } else if (isSelfPair && isReceiver) {
+    msgDiv.style.background = 'linear-gradient(135deg, rgba(245,158,11,0.9), rgba(6,182,212,0.9))';
+    msgDiv.style.color = '#fff';
+    msgDiv.innerHTML = '⭐ It’s your turn to borrow (no pair). Click "Request Loan".';
+  } else {
+    msgDiv.style.background = 'rgba(255,255,255,0.15)';
+    msgDiv.style.color = 'var(--t2)';
+    const borrowerName = allowedBorrower ? allowedBorrower.name : 'another member';
+    msgDiv.innerHTML = `⏳ ${borrowerName} is the designated borrower this week. Wait for your turn.`;
+  }
+}
   // Receiver card: animated cycle + progress bar
   if(rotation.order?.length){
     startReceiverAnimation();
@@ -4849,16 +4905,46 @@ window.openLoanSettings = function() {
 };
 
 window.openLoanRequestModal = async function() {
-  if (currentUser.isAdmin) { toast('Admin cannot request loans', '#ef4444'); return; }
+  if (!currentUser || currentUser.isAdmin) { toast('Admin cannot request loans', '#ef4444'); return; }
   
-  // Refresh loans from Firebase to ensure latest data
+  // Refresh loans from Firebase
   const snap = await db.ref('loans').once('value');
   loans = snap.val() ? Object.entries(snap.val()).map(([id, l]) => ({ ...l, id })) : [];
   
   if (hasActiveLoanFromApplication()) {
-  toast('A loan requested through the application is still unpaid. No new requests allowed until it is repaid.', '#ef4444');
-  return;
-}
+    toast('A loan requested through the application is still unpaid. No new requests allowed until it is repaid.', '#ef4444');
+    return;
+  }
+  
+  // --- New: Paired borrowing rule ---
+  const rotationList = rotation.order || [];
+  const total = rotationList.length;
+  if (total === 0) {
+    toast('Rotation order not set. Contact admin.', '#ef4444');
+    return;
+  }
+  const receiverIndex = rotation.currentIndex || 0;
+  const allowedBorrowerIndex = getAllowedBorrowerIndex(receiverIndex, total);
+  const allowedBorrowerId = rotationList[allowedBorrowerIndex];
+  const isSelfPair = (allowedBorrowerIndex === receiverIndex);
+  
+  if (isSelfPair) {
+    // Middle member (odd number) can borrow when it's his turn
+    if (currentUser.id !== allowedBorrowerId) {
+      toast('Only the current receiver can borrow this week (no paired member).', '#ef4444');
+      return;
+    }
+  } else {
+    // Paired member must be the borrower
+    if (currentUser.id !== allowedBorrowerId) {
+      const allowedMember = members.find(m => m.id === allowedBorrowerId);
+      const allowedName = allowedMember ? allowedMember.name : 'another member';
+      toast(`Only ${allowedName} can request a loan this week. Wait for your turn.`, '#ef4444');
+      return;
+    }
+  }
+  // --- End of new rule ---
+  
   computePots();
   
   // Calculate member's discipline limit
@@ -4890,7 +4976,7 @@ window.openLoanRequestModal = async function() {
       return;
     }
     const baseRate = loanSettings.interestRate || 5;
-    const extra = (weeks - 1) * 2; // first week base, each extra week +2%
+    const extra = (weeks - 1) * 2;
     const totalRate = baseRate + extra;
     const interest = Math.floor(amt * totalRate / 100);
     const totalRepay = amt + interest;
@@ -4906,7 +4992,6 @@ window.openLoanRequestModal = async function() {
   updateSummary();
   openOv('ov-loan-request');
 };
-
 let tempLoanData = null; // temporary storage before confirmation
 
 window.submitLoanWithQuestions = async function() {
