@@ -1670,6 +1670,17 @@ setTimeout(() => {
 <div class="ov" id="ov-add-welfare" onclick="maybeClose(event,'ov-add-welfare')"><div class="bs"><div class="bs-title">🤝 Welfare</div><div class="fgrp"><label class="flbl">Member</label><select id="welfare-member" class="inp"><option value="">Select member</option></select></div><div class="fgrp"><label class="flbl">Description</label><input type="text" id="welfare-desc" class="inp" placeholder="Description"></div><div class="fgrp"><label class="flbl">Amount</label><input type="number" id="welfare-amount" class="inp" placeholder="Amount"></div><button class="btn btn-green btn-full" onclick="addWelfare()">🤝 Record Welfare</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-add-welfare')">Cancel</button></div></div>
 <div class="ov" id="ov-add-exp" onclick="maybeClose(event,'ov-add-exp')"><div class="bs"><div class="bs-title">📤 Expense</div><div class="fgrp"><label class="flbl">Description</label><input type="text" id="exp-desc" class="inp" placeholder="Description"></div><div class="fgrp"><label class="flbl">Amount</label><input type="number" id="exp-amount" class="inp" placeholder="Amount"></div><div class="fgrp"><label class="flbl">Paid To</label><input type="text" id="exp-paidto" class="inp" placeholder="Paid To"></div><button class="btn btn-red btn-full" onclick="addExpense()">📤 Record Expense</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-add-exp')">Cancel</button></div></div>
 <div class="ov" id="ov-rot-manage" onclick="maybeClose(event,'ov-rot-manage')"><div class="bs"><div class="bs-title">🔄 Rotation Order</div><div style="font-size:0.74rem;margin-bottom:12px;color:var(--t3);font-style:italic">Drag to reorder. Top = next payout.</div><div id="rot-drag-list"></div><div style="display:flex;gap:8px;margin-top:14px"><button class="btn btn-gold" style="flex:1" onclick="saveRotationOrder()">💾 Save Order</button><button class="btn btn-sec" style="flex:1" onclick="closeOv('ov-rot-manage')">Cancel</button></div></div></div>
+<div class="ov" id="ov-loan-rot-manage" onclick="maybeClose(event,'ov-loan-rot-manage')">
+  <div class="bs">
+    <div class="bs-title">🔄 Loan Rotation Order</div>
+    <div style="font-size:0.74rem;margin-bottom:12px;color:var(--t3);font-style:italic">Drag to reorder. Top = next loan receiver.</div>
+    <div id="loan-rot-drag-list"></div>
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn btn-gold" style="flex:1" onclick="saveLoanRotationOrder()">💾 Save Order</button>
+      <button class="btn btn-sec" style="flex:1" onclick="closeOv('ov-loan-rot-manage')">Cancel</button>
+    </div>
+  </div>
+</div>
 <div class="ov" id="ov-mark-paid" onclick="maybeClose(event,'ov-mark-paid')"><div class="bs"><div class="bs-title">✅ Mark Payout</div><div id="mark-paid-info" style="margin-bottom:14px"></div><button class="btn btn-green btn-full" onclick="confirmMarkPaid()">✅ Confirm Payout</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-mark-paid')">Cancel</button></div></div>
 <div class="ov" id="ov-upcoming" onclick="maybeClose(event,'ov-upcoming')">
   <div class="bs">
@@ -1852,9 +1863,13 @@ setTimeout(() => {
     <div class="bs-title">💰 Loan Application Form</div>
     <div style="max-height: 60vh; overflow-y: auto; padding-right: 6px;">
       <div class="hint-box" id="loan-limit-info"></div>
-      
-      <!-- Loan amount and period -->
-      <div class="fgrp"><label class="flbl">1. How much do you need? (UGX)</label><input type="number" id="loan-amount" class="inp" placeholder="Minimum 1000"></div>
+
+      <!-- Loan amount -->
+      <div class="fgrp"><label class="flbl">1. How much do you need? (UGX)</label>
+        <input type="number" id="loan-amount" class="inp" placeholder="Minimum 1000">
+      </div>
+
+      <!-- Repayment weeks (2–10) -->
       <div class="fgrp"><label class="flbl">2. Repayment period (weeks)</label>
         <select id="loan-weeks" class="inp">
           <option value="2">2 weeks</option><option value="3">3 weeks</option><option value="4">4 weeks</option>
@@ -1862,19 +1877,35 @@ setTimeout(() => {
           <option value="8">8 weeks</option><option value="9">9 weeks</option><option value="10">10 weeks</option>
         </select>
       </div>
-      
-      <!-- Dynamic summary box -->
+
+      <!-- Summary box -->
       <div id="loan-summary" class="hint-box" style="background: var(--blue3); margin: 8px 0;"></div>
-      
-      <!-- Questionnaire questions (dropdowns and text) -->
-      <div class="fgrp"><label class="flbl">3. What will you use this money for?</label><select id="loan-q1" class="inp"><option value="">Select</option><option value="Business">Business</option><option value="School fees">School fees</option><option value="Medical">Medical</option><option value="Home needs">Home needs</option><option value="Other">Other</option></select></div>
-      <div class="fgrp"><label class="flbl">4. How do you plan to repay?</label><select id="loan-q2" class="inp"><option value="">Select</option><option value="Daily sales">Daily sales</option><option value="Weekly salary">Weekly salary</option><option value="Farming harvest">Farming harvest</option><option value="Business profit">Business profit</option><option value="Other">Other</option></select></div>
-      <div class="fgrp"><label class="flbl">5. Do you have any other source of income?</label><select id="loan-q3" class="inp"><option value="">Select</option><option value="Yes">Yes</option><option value="No">No</option></select></div>
-      <div class="fgrp"><label class="flbl">6. Have you borrowed from this group before?</label><select id="loan-q4" class="inp"><option value="">Select</option><option value="Yes">Yes</option><option value="No">No</option></select></div>
-      <div class="fgrp"><label class="flbl">7. If yes, did you repay on time?</label><select id="loan-q5" class="inp"><option value="">Select</option><option value="Yes">Yes</option><option value="No">No</option><option value="Not applicable">Not applicable</option></select></div>
-      <div class="fgrp"><label class="flbl">8. Can you provide a guarantor from the group?</label><select id="loan-q6" class="inp"><option value="">Select</option><option value="Yes">Yes</option><option value="No">No</option></select></div>
-      <div class="fgrp"><label class="flbl">9. What is your phone number for loan follow‑up?</label><input type="tel" id="loan-q7" class="inp" placeholder="07XXXXXXXX"></div>
-      <div class="fgrp"><label class="flbl">10. Any extra information?</label><textarea id="loan-q8" class="inp" rows="2" placeholder="Optional"></textarea></div>
+
+      <!-- Questions 3–10 -->
+      <div class="fgrp"><label class="flbl">3. What will you use this money for?</label>
+        <select id="loan-q1" class="inp"><option value="">Select</option><option value="Business">Business</option><option value="School fees">School fees</option><option value="Medical">Medical</option><option value="Home needs">Home needs</option><option value="Other">Other</option></select>
+      </div>
+      <div class="fgrp"><label class="flbl">4. How do you plan to repay?</label>
+        <select id="loan-q2" class="inp"><option value="">Select</option><option value="Daily sales">Daily sales</option><option value="Weekly salary">Weekly salary</option><option value="Farming harvest">Farming harvest</option><option value="Business profit">Business profit</option><option value="Other">Other</option></select>
+      </div>
+      <div class="fgrp"><label class="flbl">5. Do you have any other source of income?</label>
+        <select id="loan-q3" class="inp"><option value="">Select</option><option value="Yes">Yes</option><option value="No">No</option></select>
+      </div>
+      <div class="fgrp"><label class="flbl">6. Have you borrowed from this group before?</label>
+        <select id="loan-q4" class="inp"><option value="">Select</option><option value="Yes">Yes</option><option value="No">No</option></select>
+      </div>
+      <div class="fgrp"><label class="flbl">7. If yes, did you repay on time?</label>
+        <select id="loan-q5" class="inp"><option value="">Select</option><option value="Yes">Yes</option><option value="No">No</option><option value="Not applicable">Not applicable</option></select>
+      </div>
+      <div class="fgrp"><label class="flbl">8. Can you provide a guarantor from the group?</label>
+        <select id="loan-q6" class="inp"><option value="">Select</option><option value="Yes">Yes</option><option value="No">No</option></select>
+      </div>
+      <div class="fgrp"><label class="flbl">9. What is your phone number for loan follow‑up?</label>
+        <input type="tel" id="loan-q7" class="inp" placeholder="07XXXXXXXX">
+      </div>
+      <div class="fgrp"><label class="flbl">10. Any extra information?</label>
+        <textarea id="loan-q8" class="inp" rows="2" placeholder="Optional"></textarea>
+      </div>
     </div>
     <button class="btn btn-amber btn-full" onclick="submitLoanWithQuestions()">📨 Submit Loan Request</button>
     <button class="btn btn-sec btn-full" onclick="closeOv('ov-loan-request')">Cancel</button>
@@ -1986,6 +2017,17 @@ setTimeout(() => {
     <div class="bs-title">🔔 Notifications</div>
     <div id="notifications-popup-list" style="max-height: 55vh; overflow-y: auto;"></div>
     <button class="btn btn-sec btn-full" style="margin-top:12px" onclick="closeOv('ov-notifications-popup')">Close</button>
+  </div>
+</div>
+<div class="ov" id="ov-loan-daily-preview" onclick="maybeClose(event,'ov-loan-daily-preview')">
+  <div class="bs" style="text-align: center;">
+    <div class="bs-title">💰 Loan Daily Payment Preview</div>
+    <div id="loan-daily-preview-content" style="font-size: 2.5rem; font-weight: 800; margin: 20px 0; color: var(--gold);"></div>
+    <div id="loan-daily-preview-detail" style="margin-bottom: 20px;"></div>
+    <div style="display: flex; gap: 12px; justify-content: center;">
+      <button class="btn btn-gold" onclick="confirmLoanAfterPreview()">✅ Confirm & Submit</button>
+      <button class="btn btn-sec" onclick="closeOv('ov-loan-daily-preview')">Cancel</button>
+    </div>
   </div>
 </div>
 <script>
@@ -2280,6 +2322,8 @@ let loanSettings = {
   overduePenalty: 2
 };
 let loans=[];
+let loanRotationOrder = [];   // array of member IDs for loan request order
+let loanReceiverIndex = 0;    // index in loanRotationOrder for who can borrow
 let notifications = {};
 function hasActiveLoanFromApplication() {
   return loans.some(l => 
@@ -2404,31 +2448,33 @@ async function checkAndAssignDebts() {
   const writes = [];
 
   for (const member of activeMembers) {
-    if (!depositToday.has(member.phone)) {
-      // 1. Debt for the missed daily amount (with autoMidnight flag)
+  if (!depositToday.has(member.phone)) {
+    const requiredAmount = getDailyRequiredForMember(member.id);
+    const interestRate = (settings.penaltyInterestRate || 5) / 100;
+    const interestAmount = Math.round(requiredAmount * interestRate);
+    
+    writes.push(db.ref('transactions').push({
+      memberPhone: member.phone,
+      memberName: member.name,
+      type: 'debt',
+      amount: requiredAmount,
+      description: `Auto penalty (daily + loan installment) for ${todayDateStr} – no deposit`,
+      date: Date.now(),
+      autoMidnight: true
+    }));
+    if (interestAmount > 0) {
       writes.push(db.ref('transactions').push({
         memberPhone: member.phone,
         memberName: member.name,
-        type: 'debt',
-        amount: dailyAmount,
-        description: `Auto penalty (daily) for ${todayDateStr} – no deposit`,
-        date: Date.now(),
+        type: 'fine',
+        amount: interestAmount,
+        description: `Auto penalty interest (${settings.penaltyInterestRate}%) for ${todayDateStr} – no deposit`,
+        date: Date.now() + 1,
         autoMidnight: true
       }));
-      // 2. Interest penalty added to profit pool (fine)
-      if (interestAmount > 0) {
-        writes.push(db.ref('transactions').push({
-          memberPhone: member.phone,
-          memberName: member.name,
-          type: 'fine',
-          amount: interestAmount,
-          description: `Auto penalty interest (${settings.penaltyInterestRate}%) for ${todayDateStr} – no deposit`,
-          date: Date.now() + 1,
-          autoMidnight: true
-        }));
-      }
     }
   }
+}
 
   if (writes.length) {
     await Promise.all(writes);
@@ -2793,6 +2839,15 @@ function getDaysActive(member) {
   const diff = Math.floor((today - join) / (1000 * 60 * 60 * 24));
   return Math.max(0, diff);
 }
+function getDailyRequiredForMember(memberId) {
+  const dailySavings = (settings.dailyAmount || 2500) + (settings.welfareAmount || 0);
+  const activeLoan = loans.find(l => l.memberId === memberId && l.status === 'approved' && !l.repaid);
+  if (!activeLoan) return dailySavings;
+  // Remaining days? We'll assume loan is paid in equal daily installments over its original weeks.
+  const totalDays = (activeLoan.weeks || 4) * 7;
+  const dailyInstallment = Math.ceil(activeLoan.totalRepay / totalDays);
+  return dailySavings + dailyInstallment;
+}
 function getAllowedBorrowerIndex(receiverIndex, totalMembers) {
   // Returns the index of the member allowed to borrow for a given receiver index.
   // For 10 members: 0 ↔ 9, 1 ↔ 8, 2 ↔ 7, 3 ↔ 6, 4 ↔ 5.
@@ -2932,10 +2987,19 @@ async function updateLoanRepaidStatus(phone) {
   console.log(`Outstanding loan balance for ${member.name}: ${outstanding}`);
   
   if (outstanding === 0) {
-  for (let loan of pendingRepayLoans) {
-    await db.ref('loans/' + loan.id).update({ repaid: true, repaidAt: Date.now() });
-  }
-  toast(`Loan cleared for ${member.name}`, '#10b981');
+    for (let loan of pendingRepayLoans) {
+      console.log(`Marking loan ${loan.id} as repaid`);
+      await db.ref('loans/' + loan.id).update({ repaid: true, repaidAt: Date.now() });
+    }
+    toast(`Loan cleared for ${member.name}`, '#10b981');
+    
+    // *** AUTO-ADVANCE LOAN RECEIVER TO NEXT MEMBER ***
+    if (loanRotationOrder.length > 0) {
+      loanReceiverIndex = (loanReceiverIndex + 1) % loanRotationOrder.length;
+      await db.ref('settings/loanReceiverIndex').set(loanReceiverIndex);
+      toast(`Loan fully repaid! Loan receiver advanced to next member.`, '#10b981');
+      updateHomeUI();  // refresh home card message
+    }
     
     // Force refresh loans array and admin UI
     const allLoansSnap = await db.ref('loans').once('value');
@@ -2947,6 +3011,7 @@ async function updateLoanRepaidStatus(phone) {
     console.log(`Outstanding not zero: ${outstanding}`);
   }
 }
+
 async function refreshLoans() {
   const snap = await db.ref('loans').on('value', snap => {
   loans = snap.val() ? Object.entries(snap.val()).map(([id, l]) => ({ ...l, id })) : [];
@@ -3217,7 +3282,13 @@ function loadAllData() {
     refreshCarouselPayee();
     if (currentScreen === 'statistics') renderStatistics();
   });
-
+  // loanReceiver:
+ db.ref('settings/loanRotationOrder').on('value', snap => {
+  if (snap.val()) loanRotationOrder = snap.val();
+});
+db.ref('settings/loanReceiverIndex').on('value', snap => {
+  if (snap.val() !== null) loanReceiverIndex = snap.val();
+});
   // Pending applications (for badge)
   db.ref('applications').orderByChild('status').equalTo('pending').on('value', snap => {
     const count = snap.val() ? Object.keys(snap.val()).length : 0;
@@ -3280,17 +3351,14 @@ function updateHomeUI(){
     profitsDisplay.className='ss-val '+(groupProfit<0?'':'sv-teal');
     profitsDisplay.style.color=groupProfit<0?'var(--red)':'';
   }
-// Show paired borrowing message on home card
+// Show loan receiver message on home card using loan rotation order
 const receiverCard = document.querySelector('.weekly-receiver-card');
 if (receiverCard && currentUser && !currentUser.isAdmin) {
-  const rotationList = rotation.order || [];
-  const total = rotationList.length;
-  if (total === 0) return;
-  const receiverIndex = rotation.currentIndex || 0;
-  const allowedBorrowerIndex = getAllowedBorrowerIndex(receiverIndex, total);
-  const allowedBorrowerId = rotationList[allowedBorrowerIndex];
+  const rotationList = loanRotationOrder.length ? loanRotationOrder : rotation.order;
+  if (!rotationList.length) return;
+  const allowedBorrowerId = rotationList[loanReceiverIndex];
   const allowedBorrower = members.find(m => m.id === allowedBorrowerId);
-  const isSelfPair = (allowedBorrowerIndex === receiverIndex);
+  const isAllowedBorrower = (currentUser.id === allowedBorrowerId);
   
   let msgDiv = document.getElementById('loan-turn-message');
   if (!msgDiv) {
@@ -3306,18 +3374,11 @@ if (receiverCard && currentUser && !currentUser.isAdmin) {
     receiverCard.appendChild(msgDiv);
   }
   
-  const isAllowedBorrower = (currentUser.id === allowedBorrowerId);
-  const isReceiver = (currentUser.id === rotationList[receiverIndex]);
-  
   if (isAllowedBorrower) {
     msgDiv.style.background = 'linear-gradient(135deg, rgba(245,158,11,0.9), rgba(6,182,212,0.9))';
     msgDiv.style.color = '#fff';
     msgDiv.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
     msgDiv.innerHTML = '⭐ It’s your turn to borrow this week! Click "Request Loan" above.';
-  } else if (isSelfPair && isReceiver) {
-    msgDiv.style.background = 'linear-gradient(135deg, rgba(245,158,11,0.9), rgba(6,182,212,0.9))';
-    msgDiv.style.color = '#fff';
-    msgDiv.innerHTML = '⭐ It’s your turn to borrow (no pair). Click "Request Loan".';
   } else {
     msgDiv.style.background = 'rgba(255,255,255,0.15)';
     msgDiv.style.color = 'var(--t2)';
@@ -3418,34 +3479,30 @@ function displayLoanRepaymentSchedule() {
 }
 function updateLoanSummary() {
   const amountInput = document.getElementById('loan-amount');
-  const weeksSelect = document.getElementById('loan-weeks');
   const summaryDiv = document.getElementById('loan-summary');
-  if (!amountInput || !weeksSelect || !summaryDiv) return;
+  if (!amountInput || !summaryDiv) return;
   
   const amount = parseFloat(amountInput.value);
-  const weeks = parseInt(weeksSelect.value);
-  if (isNaN(amount) || amount <= 0 || isNaN(weeks)) {
+  if (isNaN(amount) || amount <= 0) {
     summaryDiv.style.display = 'none';
     return;
   }
   
-  const baseRate = parseFloat(loanSettings.interestRate) || 5; // admin set base rate (e.g., 5%)
-  const extraPerWeek = 2; // +2% per extra week beyond first
-  let interestRate = baseRate + (weeks - 1) * extraPerWeek;
-  // Optional: cap maximum interest rate (e.g., 20%)
-  if (interestRate > 20) interestRate = 20;
-  
+  const baseRate = parseFloat(loanSettings.interestRate) || 5;
+  // No extra per week since fixed 7 days
+  const interestRate = baseRate;
   const interest = Math.floor(amount * interestRate / 100);
   const totalRepay = amount + interest;
+  const dailyInstallment = Math.ceil(totalRepay / 7);
   
   summaryDiv.innerHTML = `
-    <div style="font-weight: 700; margin-bottom: 6px;">📊 Loan Summary</div>
+    <div style="font-weight: 700; margin-bottom: 6px;">📊 Loan Summary (7‑day repayment)</div>
     <div>Principal: <strong>${money(amount)}</strong></div>
-    <div>Repayment period: <strong>${weeks} week${weeks !== 1 ? 's' : ''}</strong></div>
-    <div>Interest rate: <strong>${interestRate}%</strong> (${baseRate}% base + ${(weeks-1)*extraPerWeek}% extra)</div>
+    <div>Interest rate: <strong>${interestRate}%</strong> (flat rate)</div>
     <div>Interest amount: <strong>${money(interest)}</strong></div>
     <div>Total to repay: <strong>${money(totalRepay)}</strong></div>
-    <div class="micro muted" style="margin-top: 6px;">⚠️ You must repay by the due date. Late payment will incur a penalty (${loanSettings.overduePenalty || 2}%).</div>
+    <div>Daily installment: <strong>${money(dailyInstallment)}</strong> (added to your daily savings)</div>
+    <div class="micro muted" style="margin-top: 6px;">⚠️ You must pay this daily amount on top of your daily savings. Late payment will incur a penalty (${loanSettings.overduePenalty || 2}%).</div>
   `;
   summaryDiv.style.display = 'block';
 }
@@ -4907,7 +4964,7 @@ window.openLoanSettings = function() {
 window.openLoanRequestModal = async function() {
   if (!currentUser || currentUser.isAdmin) { toast('Admin cannot request loans', '#ef4444'); return; }
   
-  // Refresh loans from Firebase
+  // Refresh loans
   const snap = await db.ref('loans').once('value');
   loans = snap.val() ? Object.entries(snap.val()).map(([id, l]) => ({ ...l, id })) : [];
   
@@ -4916,34 +4973,20 @@ window.openLoanRequestModal = async function() {
     return;
   }
   
-  // --- New: Paired borrowing rule ---
-  const rotationList = rotation.order || [];
-  const total = rotationList.length;
-  if (total === 0) {
-    toast('Rotation order not set. Contact admin.', '#ef4444');
-    return;
-  }
-  const receiverIndex = rotation.currentIndex || 0;
-  const allowedBorrowerIndex = getAllowedBorrowerIndex(receiverIndex, total);
-  const allowedBorrowerId = rotationList[allowedBorrowerIndex];
-  const isSelfPair = (allowedBorrowerIndex === receiverIndex);
-  
-  if (isSelfPair) {
-    // Middle member (odd number) can borrow when it's his turn
-    if (currentUser.id !== allowedBorrowerId) {
-      toast('Only the current receiver can borrow this week (no paired member).', '#ef4444');
-      return;
-    }
-  } else {
-    // Paired member must be the borrower
-    if (currentUser.id !== allowedBorrowerId) {
-      const allowedMember = members.find(m => m.id === allowedBorrowerId);
-      const allowedName = allowedMember ? allowedMember.name : 'another member';
-      toast(`Only ${allowedName} can request a loan this week. Wait for your turn.`, '#ef4444');
-      return;
-    }
-  }
-  // --- End of new rule ---
+  // Enforce loan receiver (advanceable by admin)
+  // Use loan rotation order (or fallback to payout rotation)
+const rotationList = loanRotationOrder.length ? loanRotationOrder : rotation.order;
+if (!rotationList || rotationList.length === 0) {
+  toast('Loan rotation order not set. Contact admin.', '#ef4444');
+  return;
+}
+if (loanReceiverIndex >= rotationList.length) loanReceiverIndex = 0;
+const allowedBorrowerId = rotationList[loanReceiverIndex];
+if (currentUser.id !== allowedBorrowerId) {
+  const allowedMember = members.find(m => m.id === allowedBorrowerId);
+  toast(`Only ${allowedMember ? allowedMember.name : 'another member'} can request a loan this week. Wait for your turn.`, '#ef4444');
+  return;
+}
   
   computePots();
   
@@ -4958,21 +5001,25 @@ window.openLoanRequestModal = async function() {
   const infoDiv = document.getElementById('loan-limit-info');
   infoDiv.innerHTML = `<strong>Your savings discipline:</strong> UGX ${totalDeposits.toLocaleString()}<br>
                        <strong>You can borrow up to:</strong> UGX ${suggestedMax.toLocaleString()}<br>
-                       <strong>Base interest rate:</strong> ${loanSettings.interestRate}% + 2% per week<br>
+                       <strong>Base interest rate:</strong> ${loanSettings.interestRate}% + 2% per extra week<br>
                        <strong>Repayment period:</strong> You choose (2‑10 weeks)`;
   document.getElementById('loan-amount').max = suggestedMax;
   document.getElementById('loan-amount').value = '';
+  
   // Clear all fields
   const fields = ['loan-amount', 'loan-weeks', 'loan-q1', 'loan-q2', 'loan-q3', 'loan-q4', 'loan-q5', 'loan-q6', 'loan-q7', 'loan-q8'];
   fields.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  
   // Update summary when amount or weeks change
   const amountInput = document.getElementById('loan-amount');
   const weeksSelect = document.getElementById('loan-weeks');
+  const summaryDiv = document.getElementById('loan-summary');
   const updateSummary = () => {
     const amt = parseFloat(amountInput.value);
     const weeks = parseInt(weeksSelect.value);
     if (!amt || amt <= 0 || !weeks) {
-      document.getElementById('loan-summary').innerHTML = 'Enter amount and select weeks to see summary.';
+      summaryDiv.innerHTML = 'Enter amount and select weeks to see summary.';
+      summaryDiv.style.display = 'block';
       return;
     }
     const baseRate = loanSettings.interestRate || 5;
@@ -4980,18 +5027,22 @@ window.openLoanRequestModal = async function() {
     const totalRate = baseRate + extra;
     const interest = Math.floor(amt * totalRate / 100);
     const totalRepay = amt + interest;
-    document.getElementById('loan-summary').innerHTML = `<strong>Summary:</strong><br>
-      Loan amount: UGX ${amt.toLocaleString()}<br>
+    const dailyInstallment = Math.ceil(totalRepay / (weeks * 7));
+    summaryDiv.innerHTML = `<strong>Loan Summary</strong><br>
+      Principal: ${money(amt)}<br>
       Interest rate: ${totalRate}% (base ${baseRate}% + ${extra}% for ${weeks} weeks)<br>
-      Interest amount: UGX ${interest.toLocaleString()}<br>
-      <strong>Total to repay: UGX ${totalRepay.toLocaleString()}</strong><br>
-      <span class="micro">The profit pool will lose the principal (UGX ${amt.toLocaleString()}) and gain the interest (UGX ${interest.toLocaleString()}) when you repay.</span>`;
+      Interest: ${money(interest)}<br>
+      Total to repay: ${money(totalRepay)}<br>
+      Daily installment: ${money(dailyInstallment)} (added to your daily savings)<br>
+      <span class="micro">Your daily required amount will increase by ${money(dailyInstallment)} until the loan is fully repaid.</span>`;
+    summaryDiv.style.display = 'block';
   };
   amountInput.oninput = updateSummary;
   weeksSelect.onchange = updateSummary;
   updateSummary();
   openOv('ov-loan-request');
 };
+
 let tempLoanData = null; // temporary storage before confirmation
 
 window.submitLoanWithQuestions = async function() {
@@ -5000,27 +5051,31 @@ window.submitLoanWithQuestions = async function() {
   loans = snap.val() ? Object.entries(snap.val()).map(([id, l]) => ({ ...l, id })) : [];
   
   if (hasActiveLoanFromApplication()) {
-  toast('A loan application is still active. Please wait until it is repaid.', '#ef4444');
-  return;
-}
+    toast('A loan application is still active. Please wait until it is repaid.', '#ef4444');
+    return;
+  }
+  
   const amount = parseFloat(document.getElementById('loan-amount').value);
   const weeks = parseInt(document.getElementById('loan-weeks').value);
   if (!amount || amount <= 0) { toast('Enter a valid amount', '#ef4444'); return; }
   if (!weeks) { toast('Select repayment period', '#ef4444'); return; }
   
-  // Collect answers
+  // Collect answers (questions 2 to 10)
   const answers = [];
-  for (let i = 1; i <= 7; i++) {
+  for (let i = 1; i <= 8; i++) {
     const el = document.getElementById(`loan-q${i}`);
-    if (!el) { toast(`Question ${i+2} field missing`, '#ef4444'); return; }
+    if (!el) { toast(`Question ${i+1} field missing`, '#ef4444'); return; }
     let val = el.value;
     if (el.tagName === 'SELECT') {
       if (val === '' || val === 'Select') {
-        toast(`Please answer question ${i+2}`, '#ef4444');
+        toast(`Please answer question ${i+1}`, '#ef4444');
         return;
       }
     } else if (el.tagName === 'INPUT') {
-      if (i === 7 && val === '') { toast('Please enter your phone number', '#ef4444'); return; }
+      if (i === 7 && val === '') {
+        toast('Please enter your phone number', '#ef4444');
+        return;
+      }
     }
     answers.push(val);
   }
@@ -5045,24 +5100,32 @@ window.submitLoanWithQuestions = async function() {
   const interest = Math.floor(amount * totalRate / 100);
   const totalRepay = amount + interest;
   const dueDate = Date.now() + weeks * 7 * 86400000;
+  const dailyInstallment = Math.ceil(totalRepay / (weeks * 7));
+  const dailyTotal = (settings.dailyAmount || 2500) + (settings.welfareAmount || 0) + dailyInstallment;
   
-  // Store temporary data
-  tempLoanData = {
-    amount, weeks, answers, totalRate, interest, totalRepay, dueDate
+  // Store data for final submission
+  window._pendingLoanData = {
+    amount, weeks, answers, totalRate, interest, totalRepay, dueDate, dailyInstallment, dailyTotal
   };
   
-  // Build summary HTML
-  const summaryHtml = `
-    <div><strong>Loan Amount:</strong> UGX ${amount.toLocaleString()}</div>
-    <div><strong>Repayment Period:</strong> ${weeks} week(s)</div>
-    <div><strong>Interest Rate:</strong> ${totalRate}% (base ${baseRate}% + ${extraRate}% for extra weeks)</div>
-    <div><strong>Interest Amount:</strong> UGX ${interest.toLocaleString()}</div>
-    <div><strong><span style="color: var(--gold);">Total to Repay:</span> UGX ${totalRepay.toLocaleString()}</strong></div>
-    <div class="micro muted" style="margin-top: 8px;">By confirming, the profit pool will lose UGX ${amount.toLocaleString()} (principal) and gain UGX ${interest.toLocaleString()} (interest) when you repay.</div>
-  `;
-  document.getElementById('loan-confirm-summary').innerHTML = summaryHtml;
-  closeOv('ov-loan-request');
-  openOv('ov-loan-confirm');
+  // Show preview modal with big font
+  const previewDiv = document.getElementById('loan-daily-preview-content');
+  const detailDiv = document.getElementById('loan-daily-preview-detail');
+  if (previewDiv && detailDiv) {
+    previewDiv.innerHTML = `${money(dailyInstallment)} <span style="font-size: 1rem;">per day</span>`;
+    detailDiv.innerHTML = `
+      <div>Loan principal: ${money(amount)}</div>
+      <div>Interest rate: ${totalRate}% (${baseRate}% + ${extraRate}% for ${weeks} weeks)</div>
+      <div>Total to repay: ${money(totalRepay)} over ${weeks} weeks</div>
+      <div>Your current daily savings + welfare = ${money((settings.dailyAmount||2500)+(settings.welfareAmount||0))}</div>
+      <div style="margin-top: 12px;"><strong>Your new daily required amount:</strong><br><span style="font-size:1.5rem; color:var(--green);">${money(dailyTotal)}</span></div>
+      <div class="micro muted" style="margin-top:8px;">This includes the loan installment of ${money(dailyInstallment)} added to your daily savings.</div>
+      <div class="micro muted">You will be notified when the loan is approved.</div>
+    `;
+    openOv('ov-loan-daily-preview');
+  } else {
+    toast('Preview modal missing', '#ef4444');
+  }
 };
 window.finalSubmitLoan = function() {
   if (!tempLoanData) {
@@ -5070,34 +5133,32 @@ window.finalSubmitLoan = function() {
     closeOv('ov-loan-confirm');
     return;
   }
-  const { amount, weeks, answers, totalRate, interest, totalRepay, dueDate } = tempLoanData;
+  const { amount, answers, interestRate, interest, totalRepay, dueDate } = tempLoanData;
   
   db.ref('loans').push({
     memberId: currentUser.id,
     memberName: currentUser.name,
     memberPhone: currentUser.phone,
     amount,
-    interestRate: totalRate,
+    interestRate: interestRate,
     totalRepay,
     reason: answers[0] || 'Not specified',
     loanQuestions: answers,
-    weeks,
+    weeks: 1,          // forced 1 week
     status: 'pending',
     requestedAt: Date.now(),
     dueDate,
     repaid: false,
     penaltyApplied: false
   }).then(() => {
-    toast(`Loan request of UGX ${amount.toLocaleString()} (repay ${totalRepay.toLocaleString()}) submitted!`, '#10b981');
+    toast(`Loan request of ${money(amount)} (repay ${money(totalRepay)}) submitted!`, '#10b981');
     closeOv('ov-loan-confirm');
     tempLoanData = null;
-    // Optionally, refresh loan indicator
     updateLoanIndicator();
   }).catch(err => { 
     console.error(err); 
     toast('Failed to submit', '#ef4444');
   });
-  
 };
 
 window.saveLoanSettings = function() {
@@ -5582,7 +5643,7 @@ const pendingActivityHtml = noAction.length === 0
       <button class="btn btn-teal btn-full" onclick="openAddTransaction()">➕ Add Transaction</button>
       <button class="btn btn-green btn-full" onclick="openOv('ov-mark-paid')">✅ Mark Weekly Payout</button>
       <button class="btn btn-purple btn-full" onclick="openOv('ov-rot-manage')">🔄 Manage Rotation Order</button>
-      <button class="btn btn-amber btn-full" onclick="advanceRotation()">⏩ Advance to Next Receiver</button>
+      <button class="btn btn-amber btn-full" onclick="advanceRotation()">⏩ Advance to Next Receiver</button><button class="btn btn-purple btn-full" onclick="openOv('ov-loan-rot-manage'); buildLoanDragRotation()">🔄 Manage Loan Rotation</button><button class="btn btn-amber btn-full" onclick="advanceLoanReceiver()">⏩ Advance Loan Receiver</button>
     </div>
   `;
   } else if (currentAdminTab === 'users') {
@@ -6133,6 +6194,23 @@ window.advanceRotation = function() {
     });
   }
 };
+window.advanceLoanReceiver = function() {
+  const order = loanRotation.order || [];
+  if (order.length === 0) {
+    toast('No loan rotation order set', '#ef4444');
+    return;
+  }
+  const newIndex = (loanRotation.currentIndex + 1) % order.length;
+  db.ref('loanRotation').update({ currentIndex: newIndex }).then(() => {
+    loanRotation.currentIndex = newIndex;
+    const newReceiver = members.find(m => m.id === order[newIndex]);
+    toast(`Loan receiver advanced to ${newReceiver ? newReceiver.name : 'next member'}`, '#10b981');
+    updateHomeUI();
+  }).catch(err => {
+    console.error(err);
+    toast('Failed to advance', '#ef4444');
+  });
+};
 window.populateMemberDropdowns = function() {
   ['tx-member', 'fine-member', 'welfare-member', 'debt-member', 'cover-member'].forEach(sid => {
     const sel = document.getElementById(sid);
@@ -6202,6 +6280,7 @@ window.updateTxPreview = function() {
   const amount = parseFloat((document.getElementById('tx-amount') || {}).value);
   const previewEl = document.getElementById('tx-preview');
   if (!previewEl) return;
+
   if (type !== 'deposit' || !phone || !amount || amount <= 0) {
     previewEl.style.display = 'none';
     return;
@@ -6210,66 +6289,111 @@ window.updateTxPreview = function() {
   const member = members.find(m => m.phone === phone);
   if (!member) return;
 
-  const dailyAmount = settings.dailyAmount || 2500;
-  const welfareAmount = settings.welfareAmount || 0;
-  const requiredPerDay = dailyAmount + welfareAmount;
+  // Check for active loan
+  const activeLoan = loans.find(l => l.memberId === member.id && l.status === 'approved' && !l.repaid);
+  let warningMsg = '';
+  let dailyInstallment = 0;
+  let totalRequiredDaily = getDailyRequiredForMember(member.id);
 
-  // Find the earliest unpaid day
+  if (activeLoan) {
+    dailyInstallment = Math.ceil(activeLoan.totalRepay / 7);
+    warningMsg = `
+      <div style="background: rgba(245,158,11,0.25); border-left: 4px solid #f59e0b; padding: 10px 12px; border-radius: 12px; margin-bottom: 12px;">
+        <div style="font-weight:700; color:#f59e0b;">⚠️ Active Loan Notice</div>
+        <div style="font-size:0.8rem;">Your daily required amount is now <strong>${money(totalRequiredDaily)}</strong> (includes ${money(dailyInstallment)} loan installment).</div>
+      </div>
+    `;
+  }
+
   let remaining = amount;
   const debt = memberDebts[phone] || 0;
   const loan = memberLoans[phone] || 0;
-  let debtClear = Math.min(debt, remaining);
+  const debtClear = Math.min(debt, remaining);
   remaining -= debtClear;
-  let loanClear = Math.min(loan, remaining);
+  const loanClear = Math.min(loan, remaining);
   remaining -= loanClear;
 
-  const todayStart = new Date().setHours(0, 0, 0, 0);
-  let currentDay = todayStart;
-  let daysCovered = [];
-  let surplus = 0;
-  let maxDays = 30;
+  const dailyAmount = settings.dailyAmount || 2500;
+  const welfareAmount = settings.welfareAmount || 0;
+  const requiredPerDay = totalRequiredDaily; // includes loan installment if any
 
-  while (remaining > 0 && maxDays-- > 0) {
-    // Get already paid for this day
+  const todayStart = new Date().setHours(0, 0, 0, 0);
+  let fullDays = 0;
+  let partialRemaining = 0;
+
+  let tempRemaining = remaining;
+  let day = todayStart;
+  let maxDays = 30;
+  while (tempRemaining >= requiredPerDay && maxDays-- > 0) {
     let alreadyPaid = 0;
     transactions.forEach(tx => {
       if (tx.memberPhone === phone && tx.type === 'deposit') {
         const txDay = new Date(tx.date).setHours(0, 0, 0, 0);
-        if (txDay === currentDay) alreadyPaid += tx.amount;
+        if (txDay === day) alreadyPaid += tx.amount;
       }
     });
     const needed = Math.max(0, requiredPerDay - alreadyPaid);
-    if (needed === 0) {
-      currentDay += 86400000;
-      continue;
-    }
-    const used = Math.min(remaining, needed);
-    remaining -= used;
-    daysCovered.push({ date: new Date(currentDay), used, full: used === needed });
-    if (used < needed) break;
-    currentDay += 86400000;
+    if (tempRemaining >= needed) {
+      tempRemaining -= needed;
+      fullDays++;
+      day += 86400000;
+    } else break;
   }
-  if (remaining > 0) surplus = remaining;
+  if (tempRemaining > 0 && maxDays > 0) partialRemaining = tempRemaining;
 
-  // Build preview HTML
   let rows = '';
-  if (debtClear > 0) rows += `<div>🧹 Debt cleared: ${money(debtClear)}</div>`;
-  if (loanClear > 0) rows += `<div>💳 Loan repaid: ${money(loanClear)}</div>`;
-  if (daysCovered.length) {
-    rows += `<div><strong>Daily savings allocation:</strong></div>`;
-    daysCovered.forEach(d => {
-      const status = d.full ? '✅' : '⚠️';
-      rows += `<div style="margin-left:12px;">${status} ${d.date.toLocaleDateString()}: ${money(d.used)} / ${money(requiredPerDay)}</div>`;
-    });
+  if (debtClear > 0) {
+    rows += `
+      <div style="display:flex; align-items:center; gap:10px; background:#7f1a1a; padding:10px 14px; border-radius:14px; margin-bottom:8px; border-left:4px solid #ef4444;">
+        <span style="font-size:1.3rem;">🧹</span>
+        <div><strong style="color:#ef4444; font-size:0.9rem;">DEBT CLEARED</strong><br>${money(debtClear)}</div>
+      </div>
+    `;
   }
-  if (surplus > 0) rows += `<div>📦 Surplus (carried as balance): ${money(surplus)}</div>`;
-  if (!rows) rows = '<div>No savings covered after debts/loans.</div>';
+  if (loanClear > 0) {
+    rows += `
+      <div style="display:flex; align-items:center; gap:10px; background:#7c2d12; padding:10px 14px; border-radius:14px; margin-bottom:8px; border-left:4px solid #f97316;">
+        <span style="font-size:1.3rem;">💳</span>
+        <div><strong style="color:#f97316; font-size:0.9rem;">LOAN REPAID</strong><br>${money(loanClear)}</div>
+      </div>
+    `;
+  }
+  if (fullDays > 0) {
+    rows += `
+      <div style="display:flex; align-items:center; gap:10px; background:#064e3b; padding:10px 14px; border-radius:14px; margin-bottom:8px; border-left:4px solid #10b981;">
+        <span style="font-size:1.3rem;">📆</span>
+        <div><strong style="color:#10b981; font-size:0.9rem;">FULL DAYS COVERED</strong><br>${fullDays} day(s) × ${money(requiredPerDay)}</div>
+      </div>
+    `;
+  }
+  if (partialRemaining > 0) {
+    rows += `
+      <div style="display:flex; align-items:center; gap:10px; background:#164e63; padding:10px 14px; border-radius:14px; margin-bottom:8px; border-left:4px solid #06b6d4;">
+        <span style="font-size:1.3rem;">⚡</span>
+        <div><strong style="color:#06b6d4; font-size:0.9rem;">PARTIAL DAY</strong><br>${money(partialRemaining)} / ${money(requiredPerDay)}<br><span class="micro">Need ${money(requiredPerDay - partialRemaining)} more</span></div>
+      </div>
+    `;
+  }
+  const totalCovered = debtClear + loanClear + fullDays * requiredPerDay + partialRemaining;
+  if (totalCovered < amount) {
+    const surplus = amount - totalCovered;
+    rows += `
+      <div style="display:flex; align-items:center; gap:10px; background:#1e293b; padding:10px 14px; border-radius:14px; margin-bottom:8px; border-left:4px solid #94a3b8;">
+        <span style="font-size:1.3rem;">📦</span>
+        <div><strong style="color:#94a3b8; font-size:0.9rem;">SURPLUS BALANCE</strong><br>${money(surplus)} (stays in account)</div>
+      </div>
+    `;
+  }
+  if (!rows) rows = '<div style="padding:12px; text-align:center; color:var(--t3);">Amount too small to cover any daily savings after debts/loans.</div>';
 
   previewEl.innerHTML = `
-    <div style="background:var(--card); border-radius:16px; padding:12px; margin-top:8px;">
-      <div style="font-weight:800; margin-bottom:12px;">💰 Deposit breakdown</div>
+    <div style="background:rgba(0,0,0,0.4); border-radius:20px; padding:14px; margin-top:8px; backdrop-filter:blur(4px);">
+      ${warningMsg}
+      <div style="font-weight:800; margin-bottom:12px; display:flex; align-items:center; gap:6px; color:var(--gold);">
+        <span>💰</span> Deposit Breakdown for ${escapeHtml(member.name)}
+      </div>
       ${rows}
-      <div class="micro muted" style="margin-top:8px;">Each full day = ${money(requiredPerDay)} (daily + welfare)</div>
+      <div class="micro muted" style="margin-top:8px; text-align:center;">† Required daily amount includes loan installment if active</div>
     </div>
   `;
   previewEl.style.display = 'block';
@@ -6281,34 +6405,48 @@ window.addTransactionWithPreview = async function() {
   const amount = parseFloat(document.getElementById('tx-amount')?.value);
   const desc = document.getElementById('tx-desc')?.value;
   const member = members.find(m => m.phone === phone);
-
+  
   if (!member || !amount || amount <= 0) {
     toast('Select member and enter valid amount', '#ef4444');
     return;
   }
-
- if (type === 'deposit') {
-  if (!confirm(`Confirm deposit of UGX ${amount.toLocaleString()} for ${member.name}?`)) return;
-  const depositTxs = await processDepositWithFutureDays(member, amount, Date.now(), desc || 'Manual deposit');
-  const writes = depositTxs.map(tx => db.ref('transactions').push(tx));
-  await Promise.all(writes);
-  toast('Deposit saved! ✅', '#10b981');
+  
+  if (type === 'deposit') {
+    // Check for active loan and warn about increased daily requirement
+    const activeLoan = loans.find(l => l.memberId === member.id && l.status === 'approved' && !l.repaid);
+    if (activeLoan) {
+      const dailyInstallment = Math.ceil(activeLoan.totalRepay / 7);
+      const totalRequired = getDailyRequiredForMember(member.id);
+      const confirmMsg = `⚠️ You have an active loan.\nYour daily required amount is UGX ${totalRequired.toLocaleString()} (includes UGX ${dailyInstallment.toLocaleString()} loan installment).\n\nContinue with deposit?`;
+      if (!confirm(confirmMsg)) return;
+    }
+    if (!confirm(`Confirm deposit of ${money(amount)} for ${member.name}?`)) return;
+    
+    const depositTxs = await processDepositWithFutureDays(member, amount, Date.now(), desc || 'Manual deposit');
+    const writes = depositTxs.map(tx => db.ref('transactions').push(tx));
+    await Promise.all(writes);
+    toast(`Deposit saved! ${money(amount)} applied.`, '#10b981');
   } else {
+    // For non-deposit, use provided description or fallback
+    let finalDesc = desc || type;
+    if (type === 'debt_cleared') finalDesc = `Cleared previous debt of ${money(amount)}`;
+    if (type === 'loan_repayment') finalDesc = `Repaid loan instalment of ${money(amount)}`;
     await db.ref('transactions').push({
       memberPhone: phone,
       memberName: member.name,
       type: type,
       amount: amount,
-      description: desc || type,
+      description: finalDesc,
       date: Date.now()
     });
     toast(`${type} recorded!`, '#10b981');
   }
-
+  
   closeOv('ov-add-tx');
   computePots();
   refreshUI();
 };
+
 window.addFine=function(){const phone=document.getElementById('fine-member').value,reason=document.getElementById('fine-reason').value,amount=+document.getElementById('fine-amount').value;const m=members.find(m=>m.phone===phone);if(!m||!amount){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('transactions').push({memberPhone:phone,memberName:m.name,type:'fine',amount,description:reason||'Fine',date:Date.now()}).then(()=>{toast(t('apply_fine_btn'),'#f59e0b');['fine-member','fine-reason','fine-amount'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});closeOv('ov-add-fine');});};
 
 window.addWelfare=function(){const phone=document.getElementById('welfare-member').value,desc=document.getElementById('welfare-desc').value,amount=+document.getElementById('welfare-amount').value;const m=members.find(m=>m.phone===phone);if(!m||!amount){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('transactions').push({memberPhone:phone,memberName:m.name,type:'welfare',amount,description:desc||'Welfare',date:Date.now()}).then(()=>{toast(t('record_welfare_btn'),'#8b5cf6');closeOv('ov-add-welfare');});};
@@ -6823,6 +6961,96 @@ window.buildDragRotation = function() {
   }
   renderDragList();
 };
+let loanDragOrder = [];
+
+// Build drag list for loan rotation
+window.buildLoanDragRotation = function() {
+  if (!loanRotationOrder.length) {
+    // Default to all approved members in same order as payout rotation (if any)
+    if (rotation.order && rotation.order.length) {
+      loanRotationOrder = [...rotation.order];
+    } else {
+      loanRotationOrder = members.filter(m => m.approved !== false).map(m => m.id);
+    }
+  } else {
+    // Filter out deleted members
+    const validIds = new Set(members.filter(m => m.approved !== false).map(m => m.id));
+    loanRotationOrder = loanRotationOrder.filter(id => validIds.has(id));
+    if (loanRotationOrder.length === 0 && members.length) {
+      loanRotationOrder = members.filter(m => m.approved !== false).map(m => m.id);
+    }
+  }
+  renderLoanDragList();
+};
+
+function renderLoanDragList() {
+  const container = document.getElementById('loan-rot-drag-list');
+  if (!container) return;
+  container.innerHTML = '';
+  
+  if (!loanRotationOrder.length) {
+    container.innerHTML = '<div class="empty-state">No members in loan rotation. Add members first.</div>';
+    return;
+  }
+  
+  loanRotationOrder.forEach((id, index) => {
+    const member = members.find(m => m.id === id);
+    if (!member) return;
+    
+    const div = document.createElement('div');
+    div.className = 'rot-drag-item';
+    div.draggable = true;
+    div.innerHTML = `
+      <span class="drag-handle">⠿</span>
+      <span style="flex:1">${index === 0 ? '💰 ' : ''}${index + 1}. ${escapeHtml(member.name)}</span>
+      ${index === loanReceiverIndex ? '<span class="pill-badge pill-amber">CURRENT LOAN RECEIVER</span>' : ''}
+    `;
+    div.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('text/plain', index);
+      div.classList.add('dragging');
+    });
+    div.addEventListener('dragend', () => div.classList.remove('dragging'));
+    div.addEventListener('dragover', e => e.preventDefault());
+    div.addEventListener('drop', e => {
+      e.preventDefault();
+      const from = parseInt(e.dataTransfer.getData('text/plain'));
+      if (from === index) return;
+      const moved = loanRotationOrder.splice(from, 1)[0];
+      loanRotationOrder.splice(index, 0, moved);
+      renderLoanDragList();
+    });
+    container.appendChild(div);
+  });
+}
+
+// Save loan rotation order to Firebase
+window.saveLoanRotationOrder = function() {
+  if (!loanRotationOrder.length) {
+    toast('No members to save', '#ef4444');
+    return;
+  }
+  db.ref('settings/loanRotationOrder').set(loanRotationOrder).then(() => {
+    toast('Loan rotation order saved!', '#10b981');
+    closeOv('ov-loan-rot-manage');
+  }).catch(err => {
+    console.error(err);
+    toast('Failed to save order', '#ef4444');
+  });
+};
+
+// Advance loan receiver (uses loanRotationOrder)
+window.advanceLoanReceiver = function() {
+  if (!loanRotationOrder.length) {
+    toast('No loan rotation order set', '#ef4444');
+    return;
+  }
+  const newIndex = (loanReceiverIndex + 1) % loanRotationOrder.length;
+  loanReceiverIndex = newIndex;
+  db.ref('settings/loanReceiverIndex').set(loanReceiverIndex);
+  const newReceiver = members.find(m => m.id === loanRotationOrder[newIndex]);
+  toast(`Loan receiver advanced to ${newReceiver ? newReceiver.name : 'next member'}`, '#10b981');
+  updateHomeUI(); // refresh home card message
+};
 
 function renderDragList() {
   const container = document.getElementById('rot-drag-list');
@@ -7071,6 +7299,39 @@ window.confirmUpcomingDays = async function() {
     toast('Failed to save prepayments', '#ef4444');
   }
 };
+window.confirmLoanAfterPreview = function() {
+  if (!window._pendingLoanData) {
+    toast('No pending loan data. Please start over.', '#ef4444');
+    closeOv('ov-loan-daily-preview');
+    return;
+  }
+  const { amount, weeks, answers, totalRate, interest, totalRepay, dueDate } = window._pendingLoanData;
+  
+  db.ref('loans').push({
+    memberId: currentUser.id,
+    memberName: currentUser.name,
+    memberPhone: currentUser.phone,
+    amount,
+    interestRate: totalRate,
+    totalRepay,
+    reason: answers[0] || 'Not specified',
+    loanQuestions: answers,
+    weeks,
+    status: 'pending',
+    requestedAt: Date.now(),
+    dueDate,
+    repaid: false,
+    penaltyApplied: false
+  }).then(() => {
+    toast(`Loan request of ${money(amount)} (repay ${money(totalRepay)}) submitted!`, '#10b981');
+    closeOv('ov-loan-daily-preview');
+    window._pendingLoanData = null;
+    updateLoanIndicator();
+  }).catch(err => { 
+    console.error(err); 
+    toast('Failed to submit', '#ef4444');
+  });
+};
 function previewUpcoming() {
   const phone = document.getElementById('upcoming-member').value;
   const start = document.getElementById('upcoming-start').value;
@@ -7159,7 +7420,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
   const now = depositTimestamp || Date.now();
   const todayStart = new Date(now).setHours(0, 0, 0, 0);
 
-  // Step 1 – Clear debts and loans first
+  // Step 1 – Clear debts first
   const debtOwed = memberDebts[member.phone] || 0;
   if (debtOwed > 0 && remaining > 0) {
     const a = Math.min(debtOwed, remaining);
@@ -7174,72 +7435,93 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
     remaining -= a;
   }
 
-  const loanOwed = memberLoans[member.phone] || 0;
-  if (loanOwed > 0 && remaining > 0) {
-    const a = Math.min(loanOwed, remaining);
-    writes.push({
-      memberPhone: member.phone,
-      memberName: member.name,
-      type: 'loan_repayment',
-      amount: a,
-      description: 'Loan repaid from deposit',
-      date: now + 1,
-    });
-    remaining -= a;
+  // Step 2 – Daily required amount (including loan installment)
+  const dailyRequired = getDailyRequiredForMember(member.id);
+  
+  // Step 3 – Check if member has an active loan (for installment tracking)
+  const activeLoan = loans.find(l => l.memberId === member.id && l.status === 'approved' && !l.repaid);
+  let dailyInstallment = 0;
+  if (activeLoan) {
+    dailyInstallment = Math.ceil(activeLoan.totalRepay / 7);
   }
-
-  const dailyAmount = settings.dailyAmount || 2500;
-  const welfareAmount = settings.welfareAmount || 500; // assume 500 if not set
-  const requiredPerDay = dailyAmount + welfareAmount;
-
+  
+  const welfareAmount = settings.welfareAmount || 0;
+  
+  // Step 4 – Loop through days (today + future)
   let currentDayStart = todayStart;
   let daysProcessed = 0;
   const maxDays = 30;
-
+  
   while (remaining > 0 && daysProcessed < maxDays) {
     const dayStart = currentDayStart;
-
-    // How much has already been deposited (daily savings) for this day?
+    
+    // How much already paid for this day (deposits only, not loan repayments)
     let alreadyPaidDaily = 0;
     transactions.forEach(tx => {
       if (tx.memberPhone === member.phone && tx.date >= dayStart && tx.date < dayStart + 86400000 && tx.type === 'deposit') {
         alreadyPaidDaily += tx.amount;
       }
     });
-    // How much welfare already taken for this day?
+    // Check if welfare already taken for this day
     const alreadyHasWelfare = transactions.some(tx =>
       tx.memberPhone === member.phone && tx.type === 'welfare' &&
       tx.date >= dayStart && tx.date < dayStart + 86400000
     );
-
-    const neededDaily = Math.max(0, dailyAmount - alreadyPaidDaily);
+    
+    // For loan installment: track if already paid for this day (via loan_repayment transactions)
+    let alreadyPaidLoan = 0;
+    if (activeLoan) {
+      transactions.forEach(tx => {
+        if (tx.memberPhone === member.phone && tx.type === 'loan_repayment' && tx.date >= dayStart && tx.date < dayStart + 86400000) {
+          alreadyPaidLoan += tx.amount;
+        }
+      });
+    }
+    
+    const neededDaily = Math.max(0, (settings.dailyAmount || 2500) - alreadyPaidDaily);
     const neededWelfare = alreadyHasWelfare ? 0 : welfareAmount;
-    const neededTotal = neededDaily + neededWelfare;
-
+    const neededLoanInstallment = activeLoan ? Math.max(0, dailyInstallment - alreadyPaidLoan) : 0;
+    const neededTotal = neededDaily + neededWelfare + neededLoanInstallment;
+    
     if (neededTotal === 0) {
       currentDayStart += 86400000;
       daysProcessed++;
       continue;
     }
-
-    // Determine how much of remaining goes to daily and welfare
-    let dailyUse = 0;
-    let welfareUse = 0;
-    if (remaining >= neededTotal) {
-      dailyUse = neededDaily;
-      welfareUse = neededWelfare;
-      remaining -= neededTotal;
-    } else {
-      // Partial day – split proportionally? Simpler: first fill daily, then welfare if any left
-      dailyUse = Math.min(neededDaily, remaining);
-      remaining -= dailyUse;
-      if (remaining > 0 && !alreadyHasWelfare) {
-        welfareUse = Math.min(welfareAmount, remaining);
-        remaining -= welfareUse;
-      }
+    
+    // Determine how much goes to each part
+    let dailyUse = 0, welfareUse = 0, loanUse = 0;
+    let remainingForDay = remaining;
+    
+    // First, loan installment (priority)
+    if (neededLoanInstallment > 0) {
+      loanUse = Math.min(neededLoanInstallment, remainingForDay);
+      remainingForDay -= loanUse;
     }
-
-    // Create daily savings transaction (goes to member's available balance)
+    // Then daily savings
+    if (neededDaily > 0 && remainingForDay > 0) {
+      dailyUse = Math.min(neededDaily, remainingForDay);
+      remainingForDay -= dailyUse;
+    }
+    // Then welfare
+    if (neededWelfare > 0 && remainingForDay > 0) {
+      welfareUse = Math.min(neededWelfare, remainingForDay);
+      remainingForDay -= welfareUse;
+    }
+    
+    remaining -= (loanUse + dailyUse + welfareUse);
+    
+    // Create transactions
+    if (loanUse > 0) {
+      writes.push({
+        memberPhone: member.phone,
+        memberName: member.name,
+        type: 'loan_repayment',
+        amount: loanUse,
+        description: `Loan installment for ${new Date(dayStart).toLocaleDateString()}`,
+        date: dayStart + 1000,
+      });
+    }
     if (dailyUse > 0) {
       writes.push({
         memberPhone: member.phone,
@@ -7250,8 +7532,6 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
         date: dayStart + 1500,
       });
     }
-
-    // Create welfare transaction (goes directly to profit pool)
     if (welfareUse > 0) {
       writes.push({
         memberPhone: member.phone,
@@ -7263,12 +7543,12 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
         autoDeduction: true,
       });
     }
-
+    
     currentDayStart += 86400000;
     daysProcessed++;
   }
-
-  // Any leftover amount that doesn't complete a full day (or beyond max days)
+  
+  // Any leftover surplus
   if (remaining > 0) {
     writes.push({
       memberPhone: member.phone,
@@ -7279,7 +7559,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
       date: now + 2000,
     });
   }
-
+  
   return writes;
 }
 // Helper function to get array of dates between start and end (inclusive)
