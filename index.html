@@ -2441,45 +2441,44 @@ async function checkAndAssignDebts() {
     }
   });
 
-  const dailyAmount = settings.dailyAmount || 2500;
+  const dailyAmount = settings.dailyAmount || 2000;
+  const welfareAmount = settings.welfareAmount || 500;
+  const requiredPerDay = dailyAmount + welfareAmount;
   const interestRate = (settings.penaltyInterestRate || 5) / 100;
-  const interestAmount = Math.round(dailyAmount * interestRate);
+  const interestAmount = Math.round(requiredPerDay * interestRate);
 
   const writes = [];
 
   for (const member of activeMembers) {
-  if (!depositToday.has(member.phone)) {
-    const requiredAmount = getDailyRequiredForMember(member.id);
-    const interestRate = (settings.penaltyInterestRate || 5) / 100;
-    const interestAmount = Math.round(requiredAmount * interestRate);
-    
-    writes.push(db.ref('transactions').push({
-      memberPhone: member.phone,
-      memberName: member.name,
-      type: 'debt',
-      amount: requiredAmount,
-      description: `Auto penalty (daily + loan installment) for ${todayDateStr} – no deposit`,
-      date: Date.now(),
-      autoMidnight: true
-    }));
-    if (interestAmount > 0) {
+    if (!depositToday.has(member.phone)) {
+      // 1. Debt for the missed daily amount (both daily + welfare)
       writes.push(db.ref('transactions').push({
         memberPhone: member.phone,
         memberName: member.name,
-        type: 'fine',
-        amount: interestAmount,
-        description: `Auto penalty interest (${settings.penaltyInterestRate}%) for ${todayDateStr} – no deposit`,
-        date: Date.now() + 1,
+        type: 'debt',
+        amount: requiredPerDay,
+        description: `Auto penalty (daily + welfare) for ${todayDateStr} – no deposit`,
+        date: Date.now(),
         autoMidnight: true
       }));
+      // 2. Interest penalty added to profit pool (fine)
+      if (interestAmount > 0) {
+        writes.push(db.ref('transactions').push({
+          memberPhone: member.phone,
+          memberName: member.name,
+          type: 'fine',
+          amount: interestAmount,
+          description: `Auto penalty interest (${settings.penaltyInterestRate}%) for ${todayDateStr} – no deposit`,
+          date: Date.now() + 1,
+          autoMidnight: true
+        }));
+      }
     }
   }
-}
 
   if (writes.length) {
     await Promise.all(writes);
-    toast(`${writes.length / 2} member(s) penalised (daily + interest) for ${todayDateStr}`, '#ef4444');
-    // Refresh local data
+    toast(`${writes.length / 2} member(s) penalised (daily+interest) for ${todayDateStr}`, '#ef4444');
     const txSnap = await db.ref('transactions').once('value');
     transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
     computePots();
@@ -2491,6 +2490,7 @@ async function checkAndAssignDebts() {
   lastProcessedDate = todayDateStr;
   localStorage.setItem('lastDebtProcessDate', lastProcessedDate);
 }
+
 function getTodaysDepositStatus() {
   const todayStart = new Date().setHours(0, 0, 0, 0);
   const todayEnd = todayStart + 86400000 - 1;
@@ -2798,37 +2798,56 @@ function computePots() {
   memberBalances = {};
   memberDebts = {};
   memberLoans = {};
+
   transactions.forEach(tx => {
     const a = +(tx.amount) || 0;
     const phone = tx.memberPhone;
-    if (tx.type === 'deposit') { cash += a; memberBalances[phone] = (memberBalances[phone] || 0) + a; }
-    else if (tx.type === 'withdraw') { cash -= a; memberBalances[phone] = (memberBalances[phone] || 0) - a; }
-    else if (tx.type === 'fine') { profit += a; if (!tx.autoDeduction) memberDebts[phone] = (memberDebts[phone] || 0) + a; }
-    else if (tx.type === 'welfare') { profit += a; }
-    else if (tx.type === 'debt') { memberDebts[phone] = (memberDebts[phone] || 0) + a; }
-    else if (tx.type === 'debt_cleared') { memberDebts[phone] = Math.max(0, (memberDebts[phone] || 0) - a); }
-    else if (tx.type === 'expense') { profit -= a; }
-    else if (tx.type === 'payout') { cash -= a; }
-    else if (tx.type === 'profit_dist') { profit -= a; memberBalances[phone] = (memberBalances[phone] || 0) + a; cash += a; }
-    else if (tx.type === 'loan_disbursement') { cash += a; memberLoans[phone] = (memberLoans[phone] || 0) + a; profit -= a; }
-    else if (tx.type === 'loan_adjustment') {
-  memberLoans[phone] = (memberLoans[phone] || 0) + a; }
-    else if (tx.type === 'loan_interest') {
-  memberLoans[phone] = (memberLoans[phone] || 0) + a; }
-    else if (tx.type === 'loan_repayment') {
-  cash += a;
-  const rem = Math.max(0, (memberLoans[phone] || 0) - a);
-  memberLoans[phone] = rem;
-  profit += a;   // <-- this adds full repayment to profit pool
-}
+    if (tx.type === 'deposit') {
+      // Deposit goes to member's available balance (daily savings only)
+      cash += a;
+      memberBalances[phone] = (memberBalances[phone] || 0) + a;
+    } else if (tx.type === 'withdraw') {
+      cash -= a;
+      memberBalances[phone] = (memberBalances[phone] || 0) - a;
+    } else if (tx.type === 'fine') {
+      profit += a;
+      if (!tx.autoDeduction) memberDebts[phone] = (memberDebts[phone] || 0) + a;
+    } else if (tx.type === 'welfare') {
+      // Welfare goes directly to profit pool (no effect on member balance)
+      profit += a;
+    } else if (tx.type === 'debt') {
+      memberDebts[phone] = (memberDebts[phone] || 0) + a;
+    } else if (tx.type === 'debt_cleared') {
+      memberDebts[phone] = Math.max(0, (memberDebts[phone] || 0) - a);
+    } else if (tx.type === 'expense') {
+      profit -= a;
+    } else if (tx.type === 'payout') {
+      cash -= a;
+    } else if (tx.type === 'profit_dist') {
+      profit -= a;
+      memberBalances[phone] = (memberBalances[phone] || 0) + a;
+      cash += a;
+    } else if (tx.type === 'loan_disbursement') {
+      cash += a;
+      memberLoans[phone] = (memberLoans[phone] || 0) + a;
+      profit -= a;
+    } else if (tx.type === 'loan_adjustment') {
+      memberLoans[phone] = (memberLoans[phone] || 0) + a;
+    } else if (tx.type === 'loan_repayment') {
+      cash += a;
+      const rem = Math.max(0, (memberLoans[phone] || 0) - a);
+      memberLoans[phone] = rem;
+      profit += a;   // interest part of repayment goes to profit pool
+    }
   });
+
   cashFromDeposits = Math.max(0, cash);
   groupProfit = profit;
-  
+
   for (let phone in memberLoans) {
-  if (memberLoans[phone] === 0) {
-    console.log(`Loan balance zero for ${phone}, calling updateLoanRepaidStatus`);
-    updateLoanRepaidStatus(phone);}
+    if (memberLoans[phone] === 0) {
+      updateLoanRepaidStatus(phone);
+    }
   }
 }
 function getDaysActive(member) {
@@ -2840,13 +2859,14 @@ function getDaysActive(member) {
   return Math.max(0, diff);
 }
 function getDailyRequiredForMember(memberId) {
-  const dailySavings = (settings.dailyAmount || 2500) + (settings.welfareAmount || 0);
+  const dailySavings = settings.dailyAmount || 2500;
+  const welfare = settings.welfareAmount || 500;
+  const base = dailySavings + welfare;
   const activeLoan = loans.find(l => l.memberId === memberId && l.status === 'approved' && !l.repaid);
-  if (!activeLoan) return dailySavings;
-  // Remaining days? We'll assume loan is paid in equal daily installments over its original weeks.
+  if (!activeLoan) return base;
   const totalDays = (activeLoan.weeks || 4) * 7;
   const dailyInstallment = Math.ceil(activeLoan.totalRepay / totalDays);
-  return dailySavings + dailyInstallment;
+  return base + dailyInstallment;
 }
 function getAllowedBorrowerIndex(receiverIndex, totalMembers) {
   // Returns the index of the member allowed to borrow for a given receiver index.
@@ -6280,7 +6300,6 @@ window.updateTxPreview = function() {
   const amount = parseFloat((document.getElementById('tx-amount') || {}).value);
   const previewEl = document.getElementById('tx-preview');
   if (!previewEl) return;
-
   if (type !== 'deposit' || !phone || !amount || amount <= 0) {
     previewEl.style.display = 'none';
     return;
@@ -6289,116 +6308,72 @@ window.updateTxPreview = function() {
   const member = members.find(m => m.phone === phone);
   if (!member) return;
 
-  // Check for active loan
-  const activeLoan = loans.find(l => l.memberId === member.id && l.status === 'approved' && !l.repaid);
-  let warningMsg = '';
-  let dailyInstallment = 0;
-  let totalRequiredDaily = getDailyRequiredForMember(member.id);
+  let remaining = amount;
+  const lines = [];
 
-  if (activeLoan) {
-    dailyInstallment = Math.ceil(activeLoan.totalRepay / 7);
-    warningMsg = `
-      <div style="background: rgba(245,158,11,0.25); border-left: 4px solid #f59e0b; padding: 10px 12px; border-radius: 12px; margin-bottom: 12px;">
-        <div style="font-weight:700; color:#f59e0b;">⚠️ Active Loan Notice</div>
-        <div style="font-size:0.8rem;">Your daily required amount is now <strong>${money(totalRequiredDaily)}</strong> (includes ${money(dailyInstallment)} loan installment).</div>
-      </div>
-    `;
+  // Debts (cleared)
+  const debt = memberDebts[phone] || 0;
+  if (debt > 0) {
+    const clear = Math.min(debt, remaining);
+    if (clear > 0) {
+      lines.push(`🧹 Clear debt: ${money(clear)} → pool`);
+      remaining -= clear;
+    }
   }
 
-  let remaining = amount;
-  const debt = memberDebts[phone] || 0;
+  // Loan repayment
   const loan = memberLoans[phone] || 0;
-  const debtClear = Math.min(debt, remaining);
-  remaining -= debtClear;
-  const loanClear = Math.min(loan, remaining);
-  remaining -= loanClear;
+  if (loan > 0) {
+    const repay = Math.min(loan, remaining);
+    if (repay > 0) {
+      lines.push(`💳 Repay loan: ${money(repay)} → pool`);
+      remaining -= repay;
+    }
+  }
 
-  const dailyAmount = settings.dailyAmount || 2500;
-  const welfareAmount = settings.welfareAmount || 0;
-  const requiredPerDay = totalRequiredDaily; // includes loan installment if any
+  const dailyAmount = settings.dailyAmount || 2000;
+  const welfareAmount = settings.welfareAmount || 500;
+  const requiredPerDay = dailyAmount + welfareAmount;
 
   const todayStart = new Date().setHours(0, 0, 0, 0);
   let fullDays = 0;
   let partialRemaining = 0;
-
   let tempRemaining = remaining;
-  let day = todayStart;
-  let maxDays = 30;
-  while (tempRemaining >= requiredPerDay && maxDays-- > 0) {
-    let alreadyPaid = 0;
-    transactions.forEach(tx => {
-      if (tx.memberPhone === phone && tx.type === 'deposit') {
-        const txDay = new Date(tx.date).setHours(0, 0, 0, 0);
-        if (txDay === day) alreadyPaid += tx.amount;
-      }
-    });
-    const needed = Math.max(0, requiredPerDay - alreadyPaid);
-    if (tempRemaining >= needed) {
-      tempRemaining -= needed;
-      fullDays++;
-      day += 86400000;
-    } else break;
-  }
-  if (tempRemaining > 0 && maxDays > 0) partialRemaining = tempRemaining;
 
-  let rows = '';
-  if (debtClear > 0) {
-    rows += `
-      <div style="display:flex; align-items:center; gap:10px; background:#7f1a1a; padding:10px 14px; border-radius:14px; margin-bottom:8px; border-left:4px solid #ef4444;">
-        <span style="font-size:1.3rem;">🧹</span>
-        <div><strong style="color:#ef4444; font-size:0.9rem;">DEBT CLEARED</strong><br>${money(debtClear)}</div>
-      </div>
-    `;
+  while (tempRemaining >= requiredPerDay && fullDays < 30) {
+    tempRemaining -= requiredPerDay;
+    fullDays++;
   }
-  if (loanClear > 0) {
-    rows += `
-      <div style="display:flex; align-items:center; gap:10px; background:#7c2d12; padding:10px 14px; border-radius:14px; margin-bottom:8px; border-left:4px solid #f97316;">
-        <span style="font-size:1.3rem;">💳</span>
-        <div><strong style="color:#f97316; font-size:0.9rem;">LOAN REPAID</strong><br>${money(loanClear)}</div>
-      </div>
-    `;
+  if (tempRemaining > 0 && fullDays < 30) partialRemaining = tempRemaining;
+
+  // Full days
+  for (let i = 0; i < fullDays; i++) {
+    const date = new Date(todayStart + i * 86400000).toLocaleDateString();
+    lines.push(`📆 ${date}: ${money(dailyAmount)} (savings) + ${money(welfareAmount)} (welfare)`);
   }
-  if (fullDays > 0) {
-    rows += `
-      <div style="display:flex; align-items:center; gap:10px; background:#064e3b; padding:10px 14px; border-radius:14px; margin-bottom:8px; border-left:4px solid #10b981;">
-        <span style="font-size:1.3rem;">📆</span>
-        <div><strong style="color:#10b981; font-size:0.9rem;">FULL DAYS COVERED</strong><br>${fullDays} day(s) × ${money(requiredPerDay)}</div>
-      </div>
-    `;
-  }
+
+  // Partial day
   if (partialRemaining > 0) {
-    rows += `
-      <div style="display:flex; align-items:center; gap:10px; background:#164e63; padding:10px 14px; border-radius:14px; margin-bottom:8px; border-left:4px solid #06b6d4;">
-        <span style="font-size:1.3rem;">⚡</span>
-        <div><strong style="color:#06b6d4; font-size:0.9rem;">PARTIAL DAY</strong><br>${money(partialRemaining)} / ${money(requiredPerDay)}<br><span class="micro">Need ${money(requiredPerDay - partialRemaining)} more</span></div>
-      </div>
-    `;
+    const date = new Date(todayStart + fullDays * 86400000).toLocaleDateString();
+    let dailyPortion = Math.min(partialRemaining, dailyAmount);
+    let welfarePortion = Math.max(0, partialRemaining - dailyPortion);
+    lines.push(`⚡ ${date}: ${money(partialRemaining)} / ${money(requiredPerDay)} (${money(dailyPortion)} savings, ${money(welfarePortion)} welfare)`);
   }
-  const totalCovered = debtClear + loanClear + fullDays * requiredPerDay + partialRemaining;
+
+  // Surplus
+  const totalCovered = (debt ? Math.min(debt, amount) : 0) + (loan ? Math.min(loan, amount - (debt ? Math.min(debt, amount) : 0)) : 0) + fullDays * requiredPerDay + partialRemaining;
   if (totalCovered < amount) {
     const surplus = amount - totalCovered;
-    rows += `
-      <div style="display:flex; align-items:center; gap:10px; background:#1e293b; padding:10px 14px; border-radius:14px; margin-bottom:8px; border-left:4px solid #94a3b8;">
-        <span style="font-size:1.3rem;">📦</span>
-        <div><strong style="color:#94a3b8; font-size:0.9rem;">SURPLUS BALANCE</strong><br>${money(surplus)} (stays in account)</div>
-      </div>
-    `;
+    lines.push(`📦 Surplus: ${money(surplus)} (extra balance)`);
   }
-  if (!rows) rows = '<div style="padding:12px; text-align:center; color:var(--t3);">Amount too small to cover any daily savings after debts/loans.</div>';
 
-  previewEl.innerHTML = `
-    <div style="background:rgba(0,0,0,0.4); border-radius:20px; padding:14px; margin-top:8px; backdrop-filter:blur(4px);">
-      ${warningMsg}
-      <div style="font-weight:800; margin-bottom:12px; display:flex; align-items:center; gap:6px; color:var(--gold);">
-        <span>💰</span> Deposit Breakdown for ${escapeHtml(member.name)}
-      </div>
-      ${rows}
-      <div class="micro muted" style="margin-top:8px; text-align:center;">† Required daily amount includes loan installment if active</div>
-    </div>
-  `;
+  if (lines.length === 0) {
+    previewEl.innerHTML = `<div class="hint-box">⚠️ Amount too small to cover any daily savings after debts/loans.</div>`;
+  } else {
+    previewEl.innerHTML = `<div class="hint-box"><strong>💰 Deposit breakdown for ${escapeHtml(member.name)}:</strong><br>${lines.join('<br>')}</div>`;
+  }
   previewEl.style.display = 'block';
 };
-
 window.addTransactionWithPreview = async function() {
   const phone = document.getElementById('tx-member')?.value;
   const type = document.getElementById('tx-type')?.value;
@@ -6412,22 +6387,12 @@ window.addTransactionWithPreview = async function() {
   }
   
   if (type === 'deposit') {
-    // Check for active loan and warn about increased daily requirement
-    const activeLoan = loans.find(l => l.memberId === member.id && l.status === 'approved' && !l.repaid);
-    if (activeLoan) {
-      const dailyInstallment = Math.ceil(activeLoan.totalRepay / 7);
-      const totalRequired = getDailyRequiredForMember(member.id);
-      const confirmMsg = `⚠️ You have an active loan.\nYour daily required amount is UGX ${totalRequired.toLocaleString()} (includes UGX ${dailyInstallment.toLocaleString()} loan installment).\n\nContinue with deposit?`;
-      if (!confirm(confirmMsg)) return;
-    }
     if (!confirm(`Confirm deposit of ${money(amount)} for ${member.name}?`)) return;
-    
     const depositTxs = await processDepositWithFutureDays(member, amount, Date.now(), desc || 'Manual deposit');
     const writes = depositTxs.map(tx => db.ref('transactions').push(tx));
     await Promise.all(writes);
     toast(`Deposit saved! ${money(amount)} applied.`, '#10b981');
   } else {
-    // For non-deposit, use provided description or fallback
     let finalDesc = desc || type;
     if (type === 'debt_cleared') finalDesc = `Cleared previous debt of ${money(amount)}`;
     if (type === 'loan_repayment') finalDesc = `Repaid loan instalment of ${money(amount)}`;
@@ -7420,7 +7385,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
   const now = depositTimestamp || Date.now();
   const todayStart = new Date(now).setHours(0, 0, 0, 0);
 
-  // Step 1 – Clear debts first
+  // Step 1 – Clear debts (fines/penalties) – money goes to profit pool
   const debtOwed = memberDebts[member.phone] || 0;
   if (debtOwed > 0 && remaining > 0) {
     const a = Math.min(debtOwed, remaining);
@@ -7429,36 +7394,44 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
       memberName: member.name,
       type: 'debt_cleared',
       amount: a,
-      description: 'Debt cleared from deposit',
+      description: `Cleared debt of ${money(a)}`,
       date: now,
     });
     remaining -= a;
   }
 
-  // Step 2 – Daily required amount (including loan installment)
-  const dailyRequired = getDailyRequiredForMember(member.id);
-  
-  // Step 3 – Check if member has an active loan (for installment tracking)
-  const activeLoan = loans.find(l => l.memberId === member.id && l.status === 'approved' && !l.repaid);
-  let dailyInstallment = 0;
-  if (activeLoan) {
-    dailyInstallment = Math.ceil(activeLoan.totalRepay / 7);
+  // Step 2 – Repay loans – money goes to profit pool (since loan principal came from profit)
+  const loanOwed = memberLoans[member.phone] || 0;
+  if (loanOwed > 0 && remaining > 0) {
+    const a = Math.min(loanOwed, remaining);
+    writes.push({
+      memberPhone: member.phone,
+      memberName: member.name,
+      type: 'loan_repayment',
+      amount: a,
+      description: `Repaid loan of ${money(a)}`,
+      date: now + 1,
+    });
+    remaining -= a;
   }
-  
-  const welfareAmount = settings.welfareAmount || 0;
-  
-  // Step 4 – Loop through days (today + future)
+
+  const dailyAmount = settings.dailyAmount || 2000;
+  const welfareAmount = settings.welfareAmount || 500;
+  const requiredPerDay = dailyAmount + welfareAmount;
+
+  // Step 3 – Cover future days (starting today)
   let currentDayStart = todayStart;
   let daysProcessed = 0;
   const maxDays = 30;
-  
+
   while (remaining > 0 && daysProcessed < maxDays) {
     const dayStart = currentDayStart;
-    
-    // How much already paid for this day (deposits only, not loan repayments)
+    const dayStr = new Date(dayStart).toLocaleDateString();
+
+    // How much already paid for this day (daily savings only, not welfare)
     let alreadyPaidDaily = 0;
     transactions.forEach(tx => {
-      if (tx.memberPhone === member.phone && tx.date >= dayStart && tx.date < dayStart + 86400000 && tx.type === 'deposit') {
+      if (tx.memberPhone === member.phone && tx.type === 'deposit' && tx.date >= dayStart && tx.date < dayStart + 86400000) {
         alreadyPaidDaily += tx.amount;
       }
     });
@@ -7467,101 +7440,76 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
       tx.memberPhone === member.phone && tx.type === 'welfare' &&
       tx.date >= dayStart && tx.date < dayStart + 86400000
     );
-    
-    // For loan installment: track if already paid for this day (via loan_repayment transactions)
-    let alreadyPaidLoan = 0;
-    if (activeLoan) {
-      transactions.forEach(tx => {
-        if (tx.memberPhone === member.phone && tx.type === 'loan_repayment' && tx.date >= dayStart && tx.date < dayStart + 86400000) {
-          alreadyPaidLoan += tx.amount;
-        }
-      });
-    }
-    
-    const neededDaily = Math.max(0, (settings.dailyAmount || 2500) - alreadyPaidDaily);
+
+    const neededDaily = Math.max(0, dailyAmount - alreadyPaidDaily);
     const neededWelfare = alreadyHasWelfare ? 0 : welfareAmount;
-    const neededLoanInstallment = activeLoan ? Math.max(0, dailyInstallment - alreadyPaidLoan) : 0;
-    const neededTotal = neededDaily + neededWelfare + neededLoanInstallment;
-    
+    const neededTotal = neededDaily + neededWelfare;
+
     if (neededTotal === 0) {
       currentDayStart += 86400000;
       daysProcessed++;
       continue;
     }
-    
-    // Determine how much goes to each part
-    let dailyUse = 0, welfareUse = 0, loanUse = 0;
-    let remainingForDay = remaining;
-    
-    // First, loan installment (priority)
-    if (neededLoanInstallment > 0) {
-      loanUse = Math.min(neededLoanInstallment, remainingForDay);
-      remainingForDay -= loanUse;
+
+    let dailyUse = 0, welfareUse = 0;
+    if (remaining >= neededTotal) {
+      dailyUse = neededDaily;
+      welfareUse = neededWelfare;
+      remaining -= neededTotal;
+    } else {
+      // Partial day – first fill daily savings, then welfare if any left
+      dailyUse = Math.min(neededDaily, remaining);
+      remaining -= dailyUse;
+      if (remaining > 0 && !alreadyHasWelfare) {
+        welfareUse = Math.min(welfareAmount, remaining);
+        remaining -= welfareUse;
+      }
     }
-    // Then daily savings
-    if (neededDaily > 0 && remainingForDay > 0) {
-      dailyUse = Math.min(neededDaily, remainingForDay);
-      remainingForDay -= dailyUse;
-    }
-    // Then welfare
-    if (neededWelfare > 0 && remainingForDay > 0) {
-      welfareUse = Math.min(neededWelfare, remainingForDay);
-      remainingForDay -= welfareUse;
-    }
-    
-    remaining -= (loanUse + dailyUse + welfareUse);
-    
-    // Create transactions
-    if (loanUse > 0) {
-      writes.push({
-        memberPhone: member.phone,
-        memberName: member.name,
-        type: 'loan_repayment',
-        amount: loanUse,
-        description: `Loan installment for ${new Date(dayStart).toLocaleDateString()}`,
-        date: dayStart + 1000,
-      });
-    }
+
+    // Daily savings – goes to member’s balance
     if (dailyUse > 0) {
       writes.push({
         memberPhone: member.phone,
         memberName: member.name,
         type: 'deposit',
         amount: dailyUse,
-        description: description || `Daily savings for ${new Date(dayStart).toLocaleDateString()}`,
+        description: description || `Daily savings for ${dayStr}`,
         date: dayStart + 1500,
       });
     }
+
+    // Welfare – goes to profit pool
     if (welfareUse > 0) {
       writes.push({
         memberPhone: member.phone,
         memberName: member.name,
         type: 'welfare',
         amount: welfareUse,
-        description: `Auto welfare for ${new Date(dayStart).toLocaleDateString()}`,
+        description: `Auto welfare for ${dayStr}`,
         date: dayStart + 500,
         autoDeduction: true,
       });
     }
-    
+
     currentDayStart += 86400000;
     daysProcessed++;
   }
-  
-  // Any leftover surplus
+
+  // Any leftover becomes surplus (extra balance)
   if (remaining > 0) {
     writes.push({
       memberPhone: member.phone,
       memberName: member.name,
       type: 'deposit',
       amount: remaining,
-      description: 'Excess savings (beyond future days)',
+      description: 'Excess savings (surplus)',
       date: now + 2000,
     });
   }
-  
+
   return writes;
 }
+
 // Helper function to get array of dates between start and end (inclusive)
 function dateRangeToDays(startDate, endDate) {
   const start = new Date(startDate);
