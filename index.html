@@ -1714,10 +1714,9 @@ setTimeout(() => {
     <div class="bs-title">🧾 Assign Debt (as Loan)</div>
     <div class="fgrp">
       <label class="flbl">Member</label>
-      <select id="debt-member" class="inp">
-        <option value="">Select member</option>
-      </select>
+      <select id="debt-member" class="inp" onchange="updateDebtPreview()"></select>
     </div>
+    <div id="debt-preview" class="hint-box" style="display: none;"></div>
     <div class="fgrp">
       <label class="flbl">Principal Amount (UGX)</label>
       <input type="number" id="debt-amount" class="inp" placeholder="Amount">
@@ -1738,6 +1737,7 @@ setTimeout(() => {
     <button class="btn btn-sec btn-full" onclick="closeOv('ov-assign-debt')">Cancel</button>
   </div>
 </div>
+
 <div class="ov" id="ov-add-mbr" onclick="maybeClose(event,'ov-add-mbr')"><div class="bs"><div class="bs-title">👤 Add Member</div><div class="fgrp"><label class="flbl">Full Name</label><input type="text" id="mbr-name" class="inp" placeholder="Full Name"></div><div class="fgrp"><label class="flbl">Phone</label><input type="tel" id="mbr-phone" class="inp" placeholder="Phone number"></div><div class="fgrp"><label class="flbl">Password (optional)</label><input type="password" id="mbr-pw" class="inp" placeholder="Default: last 4 digits of phone"></div><div class="fgrp"><label class="flbl">Join Date</label><input type="date" id="mbr-join" class="inp"></div><div class="drag-zone" id="mbr-photo-zone" onclick="document.getElementById('mbr-photo-input').click()"><span>📸 Tap to upload photo (optional)</span><input type="file" id="mbr-photo-input" accept="image/*" style="display:none" onchange="handlePhotoInput(this,'mbr-photo-preview','mbr-photo-data')"><img id="mbr-photo-preview" class="image-preview" style="display:none"></div><input type="hidden" id="mbr-photo-data"><button class="btn btn-gold btn-full" onclick="addMember()">✅ Add Member</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-add-mbr')">Cancel</button></div></div>
 <div class="ov" id="ov-edit-member" onclick="maybeClose(event,'ov-edit-member')"><div class="bs"><div class="bs-title">✏️ Edit Member</div><input type="hidden" id="edit-member-id"><div class="fgrp"><label class="flbl">Full Name</label><input type="text" id="edit-mbr-name" class="inp" placeholder="Full Name"></div><div class="fgrp"><label class="flbl">Phone</label><input type="tel" id="edit-mbr-phone" class="inp" placeholder="Phone"></div><div class="drag-zone" id="edit-photo-zone" onclick="document.getElementById('edit-photo-input').click()"><span>📸 Tap to change photo</span><input type="file" id="edit-photo-input" accept="image/*" style="display:none" onchange="handlePhotoInput(this,'edit-photo-preview','edit-mbr-photo')"><img id="edit-photo-preview" class="image-preview" style="display:none"></div><input type="hidden" id="edit-mbr-photo"><div class="fgrp"><label class="flbl">Join Date</label><input type="date" id="edit-mbr-join" class="inp"></div><button class="btn btn-gold btn-full" onclick="updateMember()">💾 Save Changes</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-edit-member')">Cancel</button></div></div>
 <div class="ov" id="ov-settings" onclick="maybeClose(event,'ov-settings')">
@@ -1838,6 +1838,11 @@ setTimeout(() => {
       <input type="number" id="loan-interest-rate" class="inp" step="0.5" min="0" value="5">
     </div>
     <div class="fgrp">
+  <label class="flbl">Extra Interest Per Week (%)</label>
+  <input type="number" id="loan-extra-weekly" class="inp" step="0.5" min="0" value="2">
+  <div class="micro">Additional percentage for each extra week beyond the first week.</div>
+</div>
+    <div class="fgrp">
       <label class="flbl">Max Loan (% of Profit Pool)</label>
       <input type="number" id="loan-max-percent" class="inp" step="1" min="1" max="100" value="50">
     </div>
@@ -1871,11 +1876,18 @@ setTimeout(() => {
 
       <!-- Repayment weeks (2–10) -->
       <div class="fgrp"><label class="flbl">2. Repayment period (weeks)</label>
-        <select id="loan-weeks" class="inp">
-          <option value="2">2 weeks</option><option value="3">3 weeks</option><option value="4">4 weeks</option>
-          <option value="5">5 weeks</option><option value="6">6 weeks</option><option value="7">7 weeks</option>
-          <option value="8">8 weeks</option><option value="9">9 weeks</option><option value="10">10 weeks</option>
-        </select>
+       <select id="loan-weeks" class="inp">
+  <option value="1">1 week</option>
+  <option value="2">2 weeks</option>
+  <option value="3">3 weeks</option>
+  <option value="4">4 weeks</option>
+  <option value="5">5 weeks</option>
+  <option value="6">6 weeks</option>
+  <option value="7">7 weeks</option>
+  <option value="8">8 weeks</option>
+  <option value="9">9 weeks</option>
+  <option value="10">10 weeks</option>
+</select>
       </div>
 
       <!-- Summary box -->
@@ -2024,6 +2036,13 @@ setTimeout(() => {
     <div class="bs-title">💰 Loan Daily Payment Preview</div>
     <div id="loan-daily-preview-content" style="font-size: 2.5rem; font-weight: 800; margin: 20px 0; color: var(--gold);"></div>
     <div id="loan-daily-preview-detail" style="margin-bottom: 20px;"></div>
+    <div id="loan-warning-box" style="background: rgba(239,68,68,0.1); border-left: 4px solid #ef4444; padding: 12px; border-radius: 12px; margin-bottom: 16px; text-align: left;">
+      <strong style="color: #ef4444;">⚠️ Important – Read Carefully</strong><br>
+      - Your daily required amount will increase to <span id="warning-daily-total">—</span>.<br>
+      - Missing a day will incur a <strong>penalty</strong> (interest on the missed amount).<br>
+      - You must repay the full loan within <span id="warning-weeks">—</span> weeks.<br>
+      - By submitting, you agree to these terms.
+    </div>
     <div style="display: flex; gap: 12px; justify-content: center;">
       <button class="btn btn-gold" onclick="confirmLoanAfterPreview()">✅ Confirm & Submit</button>
       <button class="btn btn-sec" onclick="closeOv('ov-loan-daily-preview')">Cancel</button>
@@ -2319,7 +2338,8 @@ let loanSettings = {
   maxLoanPercent: 50,
   disciplineMultiplier: 1.5,
   loanPeriodDays: 30,
-  overduePenalty: 2
+  overduePenalty: 2,
+  extraWeeklyInterest: 2   // new field
 };
 let loans=[];
 let loanRotationOrder = [];   // array of member IDs for loan request order
@@ -2874,7 +2894,9 @@ function getAllowedBorrowerIndex(receiverIndex, totalMembers) {
   return totalMembers - 1 - receiverIndex;
 }
 function generateRepaymentSchedule(principal, interestRate, weeks, startDate) {
-  const totalRepay = principal + Math.floor(principal * interestRate / 100);
+  const extraWeekly = loanSettings.extraWeeklyInterest || 2;
+  const totalRate = interestRate + (weeks - 1) * extraWeekly;
+  const totalRepay = principal + Math.floor(principal * totalRate / 100);
   const weeklyPayment = Math.ceil(totalRepay / weeks);
   let remaining = totalRepay;
   const schedule = [];
@@ -2883,7 +2905,7 @@ function generateRepaymentSchedule(principal, interestRate, weeks, startDate) {
     dueDate.setDate(dueDate.getDate() + (i * 7));
     let payment = weeklyPayment;
     if (i === weeks) payment = remaining;
-    const interestPortion = Math.floor(remaining * (interestRate/100) / weeks);
+    const interestPortion = Math.floor(remaining * (totalRate/100) / weeks);
     const principalPortion = payment - interestPortion;
     remaining -= payment;
     schedule.push({
@@ -4972,12 +4994,12 @@ function applyLanguageToUI(){
   updateLoanIndicator();
 }
 window.openLoanSettings = function() {
-  // Load current settings into the modal fields
   document.getElementById('loan-interest-rate').value = loanSettings.interestRate || 5;
   document.getElementById('loan-max-percent').value = loanSettings.maxLoanPercent || 50;
   document.getElementById('discipline-multiplier').value = loanSettings.disciplineMultiplier || 1.5;
   document.getElementById('loan-days').value = loanSettings.loanPeriodDays || 30;
   document.getElementById('loan-penalty').value = loanSettings.overduePenalty || 2;
+  document.getElementById('loan-extra-weekly').value = loanSettings.extraWeeklyInterest || 2;
   openOv('ov-loan-settings');
 };
 
@@ -4993,24 +5015,22 @@ window.openLoanRequestModal = async function() {
     return;
   }
   
-  // Enforce loan receiver (advanceable by admin)
-  // Use loan rotation order (or fallback to payout rotation)
-const rotationList = loanRotationOrder.length ? loanRotationOrder : rotation.order;
-if (!rotationList || rotationList.length === 0) {
-  toast('Loan rotation order not set. Contact admin.', '#ef4444');
-  return;
-}
-if (loanReceiverIndex >= rotationList.length) loanReceiverIndex = 0;
-const allowedBorrowerId = rotationList[loanReceiverIndex];
-if (currentUser.id !== allowedBorrowerId) {
-  const allowedMember = members.find(m => m.id === allowedBorrowerId);
-  toast(`Only ${allowedMember ? allowedMember.name : 'another member'} can request a loan this week. Wait for your turn.`, '#ef4444');
-  return;
-}
+  // Enforce loan receiver (loan rotation order)
+  const rotationList = loanRotationOrder.length ? loanRotationOrder : rotation.order;
+  if (!rotationList || rotationList.length === 0) {
+    toast('Loan rotation order not set. Contact admin.', '#ef4444');
+    return;
+  }
+  if (loanReceiverIndex >= rotationList.length) loanReceiverIndex = 0;
+  const allowedBorrowerId = rotationList[loanReceiverIndex];
+  if (currentUser.id !== allowedBorrowerId) {
+    const allowedMember = members.find(m => m.id === allowedBorrowerId);
+    toast(`Only ${allowedMember ? allowedMember.name : 'another member'} can request a loan this week. Wait for your turn.`, '#ef4444');
+    return;
+  }
   
   computePots();
   
-  // Calculate member's discipline limit
   let totalDeposits = 0;
   transactions.forEach(tx => { if (tx.memberPhone === currentUser.phone && tx.type === 'deposit') totalDeposits += tx.amount; });
   const disciplineMultiplier = loanSettings.disciplineMultiplier || 1.5;
@@ -5021,8 +5041,8 @@ if (currentUser.id !== allowedBorrowerId) {
   const infoDiv = document.getElementById('loan-limit-info');
   infoDiv.innerHTML = `<strong>Your savings discipline:</strong> UGX ${totalDeposits.toLocaleString()}<br>
                        <strong>You can borrow up to:</strong> UGX ${suggestedMax.toLocaleString()}<br>
-                       <strong>Base interest rate:</strong> ${loanSettings.interestRate}% + 2% per extra week<br>
-                       <strong>Repayment period:</strong> You choose (2‑10 weeks)`;
+                       <strong>Base interest rate:</strong> ${loanSettings.interestRate}% + ${loanSettings.extraWeeklyInterest || 2}% per extra week<br>
+                       <strong>Repayment period:</strong> You choose (1‑10 weeks)`;
   document.getElementById('loan-amount').max = suggestedMax;
   document.getElementById('loan-amount').value = '';
   
@@ -5030,7 +5050,6 @@ if (currentUser.id !== allowedBorrowerId) {
   const fields = ['loan-amount', 'loan-weeks', 'loan-q1', 'loan-q2', 'loan-q3', 'loan-q4', 'loan-q5', 'loan-q6', 'loan-q7', 'loan-q8'];
   fields.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   
-  // Update summary when amount or weeks change
   const amountInput = document.getElementById('loan-amount');
   const weeksSelect = document.getElementById('loan-weeks');
   const summaryDiv = document.getElementById('loan-summary');
@@ -5043,7 +5062,7 @@ if (currentUser.id !== allowedBorrowerId) {
       return;
     }
     const baseRate = loanSettings.interestRate || 5;
-    const extra = (weeks - 1) * 2;
+    const extra = (weeks - 1) * (loanSettings.extraWeeklyInterest || 2);
     const totalRate = baseRate + extra;
     const interest = Math.floor(amt * totalRate / 100);
     const totalRepay = amt + interest;
@@ -5062,11 +5081,9 @@ if (currentUser.id !== allowedBorrowerId) {
   updateSummary();
   openOv('ov-loan-request');
 };
-
 let tempLoanData = null; // temporary storage before confirmation
 
 window.submitLoanWithQuestions = async function() {
-  // Refresh loans from Firebase
   const snap = await db.ref('loans').once('value');
   loans = snap.val() ? Object.entries(snap.val()).map(([id, l]) => ({ ...l, id })) : [];
   
@@ -5080,7 +5097,7 @@ window.submitLoanWithQuestions = async function() {
   if (!amount || amount <= 0) { toast('Enter a valid amount', '#ef4444'); return; }
   if (!weeks) { toast('Select repayment period', '#ef4444'); return; }
   
-  // Collect answers (questions 2 to 10)
+  // Collect answers
   const answers = [];
   for (let i = 1; i <= 8; i++) {
     const el = document.getElementById(`loan-q${i}`);
@@ -5102,7 +5119,6 @@ window.submitLoanWithQuestions = async function() {
   const extra = document.getElementById('loan-q8')?.value.trim() || '';
   answers.push(extra);
   
-  // Check borrowing limits
   computePots();
   let totalDeposits = 0;
   transactions.forEach(tx => { if (tx.memberPhone === currentUser.phone && tx.type === 'deposit') totalDeposits += tx.amount; });
@@ -5113,35 +5129,35 @@ window.submitLoanWithQuestions = async function() {
   if (amount > maxAllowed) { toast(`Request exceeds your limit of UGX ${maxAllowed.toLocaleString()}`, '#ef4444'); return; }
   if (groupProfit <= 0) { toast('No profit pool available for loans', '#ef4444'); return; }
   
-  // Calculate interest
   const baseRate = loanSettings.interestRate || 5;
-  const extraRate = (weeks - 1) * 2;
+  const extraRate = (weeks - 1) * (loanSettings.extraWeeklyInterest || 2);
   const totalRate = baseRate + extraRate;
   const interest = Math.floor(amount * totalRate / 100);
   const totalRepay = amount + interest;
   const dueDate = Date.now() + weeks * 7 * 86400000;
   const dailyInstallment = Math.ceil(totalRepay / (weeks * 7));
-  const dailyTotal = (settings.dailyAmount || 2500) + (settings.welfareAmount || 0) + dailyInstallment;
+  const dailyTotal = (settings.dailyAmount || 2000) + (settings.welfareAmount || 500) + dailyInstallment;
   
-  // Store data for final submission
   window._pendingLoanData = {
     amount, weeks, answers, totalRate, interest, totalRepay, dueDate, dailyInstallment, dailyTotal
   };
   
-  // Show preview modal with big font
   const previewDiv = document.getElementById('loan-daily-preview-content');
   const detailDiv = document.getElementById('loan-daily-preview-detail');
-  if (previewDiv && detailDiv) {
+  const warningDailySpan = document.getElementById('warning-daily-total');
+  const warningWeeksSpan = document.getElementById('warning-weeks');
+  if (previewDiv && detailDiv && warningDailySpan && warningWeeksSpan) {
     previewDiv.innerHTML = `${money(dailyInstallment)} <span style="font-size: 1rem;">per day</span>`;
     detailDiv.innerHTML = `
       <div>Loan principal: ${money(amount)}</div>
       <div>Interest rate: ${totalRate}% (${baseRate}% + ${extraRate}% for ${weeks} weeks)</div>
       <div>Total to repay: ${money(totalRepay)} over ${weeks} weeks</div>
-      <div>Your current daily savings + welfare = ${money((settings.dailyAmount||2500)+(settings.welfareAmount||0))}</div>
+      <div>Your current daily savings + welfare = ${money((settings.dailyAmount||2000)+(settings.welfareAmount||500))}</div>
       <div style="margin-top: 12px;"><strong>Your new daily required amount:</strong><br><span style="font-size:1.5rem; color:var(--green);">${money(dailyTotal)}</span></div>
-      <div class="micro muted" style="margin-top:8px;">This includes the loan installment of ${money(dailyInstallment)} added to your daily savings.</div>
-      <div class="micro muted">You will be notified when the loan is approved.</div>
+      <div class="micro muted">This includes the loan installment of ${money(dailyInstallment)}.</div>
     `;
+    warningDailySpan.innerText = money(dailyTotal);
+    warningWeeksSpan.innerText = weeks;
     openOv('ov-loan-daily-preview');
   } else {
     toast('Preview modal missing', '#ef4444');
@@ -5187,27 +5203,27 @@ window.saveLoanSettings = function() {
   const disciplineMultiplier = parseFloat(document.getElementById('discipline-multiplier').value);
   const loanPeriodDays = parseInt(document.getElementById('loan-days').value, 10);
   const overduePenalty = parseFloat(document.getElementById('loan-penalty').value);
-  
+  const extraWeeklyInterest = parseFloat(document.getElementById('loan-extra-weekly').value);
+
   if (isNaN(interestRate) || interestRate < 0) { toast('Invalid interest rate', '#ef4444'); return; }
   if (isNaN(maxLoanPercent) || maxLoanPercent < 1 || maxLoanPercent > 100) { toast('Max loan percent must be between 1 and 100', '#ef4444'); return; }
   if (isNaN(disciplineMultiplier) || disciplineMultiplier < 0) { toast('Invalid discipline multiplier', '#ef4444'); return; }
   if (isNaN(loanPeriodDays) || loanPeriodDays < 1) { toast('Loan period must be at least 1 day', '#ef4444'); return; }
   if (isNaN(overduePenalty) || overduePenalty < 0) { toast('Invalid overdue penalty', '#ef4444'); return; }
-  
-  // Update local object
+  if (isNaN(extraWeeklyInterest) || extraWeeklyInterest < 0) { toast('Invalid extra interest per week', '#ef4444'); return; }
+
   loanSettings.interestRate = interestRate;
   loanSettings.maxLoanPercent = maxLoanPercent;
   loanSettings.disciplineMultiplier = disciplineMultiplier;
   loanSettings.loanPeriodDays = loanPeriodDays;
   loanSettings.overduePenalty = overduePenalty;
-  
-  // Save to Firebase
+  loanSettings.extraWeeklyInterest = extraWeeklyInterest;
+
   db.ref('loanSettings').set(loanSettings).then(() => {
     toast('Loan settings saved! ✅', '#10b981');
     closeOv('ov-loan-settings');
   }).catch(err => { console.error(err); toast('Failed to save settings', '#ef4444'); });
 };
-
 window.approveLoan = function(lid) {
   db.ref('loans/' + lid).once('value', async snap => {
     const loan = snap.val();
@@ -6239,6 +6255,15 @@ window.populateMemberDropdowns = function() {
         members.filter(m => m.approved !== false).map(m => '<option value="' + m.phone + '">' + escapeHtml(m.name) + '</option>').join('');
     }
   });
+  // Attach live update for debt preview on member change AND amount input
+  const debtMember = document.getElementById('debt-member');
+  const debtAmount = document.getElementById('debt-amount');
+  if (debtMember) {
+    debtMember.onchange = function() { updateDebtPreview(); };
+  }
+  if (debtAmount) {
+    debtAmount.oninput = function() { updateDebtPreview(); };
+  }
 };
 window.saveSavingsSettings=function(){settings.dailyAmount=+document.getElementById('admin-daily').value;settings.welfareAmount=+document.getElementById('admin-welfare').value;settings.fineContribution=+document.getElementById('admin-finecontrib').value;settings.fineAmount=+document.getElementById('admin-fine').value;db.ref('settings').update({dailyAmount:settings.dailyAmount,welfareAmount:settings.welfareAmount,fineContribution:settings.fineContribution,fineAmount:settings.fineAmount});toast(t('save_rates'),'#10b981');renderAdminTab();updateHomeUI();};
 window.updateNotice = function() {
@@ -6416,7 +6441,7 @@ window.addFine=function(){const phone=document.getElementById('fine-member').val
 
 window.addWelfare=function(){const phone=document.getElementById('welfare-member').value,desc=document.getElementById('welfare-desc').value,amount=+document.getElementById('welfare-amount').value;const m=members.find(m=>m.phone===phone);if(!m||!amount){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('transactions').push({memberPhone:phone,memberName:m.name,type:'welfare',amount,description:desc||'Welfare',date:Date.now()}).then(()=>{toast(t('record_welfare_btn'),'#8b5cf6');closeOv('ov-add-welfare');});};
 window.addExpense=function(){const desc=document.getElementById('exp-desc').value,amount=+document.getElementById('exp-amount').value;if(!desc||!amount){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('transactions').push({type:'expense',amount,description:desc,date:Date.now()}).then(()=>{toast(t('record_expense_btn'),'#ef4444');['exp-desc','exp-amount','exp-paidto'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});closeOv('ov-add-exp');});};
- window.assignDebtAsLoan = async function() {
+window.assignDebtAsLoan = async function() {
   console.log("assignDebtAsLoan called");
   const phone = document.getElementById('debt-member')?.value;
   const principal = parseFloat(document.getElementById('debt-amount')?.value);
@@ -6432,12 +6457,11 @@ window.addExpense=function(){const desc=document.getElementById('exp-desc').valu
   const member = members.find(m => m.phone === phone);
   if (!member) { toast('Member not found', '#ef4444'); return; }
   
+  const dueDate = new Date(dueDateStr).getTime();
   const totalRepay = Math.floor(principal * (1 + interestRate / 100));
   const interest = totalRepay - principal;
-  const dueDate = new Date(dueDateStr).getTime();
   
   try {
-    // Create loan record
     const loanRef = db.ref('loans').push();
     await loanRef.set({
       id: loanRef.key,
@@ -6455,9 +6479,7 @@ window.addExpense=function(){const desc=document.getElementById('exp-desc').valu
       repaid: false,
       penaltyApplied: false
     });
-    console.log("Loan record created");
     
-    // Create loan disbursement transaction
     await db.ref('transactions').push({
       memberPhone: phone,
       memberName: member.name,
@@ -6467,7 +6489,6 @@ window.addExpense=function(){const desc=document.getElementById('exp-desc').valu
       date: Date.now()
     });
     
-    // Create interest adjustment transaction
     if (interest > 0) {
       await db.ref('transactions').push({
         memberPhone: phone,
@@ -6479,7 +6500,6 @@ window.addExpense=function(){const desc=document.getElementById('exp-desc').valu
       });
     }
     
-    // Refresh local data
     const loansSnap = await db.ref('loans').once('value');
     loans = loansSnap.val() ? Object.entries(loansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
     const txSnap = await db.ref('transactions').once('value');
@@ -6850,20 +6870,23 @@ window.confirmApproveLoan = async function(loanId) {
   
   const dueDate = new Date(dueDateStr).getTime();
   const principal = approvedAmount;
-  const interest = Math.floor(principal * interestRate / 100);
-  const totalRepay = principal + interest;
   const weeks = loan.weeks || 4;
+  const extraWeekly = loanSettings.extraWeeklyInterest || 2;
+  const totalRate = interestRate + (weeks - 1) * extraWeekly;
+  const interest = Math.floor(principal * totalRate / 100);
+  const totalRepay = principal + interest;
   
   const schedule = generateRepaymentSchedule(principal, interestRate, weeks, Date.now());
   
   await db.ref('loans/' + loanId).update({
     amount: principal,
-    interestRate: interestRate,
+    interestRate: totalRate,
     totalRepay: totalRepay,
     status: 'approved',
     approvedAt: Date.now(),
     dueDate: dueDate,
-    repaymentSchedule: schedule
+    repaymentSchedule: schedule,
+    weeks: weeks
   });
   
   await db.ref('transactions').push({
@@ -6871,7 +6894,7 @@ window.confirmApproveLoan = async function(loanId) {
     memberName: loan.memberName,
     type: 'loan_disbursement',
     amount: principal,
-    description: `Loan principal: UGX ${principal.toLocaleString()} (${interestRate}%)`,
+    description: `Loan principal: UGX ${principal.toLocaleString()} (${totalRate}%)`,
     date: Date.now()
   });
   if (interest > 0) {
@@ -6880,7 +6903,7 @@ window.confirmApproveLoan = async function(loanId) {
       memberName: loan.memberName,
       type: 'loan_adjustment',
       amount: interest,
-      description: `Interest on loan (${interestRate}%)`,
+      description: `Interest on loan (${totalRate}%)`,
       date: Date.now() + 1
     });
   }
@@ -7153,6 +7176,152 @@ function updateUpcomingNetDaily() {
   const dailyInput = document.getElementById('upcoming-daily-amount');
   if (dailyInput) dailyInput.value = settings.dailyAmount || 2500;
 }
+function getMemberPaymentStatus(member) {
+  // Count missed days (outstanding debts)
+  const missedDays = memberDebts[member.phone] || 0;
+  
+  // Count ahead days (surplus full days paid beyond today)
+  const todayStart = new Date().setHours(0, 0, 0, 0);
+  let futureDays = 0;
+  let day = todayStart;
+  const dailyRequired = (settings.dailyAmount || 2000) + (settings.welfareAmount || 500);
+  let totalFutureCovered = 0;
+  
+  // Check how many full days in the future have been fully paid
+  while (futureDays < 30) {
+    let dayStart = day + futureDays * 86400000;
+    let paidThisDay = 0;
+    transactions.forEach(tx => {
+      if (tx.memberPhone === member.phone && tx.type === 'deposit' && tx.date >= dayStart && tx.date < dayStart + 86400000) {
+        paidThisDay += tx.amount;
+      }
+    });
+    if (paidThisDay >= dailyRequired) {
+      totalFutureCovered += dailyRequired;
+      futureDays++;
+    } else {
+      break;
+    }
+  }
+  // Count how many full days ahead (each day requires dailyRequired)
+  const aheadDays = Math.floor(totalFutureCovered / dailyRequired);
+  
+  return { missedDays, aheadDays };
+}
+
+function updateDebtPreview() {
+  const phone = document.getElementById('debt-member')?.value;
+  const previewDiv = document.getElementById('debt-preview');
+  if (!phone) {
+    previewDiv.style.display = 'none';
+    return;
+  }
+  const member = members.find(m => m.phone === phone);
+  if (!member) return;
+
+  const enteredAmount = parseFloat(document.getElementById('debt-amount')?.value) || 0;
+
+  // Existing debt and loan data
+  const existingDebt = memberDebts[member.phone] || 0;
+  const totalLoanBalance = memberLoans[member.phone] || 0;
+  
+  const applicationLoan = loans.find(l => l.memberId === member.id && l.status === 'approved' && !l.repaid && l.loanQuestions && l.loanQuestions.length > 0);
+  const hasApplicationLoan = !!applicationLoan;
+  const hasAdminLoan = (totalLoanBalance > 0 && !hasApplicationLoan);
+  
+  const dailyRequiredBase = (settings.dailyAmount || 2000) + (settings.welfareAmount || 500);
+  let dailyRequiredWithLoan = dailyRequiredBase;
+  if (hasApplicationLoan) {
+    dailyRequiredWithLoan = getDailyRequiredForMember(member.id);
+  }
+  
+  // Ahead days
+  const todayStart = new Date().setHours(0, 0, 0, 0);
+  let totalFutureDeposits = 0;
+  transactions.forEach(tx => {
+    if (tx.memberPhone === member.phone && tx.type === 'deposit' && tx.date >= todayStart) {
+      totalFutureDeposits += tx.amount;
+    }
+  });
+  const fullDaysAhead = Math.floor(totalFutureDeposits / dailyRequiredBase);
+  const surplus = totalFutureDeposits - (fullDaysAhead * dailyRequiredBase);
+  
+  // Build status lines
+  let icon = '';
+  let statusLines = [];
+  let suggestedPrincipal = 0;
+  
+  if (existingDebt > 0) {
+    icon = '🧾';
+    statusLines.push(`⚠️ Existing debt: ${money(existingDebt)}`);
+  }
+  
+  if (hasApplicationLoan) {
+    icon = '💳';
+    statusLines.push(`📌 Application loan active – daily required (incl. installment): ${money(dailyRequiredWithLoan)}`);
+    suggestedPrincipal = existingDebt + dailyRequiredWithLoan;
+  } else if (hasAdminLoan) {
+    icon = '🏦';
+    statusLines.push(`📌 Admin‑assigned loan balance: ${money(totalLoanBalance)}`);
+    suggestedPrincipal = totalLoanBalance;
+  } else {
+    icon = '💰';
+    statusLines.push(`📌 No loan – daily required amount: ${money(dailyRequiredBase)}`);
+    suggestedPrincipal = dailyRequiredBase;
+  }
+  
+  if (fullDaysAhead > 0 && existingDebt === 0 && !hasApplicationLoan && !hasAdminLoan) {
+    statusLines.unshift(`✅ Ahead: ${fullDaysAhead} full day(s) paid ahead + ${money(surplus)} surplus`);
+  } else if (fullDaysAhead > 0) {
+    statusLines.push(`ℹ️ Note: Member has ${fullDaysAhead} day(s) paid ahead (${money(surplus)} surplus)`);
+  }
+  
+  // Today's status
+  let todayPaid = 0;
+  transactions.forEach(tx => {
+    if (tx.memberPhone === member.phone && tx.type === 'deposit' && tx.date >= todayStart && tx.date < todayStart + 86400000) {
+      todayPaid += tx.amount;
+    }
+  });
+  const todayRequired = hasApplicationLoan ? dailyRequiredWithLoan : dailyRequiredBase;
+  if (todayPaid >= todayRequired) {
+    statusLines.push(`📅 Today: paid ✓`);
+  } else if (todayPaid > 0) {
+    statusLines.push(`📅 Today: partial (${money(todayPaid)}/${money(todayRequired)})`);
+  } else {
+    statusLines.push(`📅 Today: unpaid`);
+  }
+  
+  // Prepare amount comparison
+  let amountHtml = '';
+  if (enteredAmount > 0 && enteredAmount !== suggestedPrincipal) {
+    amountHtml = `<div style="margin-top: 6px;">✏️ Entered amount: ${money(enteredAmount)} (suggested: ${money(suggestedPrincipal)})</div>`;
+  } else if (enteredAmount > 0) {
+    amountHtml = `<div style="margin-top: 6px;">✏️ Entered amount matches suggested principal.</div>`;
+  } else if (enteredAmount === 0) {
+    amountHtml = `<div style="margin-top: 6px;">✏️ Enter an amount above.</div>`;
+  }
+  
+  previewDiv.innerHTML = `
+    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+      <span style="font-size: 1.3rem;">${icon}</span>
+      <span><strong>Member: ${escapeHtml(member.name)}</strong></span>
+    </div>
+    ${statusLines.map(line => `<div>${line}</div>`).join('')}
+    <div style="margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 6px;">
+      <strong>💡 Suggested principal:</strong> ${money(suggestedPrincipal)}
+    </div>
+    ${amountHtml}
+    <div class="micro muted" style="margin-top: 6px;">Interest rate from loan settings: ${loanSettings.interestRate || 5}% (adjustable below).</div>
+  `;
+  previewDiv.style.display = 'block';
+  
+  // Set interest field to global loan rate if still default
+  const interestInput = document.getElementById('debt-interest');
+  if (interestInput && interestInput.value == 5) {
+    interestInput.value = loanSettings.interestRate || 5;
+  }
+}
 // Populate upcoming member dropdown
 function populateUpcomingMemberDropdown() {
   const sel = document.getElementById('upcoming-member');
@@ -7385,7 +7554,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
   const now = depositTimestamp || Date.now();
   const todayStart = new Date(now).setHours(0, 0, 0, 0);
 
-  // Step 1 – Clear debts (fines/penalties) – money goes to profit pool
+  // 1. Clear debts (fines/penalties) – money goes to profit pool
   const debtOwed = memberDebts[member.phone] || 0;
   if (debtOwed > 0 && remaining > 0) {
     const a = Math.min(debtOwed, remaining);
@@ -7400,26 +7569,19 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
     remaining -= a;
   }
 
-  // Step 2 – Repay loans – money goes to profit pool (since loan principal came from profit)
-  const loanOwed = memberLoans[member.phone] || 0;
-  if (loanOwed > 0 && remaining > 0) {
-    const a = Math.min(loanOwed, remaining);
-    writes.push({
-      memberPhone: member.phone,
-      memberName: member.name,
-      type: 'loan_repayment',
-      amount: a,
-      description: `Repaid loan of ${money(a)}`,
-      date: now + 1,
-    });
-    remaining -= a;
+  // 2. Find active loan and calculate daily installment
+  const activeLoan = loans.find(l => l.memberId === member.id && l.status === 'approved' && !l.repaid);
+  let dailyLoanInstallment = 0;
+  if (activeLoan) {
+    const totalDays = (activeLoan.weeks || 4) * 7;
+    dailyLoanInstallment = Math.ceil(activeLoan.totalRepay / totalDays);
   }
 
   const dailyAmount = settings.dailyAmount || 2000;
   const welfareAmount = settings.welfareAmount || 500;
-  const requiredPerDay = dailyAmount + welfareAmount;
+  const requiredPerDay = dailyAmount + welfareAmount + dailyLoanInstallment;
 
-  // Step 3 – Cover future days (starting today)
+  // 3. Cover future days (starting today)
   let currentDayStart = todayStart;
   let daysProcessed = 0;
   const maxDays = 30;
@@ -7428,22 +7590,23 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
     const dayStart = currentDayStart;
     const dayStr = new Date(dayStart).toLocaleDateString();
 
-    // How much already paid for this day (daily savings only, not welfare)
-    let alreadyPaidDaily = 0;
-    transactions.forEach(tx => {
-      if (tx.memberPhone === member.phone && tx.type === 'deposit' && tx.date >= dayStart && tx.date < dayStart + 86400000) {
-        alreadyPaidDaily += tx.amount;
-      }
-    });
-    // Check if welfare already taken for this day
+    // Already paid amounts for this day
+    let alreadyPaidDaily = 0, alreadyPaidLoan = 0;
     const alreadyHasWelfare = transactions.some(tx =>
       tx.memberPhone === member.phone && tx.type === 'welfare' &&
       tx.date >= dayStart && tx.date < dayStart + 86400000
     );
+    transactions.forEach(tx => {
+      if (tx.memberPhone === member.phone && tx.date >= dayStart && tx.date < dayStart + 86400000) {
+        if (tx.type === 'deposit') alreadyPaidDaily += tx.amount;
+        if (tx.type === 'loan_repayment') alreadyPaidLoan += tx.amount;
+      }
+    });
 
     const neededDaily = Math.max(0, dailyAmount - alreadyPaidDaily);
     const neededWelfare = alreadyHasWelfare ? 0 : welfareAmount;
-    const neededTotal = neededDaily + neededWelfare;
+    const neededLoan = Math.max(0, dailyLoanInstallment - alreadyPaidLoan);
+    const neededTotal = neededDaily + neededWelfare + neededLoan;
 
     if (neededTotal === 0) {
       currentDayStart += 86400000;
@@ -7451,22 +7614,27 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
       continue;
     }
 
-    let dailyUse = 0, welfareUse = 0;
+    let dailyUse = 0, welfareUse = 0, loanUse = 0;
     if (remaining >= neededTotal) {
       dailyUse = neededDaily;
       welfareUse = neededWelfare;
+      loanUse = neededLoan;
       remaining -= neededTotal;
     } else {
-      // Partial day – first fill daily savings, then welfare if any left
+      // Partial day – priority: daily savings, then welfare, then loan
       dailyUse = Math.min(neededDaily, remaining);
       remaining -= dailyUse;
-      if (remaining > 0 && !alreadyHasWelfare) {
-        welfareUse = Math.min(welfareAmount, remaining);
+      if (remaining > 0 && neededWelfare > 0) {
+        welfareUse = Math.min(neededWelfare, remaining);
         remaining -= welfareUse;
+      }
+      if (remaining > 0 && neededLoan > 0) {
+        loanUse = Math.min(neededLoan, remaining);
+        remaining -= loanUse;
       }
     }
 
-    // Daily savings – goes to member’s balance
+    // Create transactions
     if (dailyUse > 0) {
       writes.push({
         memberPhone: member.phone,
@@ -7477,17 +7645,25 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
         date: dayStart + 1500,
       });
     }
-
-    // Welfare – goes to profit pool
     if (welfareUse > 0) {
       writes.push({
         memberPhone: member.phone,
         memberName: member.name,
         type: 'welfare',
         amount: welfareUse,
-        description: `Auto welfare for ${dayStr}`,
+        description: `Welfare for ${dayStr}`,
         date: dayStart + 500,
         autoDeduction: true,
+      });
+    }
+    if (loanUse > 0) {
+      writes.push({
+        memberPhone: member.phone,
+        memberName: member.name,
+        type: 'loan_repayment',
+        amount: loanUse,
+        description: `Loan installment for ${dayStr}`,
+        date: dayStart + 1000,
       });
     }
 
@@ -7495,7 +7671,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
     daysProcessed++;
   }
 
-  // Any leftover becomes surplus (extra balance)
+  // Any leftover becomes surplus balance
   if (remaining > 0) {
     writes.push({
       memberPhone: member.phone,
