@@ -1785,7 +1785,30 @@ setTimeout(() => {
     <button class="btn btn-sec btn-full" onclick="closeOv('ov-assign-debt')">Cancel</button>
   </div>
 </div>
-
+<div class="ov" id="ov-group-transaction" onclick="maybeClose(event,'ov-group-transaction')">
+  <div class="bs">
+    <div class="bs-title">📦 Add Group Transaction</div>
+    <div class="fgrp">
+      <label class="flbl">Transaction Type</label>
+      <select id="group-tx-type" class="inp" onchange="updateGroupTxPreview()">
+        <option value="welfare">🤝 Welfare Payment (goes to profit pool)</option>
+        <option value="expense">📤 Group Expense (deducts from profit pool)</option>
+        <option value="deposit">💰 Group Deposit (adds to available balance)</option>
+      </select>
+    </div>
+    <div class="fgrp">
+      <label class="flbl">Amount (UGX)</label>
+      <input type="number" id="group-tx-amount" class="inp" placeholder="Amount" oninput="updateGroupTxPreview()">
+    </div>
+    <div class="fgrp">
+      <label class="flbl">Description</label>
+      <input type="text" id="group-tx-desc" class="inp" placeholder="Description (e.g., Meeting snacks, Emergency welfare)">
+    </div>
+    <div id="group-tx-preview" class="hint-box" style="display: none;"></div>
+    <button class="btn btn-gold btn-full" onclick="addGroupTransaction()">✅ Add Transaction</button>
+    <button class="btn btn-sec btn-full" onclick="closeOv('ov-group-transaction')">Cancel</button>
+  </div>
+</div>
 <div class="ov" id="ov-add-mbr" onclick="maybeClose(event,'ov-add-mbr')"><div class="bs"><div class="bs-title">👤 Add Member</div><div class="fgrp"><label class="flbl">Full Name</label><input type="text" id="mbr-name" class="inp" placeholder="Full Name"></div><div class="fgrp"><label class="flbl">Phone</label><input type="tel" id="mbr-phone" class="inp" placeholder="Phone number"></div><div class="fgrp"><label class="flbl">Password (optional)</label><input type="password" id="mbr-pw" class="inp" placeholder="Default: last 4 digits of phone"></div><div class="fgrp"><label class="flbl">Join Date</label><input type="date" id="mbr-join" class="inp"></div><div class="drag-zone" id="mbr-photo-zone" onclick="document.getElementById('mbr-photo-input').click()"><span>📸 Tap to upload photo (optional)</span><input type="file" id="mbr-photo-input" accept="image/*" style="display:none" onchange="handlePhotoInput(this,'mbr-photo-preview','mbr-photo-data')"><img id="mbr-photo-preview" class="image-preview" style="display:none"></div><input type="hidden" id="mbr-photo-data"><button class="btn btn-gold btn-full" onclick="addMember()">✅ Add Member</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-add-mbr')">Cancel</button></div></div>
 <div class="ov" id="ov-edit-member" onclick="maybeClose(event,'ov-edit-member')"><div class="bs"><div class="bs-title">✏️ Edit Member</div><input type="hidden" id="edit-member-id"><div class="fgrp"><label class="flbl">Full Name</label><input type="text" id="edit-mbr-name" class="inp" placeholder="Full Name"></div><div class="fgrp"><label class="flbl">Phone</label><input type="tel" id="edit-mbr-phone" class="inp" placeholder="Phone"></div><div class="drag-zone" id="edit-photo-zone" onclick="document.getElementById('edit-photo-input').click()"><span>📸 Tap to change photo</span><input type="file" id="edit-photo-input" accept="image/*" style="display:none" onchange="handlePhotoInput(this,'edit-photo-preview','edit-mbr-photo')"><img id="edit-photo-preview" class="image-preview" style="display:none"></div><input type="hidden" id="edit-mbr-photo"><div class="fgrp"><label class="flbl">Join Date</label><input type="date" id="edit-mbr-join" class="inp"></div><button class="btn btn-gold btn-full" onclick="updateMember()">💾 Save Changes</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-edit-member')">Cancel</button></div></div>
 <div class="ov" id="ov-settings" onclick="maybeClose(event,'ov-settings')">
@@ -2929,6 +2952,36 @@ function computePots() {
     }
   }
 }
+// Export current financial state to Firebase
+async function exportFinancialSnapshot() {
+  const snapshot = {
+    cashFromDeposits,
+    groupProfit,
+    memberBalances,
+    memberDebts,
+    memberLoans,
+    timestamp: Date.now()
+  };
+  await db.ref('financialSnapshots/latest').set(snapshot);
+  toast('Financial snapshot saved! You can now safely delete old transactions.', '#10b981');
+}
+
+// Import financial snapshot (restore totals)
+async function importFinancialSnapshot() {
+  const snap = await db.ref('financialSnapshots/latest').once('value');
+  const snapshot = snap.val();
+  if (!snapshot) {
+    toast('No snapshot found. Export first.', '#ef4444');
+    return;
+  }
+  cashFromDeposits = snapshot.cashFromDeposits;
+  groupProfit = snapshot.groupProfit;
+  memberBalances = snapshot.memberBalances || {};
+  memberDebts = snapshot.memberDebts || {};
+  memberLoans = snapshot.memberLoans || {};
+  toast('Financial totals restored from snapshot!', '#10b981');
+  refreshUI();
+}
 function getDaysActive(member) {
   if (!member.joinDate) return 0;
   const join = new Date(member.joinDate);
@@ -3332,10 +3385,10 @@ if (currentUser && !currentUser.isAdmin) {
     }
   }, 800);
 }
-function updateMemberPresence(){
-  if(!db||realtimePresenceListening)return;
-  realtimePresenceListening=true;
-  db.ref('status').on('value', snap => {
+function updateMemberPresence() {
+  if (!db || realtimePresenceListening) return;
+  realtimePresenceListening = true;
+  db.ref('status').once('value', snap => {
     memberPresence = snap.val() || {};
     updateAdminMembersList();
   });
@@ -3400,8 +3453,7 @@ db.ref('settings/loanReceiverIndex').on('value', snap => {
   });
   
   // Notifications
- db.ref('notifications').on('value', snap => {
-  notifications = snap.val() || {};
+ db.ref('notifications').once('value', snap => {notifications = snap.val() || {};
   updateNotificationBadge();
 });
 
@@ -3428,7 +3480,7 @@ db.ref('settings/loanReceiverIndex').on('value', snap => {
 
   // Password reset requests – add if needed (not critical)
   // but we'll add for completeness
-  db.ref('passwordResetRequests').on('value', snap => {
+  db.ref('passwordResetRequests').once('value', snap => {
     // optional, used only for admin reset requests
     if (currentScreen === 'admin' && adminUnlocked && currentAdminTab === 'resetrequests') renderAdminTab();
   });
@@ -5770,7 +5822,7 @@ function renderAdminTab() {
     ? `<div class="card" style="background: rgba(16,185,129,0.1); border-color: #10b981;">
         <div style="display:flex; align-items:center; gap:10px;">
           <span style="font-size:1.5rem;">✅</span>
-          <div><strong>All members are up to date!</strong><br>${depositedCount}/${allCount} deposited today.</div>
+          <div><strong>All members are up to date!</strong><br>${depositedCount}/${allCount} are worked upon today.</div>
         </div>
       </div>`
     : `<div class="card" style="background: rgba(245,158,11,0.1); border-color: #f59e0b;">
@@ -5983,31 +6035,38 @@ function renderAdminTab() {
   updateAdminMembersList();
 }
   // ----- Fines tab -----
-  else if (currentAdminTab === 'fines') {
-    c.innerHTML = `
-      <div class="card">
-        <div class="sec-h">⚡ Fines & Finances</div>
-        <button class="btn btn-amber btn-full" onclick="openOv('ov-add-fine');populateMemberDropdowns()">⚡ Apply Fine to Member</button>
-        <button class="btn btn-red btn-full" onclick="openOv('ov-assign-debt');populateMemberDropdowns()">🧾 Assign Debt to Member</button>
-        <button class="btn btn-green btn-full" onclick="openOv('ov-add-welfare');populateMemberDropdowns()">🤝 Record Welfare Payment</button>
-        <button class="btn btn-sec btn-full" onclick="openOv('ov-add-exp')">📤 Record Group Expense</button>
-      </div>
-    `;
-  }
+ else if (currentAdminTab === 'fines') {
+  c.innerHTML = `
+    <div class="card">
+      <div class="sec-h">⚡ Fines & Finances</div>
+      <button class="btn btn-amber btn-full" onclick="openOv('ov-add-fine');populateMemberDropdowns()">⚡ Apply Fine to Member</button>
+      <button class="btn btn-red btn-full" onclick="openOv('ov-assign-debt');populateMemberDropdowns()">🧾 Assign Debt to Member</button>
+      <button class="btn btn-purple btn-full" onclick="openOv('ov-group-transaction')">📦 Add Group Transaction (Welfare, Expense, Deposit)</button>
+    </div>
+  `;
+}
 
   // ----- Settings tab -----
-  else if (currentAdminTab === 'settings') {
-    c.innerHTML = `
-      <div class="card">
-        <div class="sec-h">⚙️ Configuration</div>
-        <button class="btn btn-gold btn-full" onclick="openOv('ov-settings');loadSettings()">⚙️ Group Settings (Name, Banner, etc.)</button>
-        <button class="btn btn-purple btn-full" onclick="openEditTermsModal()">📝 Edit Group Terms</button>
-        <button class="btn btn-amber btn-full" onclick="openOv('ov-loan-settings');loadLoanSettings()">💰 Loan Settings</button>
-        <button class="btn btn-teal btn-full" onclick="exportCSV()">📥 Export Ledger as CSV</button>
-      </div>
-    `;
-  }
-
+ else if (currentAdminTab === 'settings') {
+  c.innerHTML = `
+    <div class="card">
+      <div class="sec-h">⚙️ Configuration</div>
+      <button class="btn btn-gold btn-full" onclick="openOv('ov-settings');loadSettings()">⚙️ Group Settings</button>
+      <button class="btn btn-purple btn-full" onclick="openEditTermsModal()">📝 Edit Group Terms</button>
+      <button class="btn btn-amber btn-full" onclick="openOv('ov-loan-settings');loadLoanSettings()">💰 Loan Settings</button>
+      <button class="btn btn-teal btn-full" onclick="exportCSV()">📥 Export Ledger as CSV</button>
+    </div>
+    <div class="card">
+      <div class="sec-h">🧹 Safe Data Cleanup</div>
+      <button class="btn btn-red btn-full" onclick="safeCleanup()">🗑️ Delete Transactions Older Than 14 Days (Keep Totals)</button>
+      <div class="micro muted">Exports current balances, deletes old transactions, then restores balances.</div>
+      <hr style="margin: 8px 0;">
+      <button class="btn btn-sec btn-full" onclick="exportFinancialSnapshot()">💾 Export Financial Snapshot</button>
+      <button class="btn btn-sec btn-full" onclick="importFinancialSnapshot()">📂 Import Financial Snapshot</button>
+      <div class="micro muted">Manually save/restore totals (useful before/after manual cleanup).</div>
+    </div>
+  `;
+}
   // Update the pending applications badge count (for the Users tab button)
   if (currentAdminTab === 'users') {
     db.ref('applications').orderByChild('status').equalTo('pending').once('value', snap => {
@@ -6759,6 +6818,57 @@ window.addFine=function(){const phone=document.getElementById('fine-member').val
 
 window.addWelfare=function(){const phone=document.getElementById('welfare-member').value,desc=document.getElementById('welfare-desc').value,amount=+document.getElementById('welfare-amount').value;const m=members.find(m=>m.phone===phone);if(!m||!amount){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('transactions').push({memberPhone:phone,memberName:m.name,type:'welfare',amount,description:desc||'Welfare',date:Date.now()}).then(()=>{toast(t('record_welfare_btn'),'#8b5cf6');closeOv('ov-add-welfare');});};
 window.addExpense=function(){const desc=document.getElementById('exp-desc').value,amount=+document.getElementById('exp-amount').value;if(!desc||!amount){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('transactions').push({type:'expense',amount,description:desc,date:Date.now()}).then(()=>{toast(t('record_expense_btn'),'#ef4444');['exp-desc','exp-amount','exp-paidto'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});closeOv('ov-add-exp');});};
+// Update preview when type or amount changes
+window.updateGroupTxPreview = function() {
+  const type = document.getElementById('group-tx-type').value;
+  const amount = parseFloat(document.getElementById('group-tx-amount').value);
+  const previewDiv = document.getElementById('group-tx-preview');
+  if (!previewDiv) return;
+  if (!amount || amount <= 0) {
+    previewDiv.style.display = 'none';
+    return;
+  }
+  let effect = '';
+  if (type === 'welfare') effect = `➕ Adds ${money(amount)} to the profit pool.`;
+  else if (type === 'expense') effect = `➖ Deducts ${money(amount)} from the profit pool.`;
+  else if (type === 'deposit') effect = `💰 Adds ${money(amount)} to the group's available balance (cash from deposits).`;
+  previewDiv.innerHTML = `<strong>Effect:</strong> ${effect}<br><span class="micro">No member involved – this is a group‑level transaction.</span>`;
+  previewDiv.style.display = 'block';
+};
+
+// Add the group transaction
+window.addGroupTransaction = async function() {
+  const type = document.getElementById('group-tx-type').value;
+  const amount = parseFloat(document.getElementById('group-tx-amount').value);
+  let desc = document.getElementById('group-tx-desc').value.trim();
+  if (!amount || amount <= 0) {
+    toast('Enter a valid amount', '#ef4444');
+    return;
+  }
+  if (!desc) {
+    if (type === 'welfare') desc = 'Group welfare payment';
+    else if (type === 'expense') desc = 'Group expense';
+    else desc = 'Group deposit';
+  }
+  // Create transaction with NO memberPhone (group level)
+  const tx = {
+    type: type,
+    amount: amount,
+    description: desc,
+    date: Date.now(),
+    isGroupTransaction: true
+  };
+  await db.ref('transactions').push(tx);
+  toast(`${type === 'welfare' ? 'Welfare' : type === 'expense' ? 'Expense' : 'Deposit'} recorded!`, '#10b981');
+  closeOv('ov-group-transaction');
+  // Reset fields
+  document.getElementById('group-tx-amount').value = '';
+  document.getElementById('group-tx-desc').value = '';
+  document.getElementById('group-tx-preview').style.display = 'none';
+  computePots();
+  refreshUI();
+};
+
 window.assignDebtAsLoan = async function() {
   console.log("assignDebtAsLoan called");
   const phone = document.getElementById('debt-member')?.value;
@@ -8735,6 +8845,35 @@ window.deleteNotifPopup = async function(id) {
     showNotificationsPopup(); // refresh list
   }
 };
+// Delete transactions older than 14 days (2 weeks)
+// Delete old transactions but keep financial totals correct
+async function safeCleanup() {
+  // 1. Export current financial state
+  await exportFinancialSnapshot();
+  
+  // 2. Delete old transactions (older than 14 days)
+  const cutoff = Date.now() - 14 * 86400000;
+  const oldTx = transactions.filter(tx => tx.date < cutoff);
+  if (!oldTx.length) {
+    toast('No old transactions to delete.', '#10b981');
+    return;
+  }
+  for (let tx of oldTx) {
+    await db.ref('transactions/' + tx.id).remove();
+  }
+  
+  // 3. Refresh local transactions
+  const txSnap = await db.ref('transactions').once('value');
+  transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
+  
+  // 4. Restore financial totals from snapshot (overwrites recalculated values)
+  await importFinancialSnapshot();
+  
+  // 5. Also delete old notifications (optional)
+  await deleteOldNotifications();
+  
+  toast(`Cleanup complete. Deleted ${oldTx.length} old transactions. Totals unchanged.`, '#10b981');
+}
 function attachDepositPreviewHandler() {
   // All preview logic lives in window.updateTxPreview — just wire up listeners
   // and trigger once so the preview is fresh when the modal opens.
