@@ -1306,7 +1306,7 @@ setTimeout(() => {
   const yearsText = getGroupAgeText();
   const yearsDiv = document.getElementById('years-text');
   if (yearsDiv) {
-    yearsDiv.innerText = `@2months`;
+    yearsDiv.innerText = `@2mths`;
     const container = document.getElementById('years-container');
     if (container) {
       container.style.opacity = '1';
@@ -1462,7 +1462,10 @@ setTimeout(() => {
         <span id="notification-badge" class="notification-badge hidden">0</span>
       </div>
       <button class="hdr-btn" onclick="toggleShare()">⬆</button>
-      <button class="hdr-btn" onclick="goTab('admin',this)">🔐</button>
+      <button class="hdr-btn" onclick="goTab('admin',this)" style="position:relative;">
+  🔐
+  <span id="admin-pending-badge" class="notification-badge hidden" style="top:-8px; right:-8px;">0</span>
+</button>
     </div>
   </div>
   <div id="content">
@@ -1741,7 +1744,19 @@ setTimeout(() => {
     <button class="btn btn-sec btn-full" onclick="closeOv('ov-upcoming')">Cancel</button>
   </div>
 </div>
-<div class="ov" id="ov-apps" onclick="maybeClose(event,'ov-apps')"><div class="bs"><div class="bs-title">📝 Applications & Loans</div><div id="apps-list"></div><button class="btn btn-sec btn-full" style="margin-top:8px" onclick="closeOv('ov-apps')">Close</button></div></div>
+<div class="ov" id="ov-apps" onclick="maybeClose(event,'ov-apps')">
+  <div class="bs">
+    <div class="bs-title">📝 Pending Requests</div>
+    <div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
+      <button class="btn btn-sm btn-gold" onclick="loadAppsTab('members')">👥 Member Applications</button>
+      <button class="btn btn-sm btn-gold" onclick="loadAppsTab('loans')">💰 Loan Applications</button>
+      <button class="btn btn-sm btn-gold" onclick="loadAppsTab('referrals')">🎁 Referral Bonuses</button>
+      <button class="btn btn-sm btn-gold" onclick="loadAppsTab('passwords')">🔑 Password Reset</button>
+    </div>
+    <div id="apps-content" style="max-height: 55vh; overflow-y: auto;"></div>
+    <button class="btn btn-sec btn-full" style="margin-top:12px" onclick="closeOv('ov-apps')">Close</button>
+  </div>
+</div>
 <div class="ov" id="ov-assign-debt" onclick="maybeClose(event,'ov-assign-debt')">
   <div class="bs">
     <div class="bs-title">🧾 Assign Debt (as Loan)</div>
@@ -1801,6 +1816,11 @@ setTimeout(() => {
       <input type="number" id="set-penalty-interest" class="inp" step="0.5" value="5">
       <div class="micro">Applied at midnight when a member misses a daily deposit (added on top of daily amount + welfare).</div>
     </div>
+    <div class="fgrp">
+  <label class="flbl">Referral Bonus (UGX)</label>
+  <input type="number" id="set-referral-bonus" class="inp" value="10000" step="1000">
+  <div class="micro">Amount a member receives when their referral is approved <strong>and</strong> the bonus is cleared by admin.</div>
+</div>
     <div class="fgrp">
       <label class="flbl">Group Start Date (anniversary)</label>
       <input type="date" id="groupStartDate" class="inp" value="">
@@ -2096,35 +2116,6 @@ if (savedThemeColor && window.applyTheme) {
   // if you have a function to apply accent, call it here
   // but for background color, only mode matters.
 }
-setTimeout(() => {
-  const lion = document.getElementById('lion-splash');
-  if (lion && lion.style.display !== 'none') {
-    // Start the loading animation inside lion splash
-    const splashMsgs = ['Loading your pride…', 'Connecting to hive…', 'Fetching balances…', 'Almost there…'];
-    let idx = 0;
-    const subEl = document.getElementById('lion-sub');
-    if (subEl) {
-      const msgInterval = setInterval(() => {
-        idx = (idx + 1) % splashMsgs.length;
-        subEl.innerText = splashMsgs[idx];
-      }, 1200);
-      setTimeout(() => {
-        clearInterval(msgInterval);
-        // Hide lion splash and show login screen
-        lion.style.display = 'none';
-        const loginScreen = document.getElementById('login-screen');
-        if (loginScreen) loginScreen.classList.remove('hidden');
-      }, 4500);
-    } else {
-      // Fallback: force login after 4.5s
-      setTimeout(() => {
-        lion.style.display = 'none';
-        const loginScreen = document.getElementById('login-screen');
-        if (loginScreen) loginScreen.classList.remove('hidden');
-      }, 4500);
-    }
-  }
-}, 5300); // 5000 (blank) + 300 margin
 'use strict';
 const APP_VERSION='2.0.0';
 const FIREBASE_CONFIG={
@@ -2569,18 +2560,17 @@ function getTodaysDepositStatus() {
   const hasActionToday = new Set();
 
   transactions.forEach(tx => {
-    if (tx.date >= todayStart && tx.date <= todayEnd) {
-      // Any transaction for this member today counts as action
-      if (tx.memberPhone) {
-        hasActionToday.add(tx.memberPhone);
-      }
+    if (tx.date >= todayStart && tx.date <= todayEnd && tx.memberPhone) {
+      // Any transaction (deposit, debt, fine, welfare) counts as action
+      hasActionToday.add(tx.memberPhone);
     }
   });
 
   const allMembers = members.filter(m => m.approved);
   const noAction = allMembers.filter(m => !hasActionToday.has(m.phone));
-  return { noAction, allCount: allMembers.length, actionCount: hasActionToday.size };
+  return { notDeposited: noAction, allCount: allMembers.length, depositedCount: hasActionToday.size };
 }
+
 function getTodayDeficit(member) {
   const todayStart = new Date().setHours(0, 0, 0, 0);
   const dailyAmount = settings.dailyAmount || 2000;
@@ -3790,9 +3780,6 @@ function renderStatistics() {
   renderRewardsContent(); // fills rewards data in the stats tab
 }
 function renderRewardsContent() {
-  // Force recalc from current transactions
-  computePots();
-  
   const summaryDiv = document.getElementById('rewards-summary');
   const listDiv = document.getElementById('rewards-list');
   const referralDiv = document.getElementById('referral-code-display-stats');
@@ -3800,95 +3787,48 @@ function renderRewardsContent() {
 
   if (!summaryDiv || !listDiv) return;
 
-  // If no transactions yet, show loading message
-  if (transactions.length === 0) {
-    summaryDiv.innerHTML = '<div class="muted">Loading financial data...</div>';
-    listDiv.innerHTML = '';
-    if (referralBox) referralBox.style.display = 'none';
-    return;
-  }
-
-  const activeMembers = members.filter(m => m.approved);
-  if (activeMembers.length === 0) {
+  const data = calculateRewards();
+  if (!data || data.totalMembers === 0) {
     summaryDiv.innerHTML = '<div class="muted">No active members yet.</div>';
     listDiv.innerHTML = '';
     if (referralBox) referralBox.style.display = 'none';
     return;
   }
 
-  const rewardsPercent = 5;
-  const rewardsPool = Math.floor(groupProfit * rewardsPercent / 100);
-  const proratedPool = groupProfit - rewardsPool;
-
-  // Calculate days active for average share (prorated)
-  let totalDays = 0;
-  for (let m of activeMembers) {
-    totalDays += getDaysActive(m);
-  }
-  let avgShare = 0;
-  if (totalDays === 0) {
-    avgShare = Math.floor(proratedPool / activeMembers.length);
-  } else {
-    avgShare = Math.floor(proratedPool / activeMembers.length);
-  }
-
-  // Calculate category winners (5% rewards)
-  const memberScores = activeMembers.map(m => {
-    let totalDeposits = 0;
-    let consistency = new Set();
-    let referrals = m.referralCount || 0;
-    let repaidLoans = 0;
-    let activity = 0;
-    transactions.forEach(tx => {
-      if (tx.memberPhone === m.phone && tx.type === 'deposit') {
-        totalDeposits += tx.amount;
-        consistency.add(new Date(tx.date).toISOString().slice(0, 10));
-        activity++;
-      }
-    });
-    loans.forEach(loan => {
-      if (loan.memberId === m.id && loan.repaid === true) repaidLoans++;
-    });
-    return { m, totalDeposits, consistency: consistency.size, referrals, repaidLoans, activity };
-  });
-
-  const categories = [
-    { name: '🏆 Top Saver', field: 'totalDeposits', percent: 0.30 },
-    { name: '📅 Most Consistent', field: 'consistency', percent: 0.25 },
-    { name: '👥 Top Referrer', field: 'referrals', percent: 0.20 },
-    { name: '💳 Best Loan Repayer', field: 'repaidLoans', percent: 0.15 },
-    { name: '⚡ Most Active', field: 'activity', percent: 0.10 }
-  ];
-
-  let winnersHtml = '';
-  let usedIds = new Set();
-  for (let cat of categories) {
-    let best = null;
-    let bestVal = -1;
-    for (let s of memberScores) {
-      if (usedIds.has(s.m.id)) continue;
-      let val = s[cat.field];
-      if (val > bestVal) { bestVal = val; best = s; }
-    }
-    let amount = 0;
-    if (best && bestVal > 0) {
-      amount = Math.floor(rewardsPool * cat.percent);
-      usedIds.add(best.m.id);
-      winnersHtml += `<div class="reward-card"><div class="reward-category">${cat.name}</div><div class="reward-member">${escapeHtml(best.m.name)}</div><div class="reward-amount">${money(amount)}</div><div class="micro muted">${bestVal} points</div></div>`;
+  // Build winners HTML (cards)
+  let winnersHtml = '<div class="rewards-grid">';
+  data.winners.forEach(winner => {
+    if (winner.eligible) {
+      winnersHtml += `
+        <div class="reward-card">
+          <div class="reward-category">${winner.category}</div>
+          <div class="reward-member">${escapeHtml(winner.member.name)}</div>
+          <div class="reward-amount">${money(winner.amount)}</div>
+          <div class="micro muted">${winner.metric} points</div>
+        </div>
+      `;
     } else {
-      winnersHtml += `<div class="reward-card" style="opacity:0.7;"><div class="reward-category">${cat.name}</div><div class="reward-member">— —</div><div class="reward-amount">UGX 0</div><div class="micro muted">No eligible member</div></div>`;
+      winnersHtml += `
+        <div class="reward-card" style="opacity: 0.7;">
+          <div class="reward-category">${winner.category}</div>
+          <div class="reward-member">— —</div>
+          <div class="reward-amount">UGX 0</div>
+          <div class="micro muted">No eligible member</div>
+        </div>
+      `;
     }
-  }
+  });
+  winnersHtml += '</div>';
 
-  // Build summary
+  // Weight distribution text
+  const weightsText = "🏆 Top Saver (30%) | 📅 Most Consistent (25%) | 💳 Best Loan Repayer (20%) | ⚡ Most Active (15%) | 🤝 Highest Welfare (10%)";
+
   summaryDiv.innerHTML = `
-    <div><strong>Total Profit Pool:</strong> ${money(groupProfit)}</div>
-    <div><strong>Average Prorated Share (95%):</strong> ${money(avgShare)} per member (based on days active)</div>
-    <div><strong>Rewards Pool (5%):</strong> ${money(rewardsPool)} – awarded to top performers</div>
+    <div><strong>Total Profit Pool:</strong> ${money(data.groupProfit)}</div>
+    <div><strong>Equal Share (95%):</strong> ${money(data.equalSharePerMember)} per member</div>
+    <div><strong>Rewards Pool (5%):</strong> ${money(data.rewardsPoolDisplay)} – split as:<br>${weightsText}</div>
   `;
-
-  // Insert winners grid
-  listDiv.innerHTML = `<div class="rewards-grid">${winnersHtml}</div>`;
+  listDiv.innerHTML = winnersHtml;
 
   // Referral section (only for members)
   if (referralBox && currentUser && !currentUser.isAdmin) {
@@ -4241,18 +4181,59 @@ function updateAccountUI(){
 updateNotificationBadge();
 updateLoanIndicator();
 }
-function updateNotificationBadge() {
+async function updateNotificationBadge() {
   if (!currentUser) return;
+
+  // ----- Member notifications (bell icon) -----
+  if (!currentUser.isAdmin) {
+    const memberNotifs = notifications[currentUser.id] || [];
+    const unreadCount = memberNotifs.filter(n => !n.read).length;
+    const badge = document.getElementById('notification-badge');
+    if (badge) {
+      if (unreadCount > 0) {
+        badge.classList.remove('hidden');
+        badge.innerText = unreadCount;
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+    return;
+  }
+
+  // ----- Admin pending actions (lock icon) -----
   if (currentUser.isAdmin) {
-    const arr = notifications.admin || [];
-    const unread = arr.filter(n => !n.read).length;
-    const badge = document.getElementById('notification-badge');
-    if (unread) { badge.classList.remove('hidden'); badge.innerText = unread; } else badge.classList.add('hidden');
-  } else {
-    const arr = notifications[currentUser.id] || [];
-    const unread = arr.filter(n => !n.read).length;
-    const badge = document.getElementById('notification-badge');
-    if (unread) { badge.classList.remove('hidden'); badge.innerText = unread; } else badge.classList.add('hidden');
+    try {
+      // 1. Pending membership applications
+      const membersSnap = await db.ref('applications').orderByChild('status').equalTo('pending').once('value');
+      const pendingMembers = membersSnap.val() ? Object.keys(membersSnap.val()).length : 0;
+
+      // 2. Pending loan applications (status = 'pending')
+      const pendingLoans = loans.filter(l => l.status === 'pending').length;
+
+      // 3. Pending referral bonuses (type 'pending_referral_bonus' and cleared = false)
+      const refBonusSnap = await db.ref('transactions').orderByChild('type').equalTo('pending_referral_bonus').once('value');
+      const pendingReferrals = refBonusSnap.val()
+        ? Object.values(refBonusSnap.val()).filter(tx => !tx.cleared).length
+        : 0;
+
+      // 4. Pending password reset requests
+      const resetSnap = await db.ref('passwordResetRequests').orderByChild('status').equalTo('pending').once('value');
+      const pendingResets = resetSnap.val() ? Object.keys(resetSnap.val()).length : 0;
+
+      const totalPending = pendingMembers + pendingLoans + pendingReferrals + pendingResets;
+
+      const adminBadge = document.getElementById('admin-pending-badge');
+      if (adminBadge) {
+        if (totalPending > 0) {
+          adminBadge.classList.remove('hidden');
+          adminBadge.innerText = totalPending;
+        } else {
+          adminBadge.classList.add('hidden');
+        }
+      }
+    } catch (err) {
+      console.error("Error counting admin pending actions:", err);
+    }
   }
 }
 window.copyReferralLink=function(){
@@ -4997,6 +4978,7 @@ window.setLanguage=function(lang){
   closeModal();
   toast(t('language_updated'),'#06b6d4');
 };
+// Send in‑app notification to all members (broadcast)
 window.sendBroadcastNotification = async function() {
   const msg = document.getElementById('broadcast-msg')?.value.trim();
   if (!msg) {
@@ -5012,17 +4994,32 @@ window.sendBroadcastNotification = async function() {
         id: Date.now(),
         text: msg,
         date: Date.now(),
-        read: false,
-        broadcast: true    // <-- mark as broadcast
+        read: false
       });
       writes.push(db.ref('notifications/' + member.id).set(memberNotifs));
     }
     await Promise.all(writes);
     toast(`Broadcast sent to ${allMembers.length} members`, '#10b981');
     document.getElementById('broadcast-msg').value = '';
-    // Immediately refresh the queue for the current user
-    if (currentUser && !currentUser.isAdmin) refreshNotificationQueue();
   }, 'Send Broadcast');
+};
+
+// Copy WhatsApp reminder message to clipboard and optionally open group link
+window.sendWhatsAppReminder = function() {
+  const dailyAmount = (settings.dailyAmount || 2000) + (settings.welfareAmount || 500);
+  const message = `🔔 *HARVEST TRUST FINANCE – DAILY DEPOSIT REMINDER* 🔔\n\nDear member, please make your daily deposit of ${money(dailyAmount)} before midnight. Late deposits incur a penalty.\n\nThank you for keeping our group strong! 💪\n\n_This is an automated reminder._`;
+  
+  navigator.clipboard.writeText(message).then(() => {
+    toast('Reminder message copied to clipboard!', '#10b981');
+  }).catch(() => {
+    toast('Failed to copy. Please copy manually.', '#ef4444');
+  });
+  
+  if (settings.whatsappLink) {
+    window.open(settings.whatsappLink, '_blank');
+  } else {
+    toast('No WhatsApp group link set. Please set it in Group Settings.', '#ef4444');
+  }
 };
 function applyLanguageToUI(){
   document.querySelectorAll('[data-i18n]').forEach(el=>{
@@ -5393,74 +5390,135 @@ function checkOverdueLoans(){
 }
 
 window.loadApplications = function() {
-  // Fetch pending membership applications
-  db.ref('applications').orderByChild('status').equalTo('pending').once('value', snap => {
-    const apps = snap.val() ? Object.entries(snap.val()).map(([k, v]) => ({ ...v, key: k })) : [];
-    
-    // Fetch pending password reset requests
-    db.ref('passwordResetRequests').orderByChild('status').equalTo('pending').once('value', resetSnap => {
-      const resets = resetSnap.val() ? Object.entries(resetSnap.val()).map(([k, v]) => ({ ...v, id: k })) : [];
-      
+  console.log("loadApplications called");
+  // Open the modal and load the first tab (member applications)
+  openOv('ov-apps');
+  loadAppsTab('members');
+};
+window.loadAppsTab = async function(tab) {
+  const container = document.getElementById('apps-content');
+  if (!container) {
+    console.error("apps-content element missing");
+    return;
+  }
+  container.innerHTML = '<div class="loading">Loading...</div>';
+  
+  try {
+    if (tab === 'members') {
+      // Fetch pending membership applications
+      const snap = await db.ref('applications').orderByChild('status').equalTo('pending').once('value');
+      const apps = snap.val() ? Object.entries(snap.val()).map(([k, v]) => ({ ...v, key: k })) : [];
+      if (!apps.length) {
+        container.innerHTML = '<div class="empty-state">No pending membership applications</div>';
+        return;
+      }
       let html = '';
-      
-      // Membership applications section
-      html += `<div class="sec-h" style="margin-top:0">📝 Membership Applications</div>`;
-      if (apps.length) {
-        html += apps.map(a => `
+      for (let a of apps) {
+        let referrerName = '';
+        if (a.referredBy) {
+          const referrer = members.find(m => m.id === a.referredBy);
+          referrerName = referrer ? referrer.name : 'Unknown';
+        }
+        html += `
           <div class="app-item">
             <div style="flex:1">
               <div class="app-name">${escapeHtml(a.name)}</div>
               <div class="app-phone">📞 ${escapeHtml(a.phone)}</div>
-              ${a.referredBy ? `<div class="micro">👤 Referred by: ${escapeHtml(a.referredBy)}</div>` : ''}
+              ${a.referredBy ? `<div class="micro">👤 Referred by: ${escapeHtml(referrerName)}</div>` : ''}
               ${a.why ? `<div class="micro">💬 "${escapeHtml(a.why)}"</div>` : ''}
-              <details style="margin-top: 6px;">
-                <summary>🔒 Security answers</summary>
-                <ul style="margin-top: 4px; padding-left: 18px;">
-                  ${(a.securityAnswers || []).map((ans, idx) => `<li><strong>Q${idx+1}:</strong> ${escapeHtml(atob(ans))}</li>`).join('')}
-                </ul>
-              </details>
+              <details><summary>🔒 Security answers</summary><ul>${(a.securityAnswers || []).map((ans, idx) => `<li><strong>Q${idx+1}:</strong> ${escapeHtml(atob(ans))}</li>`).join('')}</ul></details>
             </div>
-            <div style="display:flex; gap:6px; flex-shrink:0;">
+            <div style="display:flex; gap:6px;">
               <button class="btn btn-sm btn-green" onclick="approveApplication('${a.key}')">✅ Approve</button>
               <button class="btn btn-sm btn-red" onclick="rejectApplication('${a.key}')">✕ Reject</button>
             </div>
           </div>
-        `).join('');
-      } else {
-        html += `<div class="empty-state">No pending membership applications</div>`;
+        `;
       }
-      
-      // Password reset requests section
-      html += `<div class="sec-h" style="margin-top:20px">🔑 Password Reset Requests</div>`;
-      if (resets.length) {
-        html += resets.map(req => `
+      container.innerHTML = html;
+    } 
+    else if (tab === 'loans') {
+      const pendingLoans = loans.filter(l => l.status === 'pending');
+      if (!pendingLoans.length) {
+        container.innerHTML = '<div class="empty-state">No pending loan applications</div>';
+        return;
+      }
+      let html = '';
+      for (let l of pendingLoans) {
+        const member = members.find(m => m.id === l.memberId) || { name: 'Unknown', phone: '' };
+        html += `
+          <div class="app-item">
+            <div style="flex:1">
+              <div class="app-name">${escapeHtml(member.name)}</div>
+              <div class="app-phone">📞 ${escapeHtml(member.phone)}</div>
+              <div>Amount: ${money(l.amount)} | Repay: ${money(l.totalRepay)} (${l.interestRate}%)</div>
+              <div class="micro">Requested: ${new Date(l.requestedAt).toLocaleDateString()}</div>
+              <details><summary>📋 Questions & Answers</summary>
+                <ul>${(l.loanQuestions || []).map((q, i) => `<li><strong>Q${i+1}:</strong> ${escapeHtml(q)}</li>`).join('')}</ul>
+              </details>
+            </div>
+            <div style="display:flex; gap:6px;">
+              <button class="btn btn-sm btn-green" onclick="approveLoan('${l.id}')">✅ Approve</button>
+              <button class="btn btn-sm btn-red" onclick="rejectLoan('${l.id}')">✕ Reject</button>
+            </div>
+          </div>
+        `;
+      }
+      container.innerHTML = html;
+    }
+    else if (tab === 'referrals') {
+      const snap = await db.ref('transactions').orderByChild('type').equalTo('pending_referral_bonus').once('value');
+      const pendings = snap.val() ? Object.entries(snap.val()).map(([id, tx]) => ({ ...tx, id })).filter(tx => !tx.cleared) : [];
+      if (!pendings.length) {
+        container.innerHTML = '<div class="empty-state">No pending referral bonuses</div>';
+        return;
+      }
+      let html = '';
+      for (let tx of pendings) {
+        const referrer = members.find(m => m.phone === tx.memberPhone);
+        html += `
+          <div class="app-item">
+            <div style="flex:1">
+              <div class="app-name">${escapeHtml(tx.memberName)}</div>
+              <div class="app-phone">💰 ${money(tx.amount)} for referring ${escapeHtml(tx.referredMemberName)}</div>
+              <div class="micro">Date: ${new Date(tx.date).toLocaleDateString()}</div>
+            </div>
+            <button class="btn btn-sm btn-green" onclick="approveReferralBonus('${tx.id}')">✅ Approve Bonus</button>
+          </div>
+        `;
+      }
+      container.innerHTML = html;
+    }
+    else if (tab === 'passwords') {
+      const snap = await db.ref('passwordResetRequests').orderByChild('status').equalTo('pending').once('value');
+      const resets = snap.val() ? Object.entries(snap.val()).map(([k, v]) => ({ ...v, id: k })) : [];
+      if (!resets.length) {
+        container.innerHTML = '<div class="empty-state">No pending password reset requests</div>';
+        return;
+      }
+      let html = '';
+      for (let req of resets) {
+        html += `
           <div class="app-item">
             <div style="flex:1">
               <div class="app-name">${escapeHtml(req.memberName)}</div>
               <div class="app-phone">📞 ${escapeHtml(req.phone)}</div>
               <div class="micro">Requested: ${new Date(req.requestedAt).toLocaleString()}</div>
-              ${req.verified ? '<div class="micro">✅ Verified via security questions</div>' : '<div class="micro">⚠️ Manual verification needed (no security answers)</div>'}
+              ${req.verified ? '<div class="micro">✅ Verified via security questions</div>' : '<div class="micro">⚠️ Manual verification needed</div>'}
             </div>
-            <div style="display:flex; gap:6px; flex-shrink:0;">
+            <div style="display:flex; gap:6px;">
               <button class="btn btn-sm btn-green" onclick="approveReset('${req.id}')">✅ Approve</button>
               <button class="btn btn-sm btn-red" onclick="rejectReset('${req.id}')">✕ Reject</button>
             </div>
           </div>
-        `).join('');
-      } else {
-        html += `<div class="empty-state">No pending password reset requests</div>`;
+        `;
       }
-      
-      // Show modal
-      const overlay = document.getElementById('ov-apps');
-      if (overlay) {
-        document.getElementById('apps-list').innerHTML = html;
-        openOv('ov-apps');
-      } else {
-        showModal(html, 'Applications & Reset Requests');
-      }
-    });
-  });
+      container.innerHTML = html;
+    }
+  } catch (err) {
+    console.error("Error loading tab:", err);
+    container.innerHTML = `<div class="empty-state">Error loading data. Check console.</div>`;
+  }
 };
 
 window.approveApplication = function(key) {
@@ -5475,7 +5533,7 @@ window.approveApplication = function(key) {
       phone: a.phone,
       password: 'HT' + a.phone.slice(-4),
       approved: true,
-      feeCleared: signupFee === 0, // automatically cleared if no fee
+      feeCleared: signupFee === 0,
       joinDate: joinDate,
       photoData: a.photoData || '',
       referredBy: a.referredBy || null,
@@ -5485,7 +5543,7 @@ window.approveApplication = function(key) {
     
     const ref = await db.ref('members').push(newMember);
     
-    // Add signup fee as a debt transaction
+    // Add signup fee debt
     if (signupFee > 0) {
       await db.ref('transactions').push({
         memberPhone: newMember.phone,
@@ -5496,12 +5554,39 @@ window.approveApplication = function(key) {
         date: Date.now(),
         isSignupFee: true
       });
-      toast(`Signup fee of UGX ${signupFee.toLocaleString()} added as debt for ${a.name}`, '#f59e0b');
     }
     
-    // Referral logic
+    // Handle referral (if any)
     if (a.referredBy) {
-      db.ref(`members/${a.referredBy}/referralCount`).transaction(cur => (cur || 0) + 1);
+      // Increment referrer's referralCount (for display, not for reward)
+      await db.ref(`members/${a.referredBy}/referralCount`).transaction(cur => (cur || 0) + 1);
+      
+      // Give immediate referral bonus (if set)
+      if (settings.referralBonusAmount > 0) {
+        const referrer = members.find(m => m.id === a.referredBy);
+        if (referrer) {
+          await db.ref('transactions').push({
+            memberPhone: referrer.phone,
+            memberName: referrer.name,
+            type: 'deposit',
+            amount: settings.referralBonusAmount,
+            description: `Referral bonus for ${a.name} joining the group`,
+            date: Date.now()
+          });
+          // Send notification
+          const notifs = notifications[referrer.id] || [];
+          notifs.push({
+            id: Date.now(),
+            text: `🎉 You earned ${money(settings.referralBonusAmount)} referral bonus for bringing ${a.name}!`,
+            date: Date.now(),
+            read: false
+          });
+          await db.ref('notifications/' + referrer.id).set(notifs);
+          toast(`Referral bonus of ${money(settings.referralBonusAmount)} given to ${referrer.name}`, '#10b981');
+        }
+      }
+      
+      // Also send a simple notification
       db.ref(`notifications/${a.referredBy}`).once('value', nSnap => {
         let arr = nSnap.val() || [];
         arr.push({ id: Date.now(), text: `${a.name} joined using your referral!`, date: Date.now(), read: false });
@@ -5517,7 +5602,7 @@ window.approveApplication = function(key) {
     }
     
     toast(a.name + ' approved! ✅', '#10b981');
-    loadApplications();
+    loadApplications(); // refresh the modal
     if (currentAdminTab === 'users') renderAdminTab();
   });
 };
@@ -5629,235 +5714,318 @@ window.confirmDailySavings = async function() {
   if (currentScreen === 'statistics') renderStatistics();
 };
 window.switchAdminTab=function(tab){currentAdminTab=tab;document.querySelectorAll('.admin-tab').forEach(t=>t.classList.remove('active'));document.querySelector(`.admin-tab[data-tab="${tab}"]`)?.classList.add('active');renderAdminTab();};
-function renderAdminTab(){
-  const c=document.getElementById('admin-content');if(!c)return;
-  const pendingLoans=loans.filter(l=>l.status==='pending');
-  const activeLoans = loans.filter(l => l.status === 'approved' && !l.repaid);
-  if(currentAdminTab==='savings'){
-  const { noAction, allCount, actionCount } = getTodaysDepositStatus();
-const pendingActivityHtml = noAction.length === 0 
-  ? `<div class="card" style="background: rgba(16,185,129,0.1); border-color: #10b981;">
-      <div style="display:flex; align-items:center; gap:10px;">
-        <span style="font-size:1.5rem;">✅</span>
-        <div><strong>All members are up to date!</strong><br>${actionCount}/${allCount} have taken action today.</div>
-      </div>
-    </div>`
-  : `<div class="card" style="background: rgba(245,158,11,0.1); border-color: #f59e0b;">
-      <div style="margin-bottom:8px;"><strong>⚠️ No action yet (${noAction.length} members)</strong></div>
-      <div style="display:flex; flex-wrap:wrap; gap:6px;">
-        ${noAction.map(m => `<span class="pill-badge pill-amber" style="background:rgba(245,158,11,0.2);">⚠️ ${escapeHtml(m.name)}</span>`).join('')}
-      </div>
-      <div class="micro muted" style="margin-top:6px;">These members have neither deposited nor been auto‑penalised today. Auto‑penalty applies at midnight.</div>
-    </div>`;
-  c.innerHTML = `
+function renderAdminTab() {
+  const c = document.getElementById('admin-content');
+  if (!c) return;
+
+  const pendingLoans = loans.filter(l => l.status === 'pending');
+  // For active loans grouping (used in Savings tab)
+  const activeByMember = {};
+  loans.forEach(l => {
+    if (l.status === 'approved' && !l.repaid) {
+      const memberExists = members.some(m => m.id === l.memberId && m.approved !== false);
+      if (!memberExists) return;
+      if (!activeByMember[l.memberId]) {
+        activeByMember[l.memberId] = {
+          memberName: l.memberName,
+          memberPhone: l.memberPhone,
+          totalPrincipal: 0,
+          totalRepay: 0,
+          weightedInterest: 0,
+          count: 0,
+          dueDate: 0
+        };
+      }
+      activeByMember[l.memberId].totalPrincipal += l.amount;
+      activeByMember[l.memberId].totalRepay += l.totalRepay;
+      activeByMember[l.memberId].weightedInterest += l.amount * (l.interestRate || 0);
+      activeByMember[l.memberId].count++;
+      if (l.dueDate > activeByMember[l.memberId].dueDate) activeByMember[l.memberId].dueDate = l.dueDate;
+    }
+  });
+  const entries = Object.entries(activeByMember);
+
+  // Helper to format money
+  function money(n) { n = Math.round(Number(n) || 0); return (n < 0 ? '-' : '') + 'UGX ' + Math.abs(n).toLocaleString(); }
+
+  // ----- Savings tab -----
+ if (currentAdminTab === 'savings') {
+  // Helper: get today's deposit status
+  function getTodaysDepositStatus() {
+    const todayStart = new Date().setHours(0, 0, 0, 0);
+    const todayEnd = todayStart + 86400000 - 1;
+    const hasActionToday = new Set();
+    transactions.forEach(tx => {
+      if (tx.date >= todayStart && tx.date <= todayEnd && tx.memberPhone) {
+        hasActionToday.add(tx.memberPhone);
+      }
+    });
+    const allMembers = members.filter(m => m.approved);
+    const noAction = allMembers.filter(m => !hasActionToday.has(m.phone));
+    return { notDeposited: noAction, allCount: allMembers.length, depositedCount: hasActionToday.size };
+  }
+
+  const { notDeposited, allCount, depositedCount } = getTodaysDepositStatus();
+  const pendingActivityHtml = notDeposited.length === 0
+    ? `<div class="card" style="background: rgba(16,185,129,0.1); border-color: #10b981;">
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span style="font-size:1.5rem;">✅</span>
+          <div><strong>All members are up to date!</strong><br>${depositedCount}/${allCount} deposited today.</div>
+        </div>
+      </div>`
+    : `<div class="card" style="background: rgba(245,158,11,0.1); border-color: #f59e0b;">
+        <div style="margin-bottom:8px;"><strong>⚠️ Pending deposits (${notDeposited.length} members)</strong></div>
+        <div style="display:flex; flex-wrap:wrap; gap:6px;">
+          ${notDeposited.map(m => `<span class="pill-badge pill-amber" style="background:rgba(245,158,11,0.2);">⚠️ ${escapeHtml(m.name)}</span>`).join('')}
+        </div>
+        <div class="micro muted" style="margin-top:6px;">These members have not deposited today. Auto‑penalty applies at midnight.</div>
+      </div>`;
+
+  // Profit pool card
+  const profitPoolHtml = `
     <div class="card">
       <div class="sec-h">🏦 Profit Pool</div>
-      <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
+      <div style="display:flex; align-items:center; gap:14px; margin-bottom:14px">
         <div style="width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,var(--green),#059669);display:flex;align-items:center;justify-content:center;font-size:1.6rem">💰</div>
         <div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:1.6rem;font-weight:700;color:${groupProfit<0?'var(--red)':'var(--green)'}">UGX ${groupProfit.toLocaleString()}</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:1.6rem;font-weight:700;color:${groupProfit < 0 ? 'var(--red)' : 'var(--green)'}">${money(groupProfit)}</div>
           <div class="micro">Prorated share – use preview to see breakdown</div>
         </div>
       </div>
-      <button class="btn btn-green btn-full" onclick="previewProfitDistribution()">${t('distribute_profit')}</button>
+      <button class="btn btn-green btn-full" onclick="previewProfitDistribution()">🎉 Distribute Profit to All Members</button>
     </div>
-    ${pendingActivityHtml}
-    ${pendingLoans.length ? `<div class="card"><div class="sec-h">${t('pending_loans')} <span class="pill-badge pill-amber">${pendingLoans.length}</span></div>${pendingLoans.map(l=>`<div class="mc"><div><div class="mc-name">${l.memberName}</div><div class="mc-phone">UGX ${l.amount.toLocaleString()} · Repay: UGX ${l.totalRepay.toLocaleString()} (${l.interestRate}%)</div><div class="micro">${l.reason}</div></div><div><button class="btn btn-sm btn-green" onclick="approveLoan('${l.id}')">✅</button><button class="btn btn-sm btn-red" onclick="rejectLoan('${l.id}')">✕</button></div></div>`).join('')}</div>` : ''}
-    ${(() => {
-      const activeByMember = {};
-      loans.forEach(l => {
-        if (l.status === 'approved' && !l.repaid) {
-          const memberExists = members.some(m => m.id === l.memberId && m.approved !== false);
-          if (!memberExists) return;
-          if (!activeByMember[l.memberId]) {
-            activeByMember[l.memberId] = {
-              memberName: l.memberName,
-              memberPhone: l.memberPhone,
-              totalPrincipal: 0,
-              totalRepay: 0,
-              weightedInterest: 0,
-              count: 0,
-              dueDate: 0
-            };
-          }
-          activeByMember[l.memberId].totalPrincipal += l.amount;
-          activeByMember[l.memberId].totalRepay += l.totalRepay;
-          activeByMember[l.memberId].weightedInterest += l.amount * (l.interestRate || 0);
-          activeByMember[l.memberId].count++;
-          if (l.dueDate > activeByMember[l.memberId].dueDate) activeByMember[l.memberId].dueDate = l.dueDate;
-        }
-      });
-      const entries = Object.entries(activeByMember);
-      if (!entries.length) return '';
-      return `<div class="card"><div class="sec-h">${t('active_loans')} <span class="pill-badge pill-green">${entries.length}</span></div>
-        ${entries.map(([memberId, data]) => {
-          const member = members.find(m => m.id === memberId);
-          const memberName = member ? member.name : 'Deleted Member';
-          const avgRate = data.totalPrincipal ? (data.weightedInterest / data.totalPrincipal).toFixed(1) : 0;
-          const balance = memberLoans[data.memberPhone] || 0;
-          const paid = Math.max(0, data.totalRepay - balance);
-          const isOverdue = data.dueDate && data.dueDate < Date.now();
-          return `<div class="mc" style="border-left: 4px solid ${isOverdue ? 'var(--red)' : 'var(--green)'};">
+  `;
+
+  // Pending loans card
+  const pendingLoansHtml = pendingLoans.length
+    ? `<div class="card">
+        <div class="sec-h">📋 Pending Loan Requests <span class="pill-badge pill-amber">${pendingLoans.length}</span></div>
+        ${pendingLoans.map(l => `
+          <div class="mc">
             <div>
-              <div class="mc-name" style="font-size: 1rem; margin-bottom: 4px;">${memberName}</div>
-              <div style="display: flex; flex-wrap: wrap; gap: 12px; margin: 6px 0;">
-                <span style="background: rgba(245,158,11,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--gold);">💰 Borrowed: UGX ${data.totalPrincipal.toLocaleString()}</span>
-                <span style="background: rgba(6,182,212,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--teal);">📈 Interest: ${avgRate}%</span>
-                <span style="background: rgba(251,146,60,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--amber);">💸 Repay: UGX ${data.totalRepay.toLocaleString()}</span>
-              </div>
-              <div style="display: flex; flex-wrap: wrap; gap: 12px; margin: 6px 0;">
-                <span style="background: rgba(34,197,94,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--green);">✅ Paid: UGX ${paid.toLocaleString()}</span>
-                <span style="background: ${balance > 0 ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)'}; padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: ${balance > 0 ? 'var(--red)' : 'var(--green)'};">⚖️ Balance: UGX ${balance.toLocaleString()}</span>
-                <span style="background: rgba(100,116,139,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.65rem; font-weight: 600; color: var(--t3);">📅 Due: ${new Date(data.dueDate).toLocaleDateString()}</span>
-                ${data.count > 1 ? `<span style="background: rgba(139,92,246,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.65rem; font-weight: 600; color: var(--purple);">📚 ${data.count} loans</span>` : ''}
-              </div>
+              <div class="mc-name">${l.memberName}</div>
+              <div class="mc-phone">UGX ${l.amount.toLocaleString()} · Repay: UGX ${l.totalRepay.toLocaleString()} (${l.interestRate}%)</div>
+              <div class="micro">${l.reason}</div>
             </div>
-            <span class="pill-badge pill-green">${isOverdue ? '⚠️ Overdue' : t('active')}</span>
-          </div>`;
-        }).join('')}
-      </div>`;
-    })()}
-  `;
-  } else if (currentAdminTab === 'notice') {
-  c.innerHTML = `
-    <div class="card">
-      <div class="sec-h">📢 Broadcast to All Members</div>
-      <div class="fgrp">
-        <label class="flbl">Notification Message</label>
-        <textarea id="broadcast-msg" class="inp" rows="3" placeholder="Type message for all members..."></textarea>
-      </div>
-      <button class="btn btn-gold btn-full" onclick="sendBroadcastNotification()">📨 Send to All Members</button>
-    </div>
-    <div class="card">
-      <div class="sec-h">🎠 ${t('carousel_notices')} <span class="pill-badge pill-amber">${mainCarouselNotifs.length}/5</span></div>
-      <div id="main-carousel-admin-list" style="margin-bottom:12px">${mainCarouselNotifs.map(n => `
-        <div class="mc">
-          <div>
-            <div class="mc-name">${n.icon || '📢'} ${escapeHtml(n.text.slice(0,50))}${n.text.length > 50 ? '…' : ''}</div>
-            <div class="mc-phone">${n.imageData ? '📷 Image' : ''} ${n.payee ? `👤 ${escapeHtml(n.payee)}` : ''}</div>
+            <div>
+              <button class="btn btn-sm btn-green" onclick="approveLoan('${l.id}')">✅ Approve</button>
+              <button class="btn btn-sm btn-red" onclick="rejectLoan('${l.id}')">✕ Reject</button>
+            </div>
           </div>
-          <button class="btn btn-sm btn-red" onclick="removeCarouselNotice('${n.key}')">${t('delete_btn')}</button>
+        `).join('')}
+      </div>`
+    : '';
+
+  // Active loans – grouped by member
+  const activeByMember = {};
+  loans.forEach(l => {
+    if (l.status === 'approved' && !l.repaid) {
+      const memberExists = members.some(m => m.id === l.memberId && m.approved !== false);
+      if (!memberExists) return;
+      if (!activeByMember[l.memberId]) {
+        activeByMember[l.memberId] = {
+          memberName: l.memberName,
+          memberPhone: l.memberPhone,
+          totalPrincipal: 0,
+          totalRepay: 0,
+          weightedInterest: 0,
+          count: 0,
+          dueDate: 0
+        };
+      }
+      activeByMember[l.memberId].totalPrincipal += l.amount;
+      activeByMember[l.memberId].totalRepay += l.totalRepay;
+      activeByMember[l.memberId].weightedInterest += l.amount * (l.interestRate || 0);
+      activeByMember[l.memberId].count++;
+      if (l.dueDate > activeByMember[l.memberId].dueDate) activeByMember[l.memberId].dueDate = l.dueDate;
+    }
+  });
+  const entries = Object.entries(activeByMember);
+
+  let activeLoansHtml = '';
+  if (entries.length) {
+    activeLoansHtml = `
+      <div id="activeLoansContainer" style="display: none;">
+        <div class="card">
+          <div class="sec-h">💳 Active Loans <span class="pill-badge pill-green">${entries.length}</span></div>
+          ${entries.map(([memberId, data]) => {
+            const member = members.find(m => m.id === memberId);
+            const memberName = member ? member.name : 'Deleted Member';
+            const avgRate = data.totalPrincipal ? (data.weightedInterest / data.totalPrincipal).toFixed(1) : 0;
+            const balance = memberLoans[data.memberPhone] || 0;
+            const paid = Math.max(0, data.totalRepay - balance);
+            const isOverdue = data.dueDate && data.dueDate < Date.now();
+            return `
+              <div class="mc" style="border-left: 4px solid ${isOverdue ? 'var(--red)' : 'var(--green)'};">
+                <div>
+                  <div class="mc-name" style="font-size: 1rem; margin-bottom: 4px;">${memberName}</div>
+                  <div style="display: flex; flex-wrap: wrap; gap: 12px; margin: 6px 0;">
+                    <span style="background: rgba(245,158,11,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--gold);">💰 Borrowed: UGX ${data.totalPrincipal.toLocaleString()}</span>
+                    <span style="background: rgba(6,182,212,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--teal);">📈 Interest: ${avgRate}%</span>
+                    <span style="background: rgba(251,146,60,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--amber);">💸 Repay: UGX ${data.totalRepay.toLocaleString()}</span>
+                  </div>
+                  <div style="display: flex; flex-wrap: wrap; gap: 12px; margin: 6px 0;">
+                    <span style="background: rgba(34,197,94,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--green);">✅ Paid: UGX ${paid.toLocaleString()}</span>
+                    <span style="background: ${balance > 0 ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)'}; padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: ${balance > 0 ? 'var(--red)' : 'var(--green)'};">⚖️ Balance: UGX ${balance.toLocaleString()}</span>
+                    <span style="background: rgba(100,116,139,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.65rem; font-weight: 600; color: var(--t3);">📅 Due: ${new Date(data.dueDate).toLocaleDateString()}</span>
+                    ${data.count > 1 ? `<span style="background: rgba(139,92,246,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.65rem; font-weight: 600; color: var(--purple);">📚 ${data.count} loans</span>` : ''}
+                  </div>
+                </div>
+                <span class="pill-badge pill-green">${isOverdue ? '⚠️ Overdue' : 'Active'}</span>
+              </div>
+            `;
+          }).join('')}
         </div>
-      `).join('')}</div>
-      ${mainCarouselNotifs.length < 5 ? `<button class="btn btn-teal btn-full" onclick="openOv('ov-carousel-compose')">${t('add_carousel')}</button>` : '<div class="hint-box" style="text-align:center;margin-bottom:0">Maximum 5 notices reached. Delete one to add more.</div>'}
-    </div>`;
-  } else if (currentAdminTab === 'harvest') {
+      </div>
+      <button class="btn btn-purple btn-full" onclick="toggleActiveLoans()" style="margin-top: 8px;">📋 Show/Hide Active Loans</button>
+    `;
+  }
+
   c.innerHTML = `
-    <div class="card">
-      <div class="sec-h">🌾 Harvest Actions</div>
-      <button class="btn btn-teal btn-full" onclick="openAddTransaction()">➕ Add Transaction</button>
-      <button class="btn btn-green btn-full" onclick="openOv('ov-mark-paid')">✅ Mark Weekly Payout</button>
-      <button class="btn btn-purple btn-full" onclick="openOv('ov-rot-manage')">🔄 Manage Rotation Order</button>
-      <button class="btn btn-amber btn-full" onclick="advanceRotation()">⏩ Advance to Next Receiver</button><button class="btn btn-purple btn-full" onclick="openOv('ov-loan-rot-manage'); buildLoanDragRotation()">🔄 Manage Loan Rotation</button><button class="btn btn-amber btn-full" onclick="advanceLoanReceiver()">⏩ Advance Loan Receiver</button>
+    ${profitPoolHtml}
+    ${pendingActivityHtml}
+    ${pendingLoansHtml}
+    ${activeLoansHtml}
+  `;
+}
+
+  // ----- Notice tab -----
+ else if (currentAdminTab === 'notice') {
+  // Broadcast container (initially hidden)
+  const broadcastHtml = `
+    <div id="broadcastContainer" style="display: none;">
+      <div class="card">
+        <div class="sec-h">📢 Broadcast to All Members</div>
+        <div class="fgrp">
+          <label class="flbl">Notification Message</label>
+          <textarea id="broadcast-msg" class="inp" rows="3" placeholder="Type message for all members..."></textarea>
+        </div>
+        <button class="btn btn-gold btn-full" onclick="sendBroadcastNotification()">📨 Send to All Members (in‑app)</button>
+      </div>
+    </div>
+    <button class="btn btn-purple btn-full" onclick="toggleBroadcast()" style="margin-top: 8px;">📢 Show/Hide Broadcast</button>
+  `;
+
+  // Carousel notices container (initially hidden)
+  const carouselHtml = `
+    <div id="carouselNoticesContainer" style="display: none;">
+      <div class="card">
+        <div class="sec-h">🎠 Carousel Notices <span class="pill-badge pill-amber">${mainCarouselNotifs.length}/5</span></div>
+        <div id="main-carousel-admin-list" style="margin-bottom:12px">
+          ${mainCarouselNotifs.map(n => `
+            <div class="mc">
+              <div>
+                <div class="mc-name">${n.icon || '📢'} ${escapeHtml(n.text.slice(0,50))}${n.text.length > 50 ? '…' : ''}</div>
+                <div class="mc-phone">${n.imageData ? '📷 Image' : ''} ${n.payee ? `👤 ${escapeHtml(n.payee)}` : ''}</div>
+              </div>
+              <button class="btn btn-sm btn-red" onclick="removeCarouselNotice('${n.key}')">🗑️ Delete</button>
+            </div>
+          `).join('')}
+        </div>
+        ${mainCarouselNotifs.length < 5 ? `<button class="btn btn-teal btn-full" onclick="openOv('ov-carousel-compose')">➕ Add Carousel Notice</button>` : '<div class="hint-box" style="text-align:center;margin-bottom:0">Maximum 5 notices reached. Delete one to add more.</div>'}
+      </div>
+    </div>
+    <button class="btn btn-purple btn-full" onclick="toggleCarouselNotices()" style="margin-top: 8px;">🎠 Show/Hide Carousel Notices</button>
+  `;
+
+  c.innerHTML = `
+    ${broadcastHtml}
+    ${carouselHtml}
+    <div class="card" style="margin-top: 16px;">
+      <div class="sec-h">📱 WhatsApp Reminder</div>
+      <button class="btn btn-green btn-full" onclick="sendWhatsAppReminder()">📲 Copy & Send WhatsApp Reminder</button>
+      <div class="micro muted" style="margin-top:6px;">Copies a reminder message to clipboard. Then paste it into your group WhatsApp.</div>
     </div>
   `;
-  } else if (currentAdminTab === 'users') {
+}
+  // ----- Harvest tab -----
+  else if (currentAdminTab === 'harvest') {
+    c.innerHTML = `
+      <div class="card">
+        <div class="sec-h">🌾 Harvest Actions</div>
+        <button class="btn btn-teal btn-full" onclick="openAddTransaction()">➕ Add Transaction</button>
+        <button class="btn btn-green btn-full" onclick="openOv('ov-mark-paid')">✅ Mark Weekly Payout</button>
+        <button class="btn btn-purple btn-full" onclick="openOv('ov-rot-manage'); buildDragRotation();">🔄 Manage Payout Rotation</button>
+        <button class="btn btn-amber btn-full" onclick="advanceLoanReceiver()">⏩ Advance Loan Receiver</button>
+        <button class="btn btn-purple btn-full" onclick="openOv('ov-loan-rot-manage'); buildLoanDragRotation();">🔄 Manage Loan Rotation</button>
+      </div>
+    `;
+  }
+
+  // ----- Users tab -----
+  else if (currentAdminTab === 'users') {
+  const membersListHtml = `
+    <div id="allMembersContainer" style="display: none;">
+      <div class="card">
+        <div class="sec-h" style="display: flex; justify-content: space-between; align-items: center;">
+          <span>👥 All Members <span class="pill-badge pill-green">${members.length}</span></span>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-sm btn-amber" onclick="openMultiAssignDebt()">💰 Assign Debt to Selected</button>
+            <button class="btn btn-sm btn-teal" onclick="openMultiAddTransaction()">➕ Add Transaction to Selected</button>
+          </div>
+        </div>
+        <div id="admin-members-list"></div>
+      </div>
+    </div>
+    <button class="btn btn-purple btn-full" onclick="toggleAllMembers()" style="margin-top: 8px;">👥 Show/Hide All Members</button>
+  `;
+
   c.innerHTML = `
     <div class="card">
       <div class="sec-h">⚡ Quick Actions</div>
       <button class="btn btn-gold btn-full" onclick="openOv('ov-add-mbr')">👤 Add New Member</button>
       <button class="btn btn-teal btn-full" onclick="loadApplications()">📝 View Applications<span id="apps-badge-wrap" style="display:none;background:var(--red);color:#fff;border-radius:99px;padding:1px 7px;font-size:0.65rem;font-weight:800;margin-left:4px"><span id="apps-count">0</span></span></button>
     </div>
-    <div class="card">
-      <div class="sec-h" style="display: flex; justify-content: space-between; align-items: center;">
-        <span>👥 All Members <span class="pill-badge pill-green">${members.length}</span></span>
-        <div style="display: flex; gap: 8px;">
-          <button class="btn btn-sm btn-amber" onclick="openMultiAssignDebt()">💰 Assign Debt to Selected</button>
-          <button class="btn btn-sm btn-teal" onclick="openMultiAddTransaction()">➕ Add Transaction to Selected</button>
-        </div>
-      </div>
-      <div id="admin-members-list"></div>
-    </div>
+    ${membersListHtml}
   `;
-  updateAdminMembersList();
 
-  }else if(currentAdminTab==='fines'){
-    c.innerHTML=`<div class="card"><div class="sec-h">${t('fines_finances')}</div><button class="btn btn-amber btn-full" onclick="openOv('ov-add-fine');populateMemberDropdowns()">${t('apply_fine')}</button><button class="btn btn-red btn-full" onclick="openOv('ov-assign-debt');populateMemberDropdowns()">${t('assign_debt')}</button><button class="btn btn-green btn-full" onclick="openOv('ov-add-welfare');populateMemberDropdowns()">${t('record_welfare')}</button><button class="btn btn-sec btn-full" onclick="openOv('ov-add-exp')">${t('record_expense')}</button></div>`;
-  } else if (currentAdminTab === 'resetrequests') {
-  console.log("Rendering resetrequests tab");
-  db.ref('passwordResetRequests').orderByChild('status').equalTo('pending').once('value', snap => {
-    const requests = snap.val() ? Object.entries(snap.val()).map(([id, req]) => ({ ...req, id })) : [];
-    console.log("Pending requests:", requests);
-    if (requests.length === 0) {
-      c.innerHTML = `<div class="card"><div class="empty-state">No pending reset requests</div></div>`;
-      return;
-    }
-    let html = `<div class="card"><div class="sec-h">🔑 Pending Password Reset Requests</div>`;
-    requests.forEach(req => {
-      html += `
-        <div class="mc">
-          <div>
-            <div class="mc-name">${escapeHtml(req.memberName)} ${req.noSecurityAnswers ? '<span class="pill-badge pill-amber">⚠️ No answers</span>' : ''}</div>
-            <div class="mc-phone">${escapeHtml(req.phone)}</div>
-            ${req.verified === false ? '<div class="micro muted">Manual verification needed</div>' : ''}
-          </div>
-          <div>
-            <button class="btn btn-sm btn-green" onclick="approveReset('${req.id}')">Approve</button>
-            <button class="btn btn-sm btn-red" onclick="rejectReset('${req.id}')">Reject</button>
-          </div>
-        </div>
-      `;
-    });
-    html += `</div>`;
-    c.innerHTML = html;
-  });
-  } else if (currentAdminTab === 'ranking') {
-  // Calculate total deposits per member
-  const memberStats = members.filter(m => m.approved).map(member => {
-    let totalDeposits = 0;
-    transactions.forEach(tx => {
-      if (tx.memberPhone === member.phone && tx.type === 'deposit') {
-        totalDeposits += tx.amount;
+  // Populate the members list (it will be hidden initially, but the data is ready when shown)
+  updateAdminMembersList();
+}
+  // ----- Fines tab -----
+  else if (currentAdminTab === 'fines') {
+    c.innerHTML = `
+      <div class="card">
+        <div class="sec-h">⚡ Fines & Finances</div>
+        <button class="btn btn-amber btn-full" onclick="openOv('ov-add-fine');populateMemberDropdowns()">⚡ Apply Fine to Member</button>
+        <button class="btn btn-red btn-full" onclick="openOv('ov-assign-debt');populateMemberDropdowns()">🧾 Assign Debt to Member</button>
+        <button class="btn btn-green btn-full" onclick="openOv('ov-add-welfare');populateMemberDropdowns()">🤝 Record Welfare Payment</button>
+        <button class="btn btn-sec btn-full" onclick="openOv('ov-add-exp')">📤 Record Group Expense</button>
+      </div>
+    `;
+  }
+
+  // ----- Settings tab -----
+  else if (currentAdminTab === 'settings') {
+    c.innerHTML = `
+      <div class="card">
+        <div class="sec-h">⚙️ Configuration</div>
+        <button class="btn btn-gold btn-full" onclick="openOv('ov-settings');loadSettings()">⚙️ Group Settings (Name, Banner, etc.)</button>
+        <button class="btn btn-purple btn-full" onclick="openEditTermsModal()">📝 Edit Group Terms</button>
+        <button class="btn btn-amber btn-full" onclick="openOv('ov-loan-settings');loadLoanSettings()">💰 Loan Settings</button>
+        <button class="btn btn-teal btn-full" onclick="exportCSV()">📥 Export Ledger as CSV</button>
+      </div>
+    `;
+  }
+
+  // Update the pending applications badge count (for the Users tab button)
+  if (currentAdminTab === 'users') {
+    db.ref('applications').orderByChild('status').equalTo('pending').once('value', snap => {
+      const count = snap.val() ? Object.keys(snap.val()).length : 0;
+      const badgeWrap = document.getElementById('apps-badge-wrap');
+      const badgeSpan = document.getElementById('apps-count');
+      if (badgeWrap && badgeSpan) {
+        if (count > 0) {
+          badgeWrap.style.display = 'inline-flex';
+          badgeSpan.textContent = count;
+        } else {
+          badgeWrap.style.display = 'none';
+        }
       }
     });
-    return { ...member, totalDeposits };
-  });
-  // Sort descending
-  memberStats.sort((a, b) => b.totalDeposits - a.totalDeposits);
-  const maxDeposit = memberStats[0]?.totalDeposits || 1;
-  
-  // Build ranking HTML
-  let rankingHtml = `
-    <div class="card">
-      <div class="sec-h">🏆 Member Leaderboard</div>
-      <div class="ranking-leaderboard">
-  `;
-  
-  memberStats.forEach((m, idx) => {
-    const rank = idx + 1;
-    let medalIcon = '';
-    let rankClass = '';
-    if (rank === 1) { medalIcon = '🥇'; rankClass = 'rank-gold'; }
-    else if (rank === 2) { medalIcon = '🥈'; rankClass = 'rank-silver'; }
-    else if (rank === 3) { medalIcon = '🥉'; rankClass = 'rank-bronze'; }
-    else { medalIcon = `${rank}`; rankClass = 'rank-regular'; }
-    
-    const depositPercent = (m.totalDeposits / maxDeposit) * 100;
-    const avatarLetter = m.name.charAt(0).toUpperCase();
-    const whatsappUrl = `https://wa.me/${m.phone.replace(/\D/g, '')}`;
-    
-    rankingHtml += `
-      <div class="ranking-row ${rankClass}">
-        <div class="ranking-rank">${medalIcon}</div>
-        <div class="ranking-avatar" style="background: linear-gradient(135deg, ${getAvatarColor(m.name)}, #8b5cf6);">${avatarLetter}</div>
-        <div class="ranking-info">
-          <div class="ranking-name">${escapeHtml(m.name)}</div>
-          <div class="ranking-phone">${escapeHtml(m.phone)}</div>
-          <div class="ranking-progress-bar">
-            <div class="ranking-progress-fill" style="width: ${depositPercent}%;"></div></div><div class="ranking-deposit">UGX ${m.totalDeposits.toLocaleString()}</div></div><div class="ranking-actions"><a href="tel:${m.phone}" class="btn btn-sm btn-teal" title="Call">📞</a><a href="${whatsappUrl}" target="_blank" class="btn btn-sm btn-green" title="WhatsApp">💬</a></div></div>`;});rankingHtml += `</div><div class="micro muted" style="margin-top: 16px; text-align: center;">🏅 Ranking based on total deposits (saving discipline). Top savers get medals.</div></div>`;c.innerHTML = rankingHtml;
-  } else if(currentAdminTab==='settings'){
-  c.innerHTML = `
-  <div class="card">
-    <div class="sec-h">${t('configuration')}</div>
-    <button class="btn btn-gold btn-full" onclick="openOv('ov-settings');loadSettings()">${t('group_settings')}</button>
-    <button class="btn btn-purple btn-full" onclick="openEditTermsModal()">📝 Edit Group Terms</button>
-    <button class="btn btn-amber btn-full" onclick="openOv('ov-loan-settings');loadLoanSettings()">${t('loan_settings')}</button>
-    <button class="btn btn-teal btn-full" onclick="exportCSV()">${t('export_csv')}</button>
-  </div>
-`;
+  }
 }
-  if(currentAdminTab==='users') db.ref('applications').orderByChild('status').equalTo('pending').once('value',snap=>{const c=snap.val()?Object.keys(snap.val()).length:0;const bw=document.getElementById('apps-badge-wrap');if(bw)bw.style.display=c?'inline-flex':'none';if(document.getElementById('apps-count'))document.getElementById('apps-count').textContent=c;});
-}
+
 function truncateText(text, maxLength) {
   if (!text) return '';
   if (text.length <= maxLength) return text;
@@ -5993,7 +6161,47 @@ async function assignDebtToSingleMember(member, principal, interestRate, dueDate
     });
   }
 }
+function toggleActiveLoans() {
+  const container = document.getElementById('activeLoansContainer');
+  if (container) {
+    if (container.style.display === 'none') {
+      container.style.display = 'block';
+    } else {
+      container.style.display = 'none';
+    }
+  }
+}
+function toggleBroadcast() {
+  const container = document.getElementById('broadcastContainer');
+  if (container) {
+    if (container.style.display === 'none') {
+      container.style.display = 'block';
+    } else {
+      container.style.display = 'none';
+    }
+  }
+}
 
+function toggleCarouselNotices() {
+  const container = document.getElementById('carouselNoticesContainer');
+  if (container) {
+    if (container.style.display === 'none') {
+      container.style.display = 'block';
+    } else {
+      container.style.display = 'none';
+    }
+  }
+}
+function toggleAllMembers() {
+  const container = document.getElementById('allMembersContainer');
+  if (container) {
+    if (container.style.display === 'none') {
+      container.style.display = 'block';
+    } else {
+      container.style.display = 'none';
+    }
+  }
+}
 function openMultiAddTransaction() {
   const selected = getSelectedMembers();
   if (selected.length === 0) {
@@ -7807,6 +8015,58 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
   
   return writes;
 }
+async function loadPendingReferralBonuses() {
+  const pendingSnap = await db.ref('transactions').orderByChild('type').equalTo('pending_referral_bonus').once('value');
+  const pendings = pendingSnap.val() ? Object.entries(pendingSnap.val()).map(([id, tx]) => ({ ...tx, id })).filter(tx => !tx.cleared) : [];
+  const container = document.getElementById('pending-bonuses-list');
+  if (!container) return;
+  if (pendings.length === 0) {
+    container.innerHTML = '<div class="empty-state">No pending referral bonuses</div>';
+    return;
+  }
+  let html = '';
+  for (let tx of pendings) {
+    const referrer = members.find(m => m.phone === tx.memberPhone);
+    html += `
+      <div class="app-item">
+        <div>
+          <div class="app-name">${escapeHtml(tx.memberName)}</div>
+          <div class="app-phone">${money(tx.amount)} for referring ${escapeHtml(tx.referredMemberName)}</div>
+          <div class="micro">Date: ${new Date(tx.date).toLocaleDateString()}</div>
+        </div>
+        <button class="btn btn-sm btn-green" onclick="approveReferralBonus('${tx.id}')">✅ Approve Bonus</button>
+      </div>
+    `;
+  }
+  container.innerHTML = html;
+}
+
+window.approveReferralBonus = async function(txId) {
+  requirePasswordConfirmation(async () => {
+    const txSnap = await db.ref('transactions/' + txId).once('value');
+    const tx = txSnap.val();
+    if (!tx || tx.type !== 'pending_referral_bonus') return;
+    // Change to deposit and mark cleared
+    await db.ref('transactions/' + txId).update({ cleared: true, type: 'deposit', description: `Referral bonus for ${tx.referredMemberName} (approved)` });
+    // Send notification to referrer
+    const referrer = members.find(m => m.phone === tx.memberPhone);
+    if (referrer) {
+      const notifs = notifications[referrer.id] || [];
+      notifs.push({
+        id: Date.now(),
+        text: `✅ Your referral bonus of ${money(tx.amount)} has been approved and added to your balance!`,
+        date: Date.now(),
+        read: false
+      });
+      await db.ref('notifications/' + referrer.id).set(notifs);
+      toast(`Bonus approved for ${referrer.name}`, '#10b981');
+    }
+    computePots();
+    refreshUI();
+    loadAppsTab('referrals'); // refresh the tab
+  }, 'Approve Referral Bonus');
+};
+
 // Helper function to get array of dates between start and end (inclusive)
 function dateRangeToDays(startDate, endDate) {
   const start = new Date(startDate);
@@ -7838,6 +8098,7 @@ window.loadSettings = function() {
   document.getElementById('set-fine-contribution').value = settings.fineContribution || 0;
   document.getElementById('set-penalty-interest').value = settings.penaltyInterestRate || 5;
   document.getElementById('set-fine').value = settings.fineAmount || 5000;
+  document.getElementById('set-referral-bonus').value = settings.referralBonusAmount || 10000;
   document.getElementById('set-whatsapp').value = settings.whatsappLink || '';
   document.getElementById('set-banner-url').value = settings.bannerData || '';
   document.getElementById('set-signup-fee').value = settings.signupFee || 0;
@@ -7875,6 +8136,8 @@ window.doSaveSettings = function() {
   settings.fineContribution = +document.getElementById('set-fine-contribution').value;
   settings.fineAmount = +document.getElementById('set-fine').value;
   settings.penaltyInterestRate = parseFloat(document.getElementById('set-penalty-interest').value) || 5;
+  settings.referralBonusAmount = parseInt(document.getElementById('set-referral-bonus').value) || 0;
+db.ref('settings').update({ referralBonusAmount: settings.referralBonusAmount });
   settings.whatsappLink = document.getElementById('set-whatsapp').value;
   settings.bannerData = document.getElementById('set-banner-url').value;
   settings.themeMode = document.getElementById('set-theme-mode')?.value || 'light';
@@ -8092,75 +8355,117 @@ function calculateRewards() {
   const activeMembers = members.filter(m => m.approved);
   if (activeMembers.length === 0) return null;
 
-  const rewardsPercent = 5; // Changed from 10 to 5
-  let rewardsPool = Math.floor(groupProfit * rewardsPercent / 100);
+  const rewardsPercent = 5;
+  const rewardsPool = Math.floor(groupProfit * rewardsPercent / 100);
   let equalShareTotal = groupProfit - rewardsPool;
 
-  // Calculate metrics for each member
-  const memberScores = activeMembers.map(m => {
-    let totalDeposits = 0;
-    let consistency = new Set();
-    let referrals = m.referralCount || 0;
-    let repaidLoans = 0;
-    let activity = 0;
-
+  // Helper: total deposits (daily savings)
+  function getTotalDeposits(member) {
+    let total = 0;
     transactions.forEach(tx => {
-      if (tx.memberPhone === m.phone && tx.type === 'deposit') {
-        totalDeposits += tx.amount;
-        consistency.add(new Date(tx.date).toISOString().slice(0,10));
-        activity++;
+      if (tx.memberPhone === member.phone && tx.type === 'deposit') total += tx.amount;
+    });
+    return total;
+  }
+
+  // Helper: consistency days (unique days with deposit)
+  function getConsistencyDays(member) {
+    const days = new Set();
+    transactions.forEach(tx => {
+      if (tx.memberPhone === member.phone && tx.type === 'deposit') {
+        days.add(new Date(tx.date).toISOString().slice(0, 10));
       }
     });
-    loans.forEach(loan => {
-      if (loan.memberId === m.id && loan.repaid === true) repaidLoans++;
+    return days.size;
+  }
+
+  // Helper: total loan repayments
+  function getTotalLoanRepayments(member) {
+    let total = 0;
+    transactions.forEach(tx => {
+      if (tx.memberPhone === member.phone && tx.type === 'loan_repayment') total += tx.amount;
     });
+    return total;
+  }
 
-    return {
-      member: m,
-      totalDeposits,
-      consistency: consistency.size,
-      referrals,
-      repaidLoans,
-      activity
-    };
-  });
+  // Helper: activity days (any transaction)
+  function getActivityDays(member) {
+    const days = new Set();
+    transactions.forEach(tx => {
+      if (tx.memberPhone === member.phone) {
+        days.add(new Date(tx.date).toISOString().slice(0, 10));
+      }
+    });
+    return days.size;
+  }
 
-  // Same 5 categories, same percentages as profit preview
-  const categoryDefs = [
-    { name: '🏆 Top Saver', field: 'totalDeposits', percent: 0.30 },
-    { name: '📅 Most Consistent', field: 'consistency', percent: 0.25 },
-    { name: '👥 Top Referrer', field: 'referrals', percent: 0.20 },
-    { name: '💳 Best Loan Repayer', field: 'repaidLoans', percent: 0.15 },
-    { name: '⚡ Most Active', field: 'activity', percent: 0.10 }
+  // Helper: total welfare paid
+  function getTotalWelfare(member) {
+    let total = 0;
+    transactions.forEach(tx => {
+      if (tx.memberPhone === member.phone && tx.type === 'welfare') total += tx.amount;
+    });
+    return total;
+  }
+
+  // Build member metrics
+  const memberMetrics = activeMembers.map(m => ({
+    member: m,
+    deposits: getTotalDeposits(m),
+    consistency: getConsistencyDays(m),
+    loanRepaid: getTotalLoanRepayments(m),
+    activity: getActivityDays(m),
+    welfare: getTotalWelfare(m)
+  }));
+
+  // Normalise values (0 to 1)
+  function normalise(values) {
+    const max = Math.max(...values, 1);
+    return values.map(v => v / max);
+  }
+
+  const normDeposits = normalise(memberMetrics.map(m => m.deposits));
+  const normConsistency = normalise(memberMetrics.map(m => m.consistency));
+  const normLoanRepaid = normalise(memberMetrics.map(m => m.loanRepaid));
+  const normActivity = normalise(memberMetrics.map(m => m.activity));
+  const normWelfare = normalise(memberMetrics.map(m => m.welfare));
+
+  // Categories with weights (sum = 100%)
+  const categories = [
+    { name: '🏆 Top Saver', field: 'deposits', normArray: normDeposits, weight: 0.30 },
+    { name: '📅 Most Consistent', field: 'consistency', normArray: normConsistency, weight: 0.25 },
+    { name: '💳 Best Loan Repayer', field: 'loanRepaid', normArray: normLoanRepaid, weight: 0.20 },
+    { name: '⚡ Most Active', field: 'activity', normArray: normActivity, weight: 0.15 },
+    { name: '🤝 Highest Welfare', field: 'welfare', normArray: normWelfare, weight: 0.10 }
   ];
 
   const winners = [];
   const usedMemberIds = new Set();
 
-  for (let cat of categoryDefs) {
-    let best = null;
+  for (let cat of categories) {
+    let bestIndex = -1;
     let bestValue = -1;
-    for (let s of memberScores) {
-      if (usedMemberIds.has(s.member.id)) continue;
-      let val = s[cat.field];
+    for (let i = 0; i < memberMetrics.length; i++) {
+      if (usedMemberIds.has(memberMetrics[i].member.id)) continue;
+      const val = cat.normArray[i];
       if (val > bestValue) {
         bestValue = val;
-        best = s;
+        bestIndex = i;
       }
     }
-    if (best && bestValue > 0) {
-      const amount = Math.floor(rewardsPool * cat.percent);
+    if (bestIndex !== -1 && memberMetrics[bestIndex][cat.field] > 0) {
+      const amount = Math.floor(rewardsPool * cat.weight);
       winners.push({
         category: cat.name,
-        member: best.member,
+        member: memberMetrics[bestIndex].member,
         amount: amount,
-        metric: bestValue,
+        metric: memberMetrics[bestIndex][cat.field],
         eligible: true
       });
-      usedMemberIds.add(best.member.id);
+      usedMemberIds.add(memberMetrics[bestIndex].member.id);
     } else {
       // No eligible member – add amount back to equal share
-      equalShareTotal += Math.floor(rewardsPool * cat.percent);
+      equalShareTotal += Math.floor(rewardsPool * cat.weight);
       winners.push({
         category: cat.name,
         member: null,
@@ -8182,7 +8487,6 @@ function calculateRewards() {
 }
 
 let forgotState = { step: 'phone', phone: '', memberId: null, revealedPin: '' };
-
 function openForgotPassword() {
   forgotState = { step: 'phone', phone: '', memberId: null, revealedPin: '' };
   showForgotStep();
@@ -8680,7 +8984,6 @@ if (document.readyState === 'loading') {
 } else {
   createParticles();
 }
-
 // ── Patch doLogin to shake card on wrong password ─────────────────────────────
 (function(){
   var _orig=window.doLogin;
