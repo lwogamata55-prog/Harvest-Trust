@@ -1239,12 +1239,28 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
 <script>
 // Define completeSplashAndShowLogin early so the animation IIFE can call it
 var splashCompleted = false;
+var dataLoaded = false;
+var splashAnimDone = false;
 window.completeSplashAndShowLogin = function() {
+  splashAnimDone = true;
+  if (!dataLoaded) {
+    // Animation finished but Firebase data not yet loaded – keep lion splash visible
+    var sub = document.getElementById('lion-sub');
+    if (sub) sub.innerText = 'Almost ready…';
+    return;
+  }
+  if (splashCompleted) return;
   var lionSplash = document.getElementById('lion-splash');
   var loginScreen = document.getElementById('login-screen');
   if (lionSplash) lionSplash.style.display = 'none';
   if (loginScreen) loginScreen.classList.remove('hidden');
   splashCompleted = true;
+};
+// Called by loadAllData once both settings + members have fired at least once
+window._onDataLoaded = function() {
+  if (dataLoaded) return;
+  dataLoaded = true;
+  if (splashAnimDone) window.completeSplashAndShowLogin();
 };
 </script>
 <script>
@@ -2350,7 +2366,7 @@ const translations = {
 
 let currentLang = localStorage.getItem('ht_lang') || 'en';
 function t(key) { return translations[currentLang]?.[key] || translations.en[key] || key; }
-
+let currentStep = 0;
 let db=null;
 let members=[],transactions=[],rotation={order:[],currentIndex:0,history:[]};
 let settings = {
@@ -3387,10 +3403,13 @@ function loadAllData() {
   if (!db) return;
 
   // Settings
+  var _settingsFirstLoad = true;
+  var _membersFirstLoad = true;
   db.ref('settings').on('value', snap => {
     if (snap.val()) settings = { ...settings, ...snap.val() };
     applySettings();
     if (currentScreen === 'admin' && adminUnlocked) renderAdminTab();
+    if (_settingsFirstLoad) { _settingsFirstLoad = false; if (!_membersFirstLoad && window._onDataLoaded) window._onDataLoaded(); }
   });
 
   // Members
@@ -3404,6 +3423,7 @@ function loadAllData() {
     updateLoanIndicator();
     if (isLedgerActive()) loadLedger('all');
     if (currentScreen === 'statistics') renderStatistics();
+    if (_membersFirstLoad) { _membersFirstLoad = false; if (!_settingsFirstLoad && window._onDataLoaded) window._onDataLoaded(); }
   });
 
   // Transactions
@@ -4413,91 +4433,127 @@ function showSignupPage() {
   const prevBtn = document.getElementById('signup-prev-btn');
   const nextBtn = document.getElementById('signup-next-btn');
 
-  // Build stepper (unchanged)
-  let stepperHtml = `
-  <div style="display: flex; align-items: center; justify-content: center; margin-bottom: 20px; overflow-x: auto; padding: 4px 2px;">
-    <div style="display: flex; align-items: center; flex-wrap: nowrap; gap: 0;">
-  `;
-  for (let i = 0; i < 10; i++) {
-    const isAnswered = (signupAnswers[i] && signupAnswers[i].length > 0 && signupAnswers[i] !== 'Skipped');
-    const isCurrent = (i === currentQuestionIndex && currentQuestionIndex < 10);
-    let bgGradient = '';
-    let glowStyle = '';
-    if (isAnswered) {
-      bgGradient = 'linear-gradient(135deg, #10b981, #059669)';
-    } else if (isCurrent) {
-      bgGradient = 'linear-gradient(135deg, #f59e0b, #d97706)';
-      glowStyle = 'box-shadow: 0 0 0 3px rgba(245,158,11,0.4), 0 0 8px rgba(245,158,11,0.6);';
-    } else {
-      bgGradient = 'linear-gradient(135deg, #4a5568, #2d3748)';
+  // Define the 5 steps
+  const steps = [
+    { name: 'Personal Info', indices: [0,1,2,3], type: 'questions' },
+    { name: 'Financial Habits', indices: [4,5,6], type: 'questions' },
+    { name: 'Goals & Details', indices: [7,8,9], type: 'questions' },
+    { name: 'Your Details', indices: [], type: 'details' },
+    { name: 'Terms & Submit', indices: [], type: 'terms' }
+  ];
+
+  // Build stepper (single row, 5 circles)
+  let stepperHtml = '<div style="display: flex; align-items: center; justify-content: center; margin-bottom: 20px; overflow-x: auto; padding: 4px 2px;">' +
+    '<div style="display: flex; align-items: center; flex-wrap: nowrap; gap: 4px;">';
+  for (let s = 0; s < steps.length; s++) {
+    const step = steps[s];
+    let isCompleted = false;
+    if (step.type === 'questions') {
+      // All questions in this step have a non‑empty answer
+      isCompleted = step.indices.every(idx => signupAnswers[idx] && signupAnswers[idx] !== 'Skipped');
+    } else if (step.type === 'details') {
+      isCompleted = !!(signupExtra.name && signupExtra.phone);
+    } else if (step.type === 'terms') {
+      isCompleted = false; // only after submit
     }
-    stepperHtml += `<div class="step-circle" style="width: 25px; height: 25px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: ${bgGradient}; color: #fff; font-weight: bold; font-size: 0.85rem; border: 1.5px solid rgba(255,255,255,0.2); flex-shrink: 0; transition: all 0.2s ease; ${glowStyle}">${i+1}</div>`;
-    if (i < 9) {
-      const leftAnswered = (signupAnswers[i] && signupAnswers[i].length > 0 && signupAnswers[i] !== 'Skipped');
-      const rightAnswered = (signupAnswers[i+1] && signupAnswers[i+1].length > 0 && signupAnswers[i+1] !== 'Skipped');
-      const lineColor = (leftAnswered && rightAnswered) ? '#10b981' : '#4a5568';
-      stepperHtml += `<div class="step-line" style="width: 14px; height: 2px; background: ${lineColor}; flex-shrink: 0; transition: background 0.3s ease;"></div>`;
+    const isCurrent = (currentStep === s);
+    let bgColor = isCompleted ? '#10b981' : (isCurrent ? '#f59e0b' : '#2d3748');
+    stepperHtml += `<div style="width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: ${bgColor}; color: #fff; font-weight: bold; font-size: 0.85rem; border: 1.5px solid rgba(255,255,255,0.2); box-shadow: ${isCurrent ? '0 0 0 2px rgba(245,158,11,0.4)' : 'none'};">${s+1}</div>`;
+    if (s < steps.length-1) {
+      stepperHtml += `<div style="width: 20px; height: 2px; background: #4a5568;"></div>`;
     }
   }
-  stepperHtml += `</div></div>`;
-  
+  stepperHtml += '</div></div>';
+
+  // Insert or update stepper
   let stepperDiv = document.getElementById('signup-stepper');
   if (stepperDiv) {
     stepperDiv.innerHTML = stepperHtml;
   } else {
-    const newStepper = document.createElement('div');
-    newStepper.id = 'signup-stepper';
-    newStepper.innerHTML = stepperHtml;
+    stepperDiv = document.createElement('div');
+    stepperDiv.id = 'signup-stepper';
+    stepperDiv.innerHTML = stepperHtml;
     const authCard = document.querySelector('#signup-screen .auth-card');
-    if (authCard) authCard.insertBefore(newStepper, authCard.firstChild.nextSibling);
+    if (authCard) authCard.insertBefore(stepperDiv, authCard.firstChild.nextSibling);
   }
 
   stepTitle.style.display = 'none';
   stepSub.style.display = 'block';
 
-  if (currentQuestionIndex < 10) {
-  container.style.display = 'block';
-  extraDiv.style.display = 'none';
-  const q = securityQuestions[currentQuestionIndex];
-  const requiredMark = q.required ? '<span style="color:#ef4444; margin-left:4px;">*</span>' : ' <span style="color:#6b7280; font-size:0.7rem;">(optional)</span>';
-  stepSub.innerHTML = `<strong style="font-size: 1.1rem; color: var(--gold); display: block; margin-bottom: 12px;">${q.text}${requiredMark}</strong>`;
-  
-  let inputHtml = '';
-  const currentAnswer = (signupAnswers[currentQuestionIndex] === 'Skipped') ? '' : (signupAnswers[currentQuestionIndex] || '');
-  
-  if (q.type === 'dropdown') {
-    // Build dropdown from q.options
-    inputHtml = `<select id="signup-answer" class="auth-input" style="margin-top: 8px; font-weight: 500;" onchange="saveCurrentAnswer()">`;
-    for (let opt of q.options) {
-      const selected = (currentAnswer === opt) ? 'selected' : '';
-      inputHtml += `<option value="${opt}" ${selected}>${opt === '' ? '— Select —' : opt}</option>`;
+  const currentStepObj = steps[currentStep];
+
+  // ───────────────────────────────────────────────────────────
+  // Step type: questions (1‑3)
+  // ───────────────────────────────────────────────────────────
+  if (currentStepObj.type === 'questions') {
+    container.style.display = 'block';
+    extraDiv.style.display = 'none';
+    stepSub.innerHTML = `<strong style="font-size:1rem; color:var(--gold);">${currentStepObj.name}</strong>`;
+    let html = '';
+    for (let idx of currentStepObj.indices) {
+      const q = securityQuestions[idx];
+      const requiredMark = q.required ? '<span style="color:#ef4444;">*</span>' : ' <span class="micro">(optional)</span>';
+      const currentAnswer = signupAnswers[idx] === 'Skipped' ? '' : (signupAnswers[idx] || '');
+      html += `<div class="fgrp"><label class="flbl">${idx+1}. ${q.text}${requiredMark}</label>`;
+      if (q.type === 'dropdown') {
+        let optionsHtml = `<select id="signup-answer-${idx}" class="inp">`;
+        q.options.forEach(opt => {
+          const selected = (currentAnswer === opt) ? 'selected' : '';
+          optionsHtml += `<option value="${opt}" ${selected}>${opt === '' ? '— Select —' : opt}</option>`;
+        });
+        optionsHtml += '</select>';
+        html += optionsHtml;
+      } else {
+        html += `<textarea id="signup-answer-${idx}" class="inp" rows="2" placeholder="Your answer...">${escapeHtml(currentAnswer)}</textarea>`;
+      }
+      html += `</div>`;
     }
-    inputHtml += `</select>`;
-  } else {
-    // textarea
-    inputHtml = `<textarea id="signup-answer" class="auth-input" rows="3" placeholder="Your answer..." style="margin-top: 8px; font-weight: 500;" oninput="saveCurrentAnswer()">${escapeHtml(currentAnswer)}</textarea>`;
+    container.innerHTML = html;
+    prevBtn.style.display = currentStep === 0 ? 'none' : 'block';
+    nextBtn.innerText = currentStep === steps.length-1 ? 'Submit' : 'Next →';
+    nextBtn.style.display = 'block';
   }
-  
-  container.innerHTML = inputHtml;
-  prevBtn.style.display = currentQuestionIndex === 0 ? 'none' : 'block';
-  nextBtn.innerText = currentQuestionIndex === 9 ? 'Next → (Review & Agree)' : 'Next →';
-  nextBtn.style.display = 'block';
-  } else {
-    // Final page (unchanged)
+  // ───────────────────────────────────────────────────────────
+  // Step type: details (name, phone, etc.)
+  // ───────────────────────────────────────────────────────────
+  else if (currentStepObj.type === 'details') {
     container.style.display = 'none';
     extraDiv.style.display = 'block';
-    stepSub.innerHTML = '<strong style="font-size: 1rem;">Please complete your information below</strong>';
-    const signupFee = settings.signupFee || 0;
+    stepSub.innerHTML = '<strong style="font-size:1rem;">Your Details</strong>';
     extraDiv.innerHTML = `
-      <div style="max-height: 55vh; overflow-y: auto; padding-right: 8px;">
-        <div class="fgrp"><label class="flbl">Full Name *</label><input type="text" id="signup-name" class="auth-input" placeholder="Full name" value="${escapeHtml(signupExtra.name)}"></div>
-        <div class="fgrp"><label class="flbl">Phone Number *</label><input type="tel" id="signup-phone" class="auth-input" placeholder="+256770371720 or 0770371720" value="${escapeHtml(signupExtra.phone)}">
-        <div class="micro">Use exactly 9 digits after +256 or 0. Your login PIN will be the last 4 digits.</div></div>
-        <div class="fgrp"><label class="flbl">Referral Code (optional)</label><input type="text" id="signup-referral-code" class="auth-input" placeholder="Referral code" value="${escapeHtml(signupExtra.referralCode)}"></div>
-        <div class="fgrp"><label class="flbl">Why do you want to join? (optional)</label><textarea id="signup-why" class="auth-input" rows="2">${escapeHtml(signupExtra.why)}</textarea></div>
-        <div class="drag-zone" onclick="document.getElementById('signup-photo-input').click()"><span>📸 Tap to upload your photo (optional)</span><input type="file" id="signup-photo-input" accept="image/*" style="display:none" onchange="handlePhotoInput(this,'signup-photo-preview',null)"><img id="signup-photo-preview" class="image-preview" style="display:${signupExtra.photoData ? 'block' : 'none'};" src="${signupExtra.photoData || ''}"></div>
-        <div class="hint-box" style="margin: 12px 0;"><div><strong>💰 Signup Fee:</strong> ${money(signupFee)}</div><div class="micro muted">This fee will be assigned as debt upon approval and must be paid before you can log in.</div></div>
-        <button class="btn btn-teal btn-full" onclick="prepareSignupSubmission()">📖 Review Terms & Submit</button>
+      <div style="max-height:55vh;overflow-y:auto;padding-right:8px;">
+        <div class="fgrp"><label class="flbl">Full Name *</label><input type="text" id="signup-name" class="auth-input" value="${escapeHtml(signupExtra.name)}"></div>
+        <div class="fgrp"><label class="flbl">Phone Number *</label><input type="tel" id="signup-phone" class="auth-input" placeholder="+256770371720 or 0770371720" value="${escapeHtml(signupExtra.phone)}"><div class="micro">PIN = last 4 digits</div></div>
+        <div class="fgrp"><label class="flbl">Referral Code</label><input type="text" id="signup-referral-code" class="auth-input" value="${escapeHtml(signupExtra.referralCode)}"></div>
+        <div class="fgrp"><label class="flbl">Why join?</label><textarea id="signup-why" rows="2" class="auth-input">${escapeHtml(signupExtra.why)}</textarea></div>
+        <div class="drag-zone" onclick="document.getElementById('signup-photo-input').click()"><span>📸 Upload photo (optional)</span><input type="file" id="signup-photo-input" accept="image/*" style="display:none" onchange="handlePhotoInput(this,'signup-photo-preview',null)"><img id="signup-photo-preview" class="image-preview" style="display:none"></div>
+      </div>
+    `;
+    prevBtn.style.display = 'block';
+    nextBtn.innerText = 'Next →';
+    nextBtn.style.display = 'block';
+  }
+  // ───────────────────────────────────────────────────────────
+  // Step type: terms & submit
+  // ───────────────────────────────────────────────────────────
+  else if (currentStepObj.type === 'terms') {
+    container.style.display = 'none';
+    extraDiv.style.display = 'block';
+    stepSub.innerHTML = '<strong style="font-size:1rem;">Terms & Conditions</strong>';
+    const signupFee = settings.signupFee || 0;
+    const termsText = settings.termsAndConditions || 'No terms defined yet.';
+    extraDiv.innerHTML = `
+      <div style="max-height:55vh;overflow-y:auto;padding-right:8px;">
+        <div class="hint-box">💰 Signup Fee: ${money(signupFee)} – will be assigned as debt upon approval.</div>
+        <div style="margin: 12px 0; border:1px solid var(--br); border-radius:12px; padding:12px; max-height:200px; overflow-y:auto;">
+          ${escapeHtml(termsText)}
+        </div>
+        <div class="fgrp">
+          <label style="display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" id="signup-terms-agree"> <span>I have read and agree to the terms and conditions</span>
+          </label>
+        </div>
+        <button class="btn btn-gold btn-full" onclick="submitFinalSignup()">✅ Submit Application</button>
       </div>
     `;
     prevBtn.style.display = 'block';
@@ -4515,40 +4571,87 @@ function saveCurrentAnswer() {
   showSignupPage();
 }
 function signupNext() {
-  if (currentQuestionIndex < 10) {
-    // Save current answer first
-    saveCurrentAnswer();
-    const isRequired = securityQuestions[currentQuestionIndex].required;
-    const answer = signupAnswers[currentQuestionIndex];
-    if (isRequired && (!answer || answer === 'Skipped')) {
-      toast(`This question is required. Please provide an answer.`, '#ef4444');
+  const steps = [
+    { indices: [0,1,2,3], type: 'questions' },
+    { indices: [4,5,6], type: 'questions' },
+    { indices: [7,8,9], type: 'questions' },
+    { type: 'details' },
+    { type: 'terms' }
+  ];
+  const currentStepObj = steps[currentStep];
+
+  if (currentStepObj.type === 'questions') {
+    // Save answers for current step
+    let allValid = true;
+    for (let idx of currentStepObj.indices) {
+      const el = document.getElementById(`signup-answer-${idx}`);
+      if (el) {
+        let val = el.value.trim();
+        if (val === '') val = 'Skipped';
+        signupAnswers[idx] = val;
+        const q = securityQuestions[idx];
+        if (q.required && (!val || val === 'Skipped')) {
+          toast(`Question ${idx+1} is required. Please answer.`, '#ef4444');
+          allValid = false;
+        }
+      }
+    }
+    if (!allValid) return;
+  } 
+  else if (currentStepObj.type === 'details') {
+    // Save details
+    signupExtra.name = document.getElementById('signup-name')?.value.trim() || '';
+    signupExtra.phone = document.getElementById('signup-phone')?.value.trim() || '';
+    signupExtra.referralCode = document.getElementById('signup-referral-code')?.value.trim() || '';
+    signupExtra.why = document.getElementById('signup-why')?.value.trim() || '';
+    const photoPreview = document.getElementById('signup-photo-preview');
+    signupExtra.photoData = (photoPreview && photoPreview.style.display !== 'none') ? photoPreview.src : '';
+    if (!signupExtra.name || !signupExtra.phone) {
+      toast('Full name and phone number are required', '#ef4444');
       return;
     }
-    currentQuestionIndex++;
-    showSignupPage();
   }
-}
-function signupPrev() {
-  if (currentQuestionIndex > 0) {
-    saveCurrentAnswer();  // Save current answer before going back
-    currentQuestionIndex--;
+
+  if (currentStep < steps.length - 1) {
+    currentStep++;
     showSignupPage();
   }
 }
 
+function signupPrev() {
+  if (currentStep > 0) {
+    currentStep--;
+    showSignupPage();
+  }
+}
 window.submitFinalSignup = function() {
-  const name = document.getElementById('signup-name')?.value.trim();
-  let phone = document.getElementById('signup-phone')?.value.trim();
-  const referralCode = document.getElementById('signup-referral-code')?.value.trim() || '';
-  const why = document.getElementById('signup-why')?.value.trim() || '';
-  const photoPreview = document.getElementById('signup-photo-preview');
-  const photoData = (photoPreview && photoPreview.style.display !== 'none') ? photoPreview.src : '';
+  // Use stored values from signupExtra (saved during details step)
+  const name = signupExtra.name;
+  const phone = signupExtra.phone;
+  const referralCode = signupExtra.referralCode;
+  const why = signupExtra.why;
+  const photoData = signupExtra.photoData;
   const agree = document.getElementById('signup-terms-agree')?.checked;
 
-  if (!name) { toast('Full name is required', '#ef4444'); return; }
-  if (!phone) { toast('Phone number is required', '#ef4444'); return; }
-  
-  // Format phone: ensure +256 and 9 digits
+  if (!name) {
+    toast('Full name is required. Please go back to the details step.', '#ef4444');
+    // Go back to details step (index 3)
+    currentStep = 3;
+    showSignupPage();
+    return;
+  }
+  if (!phone) {
+    toast('Phone number is required. Please go back to the details step.', '#ef4444');
+    currentStep = 3;
+    showSignupPage();
+    return;
+  }
+  if (!agree) {
+    toast('You must agree to the terms and conditions', '#ef4444');
+    return;
+  }
+
+  // Format phone number
   let formattedPhone = phone.replace(/[\s\-\(\)]/g, '');
   if (formattedPhone.startsWith('0')) {
     formattedPhone = '+256' + formattedPhone.slice(1);
@@ -4560,18 +4663,16 @@ window.submitFinalSignup = function() {
     toast('Invalid phone number. Use +256 followed by exactly 9 digits (e.g., +256770371720)', '#ef4444');
     return;
   }
-  phone = formattedPhone;
-  
-  if (!agree) { toast('You must agree to the terms and conditions', '#ef4444'); return; }
+  const finalPhone = formattedPhone;
 
   // Check if phone already exists in approved members
-  if (members.some(m => m.phone === phone)) {
+  if (members.some(m => m.phone === finalPhone)) {
     toast('❌ This phone number is already registered. Please login.', '#ef4444');
     return;
   }
-  
-  // Check for pending OR rejected applications? We'll block pending, but allow retry if previous was rejected.
-  db.ref('applications').orderByChild('phone').equalTo(phone).once('value', snap => {
+
+  // Check for pending applications (rejected allowed to reapply)
+  db.ref('applications').orderByChild('phone').equalTo(finalPhone).once('value', snap => {
     let hasPending = false;
     snap.forEach(child => {
       if (child.val().status === 'pending') hasPending = true;
@@ -4580,16 +4681,16 @@ window.submitFinalSignup = function() {
       toast('❌ You already have a pending application. Please wait for admin approval.', '#ef4444');
       return;
     }
-    
-    const encodedAnswers = signupAnswers.map(a => btoa(a.toLowerCase()));
+
+    const encodedAnswers = signupAnswers.map(a => a === 'Skipped' ? btoa('skipped') : btoa(a.toLowerCase()));
     let referredBy = null;
     if (referralCode) {
       const matchedMember = members.find(m => m.id?.slice(-6) === referralCode || m.phone?.slice(-4) === referralCode);
       if (matchedMember) referredBy = matchedMember.id;
     }
-    
+
     db.ref('applications').push({
-      name, phone, why, photoData,
+      name, phone: finalPhone, why, photoData,
       securityAnswers: encodedAnswers,
       referredBy,
       status: 'pending',
@@ -4597,26 +4698,25 @@ window.submitFinalSignup = function() {
       agreedToTerms: true
     }).then(() => {
       toast('✅ Application submitted! Admin will review.', '#10b981');
-      // Reset signup state
+      // Reset all signup state
+      currentStep = 0;
       currentQuestionIndex = 0;
       signupAnswers = new Array(10).fill('');
       signupExtra = { name: '', phone: '', referralCode: '', why: '', photoData: '' };
       backToLogin();
-    }).catch(err => { 
-      console.error(err); 
+    }).catch(err => {
+      console.error(err);
       toast('❌ Submission failed. Please try again.', '#ef4444');
     });
   });
 };
 window.showSignup = function() {
-  // Hide login screen, show signup screen
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('signup-screen').classList.remove('hidden');
-  // Reset all signup state
-  currentQuestionIndex = 0;
+  currentStep = 0;               // <-- add this
+  currentQuestionIndex = 0;      // optional
   signupAnswers = new Array(10).fill('');
   signupExtra = { name: '', phone: '', referralCode: '', why: '', photoData: '' };
-  // Load latest settings for fee and terms
   if (db) {
     db.ref('settings').once('value', snap => {
       if (snap.val()) settings = { ...settings, ...snap.val() };
@@ -4633,9 +4733,7 @@ window.acceptFullTerms = function() {
     toast('You must agree to the terms to continue', '#ef4444');
     return;
   }
-  // Close the terms modal first
   closeOv('ov-full-terms');
-  // Then submit the signup
   if (typeof confirmAndSubmitSignup === 'function') {
     confirmAndSubmitSignup();
   } else {
@@ -4713,50 +4811,50 @@ window.submitSignupNew = function() {
 let isSubmitting = false;
 
 window.prepareSignupSubmission = function() {
-  if (isSubmitting) return;
-  const btn = document.getElementById('submit-signup-btn');
-  if (btn) btn.disabled = true;
-  isSubmitting = true;
-  
   const name = document.getElementById('signup-name')?.value.trim();
-  const phone = document.getElementById('signup-phone')?.value.trim();
+  let phone = document.getElementById('signup-phone')?.value.trim();
   const referralCode = document.getElementById('signup-referral-code')?.value.trim() || '';
   const why = document.getElementById('signup-why')?.value.trim() || '';
   const photoPreview = document.getElementById('signup-photo-preview');
   const photoData = (photoPreview && photoPreview.style.display !== 'none') ? photoPreview.src : '';
+
+  if (!name) { toast('Full name is required', '#ef4444'); return; }
+  if (!phone) { toast('Phone number is required', '#ef4444'); return; }
   
-  if (!name) { toast('Full name is required', '#ef4444'); resetSubmitButton(); return; }
-  if (!phone) { toast('Phone number is required', '#ef4444'); resetSubmitButton(); return; }
-  if (!/^[0-9]{10,}$/.test(phone.replace(/\D/g, ''))) {
-    toast('Please enter a valid phone number (at least 10 digits)', '#ef4444');
-    resetSubmitButton();
+  // Format phone to +256XXXXXXXXX
+  let formattedPhone = phone.replace(/[\s\-\(\)]/g, '');
+  if (formattedPhone.startsWith('0')) {
+    formattedPhone = '+256' + formattedPhone.slice(1);
+  } else if (!formattedPhone.startsWith('+256')) {
+    toast('Phone number must start with +256 or 0 (e.g., +256770371720 or 0770371720)', '#ef4444');
     return;
   }
-  
-  // Check duplicate again before showing terms
+  if (!validatePhoneNumber(formattedPhone)) {
+    toast('Invalid phone number. Use +256 followed by exactly 9 digits.', '#ef4444');
+    return;
+  }
+  phone = formattedPhone;
+
+  // Check duplicate before showing terms
   if (members.some(m => m.phone === phone)) {
     toast('❌ This phone number is already registered.', '#ef4444');
-    resetSubmitButton();
     return;
   }
   db.ref('applications').orderByChild('phone').equalTo(phone).once('value', snap => {
     if (snap.exists()) {
       toast('❌ You already have a pending application.', '#ef4444');
-      resetSubmitButton();
       return;
     }
-    // Refresh settings to get latest terms
+    // Store data for final submission
+    window._tempSignupData = { name, phone, referralCode, why, photoData };
+    // Force reload settings to get latest terms
     if (db) {
       db.ref('settings').once('value', snap => {
         if (snap.val()) settings = { ...settings, ...snap.val() };
-        window._tempSignupData = { name, phone, referralCode, why, photoData };
         showFullTermsModal();
-        resetSubmitButton(); // re-enable after modal opens
       });
     } else {
-      window._tempSignupData = { name, phone, referralCode, why, photoData };
       showFullTermsModal();
-      resetSubmitButton();
     }
   });
 };
@@ -4768,32 +4866,20 @@ function resetSubmitButton() {
 }
 window.showFullTermsModal = function() {
   console.log("showFullTermsModal called");
-  // Force reload settings
-  if (db) {
-    db.ref('settings').once('value', snap => {
-      if (snap.val()) settings = { ...settings, ...snap.val() };
-      const termsText = settings.termsAndConditions || 'No terms defined yet.';
-      const signupFee = settings.signupFee || 0;
-      const termsDiv = document.getElementById('full-terms-content');
-      const feeDiv = document.getElementById('full-terms-fee');
-      if (termsDiv) termsDiv.innerHTML = `<div style="white-space: pre-wrap; line-height: 1.6;">${escapeHtml(termsText)}</div>`;
-      if (feeDiv) feeDiv.innerHTML = `<strong>💰 Signup Fee:</strong> ${money(signupFee)} – This fee will be assigned as debt upon approval and must be paid before you can log in.`;
-      document.getElementById('full-terms-agree').checked = false;
-      openOv('ov-full-terms');
-    });
-  } else {
-    const termsText = settings.termsAndConditions || 'No terms defined yet.';
-    const signupFee = settings.signupFee || 0;
-    const termsDiv = document.getElementById('full-terms-content');
-    const feeDiv = document.getElementById('full-terms-fee');
-    if (termsDiv) termsDiv.innerHTML = `<div style="white-space: pre-wrap; line-height: 1.6;">${escapeHtml(termsText)}</div>`;
-    if (feeDiv) feeDiv.innerHTML = `<strong>💰 Signup Fee:</strong> ${money(signupFee)} – This fee will be assigned as debt upon approval and must be paid before you can log in.`;
-    document.getElementById('full-terms-agree').checked = false;
-    openOv('ov-full-terms');
+  const termsText = settings.termsAndConditions || 'No terms defined yet.';
+  const signupFee = settings.signupFee || 0;
+  const termsDiv = document.getElementById('full-terms-content');
+  const feeDiv = document.getElementById('full-terms-fee');
+  if (!termsDiv || !feeDiv) {
+    console.error("Terms modal elements missing");
+    toast('Terms modal error. Please contact admin.', '#ef4444');
+    return;
   }
+  termsDiv.innerHTML = `<div style="white-space: pre-wrap; line-height: 1.6;">${escapeHtml(termsText)}</div>`;
+  feeDiv.innerHTML = `<strong>💰 Signup Fee:</strong> ${money(signupFee)} – This fee will be assigned as debt upon approval and must be paid before you can log in.`;
+  document.getElementById('full-terms-agree').checked = false;
+  openOv('ov-full-terms');
 };
-
-
 window.confirmAndSubmitSignup = function() {
   const data = window._tempSignupData;
   if (!data) {
@@ -4801,31 +4887,23 @@ window.confirmAndSubmitSignup = function() {
     return;
   }
   const { name, phone, referralCode, why, photoData } = data;
-  
-  // Check if phone already exists in approved members
+
+  // Double-check duplicate (already checked, but safe)
   if (members.some(m => m.phone === phone)) {
-    toast('❌ This phone number is already registered. Please login.', '#ef4444');
+    toast('❌ This phone number is already registered.', '#ef4444');
     return;
   }
-  
-  // Check for pending applications (status = pending) – allow if previous was rejected
   db.ref('applications').orderByChild('phone').equalTo(phone).once('value', snap => {
-    let hasPending = false;
-    snap.forEach(child => {
-      if (child.val().status === 'pending') hasPending = true;
-    });
-    if (hasPending) {
-      toast('❌ You already have a pending application. Please wait for admin approval.', '#ef4444');
+    if (snap.exists()) {
+      toast('❌ You already have a pending application.', '#ef4444');
       return;
     }
-    
     const encodedAnswers = signupAnswers.map(a => a === 'Skipped' ? btoa('skipped') : btoa(a.toLowerCase()));
     let referredBy = null;
     if (referralCode) {
       const matchedMember = members.find(m => m.id?.slice(-6) === referralCode || m.phone?.slice(-4) === referralCode);
       if (matchedMember) referredBy = matchedMember.id;
     }
-    
     db.ref('applications').push({
       name, phone, why, photoData,
       securityAnswers: encodedAnswers,
@@ -4836,16 +4914,19 @@ window.confirmAndSubmitSignup = function() {
     }).then(() => {
       toast('✅ Application submitted! Admin will review.', '#10b981');
       // Reset signup state
+      currentStep = 0;
       currentQuestionIndex = 0;
       signupAnswers = new Array(10).fill('');
       signupExtra = { name: '', phone: '', referralCode: '', why: '', photoData: '' };
       backToLogin();
-    }).catch(err => { 
-      console.error(err); 
+      delete window._tempSignupData;
+    }).catch(err => {
+      console.error(err);
       toast('❌ Submission failed. Please try again.', '#ef4444');
     });
   });
 };
+
 
 window.submitSignupWithSecurity = function() {
   const name = document.getElementById('signup-name').value.trim();
@@ -5563,121 +5644,106 @@ window.loadAppsTab = async function(tab) {
     container.innerHTML = `<div class="empty-state">Error loading data. Check console.</div>`;
   }
 };
+window.approveApplication = async function(key) {
+  const snap = await db.ref('applications/' + key).once('value');
+  const a = snap.val();
+  if (!a) return;
+  const joinDate = new Date().toISOString().split('T')[0];
+  const signupFee = settings.signupFee || 0;
 
-window.approveApplication = function(key) {
-  db.ref('applications/' + key).once('value', async snap => {
-    const a = snap.val();
-    if (!a) return;
-    const joinDate = new Date().toISOString().split('T')[0];
-    const signupFee = settings.signupFee || 0;
-    
-    const newMember = {
-      name: a.name,
-      phone: a.phone,
-      password: 'HT' + a.phone.slice(-4),
-      approved: true,
-      feeCleared: signupFee === 0,
-      joinDate: joinDate,
-      photoData: a.photoData || '',
-      referredBy: a.referredBy || null,
-      securityAnswers: a.securityAnswers || null,
-      referralCount: 0
-    };
-    
-    const ref = await db.ref('members').push(newMember);
-    
-    // Add signup fee debt
-    if (signupFee > 0) {
-      await db.ref('transactions').push({
-        memberPhone: newMember.phone,
-        memberName: newMember.name,
-        type: 'debt',
-        amount: signupFee,
-        description: `Signup fee (UGX ${signupFee.toLocaleString()}) - must be cleared before login`,
-        date: Date.now(),
-        isSignupFee: true
-      });
-    }
-    
-    // Handle referral (if any)
-    if (a.referredBy) {
-      // Increment referrer's referralCount (for display, not for reward)
-      await db.ref(`members/${a.referredBy}/referralCount`).transaction(cur => (cur || 0) + 1);
-      
-      // Give immediate referral bonus (if set)
-      if (settings.referralBonusAmount > 0) {
-        const referrer = members.find(m => m.id === a.referredBy);
-        if (referrer) {
-          await db.ref('transactions').push({
-            memberPhone: referrer.phone,
-            memberName: referrer.name,
-            type: 'deposit',
-            amount: settings.referralBonusAmount,
-            description: `Referral bonus for ${a.name} joining the group`,
-            date: Date.now()
-          });
-          // Send notification
-          const notifs = notifications[referrer.id] || [];
-          notifs.push({
-            id: Date.now(),
-            text: `🎉 You earned ${money(settings.referralBonusAmount)} referral bonus for bringing ${a.name}!`,
-            date: Date.now(),
-            read: false
-          });
-          await db.ref('notifications/' + referrer.id).set(notifs);
-          toast(`Referral bonus of ${money(settings.referralBonusAmount)} given to ${referrer.name}`, '#10b981');
-        }
-      }
-      
-      // Also send a simple notification
-      db.ref(`notifications/${a.referredBy}`).once('value', nSnap => {
-        let arr = nSnap.val() || [];
-        arr.push({ id: Date.now(), text: `${a.name} joined using your referral!`, date: Date.now(), read: false });
-        db.ref(`notifications/${a.referredBy}`).set(arr);
-      });
-    }
-    
-    db.ref('applications/' + key).update({ status: 'approved' });
-    
-    // Add to rotation
-    if (!rotation.order.includes(ref.key)) {
-      db.ref('rotation').update({ order: [...rotation.order, ref.key] });
-    }
-    
-    toast(a.name + ' approved! ✅', '#10b981');
-    loadApplications(); // refresh the modal
-    if (currentAdminTab === 'users') renderAdminTab();
-  });
-};
-window.approveReset = function(reqId) {
-  db.ref(`passwordResetRequests/${reqId}`).once('value', snap => {
-    const req = snap.val();
-    if (!req) { toast('Request not found', '#ef4444'); return; }
-    const member = members.find(m => m.id === req.memberId);
-    if (!member) { toast('Member not found', '#ef4444'); return; }
-    const newPin = member.phone.slice(-4);
-    db.ref(`members/${member.id}`).update({ password: 'HT'+newPin }).then(() => {
-      db.ref(`passwordResetRequests/${reqId}`).update({ status: 'approved', approvedAt: Date.now() });
-      // Notify member
-      db.ref(`notifications/${member.id}`).once('value', nSnap => {
-        let arr = nSnap.val() || [];
-        arr.push({ id: Date.now(), text: `Your password has been reset. Your new PIN is the last 4 digits of your phone.`, date: Date.now(), read: false });
-        db.ref(`notifications/${member.id}`).set(arr);
-      });
-      toast(`Reset approved for ${member.name}`, '#10b981');
-      // Refresh the modal if open
-      if (document.getElementById('ov-apps').classList.contains('on')) loadApplications();
-      if (currentAdminTab === 'resetrequests') renderAdminTab();
+  const newMember = {
+    name: a.name,
+    phone: a.phone,
+    password: 'HT' + a.phone.slice(-4),
+    approved: true,
+    feeCleared: false,
+    joinDate,
+    photoData: a.photoData || '',
+    referredBy: a.referredBy || null,
+    securityAnswers: a.securityAnswers || null,
+    referralCount: 0
+  };
+
+  const ref = await db.ref('members').push(newMember);
+
+  // Add signup fee as a debt (member owes it)
+  if (signupFee > 0) {
+    await db.ref('transactions').push({
+      memberPhone: newMember.phone,
+      memberName: newMember.name,
+      type: 'debt',
+      amount: signupFee,
+      description: `Signup fee (UGX ${signupFee.toLocaleString()})`,
+      date: Date.now(),
+      isSignupFee: true
     });
+    // Also add the fee directly to the profit pool (so group benefits immediately)
+    await db.ref('transactions').push({
+      memberPhone: 'system',
+      memberName: 'System',
+      type: 'profit_dist',
+      amount: signupFee,
+      description: `Signup fee from ${a.name} added to profit pool`,
+      date: Date.now() + 1
+    });
+    toast(`Signup fee of UGX ${signupFee.toLocaleString()} added as debt and to profit pool.`, '#f59e0b');
+  }
+
+  // Inside approveApplication, after creating the member, add:
+let referralNotificationId = null;
+if (a.referredBy) {
+  await db.ref(`members/${a.referredBy}/referralCount`).transaction(cur => (cur || 0) + 1);
+  const notifRef = db.ref(`notifications/${a.referredBy}`).push();
+  referralNotificationId = notifRef.key;
+  await notifRef.set({
+    id: Date.now(),
+    text: `${a.name} joined using your referral!`,
+    date: Date.now(),
+    read: false
   });
+}
+await db.ref('applications/' + key).update({
+  status: 'approved',
+  referralBonusApproved: false,
+  referralNotificationId: referralNotificationId // saved from earlier
+});
+
+  if (!rotation.order.includes(ref.key)) {
+    await db.ref('rotation').update({ order: [...rotation.order, ref.key] });
+  }
+
+  toast(a.name + ' approved! ✅', '#10b981');
+  loadAppsTab('members');
+  if (currentAdminTab === 'users') renderAdminTab();
+  computePots();
+  refreshUI();
+};
+window.approveReset = async function(reqId) {
+  const snap = await db.ref(`passwordResetRequests/${reqId}`).once('value');
+  const req = snap.val();
+  if (!req) { toast('Request not found', '#ef4444'); return; }
+  const member = members.find(m => m.id === req.memberId);
+  if (!member) { toast('Member not found', '#ef4444'); return; }
+  const newPin = member.phone.slice(-4);
+  await db.ref(`members/${member.id}`).update({ password: 'HT'+newPin });
+  await db.ref(`passwordResetRequests/${reqId}`).update({ status: 'approved', approvedAt: Date.now() });
+  // Notify member
+  const notif = await db.ref(`notifications/${member.id}`).push({
+    id: Date.now(),
+    text: `Your password has been reset. Your new PIN is the last 4 digits of your phone.`,
+    date: Date.now(),
+    read: false
+  });
+  toast(`Reset approved for ${member.name}`, '#10b981');
+  loadAppsTab('passwords');
 };
 
-window.rejectReset = function(reqId) {
-  db.ref(`passwordResetRequests/${reqId}`).update({ status: 'rejected' });
+window.rejectReset = async function(reqId) {
+  await db.ref(`passwordResetRequests/${reqId}`).update({ status: 'rejected' });
   toast('Reset request rejected', '#ef4444');
-  if (document.getElementById('ov-apps').classList.contains('on')) loadApplications();
-  if (currentAdminTab === 'resetrequests') renderAdminTab();
+  loadAppsTab('passwords');
 };
+
 window.rejectApplication = function(key) {
   db.ref('applications/'+key).update({ status: 'rejected' });
   toast('Application rejected','#ef4444');
@@ -7515,36 +7581,6 @@ window.checkPhoneAvailability = function(phone) {
     }
   });
 };
-function renderDragList() {
-  const c = document.getElementById('rot-drag-list');
-  if (!c) return;
-  c.innerHTML = '';
-  if (!dragOrder.length) {
-    c.innerHTML = '<div class="empty-state">No members in rotation. Add members first.</div>';
-    return;
-  }
-  dragOrder.forEach((id, i) => {
-    const m = members.find(m => m.id === id);
-    // Skip if member no longer exists (shouldn't happen after filtering)
-    if (!m) return;
-    const d = document.createElement('div');
-    d.className = 'rot-drag-item';
-    d.draggable = true;
-    d.innerHTML = '<span class="drag-handle">⠿</span><span style="flex:1">' + (i === 0 ? '💰 ' : '') + (i + 1) + '. ' + escapeHtml(m.name) + '</span>' + (i === 0 ? '<span class="pill-badge pill-amber">NEXT</span>' : '');
-    d.addEventListener('dragstart', e => { e.dataTransfer.setData('text/plain', i); d.classList.add('dragging'); });
-    d.addEventListener('dragend', () => d.classList.remove('dragging'));
-    d.addEventListener('dragover', e => e.preventDefault());
-    d.addEventListener('drop', e => {
-      e.preventDefault();
-      const from = +e.dataTransfer.getData('text/plain');
-      if (from === i) return;
-      const moved = dragOrder.splice(from, 1)[0];
-      dragOrder.splice(i, 0, moved);
-      renderDragList();
-    });
-    c.appendChild(d);
-  });
-}
 window.saveRotationOrder = function() {
   if (!dragOrder.length) {
     toast('No members to save', '#ef4444');
@@ -7716,21 +7752,8 @@ function populateUpcomingMemberDropdown() {
     members.filter(m => m.approved).map(m => `<option value="${m.phone}">${escapeHtml(m.name)}</option>`).join('');
 }
 function validatePhoneNumber(phone) {
-  // Remove any spaces, dashes, or parentheses
-  let cleaned = phone.replace(/[\s\-\(\)]/g, '');
-  // Check if it starts with +256
-  if (cleaned.startsWith('+256')) {
-    const afterCode = cleaned.slice(4);
-    // Must be exactly 9 digits
-    if (/^\d{9}$/.test(afterCode)) return true;
-    else return false;
-  }
-  // Also allow starting with 0 (convert to +256)
-  if (cleaned.startsWith('0')) {
-    const afterZero = cleaned.slice(1);
-    if (/^\d{9}$/.test(afterZero)) return true;
-  }
-  return false;
+  // Must be exactly +256 followed by 9 digits
+  return /^\+256\d{9}$/.test(phone);
 }
 // Open upcoming modal
 window.openUpcomingDays = function() {
@@ -8125,29 +8148,40 @@ async function loadPendingReferralBonuses() {
   container.innerHTML = html;
 }
 
-window.approveReferralBonus = async function(txId) {
+window.approveReferralBonus = async function(appKey, referrerId, referredName) {
   requirePasswordConfirmation(async () => {
-    const txSnap = await db.ref('transactions/' + txId).once('value');
-    const tx = txSnap.val();
-    if (!tx || tx.type !== 'pending_referral_bonus') return;
-    // Change to deposit and mark cleared
-    await db.ref('transactions/' + txId).update({ cleared: true, type: 'deposit', description: `Referral bonus for ${tx.referredMemberName} (approved)` });
-    // Send notification to referrer
-    const referrer = members.find(m => m.phone === tx.memberPhone);
-    if (referrer) {
-      const notifs = notifications[referrer.id] || [];
-      notifs.push({
-        id: Date.now(),
-        text: `✅ Your referral bonus of ${money(tx.amount)} has been approved and added to your balance!`,
-        date: Date.now(),
-        read: false
-      });
-      await db.ref('notifications/' + referrer.id).set(notifs);
-      toast(`Bonus approved for ${referrer.name}`, '#10b981');
+    const referrer = members.find(m => m.id === referrerId);
+    if (!referrer) {
+      toast('Referrer not found', '#ef4444');
+      return;
     }
-    computePots();
+    // 1. Add 10,000 UGX to referrer
+    await db.ref('transactions').push({
+      memberPhone: referrer.phone,
+      memberName: referrer.name,
+      type: 'profit_dist',
+      amount: 10000,
+      description: `Referral bonus for ${referredName} joining`,
+      date: Date.now()
+    });
+    // 2. Delete original referral notification
+    const appSnap = await db.ref('applications/' + appKey).once('value');
+    const app = appSnap.val();
+    if (app && app.referralNotificationId) {
+      await db.ref(`notifications/${referrerId}/${app.referralNotificationId}`).remove();
+    }
+    // 3. Send reward notification
+    await db.ref(`notifications/${referrerId}`).push({
+      id: Date.now(),
+      text: `Admin rewarded you 10,000 UGX for ${referredName} who joined using your referral code.`,
+      date: Date.now(),
+      read: false
+    });
+    // 4. Mark bonus as approved
+    await db.ref('applications/' + appKey).update({ referralBonusApproved: true });
+    toast(`Referral bonus of 10,000 UGX granted to ${referrer.name}`, '#10b981');
+    loadAppsTab('referrals'); // refresh tab
     refreshUI();
-    loadAppsTab('referrals'); // refresh the tab
   }, 'Approve Referral Bonus');
 };
 
@@ -8170,11 +8204,7 @@ window.saveCoverDays = function() {const phone = document.getElementById('cover-
     const interest = Math.round(da * interestRate);
     if (interest > 0) {writes.push(db.ref('transactions').push({memberPhone: member.phone,memberName: member.name,type: 'cover_interest',amount: interest,description: `Cover interest for ${dk} (${interestRate*100}%)`,date: new Date(dk).getTime() + 500 // slightly after deposit
         }));}});Promise.all(writes).then(() => {toast('Cover days saved! ✅', '#10b981');closeOv('ov-cover');computePots();updateHomeUI();if (isLedgerActive()) loadLedger('all');}).catch(err => {console.error(err);toast('Save failed', '#ef4444');});};
-window.addMember=function(){const name=document.getElementById('mbr-name').value.trim();const phone=document.getElementById('mbr-phone').value.trim();const pw=document.getElementById('mbr-pw').value.trim();const join=document.getElementById('mbr-join').value;const photo=document.getElementById('mbr-photo-data').value;if(!name||!phone){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('members').push({name,phone,password:pw||('HT'+phone.slice(-4)),approved:true,joinDate:join||new Date().toISOString().split('T')[0],photoData:photo||''}).then(ref=>{db.ref('rotation').update({order:[...rotation.order,ref.key]});['mbr-name','mbr-phone','mbr-pw','mbr-join','mbr-photo-data'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});const prev=document.getElementById('mbr-photo-preview');if(prev){prev.src='';prev.style.display='none';}closeOv('ov-add-mbr');toast(name+' '+t('add_member')+'! ✅','#10b981');});if (!rotation.order || rotation.order.length === 0) {
-  db.ref('rotation').update({ order: [ref.key], currentIndex: 0 });
-} else if (!rotation.order.includes(ref.key)) {
-  db.ref('rotation').update({ order: [...rotation.order, ref.key] });
-}};
+window.addMember=function(){const name=document.getElementById('mbr-name').value.trim();const phone=document.getElementById('mbr-phone').value.trim();const pw=document.getElementById('mbr-pw').value.trim();const join=document.getElementById('mbr-join').value;const photo=document.getElementById('mbr-photo-data').value;if(!name||!phone){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('members').push({name,phone,password:pw||('HT'+phone.slice(-4)),approved:true,joinDate:join||new Date().toISOString().split('T')[0],photoData:photo||''}).then(ref=>{const newOrder=rotation.order&&rotation.order.length?[...rotation.order,ref.key]:[ref.key];db.ref('rotation').update({order:newOrder,currentIndex:rotation.currentIndex||0});['mbr-name','mbr-phone','mbr-pw','mbr-join','mbr-photo-data'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});const prev=document.getElementById('mbr-photo-preview');if(prev){prev.src='';prev.style.display='none';}closeOv('ov-add-mbr');toast(name+' '+t('add_member')+'! ✅','#10b981');});};
 window.loadSettings = function() {
   document.getElementById('set-groupname').value = settings.groupName || '';
   document.getElementById('set-daily').value = settings.dailyAmount || 2500;
@@ -8590,30 +8620,28 @@ function showForgotStep() {
       <button class="btn btn-gold btn-full" onclick="checkPhoneForReset()">Next</button>
     `;
   } else if (forgotState.step === 'questions') {
-    container.innerHTML = `
-      <div class="label" style="margin-bottom: 12px;">Answer these questions to verify your identity</div>
-      <div class="fgrp">
-        <label class="flbl">1. Do you have any outstanding debt? (Yes/No)</label>
-        <select id="forgot-q1" class="inp">
-          <option value="">Select</option>
-          <option value="yes">Yes</option>
-          <option value="no">No</option>
-        </select>
-      </div>
-      <div class="fgrp">
-        <label class="flbl">2. How much money did you receive in the last rotation? (UGX)</label>
-        <input type="number" id="forgot-q2" class="inp" placeholder="Amount">
-      </div>
-      <div class="fgrp">
-        <label class="flbl">3. When did you last save? (Date)</label>
-        <input type="date" id="forgot-q3" class="inp">
-      </div>
-      <div class="fgrp">
-        <label class="flbl">4. What is your full name?</label>
-        <input type="text" id="forgot-q4" class="inp" placeholder="Your full name">
-      </div>
-      <button class="btn btn-gold btn-full" onclick="submitForgotAnswers()">Verify & Show PIN</button>
-    `;
+  container.innerHTML = `
+    <div class="label" style="margin-bottom: 12px;">Answer these questions to verify your identity</div>
+    <div class="fgrp">
+      <label class="flbl">1. What is your username (full name)?</label>
+      <input type="text" id="reset-q1" class="inp" placeholder="Your full name">
+    </div>
+    <div class="fgrp">
+      <label class="flbl">2. Do you have any outstanding debt? (Yes/No)</label>
+      <select id="reset-q2" class="inp">
+        <option value="">Select</option><option value="yes">Yes</option><option value="no">No</option>
+      </select>
+    </div>
+    <div class="fgrp">
+      <label class="flbl">3. When did you last save? (Date)</label>
+      <input type="date" id="reset-q3" class="inp">
+    </div>
+    <div class="fgrp">
+      <label class="flbl">4. How much did you save last? (UGX)</label>
+      <input type="number" id="reset-q4" class="inp" placeholder="Amount">
+    </div>
+    <button class="btn btn-gold btn-full" onclick="submitForgotAnswers()">Verify & Show PIN</button>
+  `;
   } else if (forgotState.step === 'result') {
     container.innerHTML = `
       <div class="hint-box" style="background: var(--green2); text-align: center;">
@@ -8625,17 +8653,18 @@ function showForgotStep() {
       <button class="btn btn-sec btn-full" onclick="closeOv('ov-forgot-password')">Close</button>
     `;
   } else if (forgotState.step === 'failed') {
-    container.innerHTML = `
-      <div class="hint-box" style="background: var(--red2); text-align: center;">
-        <strong>❌ Verification Failed</strong><br><br>
-        <div>We could not verify your identity with the answers provided.</div>
-        <div style="margin: 12px 0;">Please contact admin for assistance:</div>
-        <div><strong>📞 0770371720</strong></div>
-        <div><strong>✉️ lwogamata55@gmail.com</strong></div>
-      </div>
-      <button class="btn btn-amber btn-full" style="margin-top:8px" onclick="sendResetRequestDirect(members.find(m=>m.id===forgotState.memberId))">📨 Request Admin Reset Instead</button>
-      <button class="btn btn-sec btn-full" style="margin-top:4px" onclick="closeOv('ov-forgot-password')">Close</button>
-    `;
+  const member = members.find(m => m.id === forgotState.memberId);
+  container.innerHTML = `
+    <div class="hint-box" style="background: var(--red2); text-align: center;">
+      <strong>❌ Verification Failed</strong><br><br>
+      <div>We could not verify your identity with the answers provided.</div>
+      <div style="margin: 12px 0;">Please contact admin for assistance:</div>
+      <div><strong>📞 0770371720</strong></div>
+      <div><strong>✉️ lwogamata55@gmail.com</strong></div>
+    </div>
+    ${member ? `<button class="btn btn-amber btn-full" style="margin-top:8px" onclick="sendResetRequestDirect(members.find(m=>m.id===forgotState.memberId))">📨 Request Admin Reset Instead</button>` : ''}
+    <button class="btn btn-sec btn-full" style="margin-top:4px" onclick="closeOv('ov-forgot-password')">Close</button>
+  `;
   } else if (forgotState.step === 'sent') {
     container.innerHTML = `
       <div class="hint-box" style="background: var(--green2); text-align: center;">
@@ -8664,41 +8693,37 @@ function checkPhoneForReset() {
 }
 
 function submitForgotAnswers() {
-  const q1 = document.getElementById('forgot-q1')?.value;
-  const q2 = parseFloat(document.getElementById('forgot-q2')?.value);
-  const q3 = document.getElementById('forgot-q3')?.value;
-  const q4 = document.getElementById('forgot-q4')?.value.trim().toLowerCase();
+  const q1 = document.getElementById('reset-q1')?.value.trim().toLowerCase();
+  const q2 = document.getElementById('reset-q2')?.value;
+  const q3 = document.getElementById('reset-q3')?.value;
+  const q4 = parseFloat(document.getElementById('reset-q4')?.value);
   const member = members.find(m => m.id === forgotState.memberId);
   if (!member) { toast('Member not found', '#ef4444'); return; }
 
   let correct = true;
-  
-  // Q1: Debt existence
+  // 1. Full name match
+  if (member.name.toLowerCase() !== q1) correct = false;
+  // 2. Debt existence
   const hasDebt = (memberDebts[member.phone] || 0) > 0;
-  if ((q1 === 'yes' && !hasDebt) || (q1 === 'no' && hasDebt)) correct = false;
-  
-  // Q2: Last rotation payout amount (0 means member has never received a payout)
-  let lastPayout = 0;
-  transactions.forEach(tx => {
-    if (tx.memberPhone === member.phone && tx.type === 'payout' && tx.amount > lastPayout) {
-      lastPayout = tx.amount;
-    }
-  });
-  if (lastPayout > 0 && Math.abs(lastPayout - q2) > 1) correct = false;
-  if (lastPayout === 0 && q2 > 0) correct = false;
-  
-  // Q3: Last save date
+  if ((q2 === 'yes' && !hasDebt) || (q2 === 'no' && hasDebt)) correct = false;
+  // 3. Last save date
   let lastSaveDate = null;
   transactions.forEach(tx => {
     if (tx.memberPhone === member.phone && tx.type === 'deposit') {
-      const d = new Date(tx.date).toISOString().slice(0, 10);
+      const d = new Date(tx.date).toISOString().slice(0,10);
       if (!lastSaveDate || d > lastSaveDate) lastSaveDate = d;
     }
   });
   if (lastSaveDate !== q3) correct = false;
-  
-  // Q4: Full name
-  if (member.name.toLowerCase() !== q4) correct = false;
+  // 4. Last save amount – find the amount from the most recent deposit (matching lastSaveDate)
+  let lastSaveAmount = 0;
+  transactions.forEach(tx => {
+    if (tx.memberPhone === member.phone && tx.type === 'deposit') {
+      const d = new Date(tx.date).toISOString().slice(0,10);
+      if (d === lastSaveDate) lastSaveAmount = tx.amount;
+    }
+  });
+  if (Math.abs(lastSaveAmount - q4) > 1) correct = false;
 
   if (correct) {
     const pin = member.password ? member.password.replace('HT', '') : member.phone.slice(-4);
@@ -8711,6 +8736,10 @@ function submitForgotAnswers() {
 }
 
 function sendResetRequestDirect(member) {
+  if (!member) {
+    toast('Member not found', '#ef4444');
+    return;
+  }
   db.ref('passwordResetRequests').push({
     memberId: member.id,
     memberName: member.name,
@@ -8720,14 +8749,19 @@ function sendResetRequestDirect(member) {
     verified: false,
     noSecurityAnswers: true
   }).then(() => {
+    // Also notify admin
     db.ref('notifications/admin').once('value', snap => {
-  let arr = snap.val() || [];
-  arr.push({ id: Date.now(), text: `Password reset requested by ${member.name}`, date: Date.now(), read: false });
-  db.ref('notifications/admin').set(arr);
-});
+      let arr = snap.val() || [];
+      arr.push({ id: Date.now(), text: `Password reset requested by ${member.name}`, date: Date.now(), read: false });
+      db.ref('notifications/admin').set(arr);
+    });
     forgotState.step = 'sent';
     showForgotStep();
-  }).catch(err => { console.error(err); toast('Failed to send request', '#ef4444'); });
+    toast('Reset request sent to admin. You will be notified when approved.', '#10b981');
+  }).catch(err => {
+    console.error(err);
+    toast('Failed to send request', '#ef4444');
+  });
 }
 
 let loadingTimeout = null;
@@ -9116,6 +9150,290 @@ document.addEventListener('click',function(e){
   var btn=e.target.closest('.btn-gold,.btn-green,.btn-teal,.btn-purple,.auth-btn');
   if(btn)spawnSparkles(btn);
 },{passive:true});
+</script>
+
+
+<style>
+/* ══════════════════════════════════════════════════════
+   HARVEST TRUST FINANCE v2.0 — Enhanced Animations & Decorations
+   ══════════════════════════════════════════════════════ */
+
+/* ── Card entrance (fade-up-in) ───────────────────────── */
+@keyframes cardEnter {
+  from { opacity: 0; transform: translateY(22px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+.card {
+  animation: cardEnter 0.42s cubic-bezier(0.22,1,0.36,1) both;
+}
+.card:nth-child(1)  { animation-delay: 0.00s; }
+.card:nth-child(2)  { animation-delay: 0.06s; }
+.card:nth-child(3)  { animation-delay: 0.12s; }
+.card:nth-child(4)  { animation-delay: 0.18s; }
+.card:nth-child(5)  { animation-delay: 0.24s; }
+.card:nth-child(6)  { animation-delay: 0.30s; }
+
+/* ── Tab page slide transition ────────────────────────── */
+@keyframes pageSlideIn {
+  from { opacity: 0; transform: translateX(18px); }
+  to   { opacity: 1; transform: translateX(0);    }
+}
+.page.on {
+  animation: pageSlideIn 0.28s cubic-bezier(0.22,1,0.36,1) both;
+}
+
+/* ── Overlay slide-up entrance ────────────────────────── */
+@keyframes ovSlideUp {
+  from { opacity: 0; transform: translateY(40px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+.ov-box, .modal-box {
+  animation: ovSlideUp 0.32s cubic-bezier(0.22,1,0.36,1) both;
+}
+
+/* ── Gold shimmer on stat values ──────────────────────── */
+@keyframes goldShimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+.sv-gold, .stat-gold {
+  background: linear-gradient(90deg,
+    var(--gold) 20%,
+    #fff8dc     40%,
+    var(--gold) 60%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: goldShimmer 3s linear infinite;
+}
+
+/* ── Teal glow pulse on important amounts ─────────────── */
+@keyframes tealPulse {
+  0%,100% { text-shadow: 0 0 0px var(--teal); }
+  50%     { text-shadow: 0 0 12px var(--teal); }
+}
+.sv-teal {
+  animation: tealPulse 2.8s ease-in-out infinite;
+}
+
+/* ── Lion splash "almost ready" dots animation ─────────── */
+@keyframes dotBounce {
+  0%,80%,100% { transform: scale(0.6); opacity: 0.4; }
+  40%         { transform: scale(1.2); opacity: 1;   }
+}
+.lion-loading-dots span {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--gold);
+  margin: 0 3px;
+  animation: dotBounce 1.4s ease-in-out infinite both;
+}
+.lion-loading-dots span:nth-child(1) { animation-delay: -0.32s; }
+.lion-loading-dots span:nth-child(2) { animation-delay: -0.16s; }
+.lion-loading-dots span:nth-child(3) { animation-delay:  0.00s; }
+
+/* ── Button hover ripple ──────────────────────────────── */
+.btn {
+  position: relative;
+  overflow: hidden;
+}
+.btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, rgba(255,255,255,0.18) 0%, transparent 70%);
+  opacity: 0;
+  transform: scale(0.5);
+  transition: opacity 0.3s, transform 0.4s;
+  pointer-events: none;
+}
+.btn:active::after {
+  opacity: 1;
+  transform: scale(2.5);
+  transition: none;
+}
+
+/* ── Member card hover lift ───────────────────────────── */
+.mc {
+  transition: transform 0.22s cubic-bezier(0.22,1,0.36,1),
+              box-shadow 0.22s ease;
+}
+.mc:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.28);
+}
+
+/* ── Pill badge pop ───────────────────────────────────── */
+@keyframes pillPop {
+  0%   { transform: scale(0.6); opacity: 0; }
+  70%  { transform: scale(1.15); }
+  100% { transform: scale(1);   opacity: 1; }
+}
+.pill-badge {
+  animation: pillPop 0.35s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+
+/* ── Rotating coin icon on weekly receiver card ─────────── */
+@keyframes coinSpin {
+  0%   { transform: rotateY(0deg); }
+  50%  { transform: rotateY(180deg); }
+  100% { transform: rotateY(360deg); }
+}
+.coin-spin {
+  display: inline-block;
+  animation: coinSpin 2.4s ease-in-out infinite;
+  transform-style: preserve-3d;
+}
+
+/* ── Background orb slow drift ─────────────────────────── */
+@keyframes orbDrift {
+  0%   { transform: translate(0,0) scale(1);    }
+  33%  { transform: translate(30px,-20px) scale(1.07); }
+  66%  { transform: translate(-20px,15px) scale(0.95); }
+  100% { transform: translate(0,0) scale(1);    }
+}
+.bg-orb-1 { animation: orbDrift 18s ease-in-out infinite; }
+.bg-orb-2 { animation: orbDrift 22s ease-in-out infinite reverse; }
+.bg-orb-3 { animation: orbDrift 15s ease-in-out infinite 4s; }
+
+/* ── Toast slide-in from right ─────────────────────────── */
+@keyframes toastSlide {
+  from { opacity: 0; transform: translateX(120%) scale(0.85); }
+  to   { opacity: 1; transform: translateX(0)    scale(1);    }
+}
+.toast {
+  animation: toastSlide 0.32s cubic-bezier(0.22,1,0.36,1) both;
+}
+
+/* ── Input focus glow ──────────────────────────────────── */
+.inp {
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.inp:focus {
+  box-shadow: 0 0 0 3px rgba(245,158,11,0.22);
+}
+
+/* ── Progress bar shimmer ──────────────────────────────── */
+@keyframes progressShimmer {
+  from { background-position: -200% 0; }
+  to   { background-position:  200% 0; }
+}
+.prog-bar, .progress-bar {
+  background-image: linear-gradient(90deg,
+    transparent 0%,
+    rgba(255,255,255,0.25) 50%,
+    transparent 100%);
+  background-size: 200% 100%;
+  animation: progressShimmer 2s linear infinite;
+}
+
+/* ── Section header underline grow ────────────────────── */
+@keyframes underlineGrow {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+.sec-h {
+  position: relative;
+  padding-bottom: 6px;
+}
+.sec-h::after {
+  content: '';
+  position: absolute;
+  left: 0; bottom: 0;
+  height: 2px;
+  width: 100%;
+  background: linear-gradient(90deg, var(--gold), transparent);
+  transform-origin: left;
+  animation: underlineGrow 0.5s cubic-bezier(0.22,1,0.36,1) both;
+}
+
+/* ── Nav item active indicator bounce ──────────────────── */
+@keyframes navDotBounce {
+  0%   { transform: translateY(0);   }
+  40%  { transform: translateY(-5px); }
+  100% { transform: translateY(0);   }
+}
+.nav-item.active .ni-dot,
+.nav-item.on .ni-dot {
+  animation: navDotBounce 0.4s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+</style>
+
+<script>
+// ── Enhanced: add loading dots to lion splash while waiting for data ──────────
+(function() {
+  var _orig = window._onDataLoaded;
+  window._onDataLoaded = function() {
+    // Remove loading dots if present
+    var dots = document.getElementById('ht-loading-dots');
+    if (dots) dots.remove();
+    if (_orig) _orig();
+  };
+
+  // When animation finishes but data isn't ready, show animated dots
+  var _origComplete = window.completeSplashAndShowLogin;
+  window.completeSplashAndShowLogin = function() {
+    if (!dataLoaded) {
+      // Show dots below subtitle
+      var sub = document.getElementById('lion-sub');
+      if (sub && !document.getElementById('ht-loading-dots')) {
+        var dots = document.createElement('div');
+        dots.id = 'ht-loading-dots';
+        dots.className = 'lion-loading-dots';
+        dots.style.cssText = 'margin-top:14px;text-align:center;';
+        dots.innerHTML = '<span></span><span></span><span></span>';
+        sub.parentNode.insertBefore(dots, sub.nextSibling);
+      }
+    }
+    if (_origComplete) _origComplete();
+  };
+})();
+
+// ── Coin spin class on weekly receiver card icons ─────────────────────────────
+(function() {
+  function addCoinSpins() {
+    document.querySelectorAll('.weekly-receiver-card .coin-icon, .wr-icon').forEach(function(el) {
+      el.classList.add('coin-spin');
+    });
+  }
+  document.addEventListener('DOMContentLoaded', addCoinSpins);
+  // Also apply after UI updates via MutationObserver
+  var obs = new MutationObserver(function(mutations) {
+    mutations.forEach(function(m) {
+      m.addedNodes.forEach(function(n) {
+        if (n.nodeType === 1) {
+          n.querySelectorAll && n.querySelectorAll('.coin-icon, .wr-icon').forEach(function(el) {
+            el.classList.add('coin-spin');
+          });
+        }
+      });
+    });
+  });
+  document.addEventListener('DOMContentLoaded', function() {
+    obs.observe(document.body, { childList: true, subtree: true });
+  });
+})();
+// ── Page tab transition: re-trigger card animations on tab switch ─────────────
+(function() {
+  var _origGoTab = window.goTab;
+  window.goTab = function(tab, btn) {
+    if (_origGoTab) _origGoTab(tab, btn);
+    // Re-trigger card entrance animations on newly active tab
+    requestAnimationFrame(function() {
+      var activePage = document.querySelector('.page.on');
+      if (activePage) {
+        activePage.querySelectorAll('.card').forEach(function(card, i) {
+          card.style.animation = 'none';
+          card.offsetHeight; // reflow
+          card.style.animation = '';
+          card.style.animationDelay = (i * 0.06) + 's';
+        });
+      }
+    });
+  };
+})();
 </script>
 
 </body>
