@@ -2109,15 +2109,10 @@ setTimeout(() => {
 </div>
 <div class="ov" id="ov-loan-daily-preview" onclick="maybeClose(event,'ov-loan-daily-preview')">
   <div class="bs" style="text-align: center;">
-    <div class="bs-title">💰 Loan Daily Payment Preview</div>
-    <div id="loan-daily-preview-content" style="font-size: 2.5rem; font-weight: 800; margin: 20px 0; color: var(--gold);"></div>
-    <div id="loan-daily-preview-detail" style="margin-bottom: 20px;"></div>
-    <div id="loan-warning-box" style="background: rgba(239,68,68,0.1); border-left: 4px solid #ef4444; padding: 12px; border-radius: 12px; margin-bottom: 16px; text-align: left;">
-      <strong style="color: #ef4444;">⚠️ Important – Read Carefully</strong><br>
-      - Your daily required amount will increase to <span id="warning-daily-total">—</span>.<br>
-      - Missing a day will incur a <strong>penalty</strong> (interest on the missed amount).<br>
-      - You must repay the full loan within <span id="warning-weeks">—</span> weeks.<br>
-      - By submitting, you agree to these terms.
+    <div class="bs-title">💰 Loan Request Summary</div>
+    <div id="loan-preview-warning" style="background: rgba(239,68,68,0.1); border-left: 4px solid #ef4444; padding: 16px; border-radius: 12px; margin-bottom: 16px; text-align: left;">
+      <strong style="color: #ef4444;">⚠️ IMPORTANT NOTE</strong><br>
+      <div id="loan-preview-text">Loading...</div>
     </div>
     <div style="display: flex; gap: 12px; justify-content: center;">
       <button class="btn btn-gold" onclick="confirmLoanAfterPreview()">✅ Confirm & Submit</button>
@@ -2991,14 +2986,9 @@ function getDaysActive(member) {
   return Math.max(0, diff);
 }
 function getDailyRequiredForMember(memberId) {
-  const dailySavings = settings.dailyAmount || 2500;
-  const welfare = settings.welfareAmount || 500;
-  const base = dailySavings + welfare;
-  const activeLoan = loans.find(l => l.memberId === memberId && l.status === 'approved' && !l.repaid);
-  if (!activeLoan) return base;
-  const totalDays = (activeLoan.weeks || 4) * 7;
-  const dailyInstallment = Math.ceil(activeLoan.totalRepay / totalDays);
-  return base + dailyInstallment;
+  const dailySavings = (settings.dailyAmount || 2000) + (settings.welfareAmount || 500);
+  // Loan installment is no longer forced – return only daily savings + welfare
+  return dailySavings;
 }
 function getAllowedBorrowerIndex(receiverIndex, totalMembers) {
   // Returns the index of the member allowed to borrow for a given receiver index.
@@ -4190,7 +4180,7 @@ function loadLedger(typeFilter) {
   }
   
   // Show first 100 transactions
-  const toRender = filtered.slice(0, 20);
+  const toRender = filtered.slice(0, 100);
   container.innerHTML = toRender.map((tx, i) => renderTxRow(tx, i)).join('');
 }
 
@@ -5129,7 +5119,7 @@ window.openLoanRequestModal = async function() {
   loans = snap.val() ? Object.entries(snap.val()).map(([id, l]) => ({ ...l, id })) : [];
   
   if (hasActiveLoanFromApplication()) {
-    toast('A loan requested through the application is still unpaid. No new requests allowed until it is repaid.', '#ef4444');
+    toast('A loan application is still active. Please wait until it is repaid.', '#ef4444');
     return;
   }
   
@@ -5159,7 +5149,7 @@ window.openLoanRequestModal = async function() {
   const infoDiv = document.getElementById('loan-limit-info');
   infoDiv.innerHTML = `<strong>Your savings discipline:</strong> UGX ${totalDeposits.toLocaleString()}<br>
                        <strong>You can borrow up to:</strong> UGX ${suggestedMax.toLocaleString()}<br>
-                       <strong>Base interest rate:</strong> ${loanSettings.interestRate}% + ${loanSettings.extraWeeklyInterest || 2}% per extra week<br>
+                       <strong>Interest rate:</strong> ${loanSettings.interestRate}% + ${loanSettings.extraWeeklyInterest || 2}% per extra week (applied from week 1)<br>
                        <strong>Repayment period:</strong> You choose (1‑10 weeks)`;
   document.getElementById('loan-amount').max = suggestedMax;
   document.getElementById('loan-amount').value = '';
@@ -5180,18 +5170,18 @@ window.openLoanRequestModal = async function() {
       return;
     }
     const baseRate = loanSettings.interestRate || 5;
-    const extra = (weeks - 1) * (loanSettings.extraWeeklyInterest || 2);
+    const extra = weeks * (loanSettings.extraWeeklyInterest || 2);
     const totalRate = baseRate + extra;
     const interest = Math.floor(amt * totalRate / 100);
     const totalRepay = amt + interest;
-    const dailyInstallment = Math.ceil(totalRepay / (weeks * 7));
+    const dueDate = new Date(Date.now() + weeks * 7 * 86400000);
     summaryDiv.innerHTML = `<strong>Loan Summary</strong><br>
       Principal: ${money(amt)}<br>
       Interest rate: ${totalRate}% (base ${baseRate}% + ${extra}% for ${weeks} weeks)<br>
       Interest: ${money(interest)}<br>
       Total to repay: ${money(totalRepay)}<br>
-      Daily installment: ${money(dailyInstallment)} (added to your daily savings)<br>
-      <span class="micro">Your daily required amount will increase by ${money(dailyInstallment)} until the loan is fully repaid.</span>`;
+      Due date: ${dueDate.toLocaleDateString()}<br>
+      <span class="micro">You can repay any amount at any time, but the full amount must be cleared by the due date. Late payment incurs a penalty.</span>`;
     summaryDiv.style.display = 'block';
   };
   amountInput.oninput = updateSummary;
@@ -5199,9 +5189,11 @@ window.openLoanRequestModal = async function() {
   updateSummary();
   openOv('ov-loan-request');
 };
+
 let tempLoanData = null; // temporary storage before confirmation
 
 window.submitLoanWithQuestions = async function() {
+  // Refresh loans from Firebase
   const snap = await db.ref('loans').once('value');
   loans = snap.val() ? Object.entries(snap.val()).map(([id, l]) => ({ ...l, id })) : [];
   
@@ -5215,7 +5207,7 @@ window.submitLoanWithQuestions = async function() {
   if (!amount || amount <= 0) { toast('Enter a valid amount', '#ef4444'); return; }
   if (!weeks) { toast('Select repayment period', '#ef4444'); return; }
   
-  // Collect answers
+  // Collect answers (questions 2 to 10)
   const answers = [];
   for (let i = 1; i <= 8; i++) {
     const el = document.getElementById(`loan-q${i}`);
@@ -5237,6 +5229,7 @@ window.submitLoanWithQuestions = async function() {
   const extra = document.getElementById('loan-q8')?.value.trim() || '';
   answers.push(extra);
   
+  // Check borrowing limits
   computePots();
   let totalDeposits = 0;
   transactions.forEach(tx => { if (tx.memberPhone === currentUser.phone && tx.type === 'deposit') totalDeposits += tx.amount; });
@@ -5247,6 +5240,7 @@ window.submitLoanWithQuestions = async function() {
   if (amount > maxAllowed) { toast(`Request exceeds your limit of UGX ${maxAllowed.toLocaleString()}`, '#ef4444'); return; }
   if (groupProfit <= 0) { toast('No profit pool available for loans', '#ef4444'); return; }
   
+  // Calculate interest
   const baseRate = loanSettings.interestRate || 5;
   const extraRate = (weeks - 1) * (loanSettings.extraWeeklyInterest || 2);
   const totalRate = baseRate + extraRate;
@@ -5254,28 +5248,25 @@ window.submitLoanWithQuestions = async function() {
   const totalRepay = amount + interest;
   const dueDate = Date.now() + weeks * 7 * 86400000;
   const dailyInstallment = Math.ceil(totalRepay / (weeks * 7));
-  const dailyTotal = (settings.dailyAmount || 2000) + (settings.welfareAmount || 500) + dailyInstallment;
+  const dailyTotal = (settings.dailyAmount || 2000) + (settings.welfareAmount || 500); // no forced installment
   
+  // Store data for final submission
   window._pendingLoanData = {
     amount, weeks, answers, totalRate, interest, totalRepay, dueDate, dailyInstallment, dailyTotal
   };
   
-  const previewDiv = document.getElementById('loan-daily-preview-content');
-  const detailDiv = document.getElementById('loan-daily-preview-detail');
-  const warningDailySpan = document.getElementById('warning-daily-total');
-  const warningWeeksSpan = document.getElementById('warning-weeks');
-  if (previewDiv && detailDiv && warningDailySpan && warningWeeksSpan) {
-    previewDiv.innerHTML = `${money(dailyInstallment)} <span style="font-size: 1rem;">per day</span>`;
-    detailDiv.innerHTML = `
-      <div>Loan principal: ${money(amount)}</div>
-      <div>Interest rate: ${totalRate}% (${baseRate}% + ${extraRate}% for ${weeks} weeks)</div>
-      <div>Total to repay: ${money(totalRepay)} over ${weeks} weeks</div>
-      <div>Your current daily savings + welfare = ${money((settings.dailyAmount||2000)+(settings.welfareAmount||500))}</div>
-      <div style="margin-top: 12px;"><strong>Your new daily required amount:</strong><br><span style="font-size:1.5rem; color:var(--green);">${money(dailyTotal)}</span></div>
-      <div class="micro muted">This includes the loan installment of ${money(dailyInstallment)}.</div>
-    `;
-    warningDailySpan.innerText = money(dailyTotal);
-    warningWeeksSpan.innerText = weeks;
+  // Build the single warning note
+  const warningText = `
+    <div style="margin-bottom: 8px;">You are requesting a loan of <strong>${money(amount)}</strong> to be repaid in <strong>${weeks} week(s)</strong>.</div>
+    <div>Total to repay: <strong>${money(totalRepay)}</strong> (${totalRate}% interest).</div>
+    <div>You may repay any amount at any time, but the full loan must be cleared by <strong>${new Date(dueDate).toLocaleDateString()}</strong>.</div>
+    <div>Late repayment will incur an overdue penalty (${loanSettings.overduePenalty || 2}% of remaining balance).</div>
+    <div class="micro muted" style="margin-top: 8px;">Your daily savings and welfare deductions continue as usual. Loan repayment is optional each day.</div>
+  `;
+  
+  const previewTextDiv = document.getElementById('loan-preview-text');
+  if (previewTextDiv) {
+    previewTextDiv.innerHTML = warningText;
     openOv('ov-loan-daily-preview');
   } else {
     toast('Preview modal missing', '#ef4444');
@@ -6676,7 +6667,7 @@ window.updateTxPreview = function() {
   let remaining = amount;
   const lines = [];
 
-  // 1. Clear debts
+  // 1. Clear debts (if any)
   const debt = memberDebts[phone] || 0;
   if (debt > 0) {
     const clear = Math.min(debt, remaining);
@@ -6686,12 +6677,12 @@ window.updateTxPreview = function() {
     }
   }
 
-  // 2. Loan repayment
+  // 2. Loan repayment (optional – any amount)
   const loan = memberLoans[phone] || 0;
   if (loan > 0) {
     const repay = Math.min(loan, remaining);
     if (repay > 0) {
-      lines.push(`💳 Repay loan: ${money(repay)} → pool`);
+      lines.push(`💳 Repay loan (optional): ${money(repay)} → pool`);
       remaining -= repay;
     }
   }
@@ -6699,36 +6690,32 @@ window.updateTxPreview = function() {
   const dailyAmount = settings.dailyAmount || 2000;
   const welfareAmount = settings.welfareAmount || 500;
   const requiredPerDay = dailyAmount + welfareAmount;
+  const todayStart = new Date().setHours(0, 0, 0, 0);
 
-  // 3. Get today's status (with prepaid)
-  const { deficit, surplus, paidDaily, welfarePaid, prepaidUsed, newPrepaid, totalRequired, totalAvailable } = getTodayStatus(member);
-  
-  // Debug (remove later)
-  console.log(`Member ${member.name}: prepaid=${member.prepaid}, paidDaily=${paidDaily}, prepaidUsed=${prepaidUsed}, newPrepaid=${newPrepaid}, totalAvailable=${totalAvailable}, totalRequired=${totalRequired}`);
-
-  if (prepaidUsed > 0) {
-    lines.push(`🔁 Prepaid used: ${money(prepaidUsed)} from previous day`);
-  }
-  if (member.prepaid > 0) {
-    lines.push(`📦 Available prepaid: ${money(member.prepaid)}`);
-  }
-
-  const dailyNeeded = Math.max(0, dailyAmount - paidDaily);
-  const welfareNeeded = welfarePaid ? 0 : welfareAmount;
-  const totalNeeded = dailyNeeded + welfareNeeded;
+  // Today's status (without loan installment)
+  let paidDaily = 0;
+  let welfarePaid = false;
+  transactions.forEach(tx => {
+    if (tx.memberPhone === member.phone && tx.date >= todayStart && tx.date < todayStart + 86400000) {
+      if (tx.type === 'deposit') paidDaily += tx.amount;
+      if (tx.type === 'welfare') welfarePaid = true;
+    }
+  });
+  const neededDaily = Math.max(0, dailyAmount - paidDaily);
+  const neededWelfare = welfarePaid ? 0 : welfareAmount;
+  const totalNeeded = neededDaily + neededWelfare;
 
   let dailyUse = 0, welfareUse = 0;
-
   if (remaining >= totalNeeded) {
-    dailyUse = dailyNeeded;
-    welfareUse = welfareNeeded;
+    dailyUse = neededDaily;
+    welfareUse = neededWelfare;
     remaining -= totalNeeded;
     lines.push(`📆 Today: complete – ${money(dailyUse)} savings + ${money(welfareUse)} welfare`);
   } else {
-    dailyUse = Math.min(dailyNeeded, remaining);
+    dailyUse = Math.min(neededDaily, remaining);
     remaining -= dailyUse;
-    if (remaining > 0 && welfareNeeded > 0) {
-      welfareUse = Math.min(welfareNeeded, remaining);
+    if (remaining > 0 && neededWelfare > 0) {
+      welfareUse = Math.min(neededWelfare, remaining);
       remaining -= welfareUse;
     }
     lines.push(`📆 Today: partial – ${money(dailyUse)} savings, ${money(welfareUse)} welfare`);
@@ -6738,34 +6725,28 @@ window.updateTxPreview = function() {
     }
   }
 
-  // 4. Future days (only if today fully covered)
+  // Future days (only if today fully covered)
   if (totalNeeded - (dailyUse + welfareUse) === 0) {
-    let currentDayStart = new Date().setHours(0, 0, 0, 0) + 86400000;
+    let futureDay = todayStart + 86400000;
     let daysCovered = 0;
     while (remaining >= requiredPerDay && daysCovered < 30) {
       remaining -= requiredPerDay;
       daysCovered++;
-      const date = new Date(currentDayStart).toLocaleDateString();
+      const date = new Date(futureDay).toLocaleDateString();
       lines.push(`📅 ${date}: full day (${money(dailyAmount)} savings + ${money(welfareAmount)} welfare)`);
-      currentDayStart += 86400000;
+      futureDay += 86400000;
     }
     if (remaining > 0 && daysCovered < 30) {
-      const date = new Date(currentDayStart).toLocaleDateString();
+      const date = new Date(futureDay).toLocaleDateString();
       let dailyPortion = Math.min(remaining, dailyAmount);
       let welfarePortion = Math.max(0, remaining - dailyPortion);
       lines.push(`⚡ ${date}: partial – ${money(dailyPortion)} savings, ${money(welfarePortion)} welfare`);
     }
   }
 
-  // 5. Surplus after all days
+  // Surplus
   if (remaining > 0) {
     lines.push(`📦 Surplus: ${money(remaining)} (extra balance)`);
-    const totalPrepaidAfter = newPrepaid + remaining;
-    const tomorrowRequired = Math.max(0, requiredPerDay - totalPrepaidAfter);
-    lines.push(`🔮 Tomorrow's required will be ${money(tomorrowRequired)} (after using surplus)`);
-  } else if (newPrepaid > 0) {
-    const tomorrowRequired = Math.max(0, requiredPerDay - newPrepaid);
-    lines.push(`🔮 Tomorrow's required will be ${money(tomorrowRequired)} (due to prepaid)`);
   }
 
   if (lines.length === 0) {
@@ -7959,7 +7940,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
   const now = depositTimestamp || Date.now();
   const todayStart = new Date(now).setHours(0, 0, 0, 0);
 
-  // 1. Clear debts
+  // 1. Clear debts (fines/penalties) – goes to profit pool
   const debtOwed = memberDebts[member.phone] || 0;
   if (debtOwed > 0 && remaining > 0) {
     const a = Math.min(debtOwed, remaining);
@@ -7974,7 +7955,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
     remaining -= a;
   }
 
-  // 2. Repay loans
+  // 2. Repay loan (flexible – any amount, no daily requirement)
   const loanOwed = memberLoans[member.phone] || 0;
   if (loanOwed > 0 && remaining > 0) {
     const a = Math.min(loanOwed, remaining);
@@ -7993,29 +7974,33 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
   const welfareAmount = settings.welfareAmount || 500;
   const requiredPerDay = dailyAmount + welfareAmount;
 
-  // 3. Get today's status (including prepaid)
-  let { deficit, surplus, paidDaily, welfarePaid, requiredPerDay: todayRequired, prepaidUsed, newPrepaid } = getTodayStatus(member);
-  
-  // Prepaid is already applied in getTodayStatus, so we only need to handle the new deposit.
-  // We'll cover today's remaining requirement (deficit) using the new deposit.
+  // 3. Apply remaining to today's requirement (daily savings + welfare)
+  let paidDaily = 0;
+  let welfarePaid = false;
+  transactions.forEach(tx => {
+    if (tx.memberPhone === member.phone && tx.date >= todayStart && tx.date < todayStart + 86400000) {
+      if (tx.type === 'deposit') paidDaily += tx.amount;
+      if (tx.type === 'welfare') welfarePaid = true;
+    }
+  });
+  const neededDaily = Math.max(0, dailyAmount - paidDaily);
+  const neededWelfare = welfarePaid ? 0 : welfareAmount;
+  const totalNeeded = neededDaily + neededWelfare;
+
   let dailyUse = 0, welfareUse = 0;
-  const dailyNeeded = Math.max(0, dailyAmount - paidDaily);
-  const welfareNeeded = welfarePaid ? 0 : welfareAmount;
-  const totalNeeded = dailyNeeded + welfareNeeded;
-  
   if (remaining >= totalNeeded) {
-    dailyUse = dailyNeeded;
-    welfareUse = welfareNeeded;
+    dailyUse = neededDaily;
+    welfareUse = neededWelfare;
     remaining -= totalNeeded;
   } else {
-    dailyUse = Math.min(dailyNeeded, remaining);
+    dailyUse = Math.min(neededDaily, remaining);
     remaining -= dailyUse;
-    if (remaining > 0 && welfareNeeded > 0) {
-      welfareUse = Math.min(welfareNeeded, remaining);
+    if (remaining > 0 && neededWelfare > 0) {
+      welfareUse = Math.min(neededWelfare, remaining);
       remaining -= welfareUse;
     }
   }
-  
+
   if (dailyUse > 0) {
     writes.push({
       memberPhone: member.phone,
@@ -8037,15 +8022,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
       autoDeduction: true,
     });
   }
-  
-  // Update prepaid if any surplus remains after today
-  const totalPaidToday = paidDaily + dailyUse;
-  const totalWelfareToday = (welfarePaid ? welfareAmount : 0) + welfareUse;
-  const finalSurplus = Math.max(0, (totalPaidToday + prepaidUsed) - dailyAmount);
-  if (finalSurplus !== (member.prepaid || 0)) {
-    await updateMemberPrepaid(member.id, finalSurplus);
-  }
-  
+
   // 4. Future days (only if today fully covered)
   if (totalNeeded - (dailyUse + welfareUse) === 0) {
     let currentDayStart = todayStart + 86400000;
@@ -8107,8 +8084,8 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
       }
     }
   }
-  
-  // 5. Surplus after all days
+
+  // 5. Any leftover becomes surplus balance
   if (remaining > 0) {
     writes.push({
       memberPhone: member.phone,
@@ -8118,11 +8095,8 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
       description: 'Excess savings (surplus)',
       date: now + 2000,
     });
-    // Add to prepaid for future days
-    const currentPrepaid = (member.prepaid || 0);
-    await updateMemberPrepaid(member.id, currentPrepaid + remaining);
   }
-  
+
   return writes;
 }
 async function loadPendingReferralBonuses() {
