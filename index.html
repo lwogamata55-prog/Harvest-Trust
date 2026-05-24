@@ -7018,13 +7018,12 @@ window.updateTxPreview = function() {
   const member = members.find(m => m.phone === phone);
   if (!member) return;
 
-  // Force fresh calculation of debts & loans
-  computePots();
+  computePots(); // ensure latest debts/loans
 
   let remaining = amount;
   const lines = [];
 
-  // 1. Today's required amount (daily + welfare)
+  // 1. Today's requirement
   const dailyAmount = settings.dailyAmount || 2000;
   const welfareAmount = settings.welfareAmount || 500;
   const requiredToday = dailyAmount + welfareAmount;
@@ -7054,20 +7053,18 @@ window.updateTxPreview = function() {
     lines.push(`✅ Today's requirement already satisfied.`);
   }
 
-  // 2. Combine debt + loan as total outstanding
+  // 2. Combined outstanding (debt + loan)
   const debtOwed = memberDebts[member.phone] || 0;
   const loanOwed = memberLoans[member.phone] || 0;
-  const totalOutstanding = debtOwed + loanOwed;
-
+  let totalOutstanding = debtOwed + loanOwed;
+  let usedForOutstanding = 0;
   if (totalOutstanding > 0 && remaining > 0) {
-    const usedForOutstanding = Math.min(remaining, totalOutstanding);
+    usedForOutstanding = Math.min(remaining, totalOutstanding);
     remaining -= usedForOutstanding;
-
     const debtPortion = Math.min(usedForOutstanding, debtOwed);
     const loanPortion = usedForOutstanding - debtPortion;
-
     lines.push(`🧹 **Outstanding cleared:** ${money(usedForOutstanding)} (debt: ${money(debtPortion)}, loan: ${money(loanPortion)})`);
-    if (remaining === 0) {
+    if (remaining === 0 && usedForOutstanding < totalOutstanding) {
       lines.push(`⚠️ Remaining outstanding: ${money(totalOutstanding - usedForOutstanding)}`);
     }
   } else if (totalOutstanding > 0) {
@@ -7076,10 +7073,12 @@ window.updateTxPreview = function() {
     lines.push(`✅ No outstanding debt or loans.`);
   }
 
-  // 3. Prepay future days (only if today fully satisfied AND no outstanding remains)
+  // Update remaining outstanding after clearing
+  const remainingOutstanding = totalOutstanding - usedForOutstanding;
   const todayFullyCovered = (usedToday === deficitToday);
-  const outstandingAfter = totalOutstanding - (remaining > 0 ? Math.min(remaining, totalOutstanding) : 0);
-  if (todayFullyCovered && outstandingAfter === 0 && remaining > 0) {
+
+  // 3. Prepay future days (only if today fully satisfied AND no outstanding remains)
+  if (todayFullyCovered && remainingOutstanding === 0 && remaining > 0) {
     let futureDayStart = todayStart + 86400000;
     let daysFullyCovered = 0;
     let remainingPartial = remaining;
@@ -7102,7 +7101,7 @@ window.updateTxPreview = function() {
     if (remainingPartial === 0 && daysFullyCovered > 0) {
       lines.push(`✨ Surplus fully allocated to ${daysFullyCovered} future day(s).`);
     }
-  } else if (remaining > 0 && (usedToday < deficitToday || totalOutstanding > 0)) {
+  } else if (remaining > 0) {
     lines.push(`💡 Remaining ${money(remaining)} will be used once today's requirement is met and outstanding cleared.`);
   }
 
