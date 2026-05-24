@@ -1310,26 +1310,47 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
 <script>
 /* ── Splash+Loading controller — waits for animation AND Firebase data ── */
 (function(){
-  var _animDone=false,_dataReady=false,_shown=false;
-  function tryShow(){
-    if(_shown||!_animDone||!_dataReady)return;
-    _shown=true;
-    var bs=document.getElementById('blank-screen');
-    if(bs){bs.classList.add('bs-exit');setTimeout(function(){bs.style.display='none';},900);}
-    var ls=document.getElementById('login-screen');
-    if(ls)ls.classList.remove('hidden');
+  var _dataReady = false;
+  var _badgeReady = false;      // new: badge animation finished
+  var _shown = false;
+
+  function tryShow() {
+    if (_shown) return;
+    // Only show login when BOTH data is loaded AND badge animation is complete
+    if (_dataReady && _badgeReady) {
+      _shown = true;
+      var bs = document.getElementById('blank-screen');
+      if (bs) {
+        bs.classList.add('bs-exit');
+        setTimeout(function() { bs.style.display = 'none'; }, 900);
+      }
+      var ls = document.getElementById('login-screen');
+      if (ls) ls.classList.remove('hidden');
+    }
   }
- window._onDataLoaded = function(){
-  if(!_dataReady){
+
+  window._onDataLoaded = function() {
+    if (!_dataReady) {
+      _dataReady = true;
+      // Generate anniversary badge using loaded settings
+      generateAnniversaryBadge();
+      // Badge will call _onBadgeReady() when its animation finishes
+    }
+  };
+
+  window._onBadgeReady = function() {
+    if (!_badgeReady) {
+      _badgeReady = true;
+      tryShow();
+    }
+  };
+
+  window.completeSplashAndShowLogin = function() {
+    // Force ready states (fallback in case something fails)
     _dataReady = true;
-    // Now generate the anniversary badge using loaded settings
-    generateAnniversaryBadge();
+    _badgeReady = true;
     tryShow();
-  }
-};
-  window.completeSplashAndShowLogin=function(){if(!_animDone){_animDone=true;tryShow();}};
-  window.forceShowLogin=function(){_animDone=true;_dataReady=true;tryShow();};
-  setTimeout(window.forceShowLogin,16000);
+  };
 })();
 </script>
 
