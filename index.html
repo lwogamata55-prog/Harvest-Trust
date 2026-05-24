@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <meta name="theme-color" content="#060e1a">
 <title>Harvest Trust Finance v2.0 · Lwogamata</title>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -298,6 +299,18 @@ body {
   opacity: 0;
   transform: translateY(-100vh);
   animation: fallLetter 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+}
+/* Letter‑by‑letter fall + violent shake (up to 45°) */
+@keyframes letterFallShake {
+  0% { opacity: 0; transform: translateY(-100vh) rotate(0deg); }
+  8% { opacity: 1; transform: translateY(0) rotate(0deg); }
+  12% { transform: translateY(0) rotate(-45deg); }   /* increased to 45° */
+  16% { transform: translateY(0) rotate(45deg); }
+  20% { transform: translateY(0) rotate(-30deg); }
+  24% { transform: translateY(0) rotate(30deg); }
+  28% { transform: translateY(0) rotate(-20deg); }
+  32% { transform: translateY(0) rotate(20deg); }
+  100% { opacity: 1; transform: translateY(0) rotate(0deg); }
 }
 @keyframes fallYears {
   0% { opacity: 0; transform: translateY(-100vh); }
@@ -869,27 +882,16 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
 #ni-rewards.on .ico {
   transform: scale(1.1) translateY(-10px) !important;
 }
-/* Carousel banner – image only, full width, no text */
-#t-home .carousel-banner .notice-title,
-#t-home .carousel-banner .notice-content {
-  display: none !important;
-}
-#t-home .carousel-banner .c-slide {
-  padding: 0 !important;
-}
+/* Carousel banner – full width image, but text visible */
 #t-home .carousel-banner .notice-image {
   width: 100% !important;
-  max-height: 200px !important;  /* adjust as needed */
+  max-height: 200px !important;
   object-fit: cover !important;
   border-radius: 0 !important;
-  margin: 0 !important;
+  margin: 0 0 8px 0 !important;
 }
 #t-home .carousel-banner {
-  padding: 0 !important;
   border-radius: 12px !important;
-  overflow: hidden !important;
-}
-.carousel-banner .carousel-viewport {
   overflow: hidden !important;
 }
 /* Home tab compact layout – fit without scrolling */
@@ -1065,147 +1067,243 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
 <body>
 <style>
 /* ═══════════════════════════════════════════════════════════
-   HARVEST TRUST — ENHANCED FALLING-LETTERS SPLASH SCREEN
+   BLANK SPLASH SCREEN – MATCHES APP THEME (TEAL)
    ═══════════════════════════════════════════════════════════ */
 #blank-screen {
-  position: fixed; inset: 0;
-  background: linear-gradient(160deg, #07080f 0%, #0d1117 40%, #0a1628 70%, #06080d 100%);
+  position: fixed;
+  inset: 0;
+  background: var(--bg);                     /* use app background */
   z-index: 20000;
-  display: flex; align-items: center; justify-content: center;
-  flex-direction: column; text-align: center;
-  padding: 20px; overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  text-align: center;
+  padding: 20px;
+  overflow: hidden;
   transition: opacity 0.85s cubic-bezier(.4,0,.2,1), transform 0.85s cubic-bezier(.4,0,.2,1);
 }
-#blank-screen.bs-exit { opacity: 0; transform: scale(1.06); pointer-events: none; }
+#blank-screen.bs-exit {
+  opacity: 0;
+  transform: scale(1.06);
+  pointer-events: none;
+}
+/* floating orbs using app colours */
 .bs-orb {
-  position: absolute; border-radius: 50%;
-  filter: blur(80px); pointer-events: none;
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
   animation: bsOrbDrift ease-in-out infinite alternate;
 }
-.bs-orb-1 { width:380px;height:380px;background:radial-gradient(circle,rgba(245,158,11,.14) 0%,transparent 70%);top:-130px;left:-130px;animation-duration:10s; }
-.bs-orb-2 { width:300px;height:300px;background:radial-gradient(circle,rgba(6,182,212,.10) 0%,transparent 70%);bottom:-90px;right:-90px;animation-duration:13s;animation-delay:-4s; }
-.bs-orb-3 { width:220px;height:220px;background:radial-gradient(circle,rgba(16,185,129,.08) 0%,transparent 70%);top:50%;left:-60px;animation-duration:15s;animation-delay:-7s; }
-.bs-orb-4 { width:200px;height:200px;background:radial-gradient(circle,rgba(139,92,246,.07) 0%,transparent 70%);top:8%;right:-50px;animation-duration:11s;animation-delay:-2s; }
-@keyframes bsOrbDrift { 0%{transform:translate(0,0)scale(1);} 100%{transform:translate(28px,18px)scale(1.1);} }
-.bs-star {
-  position: absolute; border-radius: 50%; pointer-events: none;
-  animation: bsStarFloat linear infinite;
+.bs-orb-1 {
+  width: 380px; height: 380px;
+  background: radial-gradient(circle, var(--gold3), transparent 70%);
+  top: -130px; left: -130px;
+  animation-duration: 10s;
 }
-@keyframes bsStarFloat {
-  0%   { transform:translateY(105vh) rotate(0deg); opacity:0; }
-  6%   { opacity:1; }
-  92%  { opacity:.7; }
-  100% { transform:translateY(-20px) rotate(1080deg); opacity:0; }
+.bs-orb-2 {
+  width: 300px; height: 300px;
+  background: radial-gradient(circle, var(--teal2), transparent 70%);
+  bottom: -90px; right: -90px;
+  animation-duration: 13s;
+  animation-delay: -4s;
 }
-.bs-ring-wrap {
-  position:absolute; width:340px; height:340px;
-  top:50%; left:50%; transform:translate(-50%,-50%); pointer-events:none;
+.bs-orb-3 {
+  width: 220px; height: 220px;
+  background: radial-gradient(circle, var(--green2), transparent 70%);
+  top: 50%; left: -60px;
+  animation-duration: 15s;
+  animation-delay: -7s;
 }
-.bs-ring {
-  position:absolute; inset:0; border-radius:50%;
-  border:1px solid transparent;
-  background:conic-gradient(from 0deg,rgba(245,158,11,.35) 0%,transparent 20%,rgba(6,182,212,.25) 50%,transparent 70%,rgba(245,158,11,.35) 100%) border-box;
-  -webkit-mask:linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite:destination-out; mask-composite:exclude;
-  animation:bsRingRotate 14s linear infinite;
+@keyframes bsOrbDrift {
+  0% { transform: translate(0,0) scale(1); }
+  100% { transform: translate(28px, 18px) scale(1.1); }
 }
-.bs-ring-2 { position:absolute;inset:20px;border-radius:50%;border:1px solid rgba(245,158,11,.1);animation:bsRingRotate 9s linear infinite reverse; }
-.bs-ring-3 { position:absolute;inset:40px;border-radius:50%;border:1px dashed rgba(6,182,212,.07);animation:bsRingRotate 20s linear infinite; }
-@keyframes bsRingRotate { to { transform:rotate(360deg); } }
-.bs-shimmer {
-  position:absolute; top:0; left:-100%; width:55%; height:100%;
-  background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.04) 50%,transparent 100%);
-  animation:bsShimmerSlide 5s ease-in-out 2.5s infinite; pointer-events:none; z-index:3;
-}
-@keyframes bsShimmerSlide { 0%{left:-60%;} 100%{left:150%;} }
+/* falling letters – now use teal gradient */
 #blank-screen .fall-letter,
 #blank-screen .grow-letter {
   font-size: 3.2rem !important;
   font-family: 'Syne', sans-serif !important;
   font-weight: 900 !important;
   display: inline-block !important;
-  background: linear-gradient(135deg, #f59e0b 0%, #fcd34d 45%, #f97316 100%) !important;
-  -webkit-background-clip: text !important; background-clip: text !important;
+  background: linear-gradient(135deg, var(--teal) 0%, var(--gold) 45%, var(--teal) 100%) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
   color: transparent !important;
-  filter: drop-shadow(0 0 16px rgba(245,158,11,.6));
+  filter: drop-shadow(0 0 16px var(--teal2));
   letter-spacing: 3px;
 }
 #blank-screen .fall-letter {
-  opacity:0; transform:translateY(-100vh);
-  animation:bsElasticFall 0.72s cubic-bezier(0.34,1.3,0.64,1) forwards;
+  opacity: 0;
+  transform: translateY(-100vh);
+  animation: bsElasticFall 0.72s cubic-bezier(0.34,1.3,0.64,1) forwards;
 }
 #blank-screen .grow-letter {
-  transform:scale(0); opacity:0;
-  animation:bsGrow 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards;
+  transform: scale(0);
+  opacity: 0;
+  animation: bsGrow 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards;
 }
 @keyframes bsElasticFall {
-  0%   {opacity:0;transform:translateY(-100vh) rotate(-12deg);}
-  50%  {opacity:1;transform:translateY(15px) rotate(2.5deg);}
-  70%  {transform:translateY(-5px) rotate(-1deg);}
-  100% {opacity:1;transform:translateY(0) rotate(0);}
+  0%   { opacity: 0; transform: translateY(-100vh) rotate(-12deg); }
+  50%  { opacity: 1; transform: translateY(15px) rotate(2.5deg); }
+  70%  { transform: translateY(-5px) rotate(-1deg); }
+  100% { opacity: 1; transform: translateY(0) rotate(0); }
 }
 @keyframes bsGrow {
-  0%   {transform:scale(0) rotate(-8deg);opacity:0;}
-  55%  {transform:scale(1.18) rotate(2deg);opacity:1;}
-  100% {transform:scale(1) rotate(0);opacity:1;}
+  0%   { transform: scale(0) rotate(-8deg); opacity: 0; }
+  55%  { transform: scale(1.18) rotate(2deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
 }
-#falling-container {
-  position:relative;z-index:2;
-  display:flex;flex-direction:column;align-items:center;gap:4px;
-}
-.word-row { display:flex;gap:1px;flex-wrap:wrap;justify-content:center; }
-.letter-group { display:flex;gap:1px; }
+/* other splash elements (tagline, years badge, loading row) – reuse app colours */
 #bs-tagline {
-  position:relative;z-index:2;margin-top:12px;
-  font-family:'DM Sans',sans-serif;font-size:.72rem;
-  color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:3.5px;
-  opacity:0;animation:bsFadeUp .7s 4s ease forwards;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.72rem;
+  color: var(--t3);
+  text-transform: uppercase;
+  letter-spacing: 3.5px;
+  opacity: 0;
+  animation: bsFadeUp 0.7s 4s ease forwards;
 }
-@keyframes bsFadeUp { from{opacity:0;transform:translateY(10px);} to{opacity:1;transform:translateY(0);} }
-#years-container {
-  position:relative;z-index:2;margin-top:22px;
-  opacity:0;transform:translateY(18px);
-  transition:opacity .85s ease,transform .85s ease;text-align:center;
-}
-#years-container.show { opacity:1;transform:translateY(0); }
+/* Remove the box – no border, no background, no padding, no special shape */
 #years-badge {
-  display:inline-flex;align-items:center;gap:10px;
-  background:linear-gradient(135deg,rgba(245,158,11,.12),rgba(6,182,212,.07));
-  border:1px solid rgba(245,158,11,.28);border-radius:99px;
-  padding:7px 20px 7px 14px;backdrop-filter:blur(10px);
-  box-shadow:0 0 20px rgba(245,158,11,.12),inset 0 0 12px rgba(245,158,11,.04);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 12px;
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  backdrop-filter: none !important;
+  box-shadow: none !important;
 }
-#years-icon { font-size:1.3rem;animation:bsIconSpin 3s ease-in-out infinite; }
-@keyframes bsIconSpin { 0%,100%{transform:scale(1) rotate(0);} 50%{transform:scale(1.2) rotate(12deg);} }
-#years-text {
-  font-family:'Syne',sans-serif;font-size:1.1rem;font-weight:800;
-  background:linear-gradient(90deg,#f59e0b,#fcd34d,#06b6d4);
-  -webkit-background-clip:text;background-clip:text;color:transparent;
+
+/* Main anniversary text – smaller but still bold */
+#years-text,
+#years-text span,
+.years-text-container span,
+.years-text-container .fall-letter,
+.years-text-container .grow-letter {
+  font-size: 1.6rem !important;
+  font-weight: 800 !important;
+  font-family: 'Syne', sans-serif !important;
+  background: linear-gradient(135deg, #f59e0b, #06b6d4, #8b5cf6) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  color: transparent !important;
+  letter-spacing: 2px !important;
 }
-#years-sub { font-size:.68rem;color:rgba(255,255,255,.38);letter-spacing:.5px;margin-top:3px; }
+
+/* Subtitle – also reduce a bit */
+#years-sub,
+#years-sub span {
+  font-size: 0.9rem !important;
+  font-weight: 500 !important;
+}
+#years-icon {
+  font-size: 1.3rem;
+  animation: bsIconSpin 3s ease-in-out infinite;
+}
+@keyframes bsIconSpin {
+  0%,100% { transform: scale(1) rotate(0); }
+  50% { transform: scale(1.2) rotate(12deg); }
+}
+
 #bs-loading-row {
-  position:absolute;bottom:28px;
-  display:flex;align-items:center;gap:8px;
-  opacity:0;animation:bsFadeUp .5s 5.8s ease forwards;z-index:2;
+  position: absolute;
+  bottom: 28px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  opacity: 0;
+  animation: bsFadeUp 0.5s 5.8s ease forwards;
 }
-.bs-dot { width:6px;height:6px;border-radius:50%;animation:bsDotPop 1.4s ease-in-out infinite; }
-.bs-dot:nth-child(1){background:rgba(245,158,11,.7);animation-delay:0s;}
-.bs-dot:nth-child(2){background:rgba(6,182,212,.7);animation-delay:.22s;}
-.bs-dot:nth-child(3){background:rgba(16,185,129,.7);animation-delay:.44s;}
+.bs-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  animation: bsDotPop 1.4s ease-in-out infinite;
+}
+.bs-dot:nth-child(1) { background: var(--gold); animation-delay: 0s; }
+.bs-dot:nth-child(2) { background: var(--teal); animation-delay: 0.22s; }
+.bs-dot:nth-child(3) { background: var(--green); animation-delay: 0.44s; }
 @keyframes bsDotPop {
-  0%,80%,100%{transform:scale(.7) translateY(0);opacity:.3;}
-  40%{transform:scale(1.4) translateY(-6px);opacity:1;}
+  0%,80%,100% { transform: scale(0.7) translateY(0); opacity: 0.3; }
+  40% { transform: scale(1.4) translateY(-6px); opacity: 1; }
 }
 #bs-loading-label {
-  font-size:.67rem;color:rgba(255,255,255,.2);
-  letter-spacing:1.5px;text-transform:uppercase;
+  font-size: 0.67rem;
+  color: var(--t3);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
 }
-#bs-renewal-notice {
-  position:absolute;bottom:64px;left:50%;transform:translateX(-50%);
-  background:linear-gradient(135deg,rgba(239,68,68,.2),rgba(245,158,11,.12));
-  border:1px solid rgba(239,68,68,.35);border-radius:12px;
-  padding:8px 16px;font-size:.7rem;color:rgba(255,200,100,.85);
-  white-space:nowrap;display:none;z-index:3;
+@keyframes bsFadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+/* optional floating stars – keep but use subtle colours */
+.bs-star {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: bsStarFloat linear infinite;
+}
+@keyframes bsStarFloat {
+  0%   { transform: translateY(105vh) rotate(0deg); opacity: 0; }
+  6%   { opacity: 1; }
+  92%  { opacity: 0.7; }
+  100% { transform: translateY(-20px) rotate(1080deg); opacity: 0; }
+}
+/* ring decorations – match theme */
+.bs-ring-wrap {
+  position: absolute;
+  width: 340px;
+  height: 340px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.bs-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: conic-gradient(from 0deg, var(--gold3) 0%, transparent 20%, var(--teal2) 50%, transparent 70%, var(--gold3) 100%) border-box;
+  -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: destination-out;
+  mask-composite: exclude;
+  animation: bsRingRotate 14s linear infinite;
+}
+.bs-ring-2 {
+  position: absolute;
+  inset: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--gold3);
+  animation: bsRingRotate 9s linear infinite reverse;
+}
+.bs-ring-3 {
+  position: absolute;
+  inset: 40px;
+  border-radius: 50%;
+  border: 1px dashed var(--teal2);
+  animation: bsRingRotate 20s linear infinite;
+}
+@keyframes bsRingRotate {
+  to { transform: rotate(360deg); }
+}
+.bs-shimmer {
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 55%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.04) 50%, transparent 100%);
+  animation: bsShimmerSlide 5s ease-in-out 2.5s infinite;
+  pointer-events: none;
+}
+@keyframes bsShimmerSlide {
+  0% { left: -60%; }
+  100% { left: 150%; }
 }
 </style>
 
@@ -1221,7 +1319,14 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
     var ls=document.getElementById('login-screen');
     if(ls)ls.classList.remove('hidden');
   }
-  window._onDataLoaded=function(){if(!_dataReady){_dataReady=true;tryShow();}};
+ window._onDataLoaded = function(){
+  if(!_dataReady){
+    _dataReady = true;
+    // Now generate the anniversary badge using loaded settings
+    generateAnniversaryBadge();
+    tryShow();
+  }
+};
   window.completeSplashAndShowLogin=function(){if(!_animDone){_animDone=true;tryShow();}};
   window.forceShowLogin=function(){_animDone=true;_dataReady=true;tryShow();};
   setTimeout(window.forceShowLogin,16000);
@@ -1268,15 +1373,15 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
     </div>
   </div>
   <div id="bs-tagline">Savings Group Manager</div>
-  <div id="years-container">
-    <div id="years-badge">
-      <span id="years-icon">&#127806;</span>
-      <div>
-        <div id="years-text">&#8212;</div>
-        <div id="years-sub"></div>
-      </div>
+ <div id="years-container">
+  <div id="years-badge">
+    <span id="years-icon">🌾</span>
+    <div class="years-text-container" style="display: inline-block;">
+      <div id="years-text"></div>
+      <div id="years-sub"></div>
     </div>
   </div>
+</div>
   <div id="bs-loading-row">
     <div class="bs-dot"></div>
     <div class="bs-dot"></div>
@@ -1285,7 +1390,6 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
   </div>
   <div id="bs-renewal-notice"></div>
 </div>
-
 <script>
 /* ── Falling-letters animation ───────────────────────────────────────────── */
 (function(){
@@ -1307,38 +1411,128 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
     setTimeout(function(){t.style.animation='bsElasticFall 0.72s cubic-bezier(0.34,1.3,0.64,1) forwards';t.style.opacity='1';grow(rust,lT,80,100);},1700);
     /* 3 F */
     setTimeout(function(){f.style.animation='bsElasticFall 0.72s cubic-bezier(0.34,1.3,0.64,1) forwards';f.style.opacity='1';grow(inance,lF,10,60);},3100);
-    /* 4 Anniversary badge */
-    setTimeout(function(){
-      try{
-        var sd=(typeof settings!=='undefined'&&settings.groupStartDate)?settings.groupStartDate:null;
-        var yt='@',ys='2 months',yi='\uD83C\uDF3E';
-        if(sd){
-          var s=new Date(sd),now=new Date();
-          var yrs=now.getFullYear()-s.getFullYear();
-          if(now.getMonth()<s.getMonth()||(now.getMonth()===s.getMonth()&&now.getDate()<s.getDate()))yrs--;
-          if(yrs<=0){
-            var mths=(now.getFullYear()-s.getFullYear())*12+(now.getMonth()-s.getMonth());
-            if(now.getDate()<s.getDate())mths--;mths=Math.max(0,mths);
-            if(mths===0){yt='Day One';ys='The journey begins';yi='\uD83C\uDF31';}
-            else{yt=mths+' Month'+(mths!==1?'s':'');ys='of Trust & Savings';yi='\uD83C\uDF3F';}
-          }else{
-            yt='Year '+yrs;
-            ys=yrs===1?'First Year Together \uD83C\uDF89':yrs+' Years of Trust \uD83C\uDFC6';
-            yi=yrs>=5?'\uD83D\uDC51':yrs>=3?'\uD83C\uDFC6':'\uD83C\uDF89';
-            var anniv=new Date(now.getFullYear(),s.getMonth(),s.getDate());
-            var dta=Math.round((anniv-now)/86400000);
-            if(dta>=0&&dta<=30){
-              var n=document.getElementById('bs-renewal-notice');
-              if(n){n.textContent='\uD83D\uDD14 Anniversary in '+dta+' day'+(dta!==1?'s':'')+' \u2013 memberships will require renewal';n.style.display='block';}
-            }
-          }
-        }
-        var e=document.getElementById('years-text');if(e)e.textContent=yt;
-        var e2=document.getElementById('years-sub');if(e2)e2.textContent=ys;
-        var e3=document.getElementById('years-icon');if(e3)e3.textContent=yi;
-        var c=document.getElementById('years-container');if(c)c.classList.add('show');
-      }catch(err){}
-    },4400);
+    // 4. Anniversary badge – automatically from group start date
+setTimeout(function(){
+  try{
+    // Read group start date from settings (if loaded)
+    var groupStart = (typeof settings !== 'undefined' && settings.groupStartDate) ? settings.groupStartDate : null;
+    var mainText = '';
+    var subText = '';
+    var icon = '\uD83C\uDF3E'; // default wheat
+
+    if (groupStart) {
+      var startDate = new Date(groupStart);
+      var now = new Date();
+      // Calculate total months difference
+      var monthsDiff = (now.getFullYear() - startDate.getFullYear()) * 12 + (now.getMonth() - startDate.getMonth());
+      // Adjust for day of month
+      if (now.getDate() < startDate.getDate()) monthsDiff--;
+      var years = Math.floor(monthsDiff / 12);
+      var months = monthsDiff % 12;
+
+      if (years === 0 && months === 0) {
+        mainText = 'Day One';
+        subText = 'The journey begins';
+        icon = '\uD83C\uDF31';
+      } else if (years === 0) {
+        mainText = months + ' month' + (months !== 1 ? 's' : '');
+        subText = 'of Trust & Savings';
+        icon = '\uD83C\uDF3F';
+      } else {
+        mainText = 'Year ' + years + (months > 0 ? ' + ' + months + ' month' + (months !== 1 ? 's' : '') : '');
+        subText = years === 1 ? 'First Year Together 🎉' : years + ' Years of Trust 🏆';
+        icon = years >= 5 ? '👑' : (years >= 3 ? '🏆' : '🎉');
+      }
+    } else {
+      // Fallback if no start date set
+      mainText = 'Harvest Trust';
+      subText = 'Building together';
+      icon = '\uD83C\uDF3E';
+    }
+
+    // Update the badge elements
+    var iconSpan = document.getElementById('years-icon');
+    if (iconSpan) iconSpan.textContent = icon;
+
+    // Create the animated text container
+    var textContainer = document.querySelector('.years-text-container');
+    if (!textContainer) {
+      var badgeDiv = document.getElementById('years-badge');
+      if (badgeDiv) {
+        textContainer = document.createElement('div');
+        textContainer.className = 'years-text-container';
+        badgeDiv.appendChild(textContainer);
+      }
+    }
+    if (textContainer) {
+      textContainer.innerHTML = ''; // clear previous
+      // Animate main text letter by letter
+      function createCharSpan(ch, delay) {
+        var span = document.createElement('span');
+        span.textContent = ch === ' ' ? '\u00A0' : ch;
+        span.style.display = 'inline-block';
+        span.style.opacity = '0';
+        span.style.transform = 'translateY(-100vh) rotate(0deg)';
+        span.style.animation = 'letterFallShake 0.9s cubic-bezier(0.34,1.2,0.64,1) forwards';
+        span.style.animationDelay = delay + 's';
+        span.style.fontSize = '3.6rem'; // triple size
+        span.style.fontWeight = '900';
+        span.style.fontFamily = 'Syne, sans-serif';
+        span.style.background = 'linear-gradient(135deg, #f59e0b, #06b6d4, #8b5cf6)';
+        span.style.webkitBackgroundClip = 'text';
+        span.style.backgroundClip = 'text';
+        span.style.color = 'transparent';
+        if (ch === ' ') span.style.width = '0.4em';
+        return span;
+      }
+
+      var mainWords = mainText.split(' ');
+      var totalDelay = 0;
+      mainWords.forEach(function(word, wIdx) {
+        var wordSpan = document.createElement('span');
+        wordSpan.style.display = 'inline-block';
+        wordSpan.style.marginRight = '0.4em';
+        var letters = word.split('');
+        letters.forEach(function(letter, lIdx) {
+          var charSpan = createCharSpan(letter, totalDelay + (lIdx * 0.06));
+          wordSpan.appendChild(charSpan);
+        });
+        textContainer.appendChild(wordSpan);
+        totalDelay += letters.length * 0.06 + 0.1;
+      });
+
+      // Subtitle
+      var subContainer = document.createElement('div');
+      subContainer.style.fontSize = '1.2rem';
+      subContainer.style.fontWeight = '600';
+      subContainer.style.color = 'var(--t2)';
+      subContainer.style.letterSpacing = '2px';
+      subContainer.style.marginTop = '8px';
+      var subWords = subText.split(' ');
+      var subDelay = totalDelay + 0.2;
+      subWords.forEach(function(word, wIdx) {
+        var wordSpan = document.createElement('span');
+        wordSpan.style.display = 'inline-block';
+        wordSpan.style.marginRight = '0.3em';
+        var letters = word.split('');
+        letters.forEach(function(letter, lIdx) {
+          var charSpan = createCharSpan(letter, subDelay + (lIdx * 0.05));
+          charSpan.style.fontSize = '1.2rem'; // smaller for subtitle
+          wordSpan.appendChild(charSpan);
+        });
+        subContainer.appendChild(wordSpan);
+        subDelay += letters.length * 0.05 + 0.07;
+      });
+      textContainer.appendChild(subContainer);
+    }
+
+    // Show the container
+    var container = document.getElementById('years-container');
+    if (container) container.classList.add('show');
+  } catch(err) {
+    console.warn('Anniversary badge error:', err);
+  }
+}, 4400);
     /* 5 Loading label cycle */
     var ll=['LOADING\u2026','MEMBERS\u2026','BALANCES\u2026','ALMOST READY\u2026'];
     var li=0,lv=setInterval(function(){li++;var el=document.getElementById('bs-loading-label');if(el)el.textContent=ll[li%ll.length];},1700);
@@ -2113,12 +2307,12 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
 <!-- Single Member Receipt Modal -->
 <div class="ov" id="ov-single-receipt" onclick="maybeClose(event,'ov-single-receipt')">
   <div class="bs" style="max-width: 800px; width: 90%;">
-    <div class="bs-title">📄 Member Receipt</div>
+    <div class="bs-title">📄 Member Receipt & Summary</div>
     <div id="single-receipt-content" style="max-height: 70vh; overflow-y: auto; padding: 8px;"></div>
-    <div style="display: flex; gap: 12px; margin-top: 16px;">
-      <button class="btn btn-gold btn-full" onclick="printSingleReceipt()">🖨️ Print Receipt</button>
-      <button class="btn btn-teal btn-full" onclick="sendReceiptWhatsApp()">📱 Send via WhatsApp</button>
-      <button class="btn btn-sec btn-full" onclick="closeOv('ov-single-receipt')">Close</button>
+    <div style="display: flex; gap: 12px; margin-top: 16px; flex-wrap: wrap;">
+      <button class="btn btn-gold btn-full" style="flex:1" onclick="printSingleReceipt()">🖨️ Print Receipt</button>
+      <button class="btn btn-teal btn-full" style="flex:1" onclick="shareReceiptAsImage()">📸 Share as Image</button>
+      <button class="btn btn-sec btn-full" style="flex:1" onclick="closeOv('ov-single-receipt')">Close</button>
     </div>
   </div>
 </div>
@@ -2776,6 +2970,116 @@ function getAllowedBorrowerIndex(receiverIndex, totalMembers) {
   // Returns the index of the member allowed to borrow for a given receiver index.
   // For 10 members: 0 ↔ 9, 1 ↔ 8, 2 ↔ 7, 3 ↔ 6, 4 ↔ 5.
   return totalMembers - 1 - receiverIndex;
+}
+function generateAnniversaryBadge() {
+  try {
+    var groupStart = (settings && settings.groupStartDate) ? settings.groupStartDate : null;
+    var mainText = '';
+    var subText = '';
+    var icon = '\uD83C\uDF3E';
+
+    if (groupStart) {
+      var startDate = new Date(groupStart);
+      var now = new Date();
+      var monthsDiff = (now.getFullYear() - startDate.getFullYear()) * 12 + (now.getMonth() - startDate.getMonth());
+      if (now.getDate() < startDate.getDate()) monthsDiff--;
+      var years = Math.floor(monthsDiff / 12);
+      var months = monthsDiff % 12;
+
+      if (years === 0 && months === 0) {
+        mainText = 'Day One';
+        subText = 'The journey begins';
+        icon = '\uD83C\uDF31';
+      } else if (years === 0) {
+        mainText = months + ' month' + (months !== 1 ? 's' : '');
+        subText = 'of Trust & Savings';
+        icon = '\uD83C\uDF3F';
+      } else {
+        mainText = 'Year ' + years + (months > 0 ? ' + ' + months + ' month' + (months !== 1 ? 's' : '') : '');
+        subText = years === 1 ? 'First Year Together 🎉' : years + ' Years of Trust 🏆';
+        icon = years >= 5 ? '👑' : (years >= 3 ? '🏆' : '🎉');
+      }
+    } else {
+      mainText = 'Harvest Trust';
+      subText = 'Building together';
+      icon = '\uD83C\uDF3E';
+    }
+
+    var iconSpan = document.getElementById('years-icon');
+    if (iconSpan) iconSpan.textContent = icon;
+
+    var textContainer = document.querySelector('.years-text-container');
+    if (!textContainer) {
+      var badgeDiv = document.getElementById('years-badge');
+      if (badgeDiv) {
+        textContainer = document.createElement('div');
+        textContainer.className = 'years-text-container';
+        badgeDiv.appendChild(textContainer);
+      }
+    }
+    if (textContainer) {
+      textContainer.innerHTML = '';
+      function createCharSpan(ch, delay, fontSize) {
+        var span = document.createElement('span');
+        span.textContent = ch === ' ' ? '\u00A0' : ch;
+        span.style.display = 'inline-block';
+        span.style.opacity = '0';
+        span.style.transform = 'translateY(-100vh) rotate(0deg)';
+        span.style.animation = 'letterFallShake 0.9s cubic-bezier(0.34,1.2,0.64,1) forwards';
+        span.style.animationDelay = delay + 's';
+        span.style.fontSize = fontSize;
+        span.style.fontWeight = '900';
+        span.style.fontFamily = 'Syne, sans-serif';
+        span.style.background = 'linear-gradient(135deg, #f59e0b, #06b6d4, #8b5cf6)';
+        span.style.webkitBackgroundClip = 'text';
+        span.style.backgroundClip = 'text';
+        span.style.color = 'transparent';
+        if (ch === ' ') span.style.width = '0.4em';
+        return span;
+      }
+
+      var mainWords = mainText.split(' ');
+      var totalDelay = 0;
+      mainWords.forEach(function(word) {
+        var wordSpan = document.createElement('span');
+        wordSpan.style.display = 'inline-block';
+        wordSpan.style.marginRight = '0.4em';
+        var letters = word.split('');
+        letters.forEach(function(letter, lIdx) {
+          var charSpan = createCharSpan(letter, totalDelay + (lIdx * 0.06), '3.6rem');
+          wordSpan.appendChild(charSpan);
+        });
+        textContainer.appendChild(wordSpan);
+        totalDelay += letters.length * 0.06 + 0.1;
+      });
+
+      var subContainer = document.createElement('div');
+      subContainer.style.fontSize = '1.2rem';
+      subContainer.style.fontWeight = '600';
+      subContainer.style.color = 'var(--t2)';
+      subContainer.style.letterSpacing = '2px';
+      subContainer.style.marginTop = '8px';
+      var subWords = subText.split(' ');
+      var subDelay = totalDelay + 0.2;
+      subWords.forEach(function(word) {
+        var wordSpan = document.createElement('span');
+        wordSpan.style.display = 'inline-block';
+        wordSpan.style.marginRight = '0.3em';
+        var letters = word.split('');
+        letters.forEach(function(letter, lIdx) {
+          var charSpan = createCharSpan(letter, subDelay + (lIdx * 0.05), '1.2rem');
+          wordSpan.appendChild(charSpan);
+        });
+        subContainer.appendChild(wordSpan);
+        subDelay += letters.length * 0.05 + 0.07;
+      });
+      textContainer.appendChild(subContainer);
+    }
+    var container = document.getElementById('years-container');
+    if (container) container.classList.add('show');
+  } catch (err) {
+    console.warn('Anniversary badge generation error:', err);
+  }
 }
 function generateRepaymentSchedule(principal, interestRate, weeks, startDate) {
   const extraWeekly = loanSettings.extraWeeklyInterest || 2;
@@ -3703,21 +4007,36 @@ function renderMainCarousel() {
   const dots = document.getElementById('main-carousel-dots');
   if (!track || !dots) return;
 
-  let slides = mainCarouselNotifs.length ? mainCarouselNotifs : [];
-  if (!slides.length) {
-    slides = [{ text: settings.noticeText || t('notice_label'), imageData: settings.noticeImageData || '' }];
+  let slides = [];
+  
+  // Use custom notices from Firebase if any
+  if (mainCarouselNotifs && mainCarouselNotifs.length) {
+    slides = mainCarouselNotifs;
+  }
+  // Otherwise use the notice from settings
+  else if (settings.noticeText && settings.noticeText.trim() !== '') {
+    slides = [{ text: settings.noticeText, imageData: settings.noticeImageData || '' }];
+  }
+  // FINAL FALLBACK – hardcoded default notice
+  else {
+    slides = [{ 
+      text: "🌾 Welcome to Harvest Trust Finance! 🌾\nSave daily, grow together, and prosper.", 
+      imageData: "" 
+    }];
   }
 
+  // Build carousel HTML
   track.innerHTML = slides.map(s => `
     <div class="c-slide">
       <div>
-        <div class="notice-title">${t('notice_label')}</div>
-        <div class="notice-content">${escapeHtml(truncateText(s.text, 100))}</div>
+        <div class="notice-title">📢 NOTICE</div>
+        <div class="notice-content">${escapeHtml(s.text)}</div>
         ${s.imageData ? `<img src="${s.imageData}" class="notice-image">` : ''}
       </div>
     </div>
   `).join('');
 
+  // Build dots
   dots.innerHTML = slides.map((_, i) => `<button class="c-dot ${i === 0 ? 'active' : ''}" onclick="goToMainSlide(${i})"></button>`).join('');
 
   mainCarouselIdx = 0;
@@ -4484,9 +4803,40 @@ window.showMemberReceipt = function(memberId, dateStr = null) {
   if (isNaN(selectedDate.getTime())) selectedDate = new Date();
   
   const dateTimestamp = selectedDate.getTime();
-  const status = getSingleMemberDailyStatus(member, dateTimestamp);
+  const dailyStatus = getSingleMemberDailyStatus(member, dateTimestamp);
   const dateLabel = selectedDate.toLocaleDateString('en-UG', { year:'numeric', month:'long', day:'numeric' });
   const receiptId = `HTF-${selectedDate.toISOString().slice(0,10).replace(/-/g,'')}-${member.id.slice(-4)}`;
+  
+  // --- Member full summary calculations ---
+  let totalDepositsAll = 0;
+  let totalWelfareAll = 0;
+  let totalFines = 0;
+  let totalLoanRepaid = 0;
+  transactions.forEach(tx => {
+    if (tx.memberPhone === member.phone) {
+      if (tx.type === 'deposit') totalDepositsAll += tx.amount;
+      if (tx.type === 'welfare') totalWelfareAll += tx.amount;
+      if (tx.type === 'fine') totalFines += tx.amount;
+      if (tx.type === 'loan_repayment') totalLoanRepaid += tx.amount;
+    }
+  });
+  
+  const activeLoan = loans.find(l => l.memberId === member.id && l.status === 'approved' && !l.repaid);
+  const loanBalance = activeLoan ? (activeLoan.totalRepay - totalLoanRepaid) : 0;
+  const loanPrincipal = activeLoan ? activeLoan.amount : 0;
+  const debtBalance = memberDebts[member.phone] || 0;
+  const daysActive = getDaysActive(member);
+  
+  // Prorated profit share (if distributed today based on days active)
+  let proratedProfitShare = 0;
+  const allActiveMembers = members.filter(m => m.approved);
+  let totalDaysAll = 0;
+  allActiveMembers.forEach(m => { totalDaysAll += getDaysActive(m); });
+  if (totalDaysAll > 0 && groupProfit > 0) {
+    proratedProfitShare = Math.floor(groupProfit * daysActive / totalDaysAll);
+  }
+  
+  const totalSavingsAndWelfare = totalDepositsAll + totalWelfareAll;
   
   const receiptHtml = `
     <div class="single-receipt-card" style="
@@ -4505,6 +4855,7 @@ window.showMemberReceipt = function(memberId, dateStr = null) {
       </div>
       <div style="border-top: 2px solid #f59e0b; margin: 12px 0;"></div>
       
+      <!-- Daily receipt details -->
       <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px; font-size: 1rem; margin-bottom: 16px;">
         <div><strong>Receipt No.</strong></div><div>${receiptId}</div>
         <div><strong>Date</strong></div><div>${dateLabel}</div>
@@ -4514,28 +4865,45 @@ window.showMemberReceipt = function(memberId, dateStr = null) {
       
       <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
       
-      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px; font-size: 1rem;">
-        <div><strong>Daily savings</strong></div><div>UGX ${status.deposit.toLocaleString()}</div>
-        <div><strong>Welfare</strong></div><div>UGX ${status.welfareAmountUsed.toLocaleString()}</div>
-        <div><strong>Total paid</strong></div><div>UGX ${status.totalPaid.toLocaleString()}</div>
-        <div><strong>Required</strong></div><div>UGX ${status.required.toLocaleString()}</div>
+      <!-- Daily transaction -->
+      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px; font-size: 1rem; margin-bottom: 12px;">
+        <div><strong>Daily savings</strong></div><div>UGX ${dailyStatus.deposit.toLocaleString()}</div>
+        <div><strong>Welfare</strong></div><div>UGX ${dailyStatus.welfareAmountUsed.toLocaleString()}</div>
+        <div><strong>Total paid</strong></div><div>UGX ${dailyStatus.totalPaid.toLocaleString()}</div>
+        <div><strong>Required</strong></div><div>UGX ${dailyStatus.required.toLocaleString()}</div>
       </div>
       
-      <div style="text-align: center; margin: 20px 0 12px;">
+      <div style="text-align: center; margin: 8px 0 12px;">
         <span style="
           display: inline-block;
-          padding: 6px 16px;
-          border-radius: 30px;
-          font-size: 0.9rem;
+          padding: 4px 12px;
+          border-radius: 24px;
+          font-size: 0.8rem;
           font-weight: 700;
-          background: ${status.deficit === 0 ? '#e6f7e6' : '#ffe6e6'};
-          color: ${status.deficit === 0 ? '#2e7d32' : '#c62828'};
+          background: ${dailyStatus.deficit === 0 ? '#e6f7e6' : '#ffe6e6'};
+          color: ${dailyStatus.deficit === 0 ? '#2e7d32' : '#c62828'};
         ">
-          ${status.status} ${status.deficit > 0 ? '❌' : '✅'}
+          ${dailyStatus.status} ${dailyStatus.deficit > 0 ? '❌' : '✅'}
         </span>
-        ${status.deficit > 0 ? `<div style="margin-top: 8px;"><strong>Deficit:</strong> UGX ${status.deficit.toLocaleString()}</div>` : ''}
-        ${status.surplus > 0 ? `<div style="margin-top: 8px;"><strong>Surplus:</strong> UGX ${status.surplus.toLocaleString()}</div>` : ''}
+        ${dailyStatus.deficit > 0 ? `<div style="margin-top: 6px;"><strong>Deficit:</strong> UGX ${dailyStatus.deficit.toLocaleString()}</div>` : ''}
+        ${dailyStatus.surplus > 0 ? `<div style="margin-top: 6px;"><strong>Surplus:</strong> UGX ${dailyStatus.surplus.toLocaleString()}</div>` : ''}
       </div>
+      
+      <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
+      
+      <!-- Member Full Summary -->
+      <div><strong>📊 Member Financial Summary (All Time)</strong></div>
+      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 6px; font-size: 0.85rem; margin: 8px 0;">
+        <div>Days Active:</div><div>${daysActive} days</div>
+        <div>Total Savings:</div><div>UGX ${totalDepositsAll.toLocaleString()}</div>
+        <div>Total Welfare Paid:</div><div>UGX ${totalWelfareAll.toLocaleString()}</div>
+        <div>Total Fines:</div><div>UGX ${totalFines.toLocaleString()}</div>
+        <div>Active Loan Principal:</div><div>UGX ${loanPrincipal.toLocaleString()}</div>
+        <div>Loan Balance (incl. interest):</div><div>UGX ${loanBalance.toLocaleString()}</div>
+        <div>Outstanding Debt:</div><div>UGX ${debtBalance.toLocaleString()}</div>
+        <div>Prorated Profit Share*:</div><div>UGX ${proratedProfitShare.toLocaleString()}</div>
+      </div>
+      <div class="micro muted" style="margin-top: 4px;">*If profit pool (UGX ${groupProfit.toLocaleString()}) were distributed today.</div>
       
       <div style="border-top: 1px solid #e2e8f0; margin: 16px 0;"></div>
       <div style="text-align: center; font-size: 0.7rem; color: #94a3b8;">Thank you for saving with us</div>
@@ -4546,6 +4914,97 @@ window.showMemberReceipt = function(memberId, dateStr = null) {
   document.getElementById('single-receipt-content').innerHTML = receiptHtml;
   openOv('ov-single-receipt');
 };
+window.shareReceiptAsImage = async function() {
+  const originalCard = document.querySelector('#single-receipt-content .single-receipt-card');
+  if (!originalCard) {
+    toast('Receipt not ready', '#ef4444');
+    return;
+  }
+
+  if (typeof html2canvas === 'undefined') {
+    toast('Image library missing. Please refresh the page.', '#ef4444');
+    return;
+  }
+
+  toast('Generating image...', '#06b6d4');
+
+  // Clone the receipt card to avoid modifying the visible one
+  const cloneCard = originalCard.cloneNode(true);
+  
+  // Apply inline styles that override problematic CSS
+  cloneCard.style.filter = 'none';
+  cloneCard.style.backdropFilter = 'none';
+  cloneCard.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)'; // simple shadow
+  cloneCard.style.transform = 'none';
+  
+  // Remove any images that might be cross-origin (if any) – replace with data URL fallback
+  const images = cloneCard.querySelectorAll('img');
+  for (let img of images) {
+    if (img.src && !img.src.startsWith('data:')) {
+      // Replace with a placeholder or remove
+      const parent = img.parentNode;
+      const placeholder = document.createElement('div');
+      placeholder.textContent = '🖼️';
+      placeholder.style.fontSize = '1.2rem';
+      placeholder.style.textAlign = 'center';
+      parent.replaceChild(placeholder, img);
+    }
+  }
+  
+  // Temporarily append clone to body (off-screen) to render
+  cloneCard.style.position = 'absolute';
+  cloneCard.style.top = '-9999px';
+  cloneCard.style.left = '-9999px';
+  document.body.appendChild(cloneCard);
+  
+  try {
+    const canvas = await html2canvas(cloneCard, {
+      scale: 2,
+      backgroundColor: '#ffffff',
+      logging: false,
+      useCORS: false,           // we already removed external images
+      allowTaint: false,
+      windowWidth: cloneCard.scrollWidth,
+      windowHeight: cloneCard.scrollHeight
+    });
+    
+    // Remove clone
+    document.body.removeChild(cloneCard);
+    
+    const imageData = canvas.toDataURL('image/png');
+    
+    // Share or download
+    if (navigator.share && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      const blob = await (await fetch(imageData)).blob();
+      const file = new File([blob], 'harvest_receipt.png', { type: 'image/png' });
+      await navigator.share({
+        title: 'Harvest Trust Finance Receipt',
+        text: `Receipt for ${originalCard.querySelector('div:nth-child(3) div:nth-child(6)')?.innerText || 'member'}`,
+        files: [file]
+      });
+      toast('Image shared!', '#10b981');
+    } else {
+      // Download
+      const link = document.createElement('a');
+      link.download = 'harvest_receipt.png';
+      link.href = imageData;
+      link.click();
+      toast('Image downloaded. Share it on WhatsApp.', '#10b981');
+    }
+  } catch (err) {
+    console.error('html2canvas error:', err);
+    document.body.removeChild(cloneCard);
+    toast('Failed to generate image. Try printing instead.', '#ef4444');
+  }
+};
+function downloadImage(dataUrl) {
+  const link = document.createElement('a');
+  link.download = 'harvest_receipt.png';
+  link.href = dataUrl;
+  link.click();
+  toast('Image downloaded. You can now share it on WhatsApp.', '#10b981');
+}
+
 window.printSingleReceipt = function() {
   const content = document.getElementById('single-receipt-content').innerHTML;
   const printWindow = window.open('', '_blank');
@@ -6524,11 +6983,12 @@ function openAddTransaction() {
   openOv('ov-add-tx');
 }
 window.updateTxPreview = function() {
-  const phone = (document.getElementById('tx-member') || {}).value;
-  const type = (document.getElementById('tx-type') || {}).value;
-  const amount = parseFloat((document.getElementById('tx-amount') || {}).value);
+  const phone = document.getElementById('tx-member')?.value;
+  const type = document.getElementById('tx-type')?.value;
+  const amount = parseFloat(document.getElementById('tx-amount')?.value);
   const previewEl = document.getElementById('tx-preview');
   if (!previewEl) return;
+
   if (type !== 'deposit' || !phone || !amount || amount <= 0) {
     previewEl.style.display = 'none';
     return;
@@ -6537,99 +6997,101 @@ window.updateTxPreview = function() {
   const member = members.find(m => m.phone === phone);
   if (!member) return;
 
+  // Force fresh calculation of debts & loans
+  computePots();
+
   let remaining = amount;
   const lines = [];
 
-  // 1. Clear debts (if any)
-  const debt = memberDebts[phone] || 0;
-  if (debt > 0) {
-    const clear = Math.min(debt, remaining);
-    if (clear > 0) {
-      lines.push(`🧹 Clear debt: ${money(clear)} → pool`);
-      remaining -= clear;
-    }
-  }
-
-  // 2. Loan repayment (optional – any amount)
-  const loan = memberLoans[phone] || 0;
-  if (loan > 0) {
-    const repay = Math.min(loan, remaining);
-    if (repay > 0) {
-      lines.push(`💳 Repay loan (optional): ${money(repay)} → pool`);
-      remaining -= repay;
-    }
-  }
-
+  // 1. Today's required amount (daily + welfare)
   const dailyAmount = settings.dailyAmount || 2000;
   const welfareAmount = settings.welfareAmount || 500;
-  const requiredPerDay = dailyAmount + welfareAmount;
-  const todayStart = new Date().setHours(0, 0, 0, 0);
+  const requiredToday = dailyAmount + welfareAmount;
 
-  // Today's status (without loan installment)
-  let paidDaily = 0;
-  let welfarePaid = false;
+  const todayStart = new Date().setHours(0,0,0,0);
+  let paidDailyToday = 0;
+  let welfarePaidToday = false;
   transactions.forEach(tx => {
     if (tx.memberPhone === member.phone && tx.date >= todayStart && tx.date < todayStart + 86400000) {
-      if (tx.type === 'deposit') paidDaily += tx.amount;
-      if (tx.type === 'welfare') welfarePaid = true;
+      if (tx.type === 'deposit') paidDailyToday += tx.amount;
+      if (tx.type === 'welfare') welfarePaidToday = true;
     }
   });
-  const neededDaily = Math.max(0, dailyAmount - paidDaily);
-  const neededWelfare = welfarePaid ? 0 : welfareAmount;
-  const totalNeeded = neededDaily + neededWelfare;
+  const neededDaily = Math.max(0, dailyAmount - paidDailyToday);
+  const neededWelfare = welfarePaidToday ? 0 : welfareAmount;
+  const deficitToday = neededDaily + neededWelfare;
 
-  let dailyUse = 0, welfareUse = 0;
-  if (remaining >= totalNeeded) {
-    dailyUse = neededDaily;
-    welfareUse = neededWelfare;
-    remaining -= totalNeeded;
-    lines.push(`📆 Today: complete – ${money(dailyUse)} savings + ${money(welfareUse)} welfare`);
+  let usedToday = 0;
+  if (deficitToday > 0) {
+    usedToday = Math.min(remaining, deficitToday);
+    remaining -= usedToday;
+    lines.push(`📆 Today: ${money(usedToday)} used for today's requirement (needed ${money(deficitToday)})`);
+    if (remaining === 0 && usedToday < deficitToday) {
+      lines.push(`⚠️ Remaining deficit for today: ${money(deficitToday - usedToday)}`);
+    }
   } else {
-    dailyUse = Math.min(neededDaily, remaining);
-    remaining -= dailyUse;
-    if (remaining > 0 && neededWelfare > 0) {
-      welfareUse = Math.min(neededWelfare, remaining);
-      remaining -= welfareUse;
-    }
-    lines.push(`📆 Today: partial – ${money(dailyUse)} savings, ${money(welfareUse)} welfare`);
-    const newDeficit = totalNeeded - (dailyUse + welfareUse);
-    if (newDeficit > 0) {
-      lines.push(`⚠️ Remaining deficit for today: ${money(newDeficit)} (will become debt at midnight)`);
-    }
+    lines.push(`✅ Today's requirement already satisfied.`);
   }
 
-  // Future days (only if today fully covered)
-  if (totalNeeded - (dailyUse + welfareUse) === 0) {
-    let futureDay = todayStart + 86400000;
-    let daysCovered = 0;
-    while (remaining >= requiredPerDay && daysCovered < 30) {
-      remaining -= requiredPerDay;
-      daysCovered++;
-      const date = new Date(futureDay).toLocaleDateString();
-      lines.push(`📅 ${date}: full day (${money(dailyAmount)} savings + ${money(welfareAmount)} welfare)`);
-      futureDay += 86400000;
+  // 2. Combine debt + loan as total outstanding
+  const debtOwed = memberDebts[member.phone] || 0;
+  const loanOwed = memberLoans[member.phone] || 0;
+  const totalOutstanding = debtOwed + loanOwed;
+
+  if (totalOutstanding > 0 && remaining > 0) {
+    const usedForOutstanding = Math.min(remaining, totalOutstanding);
+    remaining -= usedForOutstanding;
+
+    const debtPortion = Math.min(usedForOutstanding, debtOwed);
+    const loanPortion = usedForOutstanding - debtPortion;
+
+    lines.push(`🧹 **Outstanding cleared:** ${money(usedForOutstanding)} (debt: ${money(debtPortion)}, loan: ${money(loanPortion)})`);
+    if (remaining === 0) {
+      lines.push(`⚠️ Remaining outstanding: ${money(totalOutstanding - usedForOutstanding)}`);
     }
-    if (remaining > 0 && daysCovered < 30) {
-      const date = new Date(futureDay).toLocaleDateString();
-      let dailyPortion = Math.min(remaining, dailyAmount);
-      let welfarePortion = Math.max(0, remaining - dailyPortion);
-      lines.push(`⚡ ${date}: partial – ${money(dailyPortion)} savings, ${money(welfarePortion)} welfare`);
-    }
+  } else if (totalOutstanding > 0) {
+    lines.push(`🧹 No extra amount to clear outstanding (still owe ${money(totalOutstanding)})`);
+  } else {
+    lines.push(`✅ No outstanding debt or loans.`);
   }
 
-  // Surplus
-  if (remaining > 0) {
-    lines.push(`📦 Surplus: ${money(remaining)} (extra balance)`);
+  // 3. Prepay future days (only if today fully satisfied AND no outstanding remains)
+  const todayFullyCovered = (usedToday === deficitToday);
+  const outstandingAfter = totalOutstanding - (remaining > 0 ? Math.min(remaining, totalOutstanding) : 0);
+  if (todayFullyCovered && outstandingAfter === 0 && remaining > 0) {
+    let futureDayStart = todayStart + 86400000;
+    let daysFullyCovered = 0;
+    let remainingPartial = remaining;
+
+    while (remainingPartial >= requiredToday && daysFullyCovered < 30) {
+      remainingPartial -= requiredToday;
+      daysFullyCovered++;
+      const dateStr = new Date(futureDayStart).toLocaleDateString();
+      lines.push(`📅 ${dateStr}: full day (${money(requiredToday)})`);
+      futureDayStart += 86400000;
+    }
+
+    if (remainingPartial > 0 && daysFullyCovered < 30) {
+      const dateStr = new Date(futureDayStart).toLocaleDateString();
+      const dailyPortion = Math.min(remainingPartial, dailyAmount);
+      const welfarePortion = Math.max(0, remainingPartial - dailyPortion);
+      lines.push(`⚡ ${dateStr}: partial – ${money(dailyPortion)} savings, ${money(welfarePortion)} welfare`);
+    }
+
+    if (remainingPartial === 0 && daysFullyCovered > 0) {
+      lines.push(`✨ Surplus fully allocated to ${daysFullyCovered} future day(s).`);
+    }
+  } else if (remaining > 0 && (usedToday < deficitToday || totalOutstanding > 0)) {
+    lines.push(`💡 Remaining ${money(remaining)} will be used once today's requirement is met and outstanding cleared.`);
   }
 
   if (lines.length === 0) {
-    previewEl.innerHTML = `<div class="hint-box">⚠️ Amount too small to cover any daily requirements after debts/loans.</div>`;
+    previewEl.innerHTML = `<div class="hint-box">ℹ️ No allocation – amount is zero or already covered.</div>`;
   } else {
     previewEl.innerHTML = `<div class="hint-box"><strong>💰 Deposit breakdown for ${escapeHtml(member.name)}:</strong><br>${lines.join('<br>')}</div>`;
   }
   previewEl.style.display = 'block';
 };
-
 window.addTransactionWithPreview = async function() {
   const phone = document.getElementById('tx-member')?.value;
   const type = document.getElementById('tx-type')?.value;
@@ -7036,30 +7498,67 @@ window.executeProfitDistribution = function() {
   }, 'Distribute Profit (Prorated)');
 };
 window.loadMarkPaidInfo = function() {
-  const idx = rotation.currentIndex || 0;
-  const beneId = rotation.order?.[idx];
-  const bene = members.find(m => m.id === beneId);
-  const el = document.getElementById('mark-paid-info');
-  if (!el) return;
-  
-  if (!bene) {
-    el.innerHTML = '<div class="muted">No valid member scheduled for payout. Check rotation order.</div>';
+  const container = document.getElementById('mark-paid-info');
+  if (!container) {
+    console.error('mark-paid-info element missing');
     return;
   }
-  
-  const target = getNetDaily() * 7 * members.filter(m => m.approved).length;
-  const debt = memberDebts[bene.phone] || 0;
-  const loan = memberLoans[bene.phone] || 0;
-  const net = Math.max(0, target - debt - loan);
-  
-  el.innerHTML = `
-    <div style="background:rgba(16,185,129,0.08);border-radius:14px;padding:14px;border:1px solid rgba(16,185,129,0.2)">
-      <div style="font-family:Syne,sans-serif;font-size:1.1rem;font-weight:800;color:var(--gold);margin-bottom:12px">💰 ${escapeHtml(bene.name)}</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:0.82rem">
-        <div>${t('full_amount')}</div><div>UGX ${target.toLocaleString()}</div>
-        <div>${t('member_debt')}</div><div>- UGX ${debt.toLocaleString()}</div>
-        <div>${t('loan_request_title')}</div><div>- UGX ${loan.toLocaleString()}</div>
-        <div>${t('net_payout')}</div><div style="font-weight:700;color:var(--green)">UGX ${net.toLocaleString()}</div>
+
+  // Ensure we have members and rotation data
+  if (!members.length) {
+    container.innerHTML = '<div class="muted">⚠️ No members found. Please refresh.</div>';
+    return;
+  }
+
+  const approvedMembers = members.filter(m => m.approved === true);
+  if (approvedMembers.length === 0) {
+    container.innerHTML = '<div class="muted">⚠️ No approved members. Cannot calculate payout.</div>';
+    return;
+  }
+
+  // Fallback rotation if empty
+  let order = rotation.order || [];
+  let currentIdx = rotation.currentIndex || 0;
+
+  if (order.length === 0) {
+    // Create default order from all approved members
+    order = approvedMembers.map(m => m.id);
+    currentIdx = 0;
+    // Optionally save this default order back to Firebase (optional)
+    console.warn('Rotation order was empty – using all members in current order');
+  }
+
+  if (currentIdx >= order.length) {
+    currentIdx = 0;
+  }
+
+  const beneficiaryId = order[currentIdx];
+  const beneficiary = members.find(m => m.id === beneficiaryId);
+
+  if (!beneficiary) {
+    container.innerHTML = '<div class="muted">⚠️ Invalid beneficiary. Check rotation order in Admin → Harvest.</div>';
+    return;
+  }
+
+  const dailyNet = getNetDaily(); // from settings.dailyAmount
+  const weeklyGross = dailyNet * 7 * approvedMembers.length;
+  const debt = memberDebts[beneficiary.phone] || 0;
+  const loan = memberLoans[beneficiary.phone] || 0;
+  const netPayout = Math.max(0, weeklyGross - debt - loan);
+
+  container.innerHTML = `
+    <div style="background:rgba(16,185,129,0.08); border-radius:14px; padding:14px; border:1px solid rgba(16,185,129,0.2)">
+      <div style="font-family:Syne,sans-serif; font-size:1.1rem; font-weight:800; color:var(--gold); margin-bottom:12px">
+        💰 ${escapeHtml(beneficiary.name)}
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:0.82rem">
+        <div>Full Weekly Amount</div><div>UGX ${weeklyGross.toLocaleString()}</div>
+        <div>Member Debt</div><div>- UGX ${debt.toLocaleString()}</div>
+        <div>Outstanding Loan</div><div>- UGX ${loan.toLocaleString()}</div>
+        <div><strong>Net Payout</strong></div><div style="font-weight:700; color:var(--green)">UGX ${netPayout.toLocaleString()}</div>
+      </div>
+      <div class="micro muted" style="margin-top:10px; text-align:center">
+        Based on ${approvedMembers.length} active members · Daily amount: UGX ${dailyNet.toLocaleString()}
       </div>
     </div>
   `;
@@ -7533,77 +8032,56 @@ function updateDebtPreview() {
   const member = members.find(m => m.phone === phone);
   if (!member) return;
 
+  // Get today's status (deficit / surplus)
   const { deficit, surplus, paidDaily, welfarePaid } = getTodayStatus(member);
-  const existingDebt = memberDebts[member.phone] || 0;
-  const totalLoanBalance = memberLoans[member.phone] || 0;
-  
-  const applicationLoan = loans.find(l => l.memberId === member.id && l.status === 'approved' && !l.repaid && l.loanQuestions && l.loanQuestions.length > 0);
-  const hasApplicationLoan = !!applicationLoan;
-  const hasAdminLoan = (totalLoanBalance > 0 && !hasApplicationLoan);
-  
-  const dailyRequiredBase = (settings.dailyAmount || 2000) + (settings.welfareAmount || 500);
-  let dailyRequiredWithLoan = dailyRequiredBase;
-  if (hasApplicationLoan) {
-    dailyRequiredWithLoan = getDailyRequiredForMember(member.id);
-  }
-  
-  let suggestedPrincipal = 0;
-  let lines = [];
-  
-  // Today's status
-  if (deficit > 0) {
-    lines.push(`⚠️ Today's deficit: ${money(deficit)} (will become debt at midnight)`);
-    suggestedPrincipal += deficit;
-  } else if (surplus > 0) {
-    lines.push(`✅ Today's surplus: ${money(surplus)} (will reduce tomorrow's requirement)`);
-    // Surplus reduces tomorrow's needed principal? Not directly; it's already applied.
-  } else {
-    lines.push(`📆 Today: fully paid ✓`);
-  }
-  
-  // Existing debt
-  if (existingDebt > 0) {
-    lines.push(`🧾 Existing debt: ${money(existingDebt)}`);
-    suggestedPrincipal += existingDebt;
-  }
-  
-  // Loan
-  if (hasApplicationLoan) {
-    lines.push(`💳 Application loan active – daily required (incl. installment): ${money(dailyRequiredWithLoan)}`);
-    suggestedPrincipal += dailyRequiredWithLoan;
-  } else if (hasAdminLoan) {
-    lines.push(`🏦 Admin‑assigned loan balance: ${money(totalLoanBalance)}`);
-    suggestedPrincipal += totalLoanBalance;
-  } else {
-    lines.push(`💰 No loan – daily required amount: ${money(dailyRequiredBase)}`);
-    suggestedPrincipal += dailyRequiredBase;
-  }
-  
-  // Show tomorrow's requirement if surplus exists
-  if (surplus > 0) {
-    const tomorrowRequired = Math.max(0, dailyRequiredBase - surplus);
-    lines.push(`🔮 Tomorrow's required will be ${money(tomorrowRequired)} (after surplus)`);
-  }
-  
+  const dailyAmount = settings.dailyAmount || 2000;
+  const welfareAmount = settings.welfareAmount || 500;
+  const requiredToday = dailyAmount + welfareAmount;
+
+  // Amount already paid today (deposits only)
+  let paidDailyToday = 0;
+  const todayStart = new Date().setHours(0,0,0,0);
+  transactions.forEach(tx => {
+    if (tx.memberPhone === member.phone && tx.type === 'deposit' && tx.date >= todayStart && tx.date < todayStart + 86400000) {
+      paidDailyToday += tx.amount;
+    }
+  });
+  const surplusToday = Math.max(0, paidDailyToday - requiredToday);
+
+  let existingDebt = memberDebts[member.phone] || 0;
+  let totalLoanBalance = memberLoans[member.phone] || 0;
+  let suggestedPrincipal = requiredToday - paidDailyToday + existingDebt + totalLoanBalance;
+  if (suggestedPrincipal < 0) suggestedPrincipal = 0;
+
   const enteredAmount = parseFloat(document.getElementById('debt-amount')?.value) || 0;
-  let amountHtml = '';
-  if (enteredAmount > 0 && enteredAmount !== suggestedPrincipal) {
-    amountHtml = `<div style="margin-top: 6px;">✏️ Entered amount: ${money(enteredAmount)} (suggested: ${money(suggestedPrincipal)})</div>`;
-  } else if (enteredAmount > 0) {
-    amountHtml = `<div style="margin-top: 6px;">✏️ Entered amount matches suggested principal.</div>`;
+  let finalDebt = enteredAmount;
+  let deductionNote = '';
+
+  if (surplusToday > 0 && enteredAmount > 0) {
+    finalDebt = Math.max(0, enteredAmount - surplusToday);
+    deductionNote = `<div style="color:var(--green); margin-top:4px;">✨ Today's surplus of ${money(surplusToday)} will be applied to this debt automatically.</div>`;
   }
-  
+
+  const interestRate = parseFloat(document.getElementById('debt-interest')?.value) || 5;
+  const interestAmount = Math.floor(finalDebt * interestRate / 100);
+  const totalRepay = finalDebt + interestAmount;
+
   previewDiv.innerHTML = `
-    <div style="margin-bottom: 8px;"><strong>Member: ${escapeHtml(member.name)}</strong></div>
-    ${lines.map(line => `<div>${line}</div>`).join('')}
-    <div style="margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 6px;">
-      <strong>💡 Suggested principal:</strong> ${money(suggestedPrincipal)}
-    </div>
-    ${amountHtml}
-    <div class="micro muted" style="margin-top: 6px;">Interest rate from loan settings: ${loanSettings.interestRate || 5}% (adjustable below).</div>
+    <div style="margin-bottom:8px;"><strong>Member: ${escapeHtml(member.name)}</strong></div>
+    <div>Today's required: ${money(requiredToday)}</div>
+    <div>Already paid today: ${money(paidDailyToday)}</div>
+    <div>Today's ${paidDailyToday >= requiredToday ? 'surplus' : 'deficit'}: ${money(paidDailyToday >= requiredToday ? paidDailyToday - requiredToday : requiredToday - paidDailyToday)}</div>
+    <div>Existing debt: ${money(existingDebt)}</div>
+    <div>Outstanding loan: ${money(totalLoanBalance)}</div>
+    <hr>
+    <div><strong>Entered principal:</strong> ${money(enteredAmount)}</div>
+    ${deductionNote}
+    <div><strong>Effective debt after today's surplus:</strong> ${money(finalDebt)}</div>
+    <div><strong>Interest (${interestRate}%):</strong> ${money(interestAmount)}</div>
+    <div><strong>Total to repay:</strong> ${money(totalRepay)}</div>
+    <div class="micro muted">This debt will be added as a loan. Today's surplus reduces it immediately.</div>
   `;
   previewDiv.style.display = 'block';
-  
   const amountInput = document.getElementById('debt-amount');
   if (amountInput && !amountInput.value) {
     amountInput.value = suggestedPrincipal;
@@ -7830,162 +8308,134 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
   const writes = [];
   let remaining = depositAmount;
   const now = depositTimestamp || Date.now();
-  const todayStart = new Date(now).setHours(0, 0, 0, 0);
-
-  // 1. Clear debts (fines/penalties) – goes to profit pool
-  const debtOwed = memberDebts[member.phone] || 0;
-  if (debtOwed > 0 && remaining > 0) {
-    const a = Math.min(debtOwed, remaining);
-    writes.push({
-      memberPhone: member.phone,
-      memberName: member.name,
-      type: 'debt_cleared',
-      amount: a,
-      description: `Cleared debt of ${money(a)}`,
-      date: now,
-    });
-    remaining -= a;
-  }
-
-  // 2. Repay loan (flexible – any amount, no daily requirement)
-  const loanOwed = memberLoans[member.phone] || 0;
-  if (loanOwed > 0 && remaining > 0) {
-    const a = Math.min(loanOwed, remaining);
-    writes.push({
-      memberPhone: member.phone,
-      memberName: member.name,
-      type: 'loan_repayment',
-      amount: a,
-      description: `Repaid loan of ${money(a)}`,
-      date: now + 1,
-    });
-    remaining -= a;
-  }
+  const todayStart = new Date(now).setHours(0,0,0,0);
 
   const dailyAmount = settings.dailyAmount || 2000;
   const welfareAmount = settings.welfareAmount || 500;
-  const requiredPerDay = dailyAmount + welfareAmount;
+  const requiredToday = dailyAmount + welfareAmount;
 
-  // 3. Apply remaining to today's requirement (daily savings + welfare)
-  let paidDaily = 0;
-  let welfarePaid = false;
+  // --- 1. Cover today's requirement ---
+  let paidDailyToday = 0;
+  let welfarePaidToday = false;
   transactions.forEach(tx => {
     if (tx.memberPhone === member.phone && tx.date >= todayStart && tx.date < todayStart + 86400000) {
-      if (tx.type === 'deposit') paidDaily += tx.amount;
-      if (tx.type === 'welfare') welfarePaid = true;
+      if (tx.type === 'deposit') paidDailyToday += tx.amount;
+      if (tx.type === 'welfare') welfarePaidToday = true;
     }
   });
-  const neededDaily = Math.max(0, dailyAmount - paidDaily);
-  const neededWelfare = welfarePaid ? 0 : welfareAmount;
-  const totalNeeded = neededDaily + neededWelfare;
+  const neededDaily = Math.max(0, dailyAmount - paidDailyToday);
+  const neededWelfare = welfarePaidToday ? 0 : welfareAmount;
+  const deficitToday = neededDaily + neededWelfare;
 
-  let dailyUse = 0, welfareUse = 0;
-  if (remaining >= totalNeeded) {
-    dailyUse = neededDaily;
-    welfareUse = neededWelfare;
-    remaining -= totalNeeded;
-  } else {
-    dailyUse = Math.min(neededDaily, remaining);
-    remaining -= dailyUse;
-    if (remaining > 0 && neededWelfare > 0) {
-      welfareUse = Math.min(neededWelfare, remaining);
-      remaining -= welfareUse;
+  let usedToday = 0;
+  if (deficitToday > 0) {
+    usedToday = Math.min(remaining, deficitToday);
+    remaining -= usedToday;
+    if (usedToday > 0) {
+      const dailyPart = Math.min(usedToday, neededDaily);
+      const welfarePart = usedToday - dailyPart;
+      if (dailyPart > 0) {
+        writes.push({
+          memberPhone: member.phone, memberName: member.name,
+          type: 'deposit', amount: dailyPart,
+          description: description || `Daily savings for ${new Date(todayStart).toLocaleDateString()}`,
+          date: todayStart + 1500
+        });
+      }
+      if (welfarePart > 0) {
+        writes.push({
+          memberPhone: member.phone, memberName: member.name,
+          type: 'welfare', amount: welfarePart,
+          description: `Welfare for ${new Date(todayStart).toLocaleDateString()}`,
+          date: todayStart + 500,
+          autoDeduction: true
+        });
+      }
     }
   }
 
-  if (dailyUse > 0) {
-    writes.push({
-      memberPhone: member.phone,
-      memberName: member.name,
-      type: 'deposit',
-      amount: dailyUse,
-      description: description || `Daily savings for ${new Date(todayStart).toLocaleDateString()}`,
-      date: todayStart + 1500,
-    });
-  }
-  if (welfareUse > 0) {
-    writes.push({
-      memberPhone: member.phone,
-      memberName: member.name,
-      type: 'welfare',
-      amount: welfareUse,
-      description: `Welfare for ${new Date(todayStart).toLocaleDateString()}`,
-      date: todayStart + 500,
-      autoDeduction: true,
-    });
+  // --- 2. Clear combined outstanding (debt + loan) ---
+  let totalOutstanding = (memberDebts[member.phone] || 0) + (memberLoans[member.phone] || 0);
+  if (totalOutstanding > 0 && remaining > 0) {
+    const usedForOutstanding = Math.min(remaining, totalOutstanding);
+    remaining -= usedForOutstanding;
+    totalOutstanding -= usedForOutstanding;
+
+    const debtOwed = memberDebts[member.phone] || 0;
+    const usedForDebt = Math.min(usedForOutstanding, debtOwed);
+    const usedForLoan = usedForOutstanding - usedForDebt;
+
+    if (usedForDebt > 0) {
+      writes.push({
+        memberPhone: member.phone, memberName: member.name,
+        type: 'debt_cleared', amount: usedForDebt,
+        description: `Cleared debt of ${money(usedForDebt)}`,
+        date: now + 1
+      });
+    }
+    if (usedForLoan > 0) {
+      writes.push({
+        memberPhone: member.phone, memberName: member.name,
+        type: 'loan_repayment', amount: usedForLoan,
+        description: `Repaid loan of ${money(usedForLoan)}`,
+        date: now + 2
+      });
+    }
   }
 
-  // 4. Future days (only if today fully covered)
-  if (totalNeeded - (dailyUse + welfareUse) === 0) {
+  // --- 3. Prepay future days (only if today fully satisfied AND no outstanding remains) ---
+  const todayFullyCovered = (usedToday === deficitToday);
+  const remainingOutstanding = totalOutstanding; // already updated after clearing
+  if (todayFullyCovered && remainingOutstanding === 0 && remaining > 0) {
     let currentDayStart = todayStart + 86400000;
     let daysProcessed = 0;
     const maxDays = 30;
-    while (remaining >= requiredPerDay && daysProcessed < maxDays) {
-      const dayStart = currentDayStart;
+    while (remaining >= requiredToday && daysProcessed < maxDays) {
       writes.push({
-        memberPhone: member.phone,
-        memberName: member.name,
-        type: 'deposit',
-        amount: dailyAmount,
-        description: `Daily savings for ${new Date(dayStart).toLocaleDateString()}`,
-        date: dayStart + 1500,
+        memberPhone: member.phone, memberName: member.name,
+        type: 'deposit', amount: dailyAmount,
+        description: `Daily savings for ${new Date(currentDayStart).toLocaleDateString()}`,
+        date: currentDayStart + 1500
       });
       writes.push({
-        memberPhone: member.phone,
-        memberName: member.name,
-        type: 'welfare',
-        amount: welfareAmount,
-        description: `Welfare for ${new Date(dayStart).toLocaleDateString()}`,
-        date: dayStart + 500,
-        autoDeduction: true,
+        memberPhone: member.phone, memberName: member.name,
+        type: 'welfare', amount: welfareAmount,
+        description: `Welfare for ${new Date(currentDayStart).toLocaleDateString()}`,
+        date: currentDayStart + 500,
+        autoDeduction: true
       });
-      remaining -= requiredPerDay;
+      remaining -= requiredToday;
       currentDayStart += 86400000;
       daysProcessed++;
     }
-    // Partial future day
     if (remaining > 0 && daysProcessed < maxDays) {
-      const dayStart = currentDayStart;
-      let futureDaily = Math.min(remaining, dailyAmount);
-      remaining -= futureDaily;
-      let futureWelfare = 0;
-      if (remaining > 0) {
-        futureWelfare = Math.min(remaining, welfareAmount);
-        remaining -= futureWelfare;
-      }
-      if (futureDaily > 0) {
+      const dailyPortion = Math.min(remaining, dailyAmount);
+      const welfarePortion = Math.max(0, remaining - dailyPortion);
+      if (dailyPortion > 0) {
         writes.push({
-          memberPhone: member.phone,
-          memberName: member.name,
-          type: 'deposit',
-          amount: futureDaily,
-          description: `Daily savings for ${new Date(dayStart).toLocaleDateString()}`,
-          date: dayStart + 1500,
+          memberPhone: member.phone, memberName: member.name,
+          type: 'deposit', amount: dailyPortion,
+          description: `Daily savings for ${new Date(currentDayStart).toLocaleDateString()}`,
+          date: currentDayStart + 1500
         });
       }
-      if (futureWelfare > 0) {
+      if (welfarePortion > 0) {
         writes.push({
-          memberPhone: member.phone,
-          memberName: member.name,
-          type: 'welfare',
-          amount: futureWelfare,
-          description: `Welfare for ${new Date(dayStart).toLocaleDateString()}`,
-          date: dayStart + 500,
-          autoDeduction: true,
+          memberPhone: member.phone, memberName: member.name,
+          type: 'welfare', amount: welfarePortion,
+          description: `Welfare for ${new Date(currentDayStart).toLocaleDateString()}`,
+          date: currentDayStart + 500,
+          autoDeduction: true
         });
       }
     }
-  }
-
-  // 5. Any leftover becomes surplus balance
-  if (remaining > 0) {
+  } else if (remaining > 0) {
+    // Surplus that cannot be applied (today not fully covered or outstanding remains) – store as extra balance
     writes.push({
-      memberPhone: member.phone,
-      memberName: member.name,
-      type: 'deposit',
-      amount: remaining,
-      description: 'Excess savings (surplus)',
-      date: now + 2000,
+      memberPhone: member.phone, memberName: member.name,
+      type: 'deposit', amount: remaining,
+      description: 'Excess savings (applied as extra balance)',
+      date: now + 2000
     });
   }
 
@@ -8524,100 +8974,227 @@ function generateGroupReportHTML() {
   const startStr = startDate.toLocaleDateString('en-UG', { year: 'numeric', month: 'long', day: 'numeric' });
   const endStr = endDate.toLocaleDateString('en-UG', { year: 'numeric', month: 'long', day: 'numeric' });
 
-  // Calculate totals from transactions
+  // ---------- Basic totals from transactions ----------
   let totalDeposits = 0, totalWithdrawals = 0, totalFines = 0;
   let totalWelfare = 0, totalExpenses = 0, totalPayouts = 0;
   let totalLoanDisbursements = 0, totalLoanRepayments = 0;
+  let depositCount = 0, fineCount = 0, welfareCount = 0, expenseCount = 0, payoutCount = 0;
 
   transactions.forEach(tx => {
     const amount = tx.amount || 0;
     switch (tx.type) {
-      case 'deposit': totalDeposits += amount; break;
+      case 'deposit': totalDeposits += amount; depositCount++; break;
       case 'withdraw': totalWithdrawals += amount; break;
-      case 'fine': totalFines += amount; break;
-      case 'welfare': totalWelfare += amount; break;
-      case 'expense': totalExpenses += amount; break;
-      case 'payout': totalPayouts += amount; break;
+      case 'fine': totalFines += amount; fineCount++; break;
+      case 'welfare': totalWelfare += amount; welfareCount++; break;
+      case 'expense': totalExpenses += amount; expenseCount++; break;
+      case 'payout': totalPayouts += amount; payoutCount++; break;
       case 'loan_disbursement': totalLoanDisbursements += amount; break;
       case 'loan_repayment': totalLoanRepayments += amount; break;
     }
   });
 
-  const netSavings = cashFromDeposits;
-  const profitPool = groupProfit;
-  const activeMembers = members.filter(m => m.approved === true).length;
-  const totalMembersEver = members.length;
+  // Profit pool composition
+  const profitFromFines = totalFines;
+  const profitFromWelfare = totalWelfare;
+  const profitFromLoanInterest = totalLoanRepayments - (totalLoanDisbursements || 0); // rough
+  const profitFromExpenses = -totalExpenses;
+  const profitPoolComposition = {
+    fines: profitFromFines,
+    welfare: profitFromWelfare,
+    loanInterest: Math.max(0, profitFromLoanInterest),
+    expenses: totalExpenses
+  };
 
-  // Top saver
-  let topSaver = { name: '—', amount: 0 };
-  members.forEach(m => {
-    let dep = 0;
+  // ---------- Member detailed data ----------
+  const activeMembers = members.filter(m => m.approved);
+  const memberDetails = activeMembers.map(m => {
+    let dep = 0, wel = 0, fines = 0, debt = memberDebts[m.phone] || 0;
+    let loanBal = memberLoans[m.phone] || 0;
+    let consistencyDays = new Set();
     transactions.forEach(tx => {
-      if (tx.memberPhone === m.phone && tx.type === 'deposit') dep += tx.amount;
-    });
-    if (dep > topSaver.amount) topSaver = { name: m.name, amount: dep };
-  });
-
-  // Most consistent (most days with a deposit)
-  let mostConsistent = { name: '—', days: 0 };
-  members.forEach(m => {
-    const daysSet = new Set();
-    transactions.forEach(tx => {
-      if (tx.memberPhone === m.phone && tx.type === 'deposit') {
-        daysSet.add(new Date(tx.date).toISOString().slice(0, 10));
+      if (tx.memberPhone === m.phone) {
+        if (tx.type === 'deposit') {
+          dep += tx.amount;
+          consistencyDays.add(new Date(tx.date).toISOString().slice(0,10));
+        }
+        if (tx.type === 'welfare') wel += tx.amount;
+        if (tx.type === 'fine') fines += tx.amount;
       }
     });
-    if (daysSet.size > mostConsistent.days) {
-      mostConsistent = { name: m.name, days: daysSet.size };
-    }
+    const activeLoan = loans.find(l => l.memberId === m.id && l.status === 'approved' && !l.repaid);
+    const loanPrincipal = activeLoan ? activeLoan.amount : 0;
+    const loanInterestOwed = activeLoan ? (activeLoan.totalRepay - activeLoan.amount) : 0;
+    const daysActive = getDaysActive(m);
+    return {
+      name: m.name,
+      phone: m.phone,
+      totalDeposits: dep,
+      totalWelfare: wel,
+      totalFines: fines,
+      debt: debt,
+      loanBalance: loanBal,
+      loanPrincipal,
+      loanInterestOwed,
+      consistencyDays: consistencyDays.size,
+      daysActive
+    };
   });
 
-  const totalLoanOutstanding = Object.values(memberLoans).reduce((a, b) => a + (b || 0), 0);
-  const totalDebtOutstanding = Object.values(memberDebts).reduce((a, b) => a + (b || 0), 0);
+  // Sort by total deposits descending
+  memberDetails.sort((a,b) => b.totalDeposits - a.totalDeposits);
+  const topSavers = memberDetails.slice(0,5);
+  // Most consistent
+  const mostConsistent = [...memberDetails].sort((a,b) => b.consistencyDays - a.consistencyDays).slice(0,3);
+
+  // ---------- Loan portfolio summary ----------
+  const totalDisbursed = totalLoanDisbursements;
+  const totalRepaid = totalLoanRepayments;
+  const outstandingLoans = memberDetails.reduce((sum,m) => sum + m.loanBalance, 0);
+  const interestEarned = Math.max(0, totalRepaid - totalDisbursed);
+  const overdueLoans = loans.filter(l => l.status === 'approved' && !l.repaid && l.dueDate && l.dueDate < Date.now()).length;
+
+  // ---------- Daily deposit performance ----------
+  const depositDates = new Map(); // date -> total deposit amount
+  transactions.forEach(tx => {
+    if (tx.type === 'deposit' && tx.date) {
+      const d = new Date(tx.date).toISOString().slice(0,10);
+      depositDates.set(d, (depositDates.get(d) || 0) + tx.amount);
+    }
+  });
+  let totalDailyDeposit = 0;
+  let maxDaily = 0, minDaily = Infinity;
+  for (let amt of depositDates.values()) {
+    totalDailyDeposit += amt;
+    if (amt > maxDaily) maxDaily = amt;
+    if (amt < minDaily) minDaily = amt;
+  }
+  const avgDaily = depositDates.size ? totalDailyDeposit / depositDates.size : 0;
+  const bestDay = maxDaily ? [...depositDates.entries()].find(([d,a]) => a === maxDaily)?.[0] : 'N/A';
+  const worstDay = minDaily !== Infinity ? [...depositDates.entries()].find(([d,a]) => a === minDaily)?.[0] : 'N/A';
+
+  // ---------- Payout history (from rotation history or payout transactions) ----------
+  const payoutTransactions = transactions.filter(tx => tx.type === 'payout');
+  const totalPayoutAmount = payoutTransactions.reduce((sum,tx) => sum + tx.amount, 0);
+  const payoutCountTotal = payoutTransactions.length;
+
+  // ---------- HTML generation ----------
+  const memberTableRows = memberDetails.map(m => `
+    <tr style="border-bottom:1px solid #e2e8f0;">
+      <td style="padding:6px;">${escapeHtml(m.name)}</td>
+      <td style="padding:6px; text-align:right;">UGX ${m.totalDeposits.toLocaleString()}</td>
+      <td style="padding:6px; text-align:right;">UGX ${m.totalWelfare.toLocaleString()}</td>
+      <td style="padding:6px; text-align:right;">UGX ${m.totalFines.toLocaleString()}</td>
+      <td style="padding:6px; text-align:right;">UGX ${m.debt.toLocaleString()}</td>
+      <td style="padding:6px; text-align:right;">UGX ${m.loanBalance.toLocaleString()}</td>
+      <td style="padding:6px; text-align:center;">${m.consistencyDays}</td>
+      <td style="padding:6px; text-align:center;">${m.daysActive}</td>
+    </tr>
+  `).join('');
 
   const html = `
     <div class="report-card" style="font-family: 'DM Sans', sans-serif;">
-      <div style="text-align: center; margin-bottom: 16px;">
+      <div style="text-align: center; margin-bottom: 20px;">
         <div style="font-size: 2rem;">🌾</div>
         <h2 style="color: #b45309;">Harvest Trust Finance</h2>
         <div style="font-size: 0.8rem; color: #475569;">Group Performance Report</div>
         <div style="font-size: 0.7rem;">${startStr} – ${endStr}</div>
       </div>
+      
+      <!-- Summary Stats -->
       <div style="border-top: 2px solid #f59e0b; margin: 12px 0;"></div>
-      <div><strong>📊 Summary</strong></div>
-      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 6px; font-size: 0.85rem; margin: 8px 0;">
-        <div>Active Members:</div><div>${activeMembers} / ${totalMembersEver}</div>
+      <div><strong>📊 Summary Statistics</strong></div>
+      <div style="display: grid; grid-template-columns: repeat(2,1fr); gap: 8px; font-size: 0.85rem; margin: 8px 0;">
+        <div>Active Members:</div><div>${activeMembers.length} / ${members.length}</div>
         <div>Total Deposits:</div><div>UGX ${totalDeposits.toLocaleString()}</div>
         <div>Total Withdrawals:</div><div>UGX ${totalWithdrawals.toLocaleString()}</div>
-        <div>Total Fines:</div><div>UGX ${totalFines.toLocaleString()}</div>
-        <div>Total Welfare:</div><div>UGX ${totalWelfare.toLocaleString()}</div>
-        <div>Total Expenses:</div><div>UGX ${totalExpenses.toLocaleString()}</div>
-        <div>Total Payouts:</div><div>UGX ${totalPayouts.toLocaleString()}</div>
+        <div>Total Fines:</div><div>UGX ${totalFines.toLocaleString()} (${fineCount} fines)</div>
+        <div>Total Welfare:</div><div>UGX ${totalWelfare.toLocaleString()} (${welfareCount} payments)</div>
+        <div>Total Expenses:</div><div>UGX ${totalExpenses.toLocaleString()} (${expenseCount} expenses)</div>
+        <div>Total Payouts:</div><div>UGX ${totalPayouts.toLocaleString()} (${payoutCountTotal} payouts)</div>
         <div>Loan Disbursements:</div><div>UGX ${totalLoanDisbursements.toLocaleString()}</div>
         <div>Loan Repayments:</div><div>UGX ${totalLoanRepayments.toLocaleString()}</div>
       </div>
+      
+      <!-- Current Balances -->
       <div style="border-top: 1px dashed #cbd5e1; margin: 12px 0;"></div>
       <div><strong>💰 Current Balances</strong></div>
       <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 6px; font-size: 0.85rem; margin: 8px 0;">
-        <div>Available Cash:</div><div>UGX ${netSavings.toLocaleString()}</div>
-        <div>Profit Pool:</div><div>UGX ${profitPool.toLocaleString()}</div>
-        <div>Outstanding Loans:</div><div>UGX ${totalLoanOutstanding.toLocaleString()}</div>
-        <div>Outstanding Debts:</div><div>UGX ${totalDebtOutstanding.toLocaleString()}</div>
+        <div>Available Cash:</div><div>UGX ${cashFromDeposits.toLocaleString()}</div>
+        <div>Profit Pool:</div><div>UGX ${groupProfit.toLocaleString()}</div>
+        <div>Outstanding Loans:</div><div>UGX ${outstandingLoans.toLocaleString()}</div>
+        <div>Outstanding Debts:</div><div>UGX ${memberDetails.reduce((s,m) => s + m.debt,0).toLocaleString()}</div>
       </div>
+      
+      <!-- Profit Pool Composition -->
+      <div style="border-top: 1px dashed #cbd5e1; margin: 12px 0;"></div>
+      <div><strong>💎 Profit Pool Composition</strong></div>
+      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 6px; font-size: 0.85rem; margin: 8px 0;">
+        <div>From Fines:</div><div>UGX ${profitPoolComposition.fines.toLocaleString()}</div>
+        <div>From Welfare:</div><div>UGX ${profitPoolComposition.welfare.toLocaleString()}</div>
+        <div>From Loan Interest:</div><div>UGX ${profitPoolComposition.loanInterest.toLocaleString()}</div>
+        <div>Minus Expenses:</div><div>UGX ${profitPoolComposition.expenses.toLocaleString()}</div>
+        <div><strong>Total Profit Pool:</strong></div><div><strong>UGX ${groupProfit.toLocaleString()}</strong></div>
+      </div>
+      
+      <!-- Loan Portfolio -->
+      <div style="border-top: 1px dashed #cbd5e1; margin: 12px 0;"></div>
+      <div><strong>🏦 Loan Portfolio</strong></div>
+      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 6px; font-size: 0.85rem; margin: 8px 0;">
+        <div>Total Disbursed:</div><div>UGX ${totalDisbursed.toLocaleString()}</div>
+        <div>Total Repaid:</div><div>UGX ${totalRepaid.toLocaleString()}</div>
+        <div>Outstanding Principal + Interest:</div><div>UGX ${outstandingLoans.toLocaleString()}</div>
+        <div>Interest Earned:</div><div>UGX ${interestEarned.toLocaleString()}</div>
+        <div>Overdue Loans:</div><div>${overdueLoans}</div>
+      </div>
+      
+      <!-- Daily Performance -->
+      <div style="border-top: 1px dashed #cbd5e1; margin: 12px 0;"></div>
+      <div><strong>📅 Daily Deposit Performance</strong></div>
+      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 6px; font-size: 0.85rem; margin: 8px 0;">
+        <div>Average Daily Deposit:</div><div>UGX ${avgDaily.toLocaleString()}</div>
+        <div>Best Day:</div><div>${bestDay} (UGX ${maxDaily.toLocaleString()})</div>
+        <div>Worst Day:</div><div>${worstDay} (UGX ${minDaily === Infinity ? 0 : minDaily.toLocaleString()})</div>
+        <div>Total Days with Deposits:</div><div>${depositDates.size}</div>
+      </div>
+      
+      <!-- Member Highlights -->
       <div style="border-top: 1px dashed #cbd5e1; margin: 12px 0;"></div>
       <div><strong>🏆 Member Highlights</strong></div>
-      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 6px; font-size: 0.85rem; margin: 8px 0;">
-        <div>Top Saver:</div><div>${escapeHtml(topSaver.name)} (UGX ${topSaver.amount.toLocaleString()})</div>
-        <div>Most Consistent:</div><div>${escapeHtml(mostConsistent.name)} (${mostConsistent.days} days)</div>
+      <div style="margin-bottom: 8px;"><strong>Top 5 Savers:</strong></div>
+      <div style="margin-left: 12px; margin-bottom: 12px;">
+        ${topSavers.map((m,i) => `<div>${i+1}. ${escapeHtml(m.name)} – UGX ${m.totalDeposits.toLocaleString()}</div>`).join('')}
       </div>
-      <div style="border-top: 2px solid #f59e0b; margin: 16px 0 8px;"></div>
-      <div style="text-align: center; font-size: 0.7rem; color: #94a3b8;">Generated by Harvest Trust Finance Admin</div>
+      <div><strong>Most Consistent (highest deposit days):</strong></div>
+      <div style="margin-left: 12px; margin-bottom: 12px;">
+        ${mostConsistent.map((m,i) => `<div>${i+1}. ${escapeHtml(m.name)} – ${m.consistencyDays} days</div>`).join('')}
+      </div>
+      
+      <!-- Full Member Table -->
+      <div style="border-top: 1px dashed #cbd5e1; margin: 12px 0;"></div>
+      <div><strong>👥 Full Member Breakdown</strong></div>
+      <div style="overflow-x: auto; max-height: 400px; overflow-y: auto; margin-top: 8px;">
+        <table style="width:100%; border-collapse: collapse; font-size: 0.7rem;">
+          <thead style="position: sticky; top:0; background: #f8fafc;">
+            <tr style="background: #e2e8f0;">
+              <th style="padding:6px;">Member</th><th style="padding:6px;">Deposits</th><th style="padding:6px;">Welfare</th>
+              <th style="padding:6px;">Fines</th><th style="padding:6px;">Debt</th><th style="padding:6px;">Loan Balance</th>
+              <th style="padding:6px;">Consistency</th><th style="padding:6px;">Days Active</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${memberTableRows}
+          </tbody>
+        </table>
+      </div>
+      
+      <div style="border-top: 2px solid #f59e0b; margin: 20px 0 8px;"></div>
+      <div style="text-align: center; font-size: 0.65rem; color: #94a3b8;">Generated by Harvest Trust Finance Admin</div>
     </div>
   `;
 
-  return { html, startDate: startStr, endDate: endStr, totalDeposits, profitPool, activeMembers };
+  return { html, startDate: startStr, endDate: endStr, totalDeposits, profitPool: groupProfit, activeMembers: activeMembers.length };
 }
-
 // Open the group report modal
 window.generateGroupReport = function() {
   const { html } = generateGroupReportHTML();
