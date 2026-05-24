@@ -3217,6 +3217,127 @@ function updatePendingDepositWarning() {
     <div class="micro muted" style="text-align: center;">Will be auto‑charged at midnight</div>
   `;
 }
+async function autoSendReceiptToWhatsApp(member, txType, amount, description) {
+  const phone = normalizePhone(member.phone);
+  if (!phone) {
+    toast(`❌ Invalid phone number for ${member.name}. Receipt not sent.`, '#ef4444');
+    return false;
+  }
+
+  // Build a compact receipt card (same as before)
+  const receiptHtml = `
+    <div class="auto-receipt-card" style="
+      max-width: 500px;
+      margin: 0 auto;
+      border: 2px solid #e2e8f0;
+      border-radius: 20px;
+      padding: 20px;
+      background: white;
+      font-family: 'DM Sans', sans-serif;
+    ">
+      <div style="text-align: center; margin-bottom: 12px;">
+        <div style="font-size: 1.8rem;">🌾</div>
+        <div style="font-weight: 800; font-size: 1.2rem; color: #b45309;">HARVEST TRUST FINANCE</div>
+      </div>
+      <div style="border-top: 1px solid #e2e8f0; margin: 8px 0;"></div>
+      <div style="font-size: 0.9rem;">
+        <div><strong>Member:</strong> ${escapeHtml(member.name)}</div>
+        <div><strong>Phone:</strong> ${member.phone}</div>
+        <div><strong>Transaction:</strong> ${txType.toUpperCase()}</div>
+        <div><strong>Amount:</strong> UGX ${amount.toLocaleString()}</div>
+        <div><strong>Description:</strong> ${escapeHtml(description || txType)}</div>
+        <div><strong>Date:</strong> ${new Date().toLocaleString()}</div>
+      </div>
+      <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
+      <div style="text-align: center; font-size: 0.7rem;">Thank you for saving with us</div>
+    </div>
+  `;
+
+  // Show custom modal with Yes/No buttons
+  return new Promise((resolve) => {
+    // Create modal overlay
+    const modal = document.createElement('div');
+    modal.className = 'ov on';
+    modal.style.zIndex = '20010';
+    modal.innerHTML = `
+      <div class="bs" style="max-width: 450px; text-align: center;">
+        <div style="font-size: 2rem;">📱</div>
+        <div style="font-weight: 800; font-size: 1.2rem; margin: 8px 0;">Send Receipt via WhatsApp?</div>
+        <div style="background: rgba(0,0,0,0.05); border-radius: 12px; padding: 12px; text-align: left; margin: 12px 0;">
+          <div><strong>Member:</strong> ${escapeHtml(member.name)}</div>
+          <div><strong>Phone:</strong> ${phone}</div>
+          <div><strong>Transaction:</strong> ${txType.toUpperCase()}</div>
+          <div><strong>Amount:</strong> UGX ${amount.toLocaleString()}</div>
+        </div>
+        <div class="micro muted" style="margin-bottom: 16px;">This will generate an image and open the share dialog.</div>
+        <div style="display: flex; gap: 12px;">
+          <button class="btn btn-gold" style="flex:1" id="confirm-send-btn">📤 Send</button>
+          <button class="btn btn-sec" style="flex:1" id="cancel-send-btn">Cancel</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    const confirmBtn = modal.querySelector('#confirm-send-btn');
+    const cancelBtn = modal.querySelector('#cancel-send-btn');
+
+    const cleanup = () => {
+      modal.classList.remove('on');
+      setTimeout(() => modal.remove(), 300);
+    };
+
+    const sendReceipt = async () => {
+      cleanup();
+      // Generate image and share
+      const tempDiv = document.createElement('div');
+      tempDiv.style.position = 'absolute';
+      tempDiv.style.top = '-9999px';
+      tempDiv.style.left = '-9999px';
+      tempDiv.innerHTML = receiptHtml;
+      document.body.appendChild(tempDiv);
+
+      try {
+        const canvas = await html2canvas(tempDiv.querySelector('.auto-receipt-card'), {
+          scale: 2,
+          backgroundColor: '#ffffff',
+          logging: false
+        });
+        document.body.removeChild(tempDiv);
+        const imageData = canvas.toDataURL('image/png');
+        const blob = await (await fetch(imageData)).blob();
+        const file = new File([blob], `receipt_${member.id}.png`, { type: 'image/png' });
+
+        if (navigator.share && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+          await navigator.share({
+            title: 'Harvest Trust Finance Receipt',
+            text: `Receipt for ${member.name} - ${txType} of UGX ${amount.toLocaleString()}`,
+            files: [file]
+          });
+          toast(`✅ Receipt shared to WhatsApp for ${member.name}`, '#10b981');
+        } else {
+          const link = document.createElement('a');
+          link.download = `receipt_${member.id}.png`;
+          link.href = imageData;
+          link.click();
+          toast(`📸 Receipt image downloaded. Please send it to ${member.name} on WhatsApp.`, '#f59e0b');
+        }
+        resolve(true);
+      } catch (err) {
+        console.error('Auto‑share error:', err);
+        document.body.removeChild(tempDiv);
+        toast('❌ Failed to generate receipt image', '#ef4444');
+        resolve(false);
+      }
+    };
+
+    confirmBtn.onclick = () => sendReceipt();
+    cancelBtn.onclick = () => {
+      cleanup();
+      toast('Receipt not sent.', '#f59e0b');
+      resolve(false);
+    };
+  });
+}
 async function updateLoanRepaidStatus(phone) {
   console.log(`updateLoanRepaidStatus called for phone ${phone}`);
   const member = members.find(m => m.phone === phone);
@@ -6766,8 +6887,46 @@ function closeCurrentModal() {
   const modal = document.querySelector('.ov.on');
   if (modal) modal.classList.remove('on');
 }
-window.openEditTx=function(txId){const tx=transactions.find(t=>t.id===txId);if(!tx)return;const sel=document.getElementById('edit-tx-member');sel.innerHTML='<option value="">'+t('select_member')+'</option>'+members.map(m=>'<option value="'+m.phone+'">'+m.name+'</option>').join('');document.getElementById('edit-tx-id').value=tx.id;document.getElementById('edit-tx-member').value=tx.memberPhone||'';document.getElementById('edit-tx-type').value=tx.type;document.getElementById('edit-tx-amount').value=tx.amount;document.getElementById('edit-tx-desc').value=tx.description||'';openOv('ov-edit-tx');};
-window.saveEditedTransaction=function(){const id=document.getElementById('edit-tx-id').value;const phone=document.getElementById('edit-tx-member').value;const type=document.getElementById('edit-tx-type').value;const amount=+document.getElementById('edit-tx-amount').value;const desc=document.getElementById('edit-tx-desc').value;const m=members.find(m=>m.phone===phone);if(!m||!amount){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('transactions/'+id).update({memberPhone:phone,memberName:m.name,type,amount,description:desc}).then(()=>{toast(t('update'),'#10b981');closeOv('ov-edit-tx');});};
+window.openEditTx = function(txId) {
+  const tx = transactions.find(t => t.id === txId);
+  if (!tx) return;
+  const sel = document.getElementById('edit-tx-member');
+  sel.innerHTML = '<option value="">Select member</option>' + 
+    members.filter(m => m.approved).map(m => '<option value="' + m.phone + '">' + escapeHtml(m.name) + '</option>').join('');
+  document.getElementById('edit-tx-id').value = tx.id;
+  document.getElementById('edit-tx-member').value = tx.memberPhone || '';
+  document.getElementById('edit-tx-type').value = tx.type;
+  document.getElementById('edit-tx-amount').value = tx.amount;
+  document.getElementById('edit-tx-desc').value = tx.description || '';
+  openOv('ov-edit-tx');
+};
+
+window.saveEditedTransaction = function() {
+  const id = document.getElementById('edit-tx-id').value;
+  const phone = document.getElementById('edit-tx-member').value;
+  const type = document.getElementById('edit-tx-type').value;
+  const amount = +document.getElementById('edit-tx-amount').value;
+  const desc = document.getElementById('edit-tx-desc').value;
+  const member = members.find(m => m.phone === phone);
+  if (!member || !amount) {
+    toast('Select a member and enter a valid amount', '#ef4444');
+    return;
+  }
+  requirePasswordConfirmation(async () => {
+    await db.ref('transactions/' + id).update({
+      memberPhone: phone,
+      memberName: member.name,
+      type: type,
+      amount: amount,
+      description: desc
+    });
+    toast('Transaction updated! ✅', '#10b981');
+    closeOv('ov-edit-tx');
+    computePots();
+    refreshUI();
+  }, 'Edit Transaction');
+};
+
 // --- Password confirmation for sensitive actions ---
 let pendingAction = null;
 
@@ -6869,7 +7028,25 @@ async function updateMemberPrepaid(memberId, newPrepaid) {
   const memberIndex = members.findIndex(m => m.id === memberId);
   if (memberIndex !== -1) members[memberIndex].prepaid = newPrepaid;
 }
-window.updateMember=function(){const id=document.getElementById('edit-member-id').value;const name=document.getElementById('edit-mbr-name').value.trim();const phone=document.getElementById('edit-mbr-phone').value.trim();const join=document.getElementById('edit-mbr-join').value;const photoData=document.getElementById('edit-mbr-photo').value;if(!name||!phone){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('members/'+id).update({name,phone,joinDate:join,photoData:photoData||''}).then(()=>{toast(name+' '+t('update'),'#10b981');closeOv('ov-edit-member');});};
+window.updateMember = function() {
+  const id = document.getElementById('edit-member-id').value;
+  const name = document.getElementById('edit-mbr-name').value.trim();
+  let phone = document.getElementById('edit-mbr-phone').value.trim();
+  const join = document.getElementById('edit-mbr-join').value;
+  const photoData = document.getElementById('edit-mbr-photo').value;
+  if (!name || !phone) { toast('Fill all fields', '#ef4444'); return; }
+  const normalizedPhone = normalizePhone(phone);
+  if (!normalizedPhone) { toast('Invalid phone number', '#ef4444'); return; }
+  db.ref('members/' + id).update({
+    name,
+    phone: normalizedPhone,
+    joinDate: join,
+    photoData: photoData || ''
+  }).then(() => {
+    toast(name + ' updated!', '#10b981');
+    closeOv('ov-edit-member');
+  });
+};
 window.deleteMember = function(id) {
   const member = members.find(m => m.id === id);
   if (!member) return;
@@ -7118,22 +7295,21 @@ window.addTransactionWithPreview = async function() {
   const amount = parseFloat(document.getElementById('tx-amount')?.value);
   const desc = document.getElementById('tx-desc')?.value;
   const member = members.find(m => m.phone === phone);
-  
+
   if (!member || !amount || amount <= 0) {
     toast('Select member and enter valid amount', '#ef4444');
     return;
   }
-  
+
   if (type === 'deposit') {
     if (!confirm(`Confirm deposit of ${money(amount)} for ${member.name}?`)) return;
     const depositTxs = await processDepositWithFutureDays(member, amount, Date.now(), desc || 'Manual deposit');
     const writes = depositTxs.map(tx => db.ref('transactions').push(tx));
     await Promise.all(writes);
     toast(`Deposit saved! ${money(amount)} applied.`, '#10b981');
+    await autoSendReceiptToWhatsApp(member, 'deposit', amount, desc);
   } else {
     let finalDesc = desc || type;
-    if (type === 'debt_cleared') finalDesc = `Cleared previous debt of ${money(amount)}`;
-    if (type === 'loan_repayment') finalDesc = `Repaid loan instalment of ${money(amount)}`;
     await db.ref('transactions').push({
       memberPhone: phone,
       memberName: member.name,
@@ -7143,16 +7319,54 @@ window.addTransactionWithPreview = async function() {
       date: Date.now()
     });
     toast(`${type} recorded!`, '#10b981');
+    await autoSendReceiptToWhatsApp(member, type, amount, finalDesc);
   }
-  
+
   closeOv('ov-add-tx');
   computePots();
   refreshUI();
 };
+window.addFine = async function() {
+  const phone = document.getElementById('fine-member').value;
+  const reason = document.getElementById('fine-reason').value;
+  const amount = +document.getElementById('fine-amount').value;
+  const m = members.find(m => m.phone === phone);
+  if (!m || !amount) { toast('Fill all fields', '#ef4444'); return; }
+  await db.ref('transactions').push({
+    memberPhone: phone,
+    memberName: m.name,
+    type: 'fine',
+    amount: amount,
+    description: reason || 'Fine',
+    date: Date.now()
+  });
+  toast('Fine applied!', '#f59e0b');
+  await autoSendReceiptToWhatsApp(m, 'fine', amount, reason);
+  closeOv('ov-add-fine');
+  computePots();
+  refreshUI();
+};
 
-window.addFine=function(){const phone=document.getElementById('fine-member').value,reason=document.getElementById('fine-reason').value,amount=+document.getElementById('fine-amount').value;const m=members.find(m=>m.phone===phone);if(!m||!amount){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('transactions').push({memberPhone:phone,memberName:m.name,type:'fine',amount,description:reason||'Fine',date:Date.now()}).then(()=>{toast(t('apply_fine_btn'),'#f59e0b');['fine-member','fine-reason','fine-amount'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});closeOv('ov-add-fine');});};
-
-window.addWelfare=function(){const phone=document.getElementById('welfare-member').value,desc=document.getElementById('welfare-desc').value,amount=+document.getElementById('welfare-amount').value;const m=members.find(m=>m.phone===phone);if(!m||!amount){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('transactions').push({memberPhone:phone,memberName:m.name,type:'welfare',amount,description:desc||'Welfare',date:Date.now()}).then(()=>{toast(t('record_welfare_btn'),'#8b5cf6');closeOv('ov-add-welfare');});};
+window.addWelfare = async function() {
+  const phone = document.getElementById('welfare-member').value;
+  const desc = document.getElementById('welfare-desc').value;
+  const amount = +document.getElementById('welfare-amount').value;
+  const m = members.find(m => m.phone === phone);
+  if (!m || !amount) { toast('Fill all fields', '#ef4444'); return; }
+  await db.ref('transactions').push({
+    memberPhone: phone,
+    memberName: m.name,
+    type: 'welfare',
+    amount: amount,
+    description: desc || 'Welfare',
+    date: Date.now()
+  });
+  toast('Welfare recorded!', '#8b5cf6');
+  await autoSendReceiptToWhatsApp(m, 'welfare', amount, desc);
+  closeOv('ov-add-welfare');
+  computePots();
+  refreshUI();
+};
 window.addExpense=function(){const desc=document.getElementById('exp-desc').value,amount=+document.getElementById('exp-amount').value;if(!desc||!amount){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('transactions').push({type:'expense',amount,description:desc,date:Date.now()}).then(()=>{toast(t('record_expense_btn'),'#ef4444');['exp-desc','exp-amount','exp-paidto'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});closeOv('ov-add-exp');});};
 // Update preview when type or amount changes
 window.updateGroupTxPreview = function() {
@@ -7212,19 +7426,19 @@ window.assignDebtAsLoan = async function() {
   const interestRate = parseFloat(document.getElementById('debt-interest')?.value);
   const dueDateStr = document.getElementById('debt-due-date')?.value;
   const reason = document.getElementById('debt-reason')?.value || 'Admin assigned debt';
-  
+
   if (!phone) { toast('Select a member', '#ef4444'); return; }
   if (!principal || principal <= 0) { toast('Enter valid principal amount', '#ef4444'); return; }
   if (isNaN(interestRate) || interestRate < 0) { toast('Enter valid interest rate', '#ef4444'); return; }
   if (!dueDateStr) { toast('Select a due date', '#ef4444'); return; }
-  
+
   const member = members.find(m => m.phone === phone);
   if (!member) { toast('Member not found', '#ef4444'); return; }
-  
+
   const dueDate = new Date(dueDateStr).getTime();
   const totalRepay = Math.floor(principal * (1 + interestRate / 100));
   const interest = totalRepay - principal;
-  
+
   try {
     const loanRef = db.ref('loans').push();
     await loanRef.set({
@@ -7243,7 +7457,7 @@ window.assignDebtAsLoan = async function() {
       repaid: false,
       penaltyApplied: false
     });
-    
+
     await db.ref('transactions').push({
       memberPhone: phone,
       memberName: member.name,
@@ -7252,7 +7466,7 @@ window.assignDebtAsLoan = async function() {
       description: `${reason} (principal)`,
       date: Date.now()
     });
-    
+
     if (interest > 0) {
       await db.ref('transactions').push({
         memberPhone: phone,
@@ -7263,7 +7477,8 @@ window.assignDebtAsLoan = async function() {
         date: Date.now() + 1
       });
     }
-    
+
+    // Refresh data
     const loansSnap = await db.ref('loans').once('value');
     loans = loansSnap.val() ? Object.entries(loansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
     const txSnap = await db.ref('transactions').once('value');
@@ -7272,6 +7487,7 @@ window.assignDebtAsLoan = async function() {
     refreshUI();
     closeOv('ov-assign-debt');
     toast(`Debt assigned: UGX ${principal.toLocaleString()} to ${member.name}`, '#10b981');
+    await autoSendReceiptToWhatsApp(member, 'loan_disbursement', principal, reason);
   } catch (err) {
     console.error("Error in assignDebtAsLoan:", err);
     toast('Failed to assign debt. Check console.', '#ef4444');
@@ -8543,7 +8759,34 @@ window.saveCoverDays = function() {const phone = document.getElementById('cover-
     const interest = Math.round(da * interestRate);
     if (interest > 0) {writes.push(db.ref('transactions').push({memberPhone: member.phone,memberName: member.name,type: 'cover_interest',amount: interest,description: `Cover interest for ${dk} (${interestRate*100}%)`,date: new Date(dk).getTime() + 500 // slightly after deposit
         }));}});Promise.all(writes).then(() => {toast('Cover days saved! ✅', '#10b981');closeOv('ov-cover');computePots();updateHomeUI();if (isLedgerActive()) loadLedger('all');}).catch(err => {console.error(err);toast('Save failed', '#ef4444');});};
-window.addMember=function(){const name=document.getElementById('mbr-name').value.trim();const phone=document.getElementById('mbr-phone').value.trim();const pw=document.getElementById('mbr-pw').value.trim();const join=document.getElementById('mbr-join').value;const photo=document.getElementById('mbr-photo-data').value;if(!name||!phone){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('members').push({name,phone,password:pw||('HT'+phone.slice(-4)),approved:true,joinDate:join||new Date().toISOString().split('T')[0],photoData:photo||''}).then(ref=>{const newOrder=rotation.order&&rotation.order.length?[...rotation.order,ref.key]:[ref.key];db.ref('rotation').update({order:newOrder,currentIndex:rotation.currentIndex||0});['mbr-name','mbr-phone','mbr-pw','mbr-join','mbr-photo-data'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});const prev=document.getElementById('mbr-photo-preview');if(prev){prev.src='';prev.style.display='none';}closeOv('ov-add-mbr');toast(name+' '+t('add_member')+'! ✅','#10b981');});};
+window.addMember = function() {
+  const name = document.getElementById('mbr-name').value.trim();
+  let phone = document.getElementById('mbr-phone').value.trim();
+  const pw = document.getElementById('mbr-pw').value.trim();
+  const join = document.getElementById('mbr-join').value;
+  const photo = document.getElementById('mbr-photo-data').value;
+  if (!name || !phone) { toast('Fill all fields', '#ef4444'); return; }
+  const normalizedPhone = normalizePhone(phone);
+  if (!normalizedPhone) { toast('Invalid phone number. Use 07XXXXXXXX or +256XXXXXXXXX', '#ef4444'); return; }
+  db.ref('members').push({
+    name,
+    phone: normalizedPhone,
+    password: pw || ('HT' + normalizedPhone.slice(-4)),
+    approved: true,
+    joinDate: join || new Date().toISOString().split('T')[0],
+    photoData: photo || ''
+  }).then(ref => {
+    const newOrder = rotation.order && rotation.order.length ? [...rotation.order, ref.key] : [ref.key];
+    db.ref('rotation').update({ order: newOrder, currentIndex: rotation.currentIndex || 0 });
+    ['mbr-name','mbr-phone','mbr-pw','mbr-join','mbr-photo-data'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    const prev = document.getElementById('mbr-photo-preview');
+    if (prev) { prev.src = ''; prev.style.display = 'none'; }
+    closeOv('ov-add-mbr');
+    toast(name + ' added! ✅', '#10b981');
+  });
+};
 window.loadSettings = function() {
   document.getElementById('set-groupname').value = settings.groupName || '';
   document.getElementById('set-daily').value = settings.dailyAmount || 2500;
@@ -8967,7 +9210,19 @@ function calculateRewards() {
     rewardsPoolDisplay: rewardsPool
   };
 }
-
+function normalizePhone(phone) {
+  if (!phone) return null;
+  let cleaned = phone.replace(/\s+/g, '').replace(/[()-]/g, '');
+  if (cleaned.startsWith('0')) {
+    cleaned = '+256' + cleaned.slice(1);
+  } else if (cleaned.startsWith('256')) {
+    cleaned = '+' + cleaned;
+  } else if (!cleaned.startsWith('+256')) {
+    return null;
+  }
+  const regex = /^\+256\d{9}$/;
+  return regex.test(cleaned) ? cleaned : null;
+}
 let forgotState = { step: 'phone', phone: '', memberId: null, revealedPin: '' };
 function openForgotPassword() {
   forgotState = { step: 'phone', phone: '', memberId: null, revealedPin: '' };
