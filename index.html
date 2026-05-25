@@ -923,17 +923,20 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
 #ni-rewards.on .ico {
   transform: scale(1.1) translateY(-10px) !important;
 }
-/* Carousel banner – full width image, but text visible */
+/* Hide notice text on home page carousel – only show image */
+#t-home .carousel-banner .notice-title,
+#t-home .carousel-banner .notice-content {
+  display: none !important;
+}
+#t-home .carousel-banner .c-slide {
+  padding: 0 !important;
+}
 #t-home .carousel-banner .notice-image {
   width: 100% !important;
   max-height: 200px !important;
   object-fit: cover !important;
   border-radius: 0 !important;
-  margin: 0 0 8px 0 !important;
-}
-#t-home .carousel-banner {
-  border-radius: 12px !important;
-  overflow: hidden !important;
+  margin: 0 !important;
 }
 /* Home tab compact layout – fit without scrolling */
 #t-home {
@@ -3990,6 +3993,21 @@ db.ref('settings/loanReceiverIndex').on('value', snap => {
   renderMainCarousel();
   if (currentScreen === 'admin' && adminUnlocked && currentAdminTab === 'notice') renderAdminTab();
 });
+// After loading mainNotices, also load the saved order
+db.ref('settings/carouselOrder').on('value', snap => {
+  const order = snap.val();
+  if (order && Array.isArray(order) && order.length === mainCarouselNotifs.length) {
+    const ordered = [];
+    for (let key of order) {
+      const notice = mainCarouselNotifs.find(n => n.key === key);
+      if (notice) ordered.push(notice);
+    }
+    if (ordered.length === mainCarouselNotifs.length) {
+      mainCarouselNotifs = ordered;
+      renderMainCarousel();
+    }
+  }
+});
 
   // Password reset requests – add if needed (not critical)
   // but we'll add for completeness
@@ -6803,8 +6821,7 @@ function renderAdminTab() {
 
   // ----- Notice tab -----
  else if (currentAdminTab === 'notice') {
-  // Broadcast container (initially hidden)
-  const broadcastHtml = `
+  const broadcastHtmlContent = `
     <div id="broadcastContainer" style="display: none;">
       <div class="card">
         <div class="sec-h">📢 Broadcast to All Members</div>
@@ -6818,33 +6835,31 @@ function renderAdminTab() {
     <button class="btn btn-purple btn-full" onclick="toggleBroadcast()" style="margin-top: 8px;">📢 Show/Hide Broadcast</button>
   `;
 
-  // Carousel notices container (initially hidden)
-  const carouselHtml = `
-    <div id="carouselNoticesContainer" style="display: none;">
+  const carouselHtmlContent = `
+    <div id="carouselNoticesContainer" style="display: none; margin-top: 16px;">
       <div class="card">
         <div class="sec-h">🎠 Carousel Notices <span class="pill-badge pill-amber">${mainCarouselNotifs.length}/5</span></div>
-        <div id="main-carousel-admin-list" style="margin-bottom:12px">
-          ${mainCarouselNotifs.map(n => `
-            <div class="mc">
-              <div>
-                <div class="mc-name">${n.icon || '📢'} ${escapeHtml(n.text.slice(0,50))}${n.text.length > 50 ? '…' : ''}</div>
-                <div class="mc-phone">${n.imageData ? '📷 Image' : ''} ${n.payee ? `👤 ${escapeHtml(n.payee)}` : ''}</div>
-              </div>
-              <button class="btn btn-sm btn-red" onclick="removeCarouselNotice('${n.key}')">🗑️ Delete</button>
+        <div id="carousel-drag-list" style="margin-bottom: 12px;">
+          ${mainCarouselNotifs.map((n, idx) => `
+            <div class="rot-drag-item" data-notice-key="${n.key}" draggable="true" style="display: flex; justify-content: space-between; align-items: center;">
+              <span class="drag-handle">⠿</span>
+              <span style="flex:1; margin-left: 8px;">${n.icon || '📢'} ${escapeHtml(n.text.slice(0,50))}${n.text.length > 50 ? '…' : ''}</span>
+              <button class="btn btn-sm btn-red" onclick="removeCarouselNotice('${n.key}')">🗑️</button>
             </div>
           `).join('')}
         </div>
-        ${mainCarouselNotifs.length < 5 ? `<button class="btn btn-teal btn-full" onclick="openOv('ov-carousel-compose')">➕ Add Carousel Notice</button>` : '<div class="hint-box" style="text-align:center;margin-bottom:0">Maximum 5 notices reached. Delete one to add more.</div>'}
+        ${mainCarouselNotifs.length < 5 ? `<button class="btn btn-teal btn-full" onclick="openOv('ov-carousel-compose')">➕ Add Carousel Notice</button>` : '<div class="hint-box" style="text-align:center;">Maximum 5 notices reached. Delete one to add more.</div>'}
+        <button class="btn btn-gold btn-full" onclick="saveCarouselOrder()" style="margin-top: 12px;">💾 Save Order</button>
       </div>
     </div>
     <button class="btn btn-purple btn-full" onclick="toggleCarouselNotices()" style="margin-top: 8px;">🎠 Show/Hide Carousel Notices</button>
   `;
 
-  c.innerHTML = `
-    ${broadcastHtml}
-    ${carouselHtml}
-  `;
+  c.innerHTML = broadcastHtmlContent + carouselHtmlContent;
+  // Initialize drag & drop after rendering
+  setTimeout(() => initCarouselDrag(), 100);
 }
+
   // ----- Harvest tab -----
   else if (currentAdminTab === 'harvest') {
     c.innerHTML = `
@@ -7123,7 +7138,6 @@ function toggleBroadcast() {
     }
   }
 }
-
 function toggleCarouselNotices() {
   const container = document.getElementById('carouselNoticesContainer');
   if (container) {
@@ -9330,6 +9344,82 @@ function getMembershipYear(m){
   if(now.getMonth()<j.getMonth()||(now.getMonth()===j.getMonth()&&now.getDate()<j.getDate()))y--;
   return Math.max(1,y+1);
 }
+let dragSrcIndex = null;
+
+function initCarouselDrag() {
+  const container = document.getElementById('carousel-drag-list');
+  if (!container) return;
+  const items = container.querySelectorAll('.rot-drag-item');
+  items.forEach(item => {
+    item.setAttribute('draggable', 'true');
+    item.removeEventListener('dragstart', handleDragStart);
+    item.removeEventListener('dragover', handleDragOver);
+    item.removeEventListener('drop', handleDrop);
+    item.addEventListener('dragstart', handleDragStart);
+    item.addEventListener('dragover', handleDragOver);
+    item.addEventListener('drop', handleDrop);
+  });
+}
+
+function handleDragStart(e) {
+  dragSrcIndex = Array.from(e.target.closest('.rot-drag-item').parentNode.children).indexOf(e.target.closest('.rot-drag-item'));
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+function handleDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  const targetItem = e.target.closest('.rot-drag-item');
+  if (!targetItem) return;
+  const targetIndex = Array.from(targetItem.parentNode.children).indexOf(targetItem);
+  if (dragSrcIndex === null || dragSrcIndex === targetIndex) return;
+  
+  const container = document.getElementById('carousel-drag-list');
+  const items = Array.from(container.children);
+  const [movedItem] = items.splice(dragSrcIndex, 1);
+  items.splice(targetIndex, 0, movedItem);
+  container.innerHTML = '';
+  items.forEach(item => container.appendChild(item));
+  dragSrcIndex = null;
+  // Re-attach drag listeners
+  initCarouselDrag();
+}
+window.saveCarouselOrder = async function() {
+  const container = document.getElementById('carousel-drag-list');
+  if (!container) {
+    toast('Carousel list not found', '#ef4444');
+    return;
+  }
+  const items = container.querySelectorAll('.rot-drag-item');
+  const newOrder = [];
+  items.forEach(item => {
+    const key = item.getAttribute('data-notice-key');
+    if (key) newOrder.push(key);
+  });
+  if (newOrder.length !== mainCarouselNotifs.length) {
+    toast('Order mismatch. Please refresh the page.', '#ef4444');
+    return;
+  }
+  // Reorder mainCarouselNotifs according to newOrder
+  const orderedNotifs = [];
+  for (let key of newOrder) {
+    const notice = mainCarouselNotifs.find(n => n.key === key);
+    if (notice) orderedNotifs.push(notice);
+  }
+  mainCarouselNotifs = orderedNotifs;
+  // Save order to Firebase (as an array of notice keys)
+  await db.ref('settings/carouselOrder').set(newOrder);
+  // Re-render the carousel on home page
+  renderMainCarousel();
+  toast('Carousel order saved!', '#10b981');
+  // Refresh the admin notice tab to show new order
+  if (currentAdminTab === 'notice') renderAdminTab();
+};
+ 
 function checkMembershipRenewal(m){
   if(!m||m.isAdmin)return;
   if(!settings.renewalEnabled)return;
