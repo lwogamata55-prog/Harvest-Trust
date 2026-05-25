@@ -3224,7 +3224,11 @@ async function autoSendReceiptToWhatsApp(member, txType, amount, description) {
     return false;
   }
 
-  // Build a compact receipt card (same as before)
+  // Get current loan balance after the transaction (force fresh compute)
+  computePots();
+  const loanBalance = memberLoans[member.phone] || 0;
+
+  // Build receipt card with loan balance included
   const receiptHtml = `
     <div class="auto-receipt-card" style="
       max-width: 500px;
@@ -3247,15 +3251,17 @@ async function autoSendReceiptToWhatsApp(member, txType, amount, description) {
         <div><strong>Amount:</strong> UGX ${amount.toLocaleString()}</div>
         <div><strong>Description:</strong> ${escapeHtml(description || txType)}</div>
         <div><strong>Date:</strong> ${new Date().toLocaleString()}</div>
+        <div><strong>Remaining Loan Balance:</strong> UGX ${loanBalance.toLocaleString()}</div>
       </div>
       <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
       <div style="text-align: center; font-size: 0.7rem;">Thank you for saving with us</div>
     </div>
   `;
 
-  // Show custom modal with Yes/No buttons
+  // ... (rest of the function unchanged: modal, html2canvas, share/download)
+  // (keep the exact same modal and image generation code as before)
   return new Promise((resolve) => {
-    // Create modal overlay
+    // Create modal overlay (same as previous version)
     const modal = document.createElement('div');
     modal.className = 'ov on';
     modal.style.zIndex = '20010';
@@ -3268,6 +3274,7 @@ async function autoSendReceiptToWhatsApp(member, txType, amount, description) {
           <div><strong>Phone:</strong> ${phone}</div>
           <div><strong>Transaction:</strong> ${txType.toUpperCase()}</div>
           <div><strong>Amount:</strong> UGX ${amount.toLocaleString()}</div>
+          <div><strong>Loan Balance After:</strong> UGX ${loanBalance.toLocaleString()}</div>
         </div>
         <div class="micro muted" style="margin-bottom: 16px;">This will generate an image and open the share dialog.</div>
         <div style="display: flex; gap: 12px;">
@@ -3288,7 +3295,6 @@ async function autoSendReceiptToWhatsApp(member, txType, amount, description) {
 
     const sendReceipt = async () => {
       cleanup();
-      // Generate image and share
       const tempDiv = document.createElement('div');
       tempDiv.style.position = 'absolute';
       tempDiv.style.top = '-9999px';
@@ -3334,6 +3340,181 @@ async function autoSendReceiptToWhatsApp(member, txType, amount, description) {
     cancelBtn.onclick = () => {
       cleanup();
       toast('Receipt not sent.', '#f59e0b');
+      resolve(false);
+    };
+  });
+}
+async function generateWeeklyPayoutReceipt() {
+  const idx = rotation.currentIndex || 0;
+  const beneId = rotation.order?.[idx];
+  const beneficiary = members.find(m => m.id === beneId);
+  if (!beneficiary) {
+    toast('No valid beneficiary for this week', '#ef4444');
+    return;
+  }
+
+  const dailyNet = getNetDaily();
+  const weeklyGross = dailyNet * 7 * members.filter(m => m.approved).length;
+  const debt = memberDebts[beneficiary.phone] || 0;
+  const loan = memberLoans[beneficiary.phone] || 0;
+  const netPayout = Math.max(0, weeklyGross - debt - loan);
+
+  const receiptHtml = `
+    <div class="weekly-receipt-card" style="
+      max-width: 600px;
+      margin: 0 auto;
+      border: 2px solid #e2e8f0;
+      border-radius: 20px;
+      padding: 24px;
+      background: white;
+      font-family: 'DM Sans', sans-serif;
+    ">
+      <div style="text-align: center; margin-bottom: 16px;">
+        <div style="font-size: 2rem;">🌾</div>
+        <div style="font-weight: 800; font-size: 1.5rem; color: #b45309;">HARVEST TRUST FINANCE</div>
+        <div style="font-size: 0.8rem; color: #64748b;">Weekly Payout Receipt</div>
+      </div>
+      <div style="border-top: 2px solid #f59e0b; margin: 12px 0;"></div>
+      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px; font-size: 1rem;">
+        <div><strong>Beneficiary:</strong></div><div>${escapeHtml(beneficiary.name)}</div>
+        <div><strong>Phone:</strong></div><div>${beneficiary.phone}</div>
+        <div><strong>Payout Date:</strong></div><div>${new Date().toLocaleDateString()}</div>
+      </div>
+      <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
+      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px; font-size: 1rem;">
+        <div><strong>Full Weekly Amount:</strong></div><div>UGX ${weeklyGross.toLocaleString()}</div>
+        <div><strong>Member Debt:</strong></div><div>- UGX ${debt.toLocaleString()}</div>
+        <div><strong>Outstanding Loan:</strong></div><div>- UGX ${loan.toLocaleString()}</div>
+        <div><strong style="color: var(--green);">Net Payout:</strong></div><div><strong>UGX ${netPayout.toLocaleString()}</strong></div>
+      </div>
+      <div style="border-top: 1px solid #e2e8f0; margin: 16px 0;"></div>
+      <div style="text-align: center; font-size: 0.7rem; color: #94a3b8;">This payout clears all debts and loans for the member.</div>
+      <div style="text-align: center; font-size: 0.6rem; margin-top: 8px;">Authorised by Harvest Trust Finance</div>
+    </div>
+  `;
+
+  // Show modal with options: Print, Share as Image, Cancel
+  return new Promise((resolve) => {
+    const modal = document.createElement('div');
+    modal.className = 'ov on';
+    modal.style.zIndex = '20010';
+    modal.innerHTML = `
+      <div class="bs" style="max-width: 650px;">
+        <div class="bs-title">📄 Weekly Payout Receipt</div>
+        <div id="weekly-receipt-preview" style="max-height: 60vh; overflow-y: auto; margin-bottom: 16px;">
+          ${receiptHtml}
+        </div>
+        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+          <button class="btn btn-gold" style="flex:1" id="print-weekly-receipt">🖨️ Print Receipt</button>
+          <button class="btn btn-teal" style="flex:1" id="share-weekly-receipt">📸 Share as Image</button>
+          <button class="btn btn-sec" style="flex:1" id="close-weekly-modal">Close</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    const printBtn = modal.querySelector('#print-weekly-receipt');
+    const shareBtn = modal.querySelector('#share-weekly-receipt');
+    const closeBtn = modal.querySelector('#close-weekly-modal');
+
+    const cleanup = () => {
+      modal.classList.remove('on');
+      setTimeout(() => modal.remove(), 300);
+    };
+
+    // Print function
+    printBtn.onclick = () => {
+      const printWindow = window.open('', '_blank');
+      printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Harvest Trust Finance - Weekly Payout Receipt</title>
+          <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body {
+              font-family: 'DM Sans', 'Segoe UI', sans-serif;
+              background: white;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              min-height: 100vh;
+              padding: 20px;
+            }
+            .weekly-receipt-card {
+              max-width: 700px;
+              width: 100%;
+              margin: 0 auto;
+              border: 1px solid #e2e8f0;
+              border-radius: 24px;
+              padding: 32px;
+              background: white;
+            }
+            @media print {
+              body { padding: 0; margin: 0; }
+              .weekly-receipt-card { box-shadow: none; border: none; }
+              @page { margin: 0.5in; }
+            }
+          </style>
+        </head>
+        <body>
+          ${receiptHtml}
+        </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+      cleanup();
+      resolve(true);
+    };
+
+    // Share as image
+    shareBtn.onclick = async () => {
+      cleanup();
+      const tempDiv = document.createElement('div');
+      tempDiv.style.position = 'absolute';
+      tempDiv.style.top = '-9999px';
+      tempDiv.style.left = '-9999px';
+      tempDiv.innerHTML = receiptHtml;
+      document.body.appendChild(tempDiv);
+
+      try {
+        const canvas = await html2canvas(tempDiv.querySelector('.weekly-receipt-card'), {
+          scale: 2,
+          backgroundColor: '#ffffff',
+          logging: false
+        });
+        document.body.removeChild(tempDiv);
+        const imageData = canvas.toDataURL('image/png');
+        const blob = await (await fetch(imageData)).blob();
+        const file = new File([blob], `weekly_payout_${beneficiary.id}.png`, { type: 'image/png' });
+
+        if (navigator.share && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+          await navigator.share({
+            title: 'Harvest Trust Finance Weekly Payout',
+            text: `Payout receipt for ${beneficiary.name} - UGX ${netPayout.toLocaleString()}`,
+            files: [file]
+          });
+          toast(`✅ Weekly payout receipt shared!`, '#10b981');
+        } else {
+          const link = document.createElement('a');
+          link.download = `weekly_payout_${beneficiary.id}.png`;
+          link.href = imageData;
+          link.click();
+          toast(`📸 Weekly payout receipt downloaded. Share it manually.`, '#f59e0b');
+        }
+        resolve(true);
+      } catch (err) {
+        console.error('Share error:', err);
+        document.body.removeChild(tempDiv);
+        toast('❌ Failed to generate image', '#ef4444');
+        resolve(false);
+      }
+    };
+
+    closeBtn.onclick = () => {
+      cleanup();
       resolve(false);
     };
   });
@@ -6526,6 +6707,7 @@ function renderAdminTab() {
         <div class="sec-h">🌾 Harvest Actions</div>
         <button class="btn btn-teal btn-full" onclick="openAddTransaction()">➕ Add Transaction</button>
         <button class="btn btn-green btn-full" onclick="openOv('ov-mark-paid')">✅ Mark Weekly Payout</button>
+        <button class="btn btn-purple btn-full" onclick="generateWeeklyPayoutReceipt()">📄 Weekly Payout Receipt (Preview/Share)</button>
         <button class="btn btn-purple btn-full" onclick="openOv('ov-rot-manage'); buildDragRotation();">🔄 Manage Payout Rotation</button>
         <button class="btn btn-amber btn-full" onclick="advanceLoanReceiver()">⏩ Advance Loan Receiver</button>
         <button class="btn btn-purple btn-full" onclick="openOv('ov-loan-rot-manage'); buildLoanDragRotation();">🔄 Manage Loan Rotation</button>
