@@ -1808,7 +1808,7 @@ setTimeout(function(){
   <!-- Sub‑tabs navigation -->
   <div class="stats-subtabs" style="display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 1px solid var(--br); padding-bottom: 6px; flex-wrap: wrap;">
     <button class="stats-tab-btn active" data-stats-tab="leaderboard">🏆 Leaderboard</button>
-    <button class="stats-tab-btn" data-stats-tab="rewards">🎁 Rewards & Bonuses</button>
+    <button class="stats-tab-btn" data-stats-tab="rewards">🎁 Rewards!</button>
     <button class="stats-tab-btn" data-stats-tab="ledger">📒 Ledger</button>
   </div>
 
@@ -4111,13 +4111,38 @@ if (!document.getElementById('contact-card')) {
   }
 }
 }
-function updateAccountBalances(){
-  if(!currentUser||currentUser.isAdmin)return;
-  const bal=memberBalances[currentUser.phone]||0;
-  const debt=(memberDebts[currentUser.phone]||0)+(memberLoans[currentUser.phone]||0);
-  document.getElementById('account-balance').innerText='UGX '+bal.toLocaleString();
-  document.getElementById('account-debt').innerText='UGX '+debt.toLocaleString();
+function updateAccountBalances() {
+  if (!currentUser || currentUser.isAdmin) return;
+  
+  const rawPhone = currentUser.phone;
+  let balance = 0;
+  let totalDebt = 0;
+  
+  // Try raw phone first
+  if (memberBalances[rawPhone] !== undefined) balance = memberBalances[rawPhone];
+  if (memberDebts[rawPhone] !== undefined) totalDebt += memberDebts[rawPhone];
+  if (memberLoans[rawPhone] !== undefined) totalDebt += memberLoans[rawPhone];
+  
+  // If still zero, try normalized version (+256...)
+  const normPhone = normalizePhone(rawPhone);
+  if (normPhone && normPhone !== rawPhone) {
+    if (memberBalances[normPhone] !== undefined) balance = memberBalances[normPhone];
+    if (memberDebts[normPhone] !== undefined) totalDebt += memberDebts[normPhone];
+    if (memberLoans[normPhone] !== undefined) totalDebt += memberLoans[normPhone];
+  }
+  
+  // If still zero, try stripping the +256 (for legacy data)
+  if (balance === 0 && rawPhone.startsWith('+256')) {
+    const shortPhone = rawPhone.slice(4);
+    if (memberBalances[shortPhone] !== undefined) balance = memberBalances[shortPhone];
+    if (memberDebts[shortPhone] !== undefined) totalDebt += memberDebts[shortPhone];
+    if (memberLoans[shortPhone] !== undefined) totalDebt += memberLoans[shortPhone];
+  }
+  
+  document.getElementById('account-balance').innerText = 'UGX ' + balance.toLocaleString();
+  document.getElementById('account-debt').innerText = 'UGX ' + totalDebt.toLocaleString();
 }
+
 function displayLoanRepaymentSchedule() {
   if (!currentUser || currentUser.isAdmin) return;
   const activeLoan = loans.find(l => l.memberId === currentUser.id && l.status === 'approved' && !l.repaid);
@@ -4938,6 +4963,8 @@ function showMainApp() {
       // Now show the actual app
       document.getElementById('app').classList.add('on');
       syncCurrentUserFromMembers();
+      computePots();
+updateAccountBalances();
       updateAccountUI();
       checkMembershipRenewal(currentUser);
       goTab('home', document.getElementById('ni-home'));
@@ -5811,13 +5838,13 @@ window.openOv = function(id) {
     buildDragRotation();
   }
 };
-window.openProfileModal=function(){
-  if(!currentUser)return;
-  if(currentUser.isAdmin){
-    showModal('<div style="text-align:center;padding:12px 0"><div style="font-size:3.5rem">🔐</div><div style="font-family:Syne,sans-serif;font-size:1.2rem;font-weight:800;color:var(--gold);margin:10px 0">'+t('admin_profile')+'</div><div style="color:var(--t3);font-size:0.82rem;margin-bottom:16px">'+t('full_access')+'</div><div style="background:rgba(245,158,11,0.08);border-radius:12px;padding:12px;border:1px solid rgba(245,158,11,0.15);display:grid;grid-template-columns:1fr 1fr;gap:10px;text-align:left"><div><div style="font-size:0.6rem;color:var(--t3)">'+t('members_count')+'</div><div style="font-weight:700;color:var(--gold)">'+members.length+'</div></div><div><div style="font-size:0.6rem;color:var(--t3)">'+t('available')+'</div><div style="font-weight:700;color:var(--green)">UGX '+cashFromDeposits.toLocaleString()+'</div></div><div><div style="font-size:0.6rem;color:var(--t3)">'+t('profit_pool')+'</div><div style="font-weight:700;color:'+(groupProfit<0?'var(--red)':'var(--teal)')+'">UGX '+groupProfit.toLocaleString()+'</div></div><div><div style="font-size:0.6rem;color:var(--t3)">'+t('transactions_count')+'</div><div style="font-weight:700">'+transactions.length+'</div></div></div></div>',t('admin_profile'));
+window.openProfileModal = function() {
+  if (!currentUser) return;
+  if (currentUser.isAdmin) {
+    showModal('<div style="text-align:center;padding:12px 0"><div style="font-size:3.5rem">🔐</div><div style="font-family:Syne,sans-serif;font-size:1.2rem;font-weight:800;color:var(--gold);margin:10px 0">Admin Profile</div><div style="color:var(--t3);font-size:0.82rem;margin-bottom:16px">Full access · Harvest Trust Finance</div><div style="background:rgba(245,158,11,0.08);border-radius:12px;padding:12px;border:1px solid rgba(245,158,11,0.15);display:grid;grid-template-columns:1fr 1fr;gap:10px;text-align:left"><div><div style="font-size:0.6rem;color:var(--t3)">Members</div><div style="font-weight:700;color:var(--gold)">' + members.length + '</div></div><div><div style="font-size:0.6rem;color:var(--t3)">Available</div><div style="font-weight:700;color:var(--green)">UGX ' + cashFromDeposits.toLocaleString() + '</div></div><div><div style="font-size:0.6rem;color:var(--t3)">Profit Pool</div><div style="font-weight:700;color:' + (groupProfit < 0 ? 'var(--red)' : 'var(--teal)') + '">UGX ' + groupProfit.toLocaleString() + '</div></div><div><div style="font-size:0.6rem;color:var(--t3)">Transactions</div><div style="font-weight:700">' + transactions.length + '</div></div></div></div>', 'Admin Profile');
     return;
   }
-  showModal('<div class="fgrp"><label class="flbl">'+t('name_placeholder')+'</label><input id="edit-name" class="inp" value="'+escapeHtml(currentUser.name)+'"></div><div class="fgrp"><label class="flbl">'+t('phone_placeholder')+'</label><input id="edit-phone" class="inp" value="'+escapeHtml(currentUser.phone)+'"></div><div style="background:rgba(245,158,11,0.08);border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:0.78rem;color:var(--t2);border:1px solid rgba(245,158,11,0.12)">'+t('phone_change_note')+'</div><button class="btn btn-gold btn-full" onclick="saveProfile()">'+t('save_changes')+'</button>',t('my_profile'));
+  showModal('<div class="fgrp"><label class="flbl">Full Name</label><input id="edit-name" class="inp" value="' + escapeHtml(currentUser.name) + '"></div><div class="fgrp"><label class="flbl">Phone Number</label><input id="edit-phone" class="inp" value="' + escapeHtml(currentUser.phone) + '"></div><div style="background:rgba(245,158,11,0.08);border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:0.78rem;color:var(--t2);border:1px solid rgba(245,158,11,0.12)">ℹ️ Changing your phone number updates your login PIN to the last 4 digits.</div><button class="btn btn-gold btn-full" onclick="saveProfile()">Save Changes</button>', 'My Profile');
 };
 window.saveProfile=async function(){
   const n=document.getElementById('edit-name').value.trim();
@@ -5827,35 +5854,38 @@ window.saveProfile=async function(){
   currentUser.name=n;currentUser.phone=p;currentUser.password='HT'+p.slice(-4);
   updateAccountUI();closeModal();toast(t('save_changes'),'#10b981');
 };
-window.openSecurityModal=function(){
-  if(!currentUser)return;
-  if(currentUser.isAdmin){showModal('<div style="text-align:center;padding:16px 0"><div style="font-size:2.5rem;margin-bottom:10px">🔒</div><div style="color:var(--t2);font-size:0.84rem;line-height:1.6">'+t('security')+'</div><div style="margin-top:12px;background:rgba(255,255,255,0.04);border-radius:10px;padding:10px;font-family:JetBrains Mono,monospace;font-size:0.75rem;color:var(--t3)">Current: admin123</div></div>',t('security'));return;}
-  let curPin='',newPin='',confPin='',step='cur';
-  const buildPins=(title,sub,err)=>`<div style="text-align:center;margin-bottom:14px"><div style="font-size:0.75rem;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin-bottom:3px">${title}</div><div style="font-size:0.8rem;color:var(--t2)">${sub}</div></div><div style="display:flex;gap:12px;justify-content:center;margin:14px 0" id="pin-dots">${[0,1,2,3].map(i=>'<div style="width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,0.2);transition:all 0.2s" id="pd'+i+'"></div>').join('')}</div><div style="min-height:18px;text-align:center;font-size:0.74rem;color:var(--red);margin-bottom:10px">${err||''}</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:240px;margin:0 auto">${[1,2,3,4,5,6,7,8,9,'','0','⌫'].map(k=>`<button onclick="pKey('${k}')" style="padding:16px;border-radius:14px;background:rgba(255,255,255,0.06);border:1.5px solid rgba(255,255,255,0.1);font-size:1.2rem;font-weight:700;cursor:pointer;color:var(--t);transition:all 0.15s">${k}</button>`).join('')}</div>`;
-  const content=document.createElement('div');
-  content.innerHTML=buildPins(t('enter_current_pin'),t('enter_current_pin'),'');
-  window.pKey=function(k){
-    const active=()=>step==='cur'?curPin:step==='new'?newPin:confPin;
-    const set=(v)=>{if(step==='cur')curPin=v;else if(step==='new')newPin=v;else confPin=v;};
-    if(k==='⌫'){set(active().slice(0,-1));}
-    else if(k!==''&&active().length<4){set(active()+k);}
-    const len=active().length;
-    for(let i=0;i<4;i++){const d=document.getElementById('pd'+i);if(d){d.style.background=i<len?'var(--gold)':'transparent';d.style.borderColor=i<len?'var(--gold)':'rgba(255,255,255,0.2)';}}
-    if(active().length===4){
-      setTimeout(()=>{
-        if(step==='cur'){
-          const stored=(currentUser.password||'').slice(-4);
-          if(active()!==stored){content.innerHTML=buildPins(t('enter_current_pin'),t('enter_current_pin'),t('incorrect_pin'));curPin='';}
-          else{step='new';newPin='';content.innerHTML=buildPins(t('enter_new_pin'),t('enter_new_pin'),'');}
-        }else if(step==='new'){step='conf';confPin='';content.innerHTML=buildPins(t('confirm_new_pin'),t('confirm_new_pin'),'');}
-        else{
-          if(newPin!==confPin){content.innerHTML=buildPins(t('enter_new_pin'),t('enter_new_pin'),t('pins_dont_match'));step='new';newPin='';confPin='';}
-          else{db.ref('members/'+currentUser.id).update({password:'HT'+newPin}).then(()=>{currentUser.password='HT'+newPin;closeModal();toast(t('pin_changed'),'#10b981');});}
+window.openSecurityModal = function() {
+  if (!currentUser) return;
+  if (currentUser.isAdmin) {
+    showModal('<div style="text-align:center;padding:16px 0"><div style="font-size:2.5rem;margin-bottom:10px">🔒</div><div style="color:var(--t2);font-size:0.84rem;line-height:1.6">Security</div><div style="margin-top:12px;background:rgba(255,255,255,0.04);border-radius:10px;padding:10px;font-family:JetBrains Mono,monospace;font-size:0.75rem;color:var(--t3)">Current: admin123</div></div>', 'Security');
+    return;
+  }
+  let curPin = '', newPin = '', confPin = '', step = 'cur';
+  const buildPins = (title, sub, err) => `<div style="text-align:center;margin-bottom:14px"><div style="font-size:0.75rem;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin-bottom:3px">${title}</div><div style="font-size:0.8rem;color:var(--t2)">${sub}</div></div><div style="display:flex;gap:12px;justify-content:center;margin:14px 0" id="pin-dots">${[0,1,2,3].map(i => '<div style="width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,0.2);transition:all 0.2s" id="pd' + i + '"></div>').join('')}</div><div style="min-height:18px;text-align:center;font-size:0.74rem;color:var(--red);margin-bottom:10px">${err || ''}</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:240px;margin:0 auto">${[1,2,3,4,5,6,7,8,9, '', '0', '⌫'].map(k => `<button onclick="pKey('${k}')" style="padding:16px;border-radius:14px;background:rgba(255,255,255,0.06);border:1.5px solid rgba(255,255,255,0.1);font-size:1.2rem;font-weight:700;cursor:pointer;color:var(--t);transition:all 0.15s">${k}</button>`).join('')}</div>`;
+  const content = document.createElement('div');
+  content.innerHTML = buildPins('Enter Current PIN', 'Enter Current PIN', '');
+  window.pKey = function(k) {
+    const active = () => step === 'cur' ? curPin : step === 'new' ? newPin : confPin;
+    const set = (v) => { if (step === 'cur') curPin = v; else if (step === 'new') newPin = v; else confPin = v; };
+    if (k === '⌫') { set(active().slice(0, -1)); }
+    else if (k !== '' && active().length < 4) { set(active() + k); }
+    const len = active().length;
+    for (let i = 0; i < 4; i++) { const d = document.getElementById('pd' + i); if (d) { d.style.background = i < len ? 'var(--gold)' : 'transparent'; d.style.borderColor = i < len ? 'var(--gold)' : 'rgba(255,255,255,0.2)'; } }
+    if (active().length === 4) {
+      setTimeout(() => {
+        if (step === 'cur') {
+          const stored = (currentUser.password || '').slice(-4);
+          if (active() !== stored) { content.innerHTML = buildPins('Enter Current PIN', 'Enter Current PIN', 'Incorrect PIN – try again'); curPin = ''; }
+          else { step = 'new'; newPin = ''; content.innerHTML = buildPins('Enter New PIN', 'Enter New PIN', ''); }
+        } else if (step === 'new') { step = 'conf'; confPin = ''; content.innerHTML = buildPins('Confirm New PIN', 'Confirm New PIN', ''); }
+        else {
+          if (newPin !== confPin) { content.innerHTML = buildPins('Enter New PIN', 'Enter New PIN', 'PINs did not match – try again'); step = 'new'; newPin = ''; confPin = ''; }
+          else { db.ref('members/' + currentUser.id).update({ password: 'HT' + newPin }).then(() => { currentUser.password = 'HT' + newPin; closeModal(); toast('PIN changed! ✅', '#10b981'); }); }
         }
-      },300);
+      }, 300);
     }
   };
-  showModalEl(content,t('change_pin'));
+  showModalEl(content, 'Change PIN');
 };
 window.openNotificationsModal = function() {
   if (!currentUser) return;
@@ -5879,11 +5909,9 @@ window.openNotificationsModal = function() {
     showModal(html, 'Admin Notifications');
     return;
   }
-  
-  // Member notifications (unchanged)
   const arr = notifications[currentUser.id] || [];
   if (!arr.length) {
-    showModal('<div class="empty-state"><div class="empty-state-icon">🔔</div><div class="empty-state-text">' + t('no_notifications') + '</div></div>', t('notifications'));
+    showModal('<div class="empty-state"><div class="empty-state-icon">🔔</div><div class="empty-state-text">No notifications yet</div></div>', 'Notifications');
     return;
   }
   let html = '<div style="max-height:320px;overflow:auto;display:flex;flex-direction:column;gap:8px">';
@@ -5891,11 +5919,11 @@ window.openNotificationsModal = function() {
     html += '<div style="padding:12px 14px;border-radius:13px;background:rgba(245,158,11,' + (n.read ? '0.04' : '0.1') + ');border:1.5px solid rgba(245,158,11,' + (n.read ? '0.06' : '0.2') + ')">';
     html += '<div style="font-size:0.84rem;font-weight:' + (n.read ? 400 : 600) + '">' + n.text + '</div>';
     html += '<div style="font-size:0.63rem;color:var(--t3);margin-top:4px">' + new Date(n.date).toLocaleString() + '</div>';
-    html += '<div style="display:flex;gap:6px;margin-top:8px">' + (n.read ? '' : '<button class="btn btn-sm btn-teal" onclick="markNotifRead(' + n.id + ')">' + t('mark_read') + '</button>') + '<button class="btn btn-sm btn-red" onclick="deleteNotif(' + n.id + ')">' + t('delete') + '</button></div>';
+    html += '<div style="display:flex;gap:6px;margin-top:8px">' + (n.read ? '' : '<button class="btn btn-sm btn-teal" onclick="markNotifRead(' + n.id + ')">✓ Mark Read</button>') + '<button class="btn btn-sm btn-red" onclick="deleteNotif(' + n.id + ')">🗑️ Delete</button></div>';
     html += '</div>';
   });
   html += '</div>';
-  showModal(html, t('notifications'));
+  showModal(html, 'Notifications');
 };
 window.markNotifRead=async function(id){const arr=notifications[currentUser.id]||[];const idx=arr.findIndex(n=>n.id===id);if(idx>-1){arr[idx].read=true;await db.ref('notifications/'+currentUser.id).set(arr);}closeModal();openNotificationsModal();};
 window.deleteNotif=async function(id){const f=(notifications[currentUser.id]||[]).filter(n=>n.id!==id);await db.ref('notifications/'+currentUser.id).set(f);closeModal();openNotificationsModal();};
@@ -8386,48 +8414,7 @@ window.buildLoanDragRotation = function() {
     });
     container.appendChild(div);
   });
-
-  // Add a reset button inside the modal if not already present
-  addLoanRotationResetButton();
 };
-
-// Helper to add reset button inside the loan rotation modal
-function addLoanRotationResetButton() {
-  const modal = document.getElementById('ov-loan-rot-manage');
-  if (!modal) return;
-  const bs = modal.querySelector('.bs');
-  if (!bs) return;
-  if (document.getElementById('loan-rot-reset-btn')) return;
-  
-  const resetBtn = document.createElement('button');
-  resetBtn.id = 'loan-rot-reset-btn';
-  resetBtn.className = 'btn btn-sec btn-full';
-  resetBtn.style.marginTop = '12px';
-  resetBtn.innerHTML = '🔄 Reset to All Members';
-  resetBtn.onclick = () => {
-    const allMembers = members.filter(m => m.approved === true);
-    if (allMembers.length === 0) return;
-    loanRotationOrder = allMembers.map(m => m.id);
-    loanRotationOrder.sort((a, b) => {
-      const ma = members.find(m => m.id === a);
-      const mb = members.find(m => m.id === b);
-      return (ma?.name || '').localeCompare(mb?.name || '');
-    });
-    loanReceiverIndex = 0;
-    db.ref('settings/loanRotationOrder').set(loanRotationOrder);
-    db.ref('settings/loanReceiverIndex').set(loanReceiverIndex);
-    buildLoanDragRotation();
-    toast(`Loan rotation reset to ${loanRotationOrder.length} members`, '#10b981');
-  };
-  
-  // Insert before the "Save Order" button's container
-  const buttonContainer = bs.querySelector('.btn-gold')?.parentElement;
-  if (buttonContainer) {
-    buttonContainer.appendChild(resetBtn);
-  } else {
-    bs.appendChild(resetBtn);
-  }
-}
 
 // Save loan rotation order to Firebase
 window.saveLoanRotationOrder = function() {
