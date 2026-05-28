@@ -2131,17 +2131,19 @@ setTimeout(function(){
       </select>
     </div>
     <div class="fgrp">
-  <label class="flbl">🤖 Auto‑Debt Assignment</label>
-  <select id="set-auto-debt-enabled" class="inp">
-    <option value="false">Disabled</option>
-    <option value="true">Enabled</option>
-  </select>
-  <div class="micro">When enabled, members with no activity today will be charged daily amount at the scheduled time.</div>
+  <label class="flbl">💰 Auto‑Debt Interest Rate (%)</label>
+  <input type="number" id="set-auto-debt-interest" class="inp" step="0.5" value="5">
+  <div class="micro">Base interest rate applied to auto‑assigned debt (loan).</div>
 </div>
 <div class="fgrp">
-  <label class="flbl">⏰ Auto‑Debt Time (24h format)</label>
-  <input type="time" id="set-auto-debt-time" class="inp" value="23:30">
-  <div class="micro">The system will run daily at this time (browser time).</div>
+  <label class="flbl">⚡ Auto‑Debt Extra Interest Per Week (%)</label>
+  <input type="number" id="set-auto-debt-extra-weekly" class="inp" step="0.5" value="2">
+  <div class="micro">Additional interest for each extra week beyond the first week.</div>
+</div>
+<div class="fgrp">
+  <label class="flbl">📅 Auto‑Debt Loan Period (weeks)</label>
+  <input type="number" id="set-auto-debt-weeks" class="inp" step="1" min="1" value="4">
+  <div class="micro">Number of weeks for the auto‑assigned loan repayment.</div>
 </div>
     <div class="fgrp">
       <label class="flbl">Theme Color</label>
@@ -2531,7 +2533,10 @@ let settings = {
   signupFee: 0,               // <-- add
   renewalEnabled: false,
   renewalFee: 10000,
-  termsAndConditions: ``  // <-- add
+  termsAndConditions: ``,  // <-- add
+  autoDebtInterest: 5,
+autoDebtExtraWeekly: 0,
+autoDebtWeeks: 0
 };
 let currentUser=null,adminUnlocked=false,currentAdminTab='savings';
 let memberBalances={},memberDebts={},memberLoans={};
@@ -9415,6 +9420,9 @@ window.loadSettings = function() {
   document.getElementById('set-fine-contribution').value = settings.fineContribution || 0;
   document.getElementById('set-penalty-interest').value = settings.penaltyInterestRate || 5;
   document.getElementById('set-fine').value = settings.fineAmount || 5000;
+  document.getElementById('set-auto-debt-interest').value = settings.autoDebtInterest || 5;
+document.getElementById('set-auto-debt-extra-weekly').value = settings.autoDebtExtraWeekly || 0;
+document.getElementById('set-auto-debt-weeks').value = settings.autoDebtWeeks || 0;
   document.getElementById('set-referral-bonus').value = settings.referralBonusAmount || 10000;
   document.getElementById('set-whatsapp').value = settings.whatsappLink || '';
   document.getElementById('set-banner-url').value = settings.bannerData || '';
@@ -9455,6 +9463,9 @@ window.doSaveSettings = function() {
   settings.fineContribution = +document.getElementById('set-fine-contribution').value;
   settings.fineAmount = +document.getElementById('set-fine').value;
   settings.penaltyInterestRate = parseFloat(document.getElementById('set-penalty-interest').value) || 5;
+  settings.autoDebtInterest = parseFloat(document.getElementById('set-auto-debt-interest').value) || 5;
+settings.autoDebtExtraWeekly = parseFloat(document.getElementById('set-auto-debt-extra-weekly').value) || 0;
+settings.autoDebtWeeks = parseInt(document.getElementById('set-auto-debt-weeks').value, 10) || 0;
   settings.referralBonusAmount = parseInt(document.getElementById('set-referral-bonus').value) || 0;
 db.ref('settings').update({ referralBonusAmount: settings.referralBonusAmount });
   settings.whatsappLink = document.getElementById('set-whatsapp').value;
@@ -9474,6 +9485,9 @@ db.ref('settings').update({ referralBonusAmount: settings.referralBonusAmount })
     fineAmount: settings.fineAmount,
     penaltyInterestRate: settings.penaltyInterestRate,
     whatsappLink: settings.whatsappLink,
+    autoDebtInterest: settings.autoDebtInterest,
+  autoDebtExtraWeekly: settings.autoDebtExtraWeekly,
+  autoDebtWeeks: settings.autoDebtWeeks,
     bannerData: settings.bannerData,
     themeMode: settings.themeMode,
     themeColor: settings.themeColor,
@@ -10479,17 +10493,14 @@ window.manualDebtReview = async function() {
   const activeMembers = members.filter(m => m.approved === true);
   const dailyAmount = settings.dailyAmount || 2000;
   const welfareAmount = settings.welfareAmount || 500;
-  const principal = dailyAmount + welfareAmount;
-  
-  // Get loan settings exactly as assign debt modal uses
-  const baseRate = (loanSettings && loanSettings.interestRate) ? loanSettings.interestRate : 5;
-  const extraWeekly = (loanSettings && loanSettings.extraWeeklyInterest) ? loanSettings.extraWeeklyInterest : 2;
-  const loanPeriodDays = (loanSettings && loanSettings.loanPeriodDays) ? loanSettings.loanPeriodDays : 30;
-  const weeks = Math.max(1, Math.floor(loanPeriodDays / 7));
-  const totalRate = baseRate + (weeks - 1) * extraWeekly;
-  const interest = Math.floor(principal * totalRate / 100);
-  const totalRepay = principal + interest;
-  const dueDate = Date.now() + weeks * 7 * 86400000;
+ const principal = (settings.dailyAmount || 2000) + (settings.welfareAmount || 500);
+const baseRate = settings.autoDebtInterest || 5;
+const extraWeekly = settings.autoDebtExtraWeekly || 2;
+const weeks = settings.autoDebtWeeks || 4;
+const totalRate = baseRate + (weeks - 1) * extraWeekly;
+const interest = Math.floor(principal * totalRate / 100);
+const totalRepay = principal + interest;
+const dueDate = Date.now() + weeks * 7 * 86400000;
 
   // Members with any transaction today
   const membersWithActivity = new Set();
