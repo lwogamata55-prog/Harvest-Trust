@@ -6741,6 +6741,7 @@ window.openAutoDebtReports = async function() {
   }
 };
 
+
 function renderAutoDebtReport(report) {
   const container = document.getElementById('auto-debt-reports-list');
   if (!container) return;
@@ -6777,24 +6778,18 @@ function renderAutoDebtReport(report) {
 }
 // 1. Confirm & Send: Add loan, send receipt image
 window.confirmAndSendDebt = async function(itemId) {
-  if (!confirm(`Add loan of UGX ${item.principal} (total repay UGX ${item.totalRepay}) to member and send receipt via WhatsApp?`)) return;
-
   const reportSnap = await db.ref(`autoDebtReports/${currentReportId}`).once('value');
   const report = reportSnap.val();
+  if (!report) { toast("Report not found", "#ef4444"); return; }
   const item = report.items.find(i => i.id == itemId);
-  if (!item) return;
-
-  // Find the member object
+  if (!item) { toast("Item not found", "#ef4444"); return; }
   const member = members.find(m => m.id === item.memberId);
-  if (!member) {
-    toast("Member not found", "#ef4444");
-    return;
-  }
-
-  // Create the loan exactly as admin assigned debt
-  await assignDebtToSingleMember(member, item.principal, item.interestRate, item.dueDate, `Auto‑assigned loan for inactivity on ${new Date(item.date).toLocaleDateString()}`);
-
-  // Send receipt image if wanted
+  if (!member) { toast("Member not found", "#ef4444"); return; }
+  
+  if (!confirm(`Add loan of UGX ${item.principal.toLocaleString()} (total repay UGX ${item.totalRepay.toLocaleString()}) to ${item.memberName} and send receipt via WhatsApp?`)) return;
+  
+  await createLoanForMember(member, item.principal, item.interestRate, item.dueDate, `Auto‑assigned loan for inactivity on ${new Date(item.date).toLocaleDateString()}`);
+  
   if (item.imageData) {
     try {
       const blob = await (await fetch(item.imageData)).blob();
@@ -6811,14 +6806,14 @@ window.confirmAndSendDebt = async function(itemId) {
         link.download = `loan_${item.memberId}.png`;
         link.href = item.imageData;
         link.click();
-        toast('Image downloaded. Send it manually on WhatsApp.', '#f59e0b');
+        toast('Image downloaded. Send manually on WhatsApp.', '#f59e0b');
       }
     } catch (err) {
       console.error(err);
       toast('Failed to send image, but loan was added.', '#ef4444');
     }
   }
-
+  
   await removeItemFromReport(currentReportId, itemId);
   const refreshedSnap = await db.ref(`autoDebtReports/${currentReportId}`).once('value');
   renderAutoDebtReport(refreshedSnap.val());
@@ -6827,23 +6822,19 @@ window.confirmAndSendDebt = async function(itemId) {
   toast(`Loan added for ${item.memberName}`, '#10b981');
 };
 
-// 2. Confirm & Don't Send: Add loan, no receipt
 window.confirmAndKeepDebt = async function(itemId) {
-  if (!confirm(`Add loan of UGX ${item.principal} (total repay UGX ${item.totalRepay}) to member without sending receipt?`)) return;
-
   const reportSnap = await db.ref(`autoDebtReports/${currentReportId}`).once('value');
   const report = reportSnap.val();
+  if (!report) { toast("Report not found", "#ef4444"); return; }
   const item = report.items.find(i => i.id == itemId);
-  if (!item) return;
-
+  if (!item) { toast("Item not found", "#ef4444"); return; }
   const member = members.find(m => m.id === item.memberId);
-  if (!member) {
-    toast("Member not found", "#ef4444");
-    return;
-  }
-
-  await assignDebtToSingleMember(member, item.principal, item.interestRate, item.dueDate, `Auto‑assigned loan for inactivity on ${new Date(item.date).toLocaleDateString()}`);
-
+  if (!member) { toast("Member not found", "#ef4444"); return; }
+  
+  if (!confirm(`Add loan of UGX ${item.principal.toLocaleString()} (total repay UGX ${item.totalRepay.toLocaleString()}) to ${item.memberName} without sending receipt?`)) return;
+  
+  await createLoanForMember(member, item.principal, item.interestRate, item.dueDate, `Auto‑assigned loan for inactivity on ${new Date(item.date).toLocaleDateString()}`);
+  
   await removeItemFromReport(currentReportId, itemId);
   const refreshedSnap = await db.ref(`autoDebtReports/${currentReportId}`).once('value');
   renderAutoDebtReport(refreshedSnap.val());
@@ -6852,7 +6843,6 @@ window.confirmAndKeepDebt = async function(itemId) {
   toast('Loan added (no receipt sent).', '#10b981');
 };
 
-// 3. Don't Save: Discard (no loan added) – unchanged
 window.discardDebtReceipt = async function(itemId) {
   if (!confirm('Discard this pending receipt? No loan will be added.')) return;
   await removeItemFromReport(currentReportId, itemId);
@@ -6870,9 +6860,10 @@ async function removeItemFromReport(reportId, itemId) {
   if (newItems.length === 0) {
     await reportRef.update({ status: 'completed', completedAt: Date.now(), items: [] });
   } else {
-    await reportRef.update({ items: newItems, totalAmount: newItems.reduce((s,i)=>s+i.amount,0) });
+    await reportRef.update({ items: newItems, totalAmount: newItems.reduce((s,i)=>s+i.principal,0) });
   }
 }
+
 window.openApproveLoanModal = async function(loanId) {
   const loan = loans.find(l => l.id === loanId);
   if (!loan) return;
@@ -10486,17 +10477,21 @@ window.manualDebtReview = async function() {
   const todayStart = new Date().setHours(0, 0, 0, 0);
   const todayEnd = todayStart + 86400000 - 1;
   const activeMembers = members.filter(m => m.approved === true);
-  const principal = (settings.dailyAmount || 2000) + (settings.welfareAmount || 500);
-const interestRate = (loanSettings && loanSettings.interestRate) ? loanSettings.interestRate : 5;
-const weeks = 4; // or use loanSettings.loanPeriodDays / 7
-const extraWeekly = (loanSettings && loanSettings.extraWeeklyInterest) ? loanSettings.extraWeeklyInterest : 2;
-const totalRate = interestRate + (weeks - 1) * extraWeekly;
-const interest = Math.floor(principal * totalRate / 100);
-const totalRepay = principal + interest;
-const dueDate = Date.now() + weeks * 7 * 86400000;
+  const dailyAmount = settings.dailyAmount || 2000;
+  const welfareAmount = settings.welfareAmount || 500;
+  const principal = dailyAmount + welfareAmount;
+  
+  // Get loan settings exactly as assign debt modal uses
+  const baseRate = (loanSettings && loanSettings.interestRate) ? loanSettings.interestRate : 5;
+  const extraWeekly = (loanSettings && loanSettings.extraWeeklyInterest) ? loanSettings.extraWeeklyInterest : 2;
+  const loanPeriodDays = (loanSettings && loanSettings.loanPeriodDays) ? loanSettings.loanPeriodDays : 30;
+  const weeks = Math.max(1, Math.floor(loanPeriodDays / 7));
+  const totalRate = baseRate + (weeks - 1) * extraWeekly;
+  const interest = Math.floor(principal * totalRate / 100);
+  const totalRepay = principal + interest;
+  const dueDate = Date.now() + weeks * 7 * 86400000;
 
-
-  // Find members with any transaction today
+  // Members with any transaction today
   const membersWithActivity = new Set();
   transactions.forEach(tx => {
     if (tx.date >= todayStart && tx.date <= todayEnd && tx.memberPhone) {
@@ -10513,21 +10508,20 @@ const dueDate = Date.now() + weeks * 7 * 86400000;
   const pendingItems = [];
   for (const member of membersToCharge) {
     const receiptImageData = await generateDebtReceiptImage(member, principal, totalRate, totalRepay, dueDate, new Date(todayStart));
-    // Inside manualDebtReview, after determining principal, interestRate, totalRepay, dueDate:
-pendingItems.push({
-  id: Date.now() + Math.random(),
-  memberId: member.id,
-  memberName: member.name,
-  memberPhone: member.phone,
-  principal: principal,
-  interestRate: totalRate,
-  totalRepay: totalRepay,
-  dueDate: dueDate,
-  date: todayStart,
-  imageData: receiptImageData,
-  status: 'pending',
-  createdAt: Date.now()
-});
+    pendingItems.push({
+      id: Date.now() + Math.random(),
+      memberId: member.id,
+      memberName: member.name,
+      memberPhone: member.phone,
+      principal: principal,
+      interestRate: totalRate,
+      totalRepay: totalRepay,
+      dueDate: dueDate,
+      date: todayStart,
+      imageData: receiptImageData,
+      status: 'pending',
+      createdAt: Date.now()
+    });
   }
 
   const reportId = Date.now();
@@ -10542,6 +10536,7 @@ pendingItems.push({
   };
   await db.ref('autoDebtReports/' + reportId).set(reportData);
 
+  // Notify admin
   const adminNotifs = notifications.admin || [];
   adminNotifs.push({
     id: Date.now(),
@@ -10556,7 +10551,6 @@ pendingItems.push({
   toast(`Created ${pendingItems.length} pending loan receipt(s). Open "Review Pending Debt Receipts" to process.`, "#f59e0b");
   openAutoDebtReports();
 };
-
 window.deleteNotifPopup = async function(id) {
   const arr = notifications[currentUser.id] || [];
   const newArr = arr.filter(n => n.id !== id);
