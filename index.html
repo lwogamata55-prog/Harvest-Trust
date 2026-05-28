@@ -1912,7 +1912,7 @@ setTimeout(function(){
           <div class="admin-tab" data-tab="notice" onclick="switchAdminTab('notice')">📢 Notice</div>
           <div class="admin-tab" data-tab="harvest" onclick="switchAdminTab('harvest')">🌾 Harvest</div>
           <div class="admin-tab" data-tab="users" onclick="switchAdminTab('users')">👥 Users</div>
-          <div class="admin-tab" data-tab="fines" onclick="switchAdminTab('fines')">⚡ Fines</div>
+          <div class="admin-tab" data-tab="fines" onclick="switchAdminTab('fines')">⚡ Debts</div>
           <div class="admin-tab" data-tab="settings" onclick="switchAdminTab('settings')">⚙️ Settings</div>
         </div>
         <div id="admin-content"></div>
@@ -2510,7 +2510,7 @@ const FIREBASE_CONFIG={
   messagingSenderId:"59557732077",
   appId:"1:59557732077:web:aa79eb14010d05728176e4"
 };
-window.lastAutoDebtDate = null;
+
 let currentStep = 0;
 let db=null;
 let members=[],transactions=[],rotation={order:[],currentIndex:0,history:[]};
@@ -2531,9 +2531,7 @@ let settings = {
   signupFee: 0,               // <-- add
   renewalEnabled: false,
   renewalFee: 10000,
-  termsAndConditions: `` ,  // <-- add
-  autoDebtEnabled: false,    // ← add
-  autoDebtTime: "23:30"      // ← add
+  termsAndConditions: ``  // <-- add
 };
 let currentUser=null,adminUnlocked=false,currentAdminTab='savings';
 let memberBalances={},memberDebts={},memberLoans={};
@@ -3482,12 +3480,22 @@ async function autoSendReceiptToWhatsApp(member, txType, amount, description) {
     };
   });
 }
-async function generateDebtReceiptImage(member, amount, date) {
-  const dateLabel = date.toLocaleDateString('en-UG', { year:'numeric', month:'long', day:'numeric' });
-  const receiptId = `DEBT-${date.toISOString().slice(0,10).replace(/-/g,'')}-${member.id.slice(-4)}`;
+async function generateDebtReceiptImage(member, debtAmount, date) {
+  const dateLabel = date.toLocaleDateString('en-UG', { year: 'numeric', month: 'long', day: 'numeric' });
+  const receiptId = `DEBT-${date.toISOString().slice(0, 10).replace(/-/g, '')}-${member.id.slice(-4)}`;
+
+  // Get member's current financial stats
+  const accountBalance = memberBalances[member.phone] || 0;
+  const loanBalance = memberLoans[member.phone] || 0;
+  const totalDeposits = (member.totalDepositsAll) ? member.totalDepositsAll : (() => {
+    let total = 0;
+    transactions.forEach(tx => { if (tx.memberPhone === member.phone && tx.type === 'deposit') total += tx.amount; });
+    return total;
+  })();
+  const maxBorrow = Math.floor(totalDeposits * (loanSettings.disciplineMultiplier || 1.5));
 
   const receiptHtml = `
-    <div class="auto-debt-receipt" style="
+    <div class="debt-receipt-card" style="
       max-width: 500px;
       margin: 0 auto;
       border: 2px solid #e2e8f0;
@@ -3499,6 +3507,7 @@ async function generateDebtReceiptImage(member, amount, date) {
       <div style="text-align: center; margin-bottom: 12px;">
         <div style="font-size: 1.8rem;">🌾</div>
         <div style="font-weight: 800; font-size: 1.2rem; color: #b45309;">HARVEST TRUST FINANCE</div>
+        <div style="font-size: 0.7rem; color: #64748b;">Debt Notice – Inactivity Penalty</div>
       </div>
       <div style="border-top: 1px solid #e2e8f0; margin: 8px 0;"></div>
       <div style="font-size: 0.9rem;">
@@ -3509,13 +3518,15 @@ async function generateDebtReceiptImage(member, amount, date) {
       </div>
       <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
       <div style="font-size: 1rem;">
-        <div><strong>Auto‑Debt Notice</strong></div>
-        <div>Daily required: UGX ${amount.toLocaleString()}</div>
-        <div>Status: <span style="color:#ef4444;">ADDED AS DEBT</span></div>
-        <div class="micro muted">No activity recorded today. Amount has been added to your outstanding debt.</div>
+        <div><strong>Debt Added:</strong> UGX ${debtAmount.toLocaleString()}</div>
+        <div><strong>Remaining Loan Balance:</strong> UGX ${loanBalance.toLocaleString()}</div>
+        <div><strong>Current Account Balance:</strong> UGX ${accountBalance.toLocaleString()}</div>
+        <div><strong>You can borrow up to:</strong> UGX ${maxBorrow.toLocaleString()}</div>
+        <div class="micro muted" style="margin-top: 8px;">⚠️ Please clear this debt promptly to avoid additional penalties and maintain your borrowing eligibility.</div>
+        <div class="micro muted">💡 Pay on time to keep your savings healthy!</div>
       </div>
       <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
-      <div style="text-align: center; font-size: 0.7rem;">Thank you for clearing your debt promptly.</div>
+      <div style="text-align: center; font-size: 0.7rem; color: #94a3b8;">Harvest Trust Finance – Savings · Loans · Prosperity</div>
     </div>
   `;
 
@@ -3527,7 +3538,7 @@ async function generateDebtReceiptImage(member, amount, date) {
   document.body.appendChild(tempDiv);
 
   try {
-    const canvas = await html2canvas(tempDiv.querySelector('.auto-debt-receipt'), {
+    const canvas = await html2canvas(tempDiv.querySelector('.debt-receipt-card'), {
       scale: 1.5,
       backgroundColor: '#ffffff',
       logging: false
@@ -3540,7 +3551,6 @@ async function generateDebtReceiptImage(member, amount, date) {
     return null;
   }
 }
-
 async function generateWeeklyPayoutReceipt() {
   const idx = rotation.currentIndex || 0;
   const beneId = rotation.order?.[idx];
@@ -5064,8 +5074,6 @@ function showMainApp() {
 updateAccountBalances();
       updateAccountUI();
       checkMembershipRenewal(currentUser);
-      window.appVisible = true;
-startAutoDebtScheduler();
       goTab('home', document.getElementById('ni-home'));
       setupPresence();
       if (currentUser && !currentUser.isAdmin) {
@@ -5103,8 +5111,6 @@ startAutoDebtScheduler();
     }
     setAdminDoorVisibility();
     if (typeof hideTabLoading === 'function') hideTabLoading();
-    // Start auto‑debt scheduler only after login and data is ready
-startAutoDebtScheduler();
   }
 }
 // 10 group-relevant questions
@@ -5611,34 +5617,7 @@ window.shareReceiptAsImage = async function() {
     toast('Failed to generate image. Try printing instead.', '#ef4444');
   }
 };
-function startAutoDebtScheduler() {
-  if (!settings || typeof settings.autoDebtEnabled === 'undefined') {
-    setTimeout(startAutoDebtScheduler, 5000);
-    return;
-  }
 
-  setInterval(async () => {
-    if (!settings.autoDebtEnabled) return;
-
-    const now = new Date();
-    const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-    const todayStr = now.toISOString().slice(0, 10);
-
-    // Only attempt to run if time matches and we haven't recorded a lock for today
-    if (currentTime === settings.autoDebtTime) {
-      // Check lock existence (quick read)
-      const lockSnap = await db.ref(`autoDebtLocks/${todayStr}`).once('value');
-      if (!lockSnap.exists()) {
-        // No lock, proceed (processAutoDebt will attempt to acquire it)
-        try {
-          await processAutoDebt();
-        } catch (err) {
-          console.error("Auto‑debt run failed", err);
-        }
-      }
-    }
-  }, 60000);
-}
 function downloadImage(dataUrl) {
   const link = document.createElement('a');
   link.download = 'harvest_receipt.png';
@@ -6728,17 +6707,16 @@ window.rejectApplication = function(key) {
   loadApplications();
 };
 
-// Function to open the modal and load pending reports
 window.openAutoDebtReports = async function() {
   const container = document.getElementById('auto-debt-reports-list');
-  if (container) container.innerHTML = '<div class="empty-state">Please wait...</div>';
+  if (container) container.innerHTML = '<div class="empty-state">Loading...</div>';
   openOv('ov-auto-debt-reports');
-  
+
   try {
     const snap = await db.ref('autoDebtReports').orderByChild('status').equalTo('pending').once('value');
     const reports = snap.val() ? Object.values(snap.val()) : [];
     if (reports.length === 0) {
-      if (container) container.innerHTML = '<div class="empty-state">🎉 No pending auto‑debt reports.</div>';
+      if (container) container.innerHTML = '<div class="empty-state">🎉 No pending debt receipts.</div>';
       return;
     }
     const report = reports.sort((a, b) => b.createdAt - a.createdAt)[0];
@@ -6750,7 +6728,6 @@ window.openAutoDebtReports = async function() {
   }
 };
 
-// Render the report items
 function renderAutoDebtReport(report) {
   const container = document.getElementById('auto-debt-reports-list');
   if (!container) return;
@@ -6763,14 +6740,15 @@ function renderAutoDebtReport(report) {
   for (const item of report.items) {
     html += `
       <div class="card" style="padding: 12px;" data-item-id="${item.id}">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
           <div>
             <strong>${escapeHtml(item.memberName)}</strong><br>
             Amount: UGX ${item.amount.toLocaleString()}
           </div>
-          <div style="display: flex; gap: 8px;">
-            <button class="btn btn-sm btn-teal" onclick="sendDebtReceipt('${item.id}')">📤 Send via WhatsApp</button>
-            <button class="btn btn-sm btn-red" onclick="cancelDebtReceipt('${item.id}')">🗑️ Cancel</button>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="btn btn-sm btn-gold" onclick="confirmAndSendDebt('${item.id}')">✅ Confirm & Send</button>
+            <button class="btn btn-sm btn-green" onclick="confirmAndKeepDebt('${item.id}')">✅ Confirm & Don't Send</button>
+            <button class="btn btn-sm btn-red" onclick="discardDebtReceipt('${item.id}')">🗑️ Don't Save</button>
           </div>
         </div>
         <div style="margin-top: 8px;">
@@ -6783,48 +6761,94 @@ function renderAutoDebtReport(report) {
   container.innerHTML = html;
 }
 
-// Send a specific receipt via WhatsApp
-window.sendDebtReceipt = async function(itemId) {
+// 1. Confirm & Send: Add debt, send WhatsApp image, remove pending item
+window.confirmAndSendDebt = async function(itemId) {
+  if (!confirm(`Add debt of UGX ${item.amount} to member and send receipt via WhatsApp?`)) return;
+
   const reportSnap = await db.ref(`autoDebtReports/${currentReportId}`).once('value');
   const report = reportSnap.val();
-  if (!report) return;
   const item = report.items.find(i => i.id == itemId);
   if (!item) return;
-  const imageData = item.imageData;
-  if (!imageData) { toast('Image data missing', '#ef4444'); return; }
-  
-  const blob = await (await fetch(imageData)).blob();
-  const file = new File([blob], 'debt_receipt.png', { type: 'image/png' });
-  
-  if (navigator.share && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-    await navigator.share({
-      title: 'Debt Receipt',
-      text: `Auto‑debt of UGX ${item.amount.toLocaleString()} for ${item.memberName}`,
-      files: [file]
-    });
-    toast('Shared!', '#10b981');
-  } else {
-    const link = document.createElement('a');
-    link.download = `debt_${item.memberId}.png`;
-    link.href = imageData;
-    link.click();
-    toast('Image downloaded. Send it manually on WhatsApp.', '#f59e0b');
+
+  // Add debt transaction
+  await db.ref('transactions').push({
+    memberPhone: item.memberPhone,
+    memberName: item.memberName,
+    type: 'debt',
+    amount: item.amount,
+    description: `Debt for ${new Date(item.date).toLocaleDateString()} (no activity)`,
+    date: Date.now(),
+    autoDebt: true
+  });
+
+  // Send receipt image via WhatsApp
+  if (item.imageData) {
+    try {
+      const blob = await (await fetch(item.imageData)).blob();
+      const file = new File([blob], 'debt_receipt.png', { type: 'image/png' });
+      if (navigator.share && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+        await navigator.share({
+          title: 'Debt Receipt',
+          text: `Debt of UGX ${item.amount.toLocaleString()} added for ${item.memberName}. Please clear promptly.`,
+          files: [file]
+        });
+        toast('Receipt shared!', '#10b981');
+      } else {
+        const link = document.createElement('a');
+        link.download = `debt_${item.memberId}.png`;
+        link.href = item.imageData;
+        link.click();
+        toast('Image downloaded. Send it manually on WhatsApp.', '#f59e0b');
+      }
+    } catch (err) {
+      console.error(err);
+      toast('Failed to send image, but debt was added.', '#ef4444');
+    }
   }
-  
+
   await removeItemFromReport(currentReportId, itemId);
   const refreshedSnap = await db.ref(`autoDebtReports/${currentReportId}`).once('value');
   renderAutoDebtReport(refreshedSnap.val());
+  computePots();
+  refreshUI();
 };
 
-// Cancel (remove) a receipt from the report
-window.cancelDebtReceipt = async function(itemId) {
-  if (!confirm('Remove this receipt? The debt transaction will remain, but the receipt will be deleted.')) return;
-  await removeItemFromReport(currentReportId, itemId);
+// 2. Confirm & Don't Send: Add debt but do not send receipt
+window.confirmAndKeepDebt = async function(itemId) {
+  if (!confirm(`Add debt of UGX ${item.amount} to member without sending receipt?`)) return;
+
   const reportSnap = await db.ref(`autoDebtReports/${currentReportId}`).once('value');
-  renderAutoDebtReport(reportSnap.val());
+  const report = reportSnap.val();
+  const item = report.items.find(i => i.id == itemId);
+  if (!item) return;
+
+  await db.ref('transactions').push({
+    memberPhone: item.memberPhone,
+    memberName: item.memberName,
+    type: 'debt',
+    amount: item.amount,
+    description: `Debt for ${new Date(item.date).toLocaleDateString()} (no activity)`,
+    date: Date.now(),
+    autoDebt: true
+  });
+
+  await removeItemFromReport(currentReportId, itemId);
+  const refreshedSnap = await db.ref(`autoDebtReports/${currentReportId}`).once('value');
+  renderAutoDebtReport(refreshedSnap.val());
+  computePots();
+  refreshUI();
+  toast('Debt added (no receipt sent).', '#10b981');
 };
 
-// Helper to remove an item from the report
+// 3. Don't Save: Discard the pending receipt (no debt added)
+window.discardDebtReceipt = async function(itemId) {
+  if (!confirm('Discard this pending receipt? No debt will be added.')) return;
+  await removeItemFromReport(currentReportId, itemId);
+  const refreshedSnap = await db.ref(`autoDebtReports/${currentReportId}`).once('value');
+  renderAutoDebtReport(refreshedSnap.val());
+  toast('Receipt discarded.', '#f59e0b');
+};
+
 async function removeItemFromReport(reportId, itemId) {
   const reportRef = db.ref(`autoDebtReports/${reportId}`);
   const snap = await reportRef.once('value');
@@ -7134,7 +7158,6 @@ function renderAdminTab() {
         <button class="btn btn-teal btn-full" onclick="openAddTransaction()">➕ Add Transaction</button>
         <button class="btn btn-green btn-full" onclick="openOv('ov-mark-paid')">✅ Mark Weekly Payout</button>
         <button class="btn btn-purple btn-full" onclick="generateWeeklyPayoutReceipt()">📄 Weekly Payout Receipt (Preview/Share)</button>
-        <button class="btn btn-purple btn-full" onclick="openAutoDebtReports()">📋 Review Auto‑Debt Receipts</button>
         <button class="btn btn-purple btn-full" onclick="openOv('ov-rot-manage'); buildDragRotation();">🔄 Manage Payout Rotation</button>
         <button class="btn btn-amber btn-full" onclick="advanceLoanReceiver()">⏩ Advance Loan Receiver</button>
         <button class="btn btn-purple btn-full" onclick="openOv('ov-loan-rot-manage'); buildLoanDragRotation();">🔄 Manage Loan Rotation</button>
@@ -7179,6 +7202,8 @@ function renderAdminTab() {
       <div class="sec-h">⚡ Fines & Finances</div>
       <button class="btn btn-amber btn-full" onclick="openOv('ov-add-fine');populateMemberDropdowns()">⚡ Apply Fine to Member</button>
       <button class="btn btn-red btn-full" onclick="openOv('ov-assign-debt');populateMemberDropdowns()">🧾 Assign Debt to Member</button>
+      <button class="btn btn-amber btn-full" onclick="manualDebtReview()">⚡ Create Debt Receipts for Inactive Members (Today)</button>
+<button class="btn btn-purple btn-full" onclick="openAutoDebtReports()">📋 Review Pending Debt Receipts</button>
       <button class="btn btn-purple btn-full" onclick="openOv('ov-group-transaction')">📦 Add Group Transaction (Welfare, Expense, Deposit)</button>
     </div>
   `;
@@ -9369,117 +9394,6 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
 
   return writes;
 }
-async function processAutoDebt() {
-  if (!settings.autoDebtEnabled) {
-    console.log("Auto‑debt disabled.");
-    return;
-  }
-
-  const today = new Date();
-  const todayStr = today.toISOString().slice(0, 10);
-  const lockRef = db.ref(`autoDebtLocks/${todayStr}`);
-
-  // Try to acquire lock (create if not exists)
-  const lockSnap = await lockRef.once('value');
-  if (lockSnap.exists()) {
-    console.log(`Auto‑debt already ran today (${todayStr})`);
-    return;
-  }
-
-  // Acquire lock using server timestamp
-  await lockRef.set({
-    startedAt: firebase.database.ServerValue.TIMESTAMP,
-    status: 'running'
-  });
-
-  try {
-    // ----- Core logic (same as before) -----
-    const todayStart = new Date().setHours(0, 0, 0, 0);
-    const todayEnd = todayStart + 86400000 - 1;
-    const activeMembers = members.filter(m => m.approved === true);
-    const dailyRequired = (settings.dailyAmount || 2000) + (settings.welfareAmount || 500);
-
-    // Members with any transaction today
-    const membersWithActivity = new Set();
-    transactions.forEach(tx => {
-      if (tx.date >= todayStart && tx.date <= todayEnd && tx.memberPhone) {
-        membersWithActivity.add(tx.memberPhone);
-      }
-    });
-
-    const membersToCharge = activeMembers.filter(m => !membersWithActivity.has(m.phone));
-    if (membersToCharge.length === 0) {
-      await logAutoDebtReport([], 0, "No members needed auto‑debt.");
-      await lockRef.update({ status: 'completed', completedAt: firebase.database.ServerValue.TIMESTAMP });
-      return;
-    }
-
-    const pendingItems = [];
-    for (const member of membersToCharge) {
-      const debtAmount = dailyRequired;
-      const debtTxRef = await db.ref('transactions').push({
-        memberPhone: member.phone,
-        memberName: member.name,
-        type: 'debt',
-        amount: debtAmount,
-        description: `Auto‑assigned debt for ${new Date(todayStart).toLocaleDateString()} (no activity)`,
-        date: Date.now(),
-        autoDebt: true
-      });
-
-      const receiptImageData = await generateDebtReceiptImage(member, debtAmount, new Date(todayStart));
-
-      pendingItems.push({
-        id: Date.now() + Math.random(),
-        memberId: member.id,
-        memberName: member.name,
-        memberPhone: member.phone,
-        amount: debtAmount,
-        date: todayStart,
-        imageData: receiptImageData,
-        transactionId: debtTxRef.key,
-        status: 'pending',
-        createdAt: Date.now()
-      });
-    }
-
-    const reportId = Date.now();
-    const reportData = {
-      id: reportId,
-      date: todayStart,
-      createdAt: Date.now(),
-      items: pendingItems,
-      status: 'pending',
-      totalMembers: pendingItems.length,
-      totalAmount: pendingItems.reduce((sum, i) => sum + i.amount, 0)
-    };
-    await db.ref('autoDebtReports/' + reportId).set(reportData);
-
-    // Notify admin
-    const adminNotifs = notifications.admin || [];
-    adminNotifs.push({
-      id: Date.now(),
-      text: `🤖 New Auto‑Debt Report: ${pendingItems.length} member(s) charged. Total UGX ${reportData.totalAmount.toLocaleString()}. Review pending receipts.`,
-      date: Date.now(),
-      read: false,
-      type: 'auto_debt_report',
-      reportId: reportId
-    });
-    await db.ref('notifications/admin').set(adminNotifs);
-
-    computePots();
-    refreshUI();
-    toast(`Auto‑debt report created with ${pendingItems.length} receipts.`, '#f59e0b');
-
-    // Mark lock as completed
-    await lockRef.update({ status: 'completed', completedAt: firebase.database.ServerValue.TIMESTAMP });
-  } catch (err) {
-    console.error("Auto‑debt processing error:", err);
-    // If error occurs, remove lock so it can retry later (optional)
-    await lockRef.remove();
-    throw err;
-  }
-}
 async function loadPendingReferralBonuses() {
   const pendingSnap = await db.ref('transactions').orderByChild('type').equalTo('pending_referral_bonus').once('value');
   const pendings = pendingSnap.val() ? Object.entries(pendingSnap.val()).map(([id, tx]) => ({ ...tx, id })).filter(tx => !tx.cleared) : [];
@@ -9600,8 +9514,6 @@ window.loadSettings = function() {
   document.getElementById('set-fine-contribution').value = settings.fineContribution || 0;
   document.getElementById('set-penalty-interest').value = settings.penaltyInterestRate || 5;
   document.getElementById('set-fine').value = settings.fineAmount || 5000;
-  document.getElementById('set-auto-debt-enabled').value = settings.autoDebtEnabled ? 'true' : 'false';
-document.getElementById('set-auto-debt-time').value = settings.autoDebtTime || '23:30';
   document.getElementById('set-referral-bonus').value = settings.referralBonusAmount || 10000;
   document.getElementById('set-whatsapp').value = settings.whatsappLink || '';
   document.getElementById('set-banner-url').value = settings.bannerData || '';
@@ -9642,8 +9554,6 @@ window.doSaveSettings = function() {
   settings.fineContribution = +document.getElementById('set-fine-contribution').value;
   settings.fineAmount = +document.getElementById('set-fine').value;
   settings.penaltyInterestRate = parseFloat(document.getElementById('set-penalty-interest').value) || 5;
-  settings.autoDebtEnabled = document.getElementById('set-auto-debt-enabled').value === 'true';
-settings.autoDebtTime = document.getElementById('set-auto-debt-time').value;
   settings.referralBonusAmount = parseInt(document.getElementById('set-referral-bonus').value) || 0;
 db.ref('settings').update({ referralBonusAmount: settings.referralBonusAmount });
   settings.whatsappLink = document.getElementById('set-whatsapp').value;
@@ -9663,8 +9573,6 @@ db.ref('settings').update({ referralBonusAmount: settings.referralBonusAmount })
     fineAmount: settings.fineAmount,
     penaltyInterestRate: settings.penaltyInterestRate,
     whatsappLink: settings.whatsappLink,
-    autoDebtEnabled: settings.autoDebtEnabled,
-  autoDebtTime: settings.autoDebtTime,
     bannerData: settings.bannerData,
     themeMode: settings.themeMode,
     themeColor: settings.themeColor,
@@ -10654,6 +10562,80 @@ window.markNotifReadPopup = async function(id) {
     // If all read, close popup
     if (arr.every(n => n.read)) closeOv('ov-notifications-popup');
   }
+};
+window.manualAutoDebt = async function() {
+  console.log("Manual auto-debt triggered");
+  await processAutoDebt();
+  toast("Manual auto-debt completed", "#10b981");
+};
+window.manualDebtReview = async function() {
+  if (!confirm("⚠️ This will create pending debt receipts for every member who has NO transaction today. You will review each receipt before debt is added. Continue?")) return;
+
+  toast("Scanning today's activity...", "#06b6d4");
+
+  const todayStart = new Date().setHours(0, 0, 0, 0);
+  const todayEnd = todayStart + 86400000 - 1;
+  const activeMembers = members.filter(m => m.approved === true);
+  const dailyRequired = (settings.dailyAmount || 2000) + (settings.welfareAmount || 500);
+
+  // Find members with any transaction today
+  const membersWithActivity = new Set();
+  transactions.forEach(tx => {
+    if (tx.date >= todayStart && tx.date <= todayEnd && tx.memberPhone) {
+      membersWithActivity.add(tx.memberPhone);
+    }
+  });
+
+  const membersToCharge = activeMembers.filter(m => !membersWithActivity.has(m.phone));
+  if (membersToCharge.length === 0) {
+    toast("All members have activity today. No debts to process.", "#10b981");
+    return;
+  }
+
+  const pendingItems = [];
+  for (const member of membersToCharge) {
+    // Generate receipt image (without adding debt yet)
+    const receiptImageData = await generateDebtReceiptImage(member, dailyRequired, new Date(todayStart));
+    pendingItems.push({
+      id: Date.now() + Math.random(),
+      memberId: member.id,
+      memberName: member.name,
+      memberPhone: member.phone,
+      amount: dailyRequired,
+      date: todayStart,
+      imageData: receiptImageData,
+      status: 'pending',
+      createdAt: Date.now()
+    });
+  }
+
+  // Save as a new report
+  const reportId = Date.now();
+  const reportData = {
+    id: reportId,
+    date: todayStart,
+    createdAt: Date.now(),
+    items: pendingItems,
+    status: 'pending',
+    totalMembers: pendingItems.length,
+    totalAmount: pendingItems.reduce((sum, i) => sum + i.amount, 0)
+  };
+  await db.ref('autoDebtReports/' + reportId).set(reportData);
+
+  // Notify admin
+  const adminNotifs = notifications.admin || [];
+  adminNotifs.push({
+    id: Date.now(),
+    text: `📋 New pending debt receipts: ${pendingItems.length} member(s). Total UGX ${reportData.totalAmount.toLocaleString()}. Review them now.`,
+    date: Date.now(),
+    read: false,
+    type: 'auto_debt_report',
+    reportId: reportId
+  });
+  await db.ref('notifications/admin').set(adminNotifs);
+
+  toast(`Created ${pendingItems.length} pending receipt(s). Open "Review Pending Debt Receipts" to process.`, "#f59e0b");
+  openAutoDebtReports(); // open modal automatically
 };
 
 window.deleteNotifPopup = async function(id) {
