@@ -7400,15 +7400,21 @@ async function updateMemberPrepaid(memberId, newPrepaid) {
 window.updateMember = function() {
   const id = document.getElementById('edit-member-id').value;
   const name = document.getElementById('edit-mbr-name').value.trim();
-  let phone = document.getElementById('edit-mbr-phone').value.trim();
+  const phone = document.getElementById('edit-mbr-phone').value.trim();
   const join = document.getElementById('edit-mbr-join').value;
   const photoData = document.getElementById('edit-mbr-photo').value;
   if (!name || !phone) { toast('Fill all fields', '#ef4444'); return; }
-  const normalizedPhone = normalizePhone(phone);
-  if (!normalizedPhone) { toast('Invalid phone number', '#ef4444'); return; }
+  
+  const originalMember = members.find(m => m.id === id);
+  if (originalMember && originalMember.phone !== phone) {
+    const confirmChange = confirm(`⚠️ WARNING: Changing the phone number from ${originalMember.phone} to ${phone} will break all historical transactions and loans for this member (balance will become 0). Are you absolutely sure?`);
+    if (!confirmChange) return;
+  }
+  
+  // No normalization – save exactly as entered
   db.ref('members/' + id).update({
     name,
-    phone: normalizedPhone,
+    phone: phone,
     joinDate: join,
     photoData: photoData || ''
   }).then(() => {
@@ -9089,17 +9095,20 @@ window.saveCoverDays = function() {const phone = document.getElementById('cover-
         }));}});Promise.all(writes).then(() => {toast('Cover days saved! ✅', '#10b981');closeOv('ov-cover');computePots();updateHomeUI();if (isLedgerActive()) loadLedger('all');}).catch(err => {console.error(err);toast('Save failed', '#ef4444');});};
 window.addMember = function() {
   const name = document.getElementById('mbr-name').value.trim();
-  let phone = document.getElementById('mbr-phone').value.trim();
+  const phone = document.getElementById('mbr-phone').value.trim();
   const pw = document.getElementById('mbr-pw').value.trim();
   const join = document.getElementById('mbr-join').value;
   const photo = document.getElementById('mbr-photo-data').value;
   if (!name || !phone) { toast('Fill all fields', '#ef4444'); return; }
-  const normalizedPhone = normalizePhone(phone);
-  if (!normalizedPhone) { toast('Invalid phone number. Use 07XXXXXXXX or +256XXXXXXXXX', '#ef4444'); return; }
+  // Accept any phone format, no normalization
+  if (!phone.match(/^[0-9+]{10,15}$/)) {
+    toast('Enter a valid phone number (digits only or + followed by digits)', '#ef4444');
+    return;
+  }
   db.ref('members').push({
     name,
-    phone: normalizedPhone,
-    password: pw || ('HT' + normalizedPhone.slice(-4)),
+    phone: phone,
+    password: pw || ('HT' + phone.slice(-4)),
     approved: true,
     joinDate: join || new Date().toISOString().split('T')[0],
     photoData: photo || ''
