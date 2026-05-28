@@ -1912,7 +1912,7 @@ setTimeout(function(){
           <div class="admin-tab" data-tab="notice" onclick="switchAdminTab('notice')">📢 Notice</div>
           <div class="admin-tab" data-tab="harvest" onclick="switchAdminTab('harvest')">🌾 Harvest</div>
           <div class="admin-tab" data-tab="users" onclick="switchAdminTab('users')">👥 Users</div>
-          <div class="admin-tab" data-tab="fines" onclick="switchAdminTab('fines')">⚡ Debts</div>
+          <div class="admin-tab" data-tab="fines" onclick="switchAdminTab('fines')">⚡ Fines</div>
           <div class="admin-tab" data-tab="settings" onclick="switchAdminTab('settings')">⚙️ Settings</div>
         </div>
         <div id="admin-content"></div>
@@ -2130,21 +2130,6 @@ setTimeout(function(){
         <option value="dark">Dark</option>
       </select>
     </div>
-    <div class="fgrp">
-  <label class="flbl">💰 Auto‑Debt Interest Rate (%)</label>
-  <input type="number" id="set-auto-debt-interest" class="inp" step="0.5" value="5">
-  <div class="micro">Base interest rate applied to auto‑assigned debt (loan).</div>
-</div>
-<div class="fgrp">
-  <label class="flbl">⚡ Auto‑Debt Extra Interest Per Week (%)</label>
-  <input type="number" id="set-auto-debt-extra-weekly" class="inp" step="0.5" value="2">
-  <div class="micro">Additional interest for each extra week beyond the first week.</div>
-</div>
-<div class="fgrp">
-  <label class="flbl">📅 Auto‑Debt Loan Period (weeks)</label>
-  <input type="number" id="set-auto-debt-weeks" class="inp" step="1" min="1" value="4">
-  <div class="micro">Number of weeks for the auto‑assigned loan repayment.</div>
-</div>
     <div class="fgrp">
       <label class="flbl">Theme Color</label>
       <select id="set-theme-color" class="inp" onchange="previewAdminTheme()"></select>
@@ -2477,16 +2462,6 @@ setTimeout(function(){
     <button class="btn btn-sec btn-full" style="margin-top: 16px;" onclick="closeOv('ov-help')">Close</button>
   </div>
 </div>
-<!-- Auto‑Debt Reports Modal -->
-<div class="ov" id="ov-auto-debt-reports" onclick="maybeClose(event,'ov-auto-debt-reports')">
-  <div class="bs" style="max-width: 800px;">
-    <div class="bs-title">📋 Auto‑Debt Receipts</div>
-    <div id="auto-debt-reports-list" style="max-height: 65vh; overflow-y: auto;">
-      <div class="empty-state">Loading...</div>
-    </div>
-    <button class="btn btn-sec btn-full" onclick="closeOv('ov-auto-debt-reports')">Close</button>
-  </div>
-</div>
 <script>
 // Immediately apply saved theme (light/dark) from localStorage before showing anything
 const savedThemeMode = localStorage.getItem('themeMode');
@@ -2533,10 +2508,7 @@ let settings = {
   signupFee: 0,               // <-- add
   renewalEnabled: false,
   renewalFee: 10000,
-  termsAndConditions: ``,  // <-- add
-  autoDebtInterest: 5,
-autoDebtExtraWeekly: 0,
-autoDebtWeeks: 0
+  termsAndConditions: ``   // <-- add
 };
 let currentUser=null,adminUnlocked=false,currentAdminTab='savings';
 let memberBalances={},memberDebts={},memberLoans={};
@@ -3358,20 +3330,15 @@ function updatePendingDepositWarning() {
     <div class="micro muted" style="text-align: center;">Will be auto‑charged at midnight</div>
   `;
 }
-async function autoSendReceiptToWhatsApp(member, txType, amount, description) {
-  const phone = normalizePhone(member.phone);
-  if (!phone) {
-    toast(`❌ Invalid phone number for ${member.name}. Receipt not sent.`, '#ef4444');
-    return false;
-  }
 
-  // Get current loan balance after the transaction (force fresh compute)
-  computePots();
-  const loanBalance = memberLoans[member.phone] || 0;
+async function generateTransactionReceipt(member, txType, amount, description, loanBalance, accountBalance, maxBorrow) {
+  const date = new Date();
+  const receiptId = `HTF-${date.toISOString().slice(0,10).replace(/-/g,'')}-${member.id.slice(-4)}`;
+  const dateLabel = date.toLocaleDateString('en-UG', { year:'numeric', month:'long', day:'numeric' });
+  const txTypeUpper = txType.toUpperCase();
 
-  // Build receipt card with loan balance included
   const receiptHtml = `
-    <div class="auto-receipt-card" style="
+    <div class="tx-receipt-card" style="
       max-width: 500px;
       margin: 0 auto;
       border: 2px solid #e2e8f0;
@@ -3386,186 +3353,47 @@ async function autoSendReceiptToWhatsApp(member, txType, amount, description) {
       </div>
       <div style="border-top: 1px solid #e2e8f0; margin: 8px 0;"></div>
       <div style="font-size: 0.9rem;">
+        <div><strong>Receipt No.</strong> ${receiptId}</div>
+        <div><strong>Date:</strong> ${dateLabel}</div>
         <div><strong>Member:</strong> ${escapeHtml(member.name)}</div>
         <div><strong>Phone:</strong> ${member.phone}</div>
-        <div><strong>Transaction:</strong> ${txType.toUpperCase()}</div>
-        <div><strong>Amount:</strong> UGX ${amount.toLocaleString()}</div>
-        <div><strong>Description:</strong> ${escapeHtml(description || txType)}</div>
-        <div><strong>Date:</strong> ${new Date().toLocaleString()}</div>
-        <div><strong>Remaining Loan Balance:</strong> UGX ${loanBalance.toLocaleString()}</div>
       </div>
       <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
-      <div style="text-align: center; font-size: 0.7rem;">Thank you for saving with us</div>
+      <div style="font-size: 1rem;">
+        <div><strong>Transaction:</strong> ${txTypeUpper}</div>
+        <div><strong>Amount:</strong> UGX ${amount.toLocaleString()}</div>
+        <div><strong>Description:</strong> ${escapeHtml(description || txType)}</div>
+      </div>
+      <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
+      <div style="font-size: 0.9rem;">
+        <div><strong>Remaining Loan Balance:</strong> UGX ${loanBalance.toLocaleString()}</div>
+        <div><strong>Current Account Balance:</strong> UGX ${accountBalance.toLocaleString()}</div>
+        <div><strong>You can borrow up to:</strong> UGX ${maxBorrow.toLocaleString()}</div>
+        <div class="micro muted" style="margin-top: 8px;">⚠️ Please clear your debt on time to avoid penalties. Borrow only what you can repay.</div>
+      </div>
+      <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
+      <div style="text-align: center; font-size: 0.7rem;">Thank you for transacting with Harvest Trust Finance</div>
     </div>
   `;
 
-  // ... (rest of the function unchanged: modal, html2canvas, share/download)
-  // (keep the exact same modal and image generation code as before)
-  return new Promise((resolve) => {
-    // Create modal overlay (same as previous version)
-    const modal = document.createElement('div');
-    modal.className = 'ov on';
-    modal.style.zIndex = '20010';
-    modal.innerHTML = `
-      <div class="bs" style="max-width: 450px; text-align: center;">
-        <div style="font-size: 2rem;">📱</div>
-        <div style="font-weight: 800; font-size: 1.2rem; margin: 8px 0;">Send Receipt via WhatsApp?</div>
-        <div style="background: rgba(0,0,0,0.05); border-radius: 12px; padding: 12px; text-align: left; margin: 12px 0;">
-          <div><strong>Member:</strong> ${escapeHtml(member.name)}</div>
-          <div><strong>Phone:</strong> ${phone}</div>
-          <div><strong>Transaction:</strong> ${txType.toUpperCase()}</div>
-          <div><strong>Amount:</strong> UGX ${amount.toLocaleString()}</div>
-          <div><strong>Loan Balance After:</strong> UGX ${loanBalance.toLocaleString()}</div>
-        </div>
-        <div class="micro muted" style="margin-bottom: 16px;">This will generate an image and open the share dialog.</div>
-        <div style="display: flex; gap: 12px;">
-          <button class="btn btn-gold" style="flex:1" id="confirm-send-btn">📤 Send</button>
-          <button class="btn btn-sec" style="flex:1" id="cancel-send-btn">Cancel</button>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(modal);
+  const tempDiv = document.createElement('div');
+  tempDiv.style.position = 'absolute';
+  tempDiv.style.top = '-9999px';
+  tempDiv.style.left = '-9999px';
+  tempDiv.innerHTML = receiptHtml;
+  document.body.appendChild(tempDiv);
 
-    const confirmBtn = modal.querySelector('#confirm-send-btn');
-    const cancelBtn = modal.querySelector('#cancel-send-btn');
-
-    const cleanup = () => {
-      modal.classList.remove('on');
-      setTimeout(() => modal.remove(), 300);
-    };
-
-    const sendReceipt = async () => {
-      cleanup();
-      const tempDiv = document.createElement('div');
-      tempDiv.style.position = 'absolute';
-      tempDiv.style.top = '-9999px';
-      tempDiv.style.left = '-9999px';
-      tempDiv.innerHTML = receiptHtml;
-      document.body.appendChild(tempDiv);
-
-      try {
-        const canvas = await html2canvas(tempDiv.querySelector('.auto-receipt-card'), {
-          scale: 2,
-          backgroundColor: '#ffffff',
-          logging: false
-        });
-        document.body.removeChild(tempDiv);
-        const imageData = canvas.toDataURL('image/png');
-        const blob = await (await fetch(imageData)).blob();
-        const file = new File([blob], `receipt_${member.id}.png`, { type: 'image/png' });
-
-        if (navigator.share && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-          await navigator.share({
-            title: 'Harvest Trust Finance Receipt',
-            text: `Receipt for ${member.name} - ${txType} of UGX ${amount.toLocaleString()}`,
-            files: [file]
-          });
-          toast(`✅ Receipt shared to WhatsApp for ${member.name}`, '#10b981');
-        } else {
-          const link = document.createElement('a');
-          link.download = `receipt_${member.id}.png`;
-          link.href = imageData;
-          link.click();
-          toast(`📸 Receipt image downloaded. Please send it to ${member.name} on WhatsApp.`, '#f59e0b');
-        }
-        resolve(true);
-      } catch (err) {
-        console.error('Auto‑share error:', err);
-        document.body.removeChild(tempDiv);
-        toast('❌ Failed to generate receipt image', '#ef4444');
-        resolve(false);
-      }
-    };
-
-    confirmBtn.onclick = () => sendReceipt();
-    cancelBtn.onclick = () => {
-      cleanup();
-      toast('Receipt not sent.', '#f59e0b');
-      resolve(false);
-    };
-  });
-}
-async function generateDebtReceiptImage(member, principal, interestRate, totalRepay, dueDate, date) {
   try {
-    // Default values if any parameter is missing
-    principal = principal || 0;
-    interestRate = interestRate || 0;
-    totalRepay = totalRepay || 0;
-    dueDate = dueDate || Date.now() + 30 * 86400000;
-    date = date || new Date();
-
-    const disciplineMultiplier = (loanSettings && loanSettings.disciplineMultiplier) ? loanSettings.disciplineMultiplier : 1.5;
-    const dateLabel = date.toLocaleDateString ? date.toLocaleDateString('en-UG', { year: 'numeric', month: 'long', day: 'numeric' }) : 'Unknown date';
-    const receiptId = `LOAN-${date.toISOString ? date.toISOString().slice(0,10).replace(/-/g,'') : Date.now()}-${member.id.slice(-4)}`;
-    const dueDateLabel = new Date(dueDate).toLocaleDateString('en-UG', { year: 'numeric', month: 'long', day: 'numeric' });
-
-    const accountBalance = (memberBalances && memberBalances[member.phone]) ? memberBalances[member.phone] : 0;
-    const existingLoan = (memberLoans && memberLoans[member.phone]) ? memberLoans[member.phone] : 0;
-    let totalDeposits = 0;
-    if (transactions) {
-      transactions.forEach(tx => { if (tx.memberPhone === member.phone && tx.type === 'deposit') totalDeposits += tx.amount; });
-    }
-    const maxBorrow = Math.floor(totalDeposits * disciplineMultiplier);
-
-    const interestAmount = totalRepay - principal;
-    const receiptHtml = `
-      <div class="debt-receipt-card" style="
-        max-width: 500px;
-        margin: 0 auto;
-        border: 2px solid #e2e8f0;
-        border-radius: 20px;
-        padding: 20px;
-        background: white;
-        font-family: 'DM Sans', sans-serif;
-      ">
-        <div style="text-align: center; margin-bottom: 12px;">
-          <div style="font-size: 1.8rem;">🌾</div>
-          <div style="font-weight: 800; font-size: 1.2rem; color: #b45309;">HARVEST TRUST FINANCE</div>
-          <div style="font-size: 0.7rem; color: #64748b;">Loan / Debt Notice – Inactivity Penalty</div>
-        </div>
-        <div style="border-top: 1px solid #e2e8f0; margin: 8px 0;"></div>
-        <div style="font-size: 0.9rem;">
-          <div><strong>Receipt No.</strong> ${receiptId}</div>
-          <div><strong>Date:</strong> ${dateLabel}</div>
-          <div><strong>Member:</strong> ${escapeHtml(member.name)}</div>
-          <div><strong>Phone:</strong> ${member.phone}</div>
-        </div>
-        <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
-        <div style="font-size: 1rem;">
-          <div><strong>Principal (Debt):</strong> UGX ${principal.toLocaleString()}</div>
-          <div><strong>Interest Rate:</strong> ${interestRate}%</div>
-          <div><strong>Interest Amount:</strong> UGX ${interestAmount.toLocaleString()}</div>
-          <div><strong>Total to Repay:</strong> UGX ${totalRepay.toLocaleString()}</div>
-          <div><strong>Due Date:</strong> ${dueDateLabel}</div>
-        </div>
-        <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
-        <div style="font-size: 0.9rem;">
-          <div><strong>Existing Loan Balance:</strong> UGX ${existingLoan.toLocaleString()}</div>
-          <div><strong>Current Account Balance:</strong> UGX ${accountBalance.toLocaleString()}</div>
-          <div><strong>You can borrow up to:</strong> UGX ${maxBorrow.toLocaleString()}</div>
-          <div class="micro muted" style="margin-top: 8px;">⚠️ Please repay this loan by the due date to avoid penalties. Late repayment will incur an extra fee.</div>
-          <div class="micro muted">💡 Pay on time to keep your borrowing power high!</div>
-        </div>
-        <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
-        <div style="text-align: center; font-size: 0.7rem; color: #94a3b8;">Harvest Trust Finance – Savings · Loans · Prosperity</div>
-      </div>
-    `;
-
-    const tempDiv = document.createElement('div');
-    tempDiv.style.position = 'absolute';
-    tempDiv.style.top = '-9999px';
-    tempDiv.style.left = '-9999px';
-    tempDiv.innerHTML = receiptHtml;
-    document.body.appendChild(tempDiv);
-
-    const card = tempDiv.querySelector('.debt-receipt-card');
-    if (!card) throw new Error("Receipt card element not found");
-
-    const canvas = await html2canvas(card, { scale: 1.5, backgroundColor: '#ffffff', logging: false });
+    const canvas = await html2canvas(tempDiv.querySelector('.tx-receipt-card'), {
+      scale: 1.5,
+      backgroundColor: '#ffffff',
+      logging: false
+    });
     document.body.removeChild(tempDiv);
     return canvas.toDataURL('image/png');
   } catch (err) {
-    console.error("generateDebtReceiptImage error for member", member.name, err);
+    document.body.removeChild(tempDiv);
+    console.error('Receipt image generation failed', err);
     return null;
   }
 }
@@ -4825,20 +4653,7 @@ function cleanRotationOrder() {
     db.ref('rotation').update({ order: newOrder, currentIndex: 0 });
   }
 }
-async function cleanOldAutoDebtLocks() {
-  const cutoff = Date.now() - 7 * 86400000;
-  const snap = await db.ref('autoDebtLocks').once('value');
-  const updates = {};
-  snap.forEach(child => {
-    const lock = child.val();
-    if (lock.completedAt && lock.completedAt < cutoff) {
-      updates[child.key] = null;
-    }
-  });
-  if (Object.keys(updates).length) {
-    await db.ref('autoDebtLocks').update(updates);
-  }
-}
+
 // Replace your existing loadLedger function
 function loadLedger(typeFilter) {
   let filtered = transactions.slice();
@@ -5635,7 +5450,6 @@ window.shareReceiptAsImage = async function() {
     toast('Failed to generate image. Try printing instead.', '#ef4444');
   }
 };
-
 function downloadImage(dataUrl) {
   const link = document.createElement('a');
   link.download = 'harvest_receipt.png';
@@ -6724,151 +6538,6 @@ window.rejectApplication = function(key) {
   toast('Application rejected','#ef4444');
   loadApplications();
 };
-
-window.openAutoDebtReports = async function() {
-  const container = document.getElementById('auto-debt-reports-list');
-  if (container) container.innerHTML = '<div class="empty-state">Loading...</div>';
-  openOv('ov-auto-debt-reports');
-
-  try {
-    const snap = await db.ref('autoDebtReports').orderByChild('status').equalTo('pending').once('value');
-    const reports = snap.val() ? Object.values(snap.val()) : [];
-    if (reports.length === 0) {
-      if (container) container.innerHTML = '<div class="empty-state">🎉 No pending debt receipts.</div>';
-      return;
-    }
-    const report = reports.sort((a, b) => b.createdAt - a.createdAt)[0];
-    currentReportId = report.id;
-    renderAutoDebtReport(report);
-  } catch (err) {
-    console.error("ERROR loading reports:", err);
-    if (container) container.innerHTML = `<div class="empty-state">❌ Error: ${err.message}</div>`;
-  }
-};
-
-
-function renderAutoDebtReport(report) {
-  const container = document.getElementById('auto-debt-reports-list');
-  if (!container) return;
-  if (!report.items || report.items.length === 0) {
-    container.innerHTML = '<div class="empty-state">No pending receipts in this report.</div>';
-    return;
-  }
-  let html = `<div class="hint-box">Report from ${new Date(report.date).toLocaleDateString()} · Total UGX ${(report.totalAmount || 0).toLocaleString()}</div>`;
-  html += '<div style="display: grid; gap: 16px;">';
-  for (const item of report.items) {
-    const amount = (item.principal || item.amount || 0);
-    const imgHtml = item.imageData ? `<img src="${item.imageData}" style="max-width: 100%; max-height: 150px; border-radius: 8px; border: 1px solid #ccc;">` : '<div class="muted" style="text-align:center; padding:20px;">⚠️ Image not available</div>';
-    html += `
-      <div class="card" style="padding: 12px;" data-item-id="${item.id}">
-        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-          <div>
-            <strong>${escapeHtml(item.memberName)}</strong><br>
-            Amount: UGX ${amount.toLocaleString()}
-          </div>
-          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-            <button class="btn btn-sm btn-gold" onclick="confirmAndSendDebt('${item.id}')">✅ Confirm & Send</button>
-            <button class="btn btn-sm btn-green" onclick="confirmAndKeepDebt('${item.id}')">✅ Confirm & Don't Send</button>
-            <button class="btn btn-sm btn-red" onclick="discardDebtReceipt('${item.id}')">🗑️ Don't Save</button>
-          </div>
-        </div>
-        <div style="margin-top: 8px;">
-          ${imgHtml}
-        </div>
-      </div>
-    `;
-  }
-  html += '</div>';
-  container.innerHTML = html;
-}
-// 1. Confirm & Send: Add loan, send receipt image
-window.confirmAndSendDebt = async function(itemId) {
-  const reportSnap = await db.ref(`autoDebtReports/${currentReportId}`).once('value');
-  const report = reportSnap.val();
-  if (!report) { toast("Report not found", "#ef4444"); return; }
-  const item = report.items.find(i => i.id == itemId);
-  if (!item) { toast("Item not found", "#ef4444"); return; }
-  const member = members.find(m => m.id === item.memberId);
-  if (!member) { toast("Member not found", "#ef4444"); return; }
-  
-  if (!confirm(`Add loan of UGX ${item.principal.toLocaleString()} (total repay UGX ${item.totalRepay.toLocaleString()}) to ${item.memberName} and send receipt via WhatsApp?`)) return;
-  
-  await createLoanForMember(member, item.principal, item.interestRate, item.dueDate, `Auto‑assigned loan for inactivity on ${new Date(item.date).toLocaleDateString()}`);
-  
-  if (item.imageData) {
-    try {
-      const blob = await (await fetch(item.imageData)).blob();
-      const file = new File([blob], 'loan_receipt.png', { type: 'image/png' });
-      if (navigator.share && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-        await navigator.share({
-          title: 'Loan Receipt',
-          text: `Loan of UGX ${item.principal.toLocaleString()} (total repay UGX ${item.totalRepay.toLocaleString()}) added for ${item.memberName}. Please repay by due date.`,
-          files: [file]
-        });
-        toast('Receipt shared!', '#10b981');
-      } else {
-        const link = document.createElement('a');
-        link.download = `loan_${item.memberId}.png`;
-        link.href = item.imageData;
-        link.click();
-        toast('Image downloaded. Send manually on WhatsApp.', '#f59e0b');
-      }
-    } catch (err) {
-      console.error(err);
-      toast('Failed to send image, but loan was added.', '#ef4444');
-    }
-  }
-  
-  await removeItemFromReport(currentReportId, itemId);
-  const refreshedSnap = await db.ref(`autoDebtReports/${currentReportId}`).once('value');
-  renderAutoDebtReport(refreshedSnap.val());
-  computePots();
-  refreshUI();
-  toast(`Loan added for ${item.memberName}`, '#10b981');
-};
-
-window.confirmAndKeepDebt = async function(itemId) {
-  const reportSnap = await db.ref(`autoDebtReports/${currentReportId}`).once('value');
-  const report = reportSnap.val();
-  if (!report) { toast("Report not found", "#ef4444"); return; }
-  const item = report.items.find(i => i.id == itemId);
-  if (!item) { toast("Item not found", "#ef4444"); return; }
-  const member = members.find(m => m.id === item.memberId);
-  if (!member) { toast("Member not found", "#ef4444"); return; }
-  
-  if (!confirm(`Add loan of UGX ${item.principal.toLocaleString()} (total repay UGX ${item.totalRepay.toLocaleString()}) to ${item.memberName} without sending receipt?`)) return;
-  
-  await createLoanForMember(member, item.principal, item.interestRate, item.dueDate, `Auto‑assigned loan for inactivity on ${new Date(item.date).toLocaleDateString()}`);
-  
-  await removeItemFromReport(currentReportId, itemId);
-  const refreshedSnap = await db.ref(`autoDebtReports/${currentReportId}`).once('value');
-  renderAutoDebtReport(refreshedSnap.val());
-  computePots();
-  refreshUI();
-  toast('Loan added (no receipt sent).', '#10b981');
-};
-
-window.discardDebtReceipt = async function(itemId) {
-  if (!confirm('Discard this pending receipt? No loan will be added.')) return;
-  await removeItemFromReport(currentReportId, itemId);
-  const refreshedSnap = await db.ref(`autoDebtReports/${currentReportId}`).once('value');
-  renderAutoDebtReport(refreshedSnap.val());
-  toast('Receipt discarded.', '#f59e0b');
-};
-
-async function removeItemFromReport(reportId, itemId) {
-  const reportRef = db.ref(`autoDebtReports/${reportId}`);
-  const snap = await reportRef.once('value');
-  const report = snap.val();
-  if (!report) return;
-  const newItems = report.items.filter(i => i.id != itemId);
-  if (newItems.length === 0) {
-    await reportRef.update({ status: 'completed', completedAt: Date.now(), items: [] });
-  } else {
-    await reportRef.update({ items: newItems, totalAmount: newItems.reduce((s,i)=>s+i.principal,0) });
-  }
-}
-
 window.openApproveLoanModal = async function(loanId) {
   const loan = loans.find(l => l.id === loanId);
   if (!loan) return;
@@ -7117,6 +6786,7 @@ function renderAdminTab() {
     ${activeLoansHtml}
   `;
 }
+
   // ----- Notice tab -----
  else if (currentAdminTab === 'notice') {
   const broadcastHtmlContent = `
@@ -7210,8 +6880,6 @@ function renderAdminTab() {
       <div class="sec-h">⚡ Fines & Finances</div>
       <button class="btn btn-amber btn-full" onclick="openOv('ov-add-fine');populateMemberDropdowns()">⚡ Apply Fine to Member</button>
       <button class="btn btn-red btn-full" onclick="openOv('ov-assign-debt');populateMemberDropdowns()">🧾 Assign Debt to Member</button>
-      <button class="btn btn-amber btn-full" onclick="manualDebtReview()">⚡ Create Debt Receipts for Inactive Members (Today)</button>
-<button class="btn btn-purple btn-full" onclick="openAutoDebtReports()">📋 Review Pending Debt Receipts</button>
       <button class="btn btn-purple btn-full" onclick="openOv('ov-group-transaction')">📦 Add Group Transaction (Welfare, Expense, Deposit)</button>
     </div>
   `;
@@ -7413,7 +7081,7 @@ async function assignDebtToSingleMember(member, principal, interestRate, dueDate
       memberName: member.name,
       type: 'loan_adjustment',
       amount: interest,
-      description: `Interest (${interestRate}%) on auto‑assigned loan`,
+      description: `Interest (${interestRate}%)`,
       date: Date.now() + 1
     });
   }
@@ -7803,22 +7471,6 @@ window.updateNotice = function() {
     toast('Publish failed', '#ef4444');
   });
 };
-
-let currentReportId = null;
-
-async function openAutoDebtReports() {
-  const snap = await db.ref('autoDebtReports').orderByChild('status').equalTo('pending').once('value');
-  const reports = snap.val() ? Object.values(snap.val()) : [];
-  if (reports.length === 0) {
-    toast('No pending auto‑debt reports.', '#f59e0b');
-    return;
-  }
-  const report = reports.sort((a,b) => b.createdAt - a.createdAt)[0];
-  currentReportId = report.id;
-  renderAutoDebtReport(report);
-  openOv('ov-auto-debt-reports');
-}
-
 function openAddTransaction() {
   // Recompute pots so debt/loan balances are fresh when preview runs
   computePots();
@@ -7964,71 +7616,131 @@ window.addTransactionWithPreview = async function() {
     return;
   }
 
+  // For deposit, we need to preview the breakdown first? We'll keep the existing preview but then show receipt modal.
   if (type === 'deposit') {
-    if (!confirm(`Confirm deposit of ${money(amount)} for ${member.name}?`)) return;
-    const depositTxs = await processDepositWithFutureDays(member, amount, Date.now(), desc || 'Manual deposit');
-    const writes = depositTxs.map(tx => db.ref('transactions').push(tx));
-    await Promise.all(writes);
-    toast(`Deposit saved! ${money(amount)} applied.`, '#10b981');
-    await autoSendReceiptToWhatsApp(member, 'deposit', amount, desc);
+    // Optional: show the deposit breakdown (existing preview) before final receipt? We'll skip for simplicity.
+    // Instead, directly show receipt modal.
+    showTransactionReceiptModal(member, 'deposit', amount, desc || 'Deposit', 
+      async () => {
+        // Confirm & Send
+        const depositTxs = await processDepositWithFutureDays(member, amount, Date.now(), desc || 'Manual deposit');
+        const writes = depositTxs.map(tx => db.ref('transactions').push(tx));
+        await Promise.all(writes);
+        toast(`Deposit saved! ${money(amount)} applied.`, '#10b981');
+        computePots();
+        refreshUI();
+        closeOv('ov-add-tx');
+      },
+      async () => {
+        // Confirm & Don't Send
+        const depositTxs = await processDepositWithFutureDays(member, amount, Date.now(), desc || 'Manual deposit');
+        const writes = depositTxs.map(tx => db.ref('transactions').push(tx));
+        await Promise.all(writes);
+        toast(`Deposit saved! ${money(amount)} applied.`, '#10b981');
+        computePots();
+        refreshUI();
+        closeOv('ov-add-tx');
+      },
+      () => {
+        // Cancel – do nothing
+        closeOv('ov-add-tx');
+      }
+    );
   } else {
-    let finalDesc = desc || type;
-    await db.ref('transactions').push({
-      memberPhone: phone,
-      memberName: member.name,
-      type: type,
-      amount: amount,
-      description: finalDesc,
-      date: Date.now()
-    });
-    toast(`${type} recorded!`, '#10b981');
-    await autoSendReceiptToWhatsApp(member, type, amount, finalDesc);
+    // For other types (withdraw, fine, welfare, expense)
+    showTransactionReceiptModal(member, type, amount, desc || type,
+      async () => {
+        await db.ref('transactions').push({
+          memberPhone: phone,
+          memberName: member.name,
+          type: type,
+          amount: amount,
+          description: desc || type,
+          date: Date.now()
+        });
+        toast(`${type} recorded!`, '#10b981');
+        computePots();
+        refreshUI();
+        closeOv('ov-add-tx');
+      },
+      async () => {
+        await db.ref('transactions').push({
+          memberPhone: phone,
+          memberName: member.name,
+          type: type,
+          amount: amount,
+          description: desc || type,
+          date: Date.now()
+        });
+        toast(`${type} recorded!`, '#10b981');
+        computePots();
+        refreshUI();
+        closeOv('ov-add-tx');
+      },
+      () => {
+        closeOv('ov-add-tx');
+      }
+    );
   }
-
-  closeOv('ov-add-tx');
-  computePots();
-  refreshUI();
 };
 window.addFine = async function() {
   const phone = document.getElementById('fine-member').value;
   const reason = document.getElementById('fine-reason').value;
   const amount = +document.getElementById('fine-amount').value;
-  const m = members.find(m => m.phone === phone);
-  if (!m || !amount) { toast('Fill all fields', '#ef4444'); return; }
-  await db.ref('transactions').push({
-    memberPhone: phone,
-    memberName: m.name,
-    type: 'fine',
-    amount: amount,
-    description: reason || 'Fine',
-    date: Date.now()
-  });
-  toast('Fine applied!', '#f59e0b');
-  await autoSendReceiptToWhatsApp(m, 'fine', amount, reason);
-  closeOv('ov-add-fine');
-  computePots();
-  refreshUI();
+  const member = members.find(m => m.phone === phone);
+  if (!member || !amount) { toast('Fill all fields', '#ef4444'); return; }
+
+  showTransactionReceiptModal(member, 'fine', amount, reason || 'Fine',
+    async () => {
+      await db.ref('transactions').push({
+        memberPhone: phone, memberName: member.name,
+        type: 'fine', amount, description: reason || 'Fine', date: Date.now()
+      });
+      toast('Fine applied!', '#f59e0b');
+      computePots(); refreshUI();
+      closeOv('ov-add-fine');
+    },
+    async () => {
+      await db.ref('transactions').push({
+        memberPhone: phone, memberName: member.name,
+        type: 'fine', amount, description: reason || 'Fine', date: Date.now()
+      });
+      toast('Fine applied!', '#f59e0b');
+      computePots(); refreshUI();
+      closeOv('ov-add-fine');
+    },
+    () => closeOv('ov-add-fine')
+  );
 };
 
 window.addWelfare = async function() {
   const phone = document.getElementById('welfare-member').value;
   const desc = document.getElementById('welfare-desc').value;
   const amount = +document.getElementById('welfare-amount').value;
-  const m = members.find(m => m.phone === phone);
-  if (!m || !amount) { toast('Fill all fields', '#ef4444'); return; }
-  await db.ref('transactions').push({
-    memberPhone: phone,
-    memberName: m.name,
-    type: 'welfare',
-    amount: amount,
-    description: desc || 'Welfare',
-    date: Date.now()
-  });
-  toast('Welfare recorded!', '#8b5cf6');
-  await autoSendReceiptToWhatsApp(m, 'welfare', amount, desc);
-  closeOv('ov-add-welfare');
-  computePots();
-  refreshUI();
+  const member = members.find(m => m.phone === phone);
+  if (!member || !amount) { toast('Fill all fields', '#ef4444'); return; }
+
+  showTransactionReceiptModal(member, 'welfare', amount, desc || 'Welfare',
+    async () => {
+      await db.ref('transactions').push({
+        memberPhone: phone, memberName: member.name,
+        type: 'welfare', amount, description: desc || 'Welfare', date: Date.now()
+      });
+      toast('Welfare recorded!', '#8b5cf6');
+      computePots(); refreshUI();
+      closeOv('ov-add-welfare');
+    },
+    async () => {
+      await db.ref('transactions').push({
+        memberPhone: phone, memberName: member.name,
+        type: 'welfare', amount, description: desc || 'Welfare', date: Date.now()
+      });
+      toast('Welfare recorded!', '#8b5cf6');
+      computePots(); refreshUI();
+      closeOv('ov-add-welfare');
+    },
+    () => closeOv('ov-add-welfare')
+  );
 };
 window.addExpense=function(){const desc=document.getElementById('exp-desc').value,amount=+document.getElementById('exp-amount').value;if(!desc||!amount){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('transactions').push({type:'expense',amount,description:desc,date:Date.now()}).then(()=>{toast(t('record_expense_btn'),'#ef4444');['exp-desc','exp-amount','exp-paidto'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});closeOv('ov-add-exp');});};
 // Update preview when type or amount changes
@@ -8083,80 +7795,72 @@ window.addGroupTransaction = async function() {
 };
 
 window.assignDebtAsLoan = async function() {
-  console.log("assignDebtAsLoan called");
   const phone = document.getElementById('debt-member')?.value;
   const principal = parseFloat(document.getElementById('debt-amount')?.value);
   const interestRate = parseFloat(document.getElementById('debt-interest')?.value);
   const dueDateStr = document.getElementById('debt-due-date')?.value;
   const reason = document.getElementById('debt-reason')?.value || 'Admin assigned debt';
-
-  if (!phone) { toast('Select a member', '#ef4444'); return; }
-  if (!principal || principal <= 0) { toast('Enter valid principal amount', '#ef4444'); return; }
-  if (isNaN(interestRate) || interestRate < 0) { toast('Enter valid interest rate', '#ef4444'); return; }
-  if (!dueDateStr) { toast('Select a due date', '#ef4444'); return; }
-
   const member = members.find(m => m.phone === phone);
-  if (!member) { toast('Member not found', '#ef4444'); return; }
-
-  const dueDate = new Date(dueDateStr).getTime();
-  const totalRepay = Math.floor(principal * (1 + interestRate / 100));
-  const interest = totalRepay - principal;
-
-  try {
-    const loanRef = db.ref('loans').push();
-    await loanRef.set({
-      id: loanRef.key,
-      memberId: member.id,
-      memberName: member.name,
-      memberPhone: phone,
-      amount: principal,
-      interestRate: interestRate,
-      totalRepay: totalRepay,
-      reason: reason,
-      status: 'approved',
-      requestedAt: Date.now(),
-      approvedAt: Date.now(),
-      dueDate: dueDate,
-      repaid: false,
-      penaltyApplied: false
-    });
-
-    await db.ref('transactions').push({
-      memberPhone: phone,
-      memberName: member.name,
-      type: 'loan_disbursement',
-      amount: principal,
-      description: `${reason} (principal)`,
-      date: Date.now()
-    });
-
-    if (interest > 0) {
-      await db.ref('transactions').push({
-        memberPhone: phone,
-        memberName: member.name,
-        type: 'loan_adjustment',
-        amount: interest,
-        description: `Interest on assigned debt (${interestRate}%)`,
-        date: Date.now() + 1
-      });
-    }
-
-    // Refresh data
-    const loansSnap = await db.ref('loans').once('value');
-    loans = loansSnap.val() ? Object.entries(loansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
-    const txSnap = await db.ref('transactions').once('value');
-    transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
-    computePots();
-    refreshUI();
-    closeOv('ov-assign-debt');
-    toast(`Debt assigned: UGX ${principal.toLocaleString()} to ${member.name}`, '#10b981');
-    await autoSendReceiptToWhatsApp(member, 'loan_disbursement', principal, reason);
-  } catch (err) {
-    console.error("Error in assignDebtAsLoan:", err);
-    toast('Failed to assign debt. Check console.', '#ef4444');
+  if (!member || !principal || isNaN(interestRate) || !dueDateStr) {
+    toast('Fill all fields correctly', '#ef4444');
+    return;
   }
-};
+  const dueDate = new Date(dueDateStr).getTime();
 
+  showTransactionReceiptModal(member, 'loan_disbursement', principal, reason,
+    async () => {
+      // Create loan and transactions
+      const totalRepay = Math.floor(principal * (1 + interestRate / 100));
+      const interest = totalRepay - principal;
+      const loanRef = db.ref('loans').push();
+      await loanRef.set({
+        id: loanRef.key, memberId: member.id, memberName: member.name, memberPhone: phone,
+        amount: principal, interestRate: interestRate, totalRepay: totalRepay, reason: reason,
+        status: 'approved', requestedAt: Date.now(), approvedAt: Date.now(), dueDate: dueDate,
+        repaid: false, penaltyApplied: false
+      });
+      await db.ref('transactions').push({
+        memberPhone: phone, memberName: member.name, type: 'loan_disbursement',
+        amount: principal, description: `${reason} (principal)`, date: Date.now()
+      });
+      if (interest > 0) {
+        await db.ref('transactions').push({
+          memberPhone: phone, memberName: member.name, type: 'loan_adjustment',
+          amount: interest, description: `Interest (${interestRate}%)`, date: Date.now() + 1
+        });
+      }
+      toast(`Debt assigned: UGX ${principal.toLocaleString()} to ${member.name}`, '#10b981');
+      computePots(); refreshUI();
+      closeOv('ov-assign-debt');
+    },
+    async () => {
+      // Same as above but without sending (still create loan)
+      const totalRepay = Math.floor(principal * (1 + interestRate / 100));
+      const interest = totalRepay - principal;
+      const loanRef = db.ref('loans').push();
+      await loanRef.set({
+        id: loanRef.key, memberId: member.id, memberName: member.name, memberPhone: phone,
+        amount: principal, interestRate: interestRate, totalRepay: totalRepay, reason: reason,
+        status: 'approved', requestedAt: Date.now(), approvedAt: Date.now(), dueDate: dueDate,
+        repaid: false, penaltyApplied: false
+      });
+      await db.ref('transactions').push({
+        memberPhone: phone, memberName: member.name, type: 'loan_disbursement',
+        amount: principal, description: `${reason} (principal)`, date: Date.now()
+      });
+      if (interest > 0) {
+        await db.ref('transactions').push({
+          memberPhone: phone, memberName: member.name, type: 'loan_adjustment',
+          amount: interest, description: `Interest (${interestRate}%)`, date: Date.now() + 1
+        });
+      }
+      toast(`Debt assigned: UGX ${principal.toLocaleString()} to ${member.name}`, '#10b981');
+      computePots(); refreshUI();
+      closeOv('ov-assign-debt');
+    },
+    () => closeOv('ov-assign-debt')
+  );
+};
 window.previewProfitDistribution = function() {
   if (groupProfit <= 0) {
     toast('No profit to distribute', '#ef4444');
@@ -9420,9 +9124,6 @@ window.loadSettings = function() {
   document.getElementById('set-fine-contribution').value = settings.fineContribution || 0;
   document.getElementById('set-penalty-interest').value = settings.penaltyInterestRate || 5;
   document.getElementById('set-fine').value = settings.fineAmount || 5000;
-  document.getElementById('set-auto-debt-interest').value = settings.autoDebtInterest || 5;
-document.getElementById('set-auto-debt-extra-weekly').value = settings.autoDebtExtraWeekly || 0;
-document.getElementById('set-auto-debt-weeks').value = settings.autoDebtWeeks || 0;
   document.getElementById('set-referral-bonus').value = settings.referralBonusAmount || 10000;
   document.getElementById('set-whatsapp').value = settings.whatsappLink || '';
   document.getElementById('set-banner-url').value = settings.bannerData || '';
@@ -9463,9 +9164,6 @@ window.doSaveSettings = function() {
   settings.fineContribution = +document.getElementById('set-fine-contribution').value;
   settings.fineAmount = +document.getElementById('set-fine').value;
   settings.penaltyInterestRate = parseFloat(document.getElementById('set-penalty-interest').value) || 5;
-  settings.autoDebtInterest = parseFloat(document.getElementById('set-auto-debt-interest').value) || 5;
-settings.autoDebtExtraWeekly = parseFloat(document.getElementById('set-auto-debt-extra-weekly').value) || 0;
-settings.autoDebtWeeks = parseInt(document.getElementById('set-auto-debt-weeks').value, 10) || 0;
   settings.referralBonusAmount = parseInt(document.getElementById('set-referral-bonus').value) || 0;
 db.ref('settings').update({ referralBonusAmount: settings.referralBonusAmount });
   settings.whatsappLink = document.getElementById('set-whatsapp').value;
@@ -9485,9 +9183,6 @@ db.ref('settings').update({ referralBonusAmount: settings.referralBonusAmount })
     fineAmount: settings.fineAmount,
     penaltyInterestRate: settings.penaltyInterestRate,
     whatsappLink: settings.whatsappLink,
-    autoDebtInterest: settings.autoDebtInterest,
-  autoDebtExtraWeekly: settings.autoDebtExtraWeekly,
-  autoDebtWeeks: settings.autoDebtWeeks,
     bannerData: settings.bannerData,
     themeMode: settings.themeMode,
     themeColor: settings.themeColor,
@@ -10478,91 +10173,7 @@ window.markNotifReadPopup = async function(id) {
     if (arr.every(n => n.read)) closeOv('ov-notifications-popup');
   }
 };
-window.manualAutoDebt = async function() {
-  console.log("Manual auto-debt triggered");
-  await processAutoDebt();
-  toast("Manual auto-debt completed", "#10b981");
-};
-window.manualDebtReview = async function() {
-  if (!confirm("⚠️ This will create pending loan receipts (debt) for every member with NO transaction today. You will review each receipt before the loan is added. Continue?")) return;
 
-  toast("Scanning today's activity...", "#06b6d4");
-
-  const todayStart = new Date().setHours(0, 0, 0, 0);
-  const todayEnd = todayStart + 86400000 - 1;
-  const activeMembers = members.filter(m => m.approved === true);
-  const dailyAmount = settings.dailyAmount || 2000;
-  const welfareAmount = settings.welfareAmount || 500;
-  const principal = dailyAmount + welfareAmount;
-  
-  // --- Use NEW group settings for auto‑debt interest ---
-  const baseRate = settings.autoDebtInterest || 5;          // from Group Settings
-  const extraWeekly = settings.autoDebtExtraWeekly || 2;    // from Group Settings
-  const weeks = settings.autoDebtWeeks || 4;                // from Group Settings
-  const totalRate = baseRate + (weeks - 1) * extraWeekly;
-  const interest = Math.floor(principal * totalRate / 100);
-  const totalRepay = principal + interest;
-  const dueDate = Date.now() + weeks * 7 * 86400000;
-
-  // Find members with any transaction today
-  const membersWithActivity = new Set();
-  transactions.forEach(tx => {
-    if (tx.date >= todayStart && tx.date <= todayEnd && tx.memberPhone) {
-      membersWithActivity.add(tx.memberPhone);
-    }
-  });
-
-  const membersToCharge = activeMembers.filter(m => !membersWithActivity.has(m.phone));
-  if (membersToCharge.length === 0) {
-    toast("All members have activity today. No debts to process.", "#10b981");
-    return;
-  }
-
-  const pendingItems = [];
-  for (const member of membersToCharge) {
-    const receiptImageData = await generateDebtReceiptImage(member, principal, totalRate, totalRepay, dueDate, new Date(todayStart));
-    pendingItems.push({
-      id: Date.now() + Math.random(),
-      memberId: member.id,
-      memberName: member.name,
-      memberPhone: member.phone,
-      principal: principal,
-      interestRate: totalRate,
-      totalRepay: totalRepay,
-      dueDate: dueDate,
-      date: todayStart,
-      imageData: receiptImageData,
-      status: 'pending',
-      createdAt: Date.now()
-    });
-  }
-
-  const reportId = Date.now();
-  const reportData = {
-    id: reportId,
-    date: todayStart,
-    createdAt: Date.now(),
-    items: pendingItems,
-    status: 'pending',
-    totalMembers: pendingItems.length,
-    totalAmount: pendingItems.reduce((sum, i) => sum + i.principal, 0)
-  };
-  await db.ref('autoDebtReports/' + reportId).set(reportData);
-
-  const adminNotifs = notifications.admin || [];
-  adminNotifs.push({
-    id: Date.now(),
-    text: `📋 New pending loan receipts: ${pendingItems.length} member(s). Total UGX ${reportData.totalAmount.toLocaleString()}. Review them now.`,
-    date: Date.now(),
-    read: false,
-    type: 'auto_debt_report',
-    reportId: reportId
-  });
-  await db.ref('notifications/admin').set(adminNotifs);
-
-  toast(`Created ${pendingItems.length} pending loan receipt(s). Open "Review Pending Debt Receipts" to process.`, "#f59e0b");
-  openAutoDebtReports();
-};
 window.deleteNotifPopup = async function(id) {
   const arr = notifications[currentUser.id] || [];
   const newArr = arr.filter(n => n.id !== id);
@@ -10575,7 +10186,85 @@ window.deleteNotifPopup = async function(id) {
     showNotificationsPopup(); // refresh list
   }
 };
+function showTransactionReceiptModal(member, txType, amount, description, onConfirmSend, onConfirmNoSend, onCancel) {
+  // Compute current financial stats
+  computePots();
+  const loanBalance = memberLoans[member.phone] || 0;
+  const accountBalance = memberBalances[member.phone] || 0;
+  let totalDeposits = 0;
+  transactions.forEach(tx => { if (tx.memberPhone === member.phone && tx.type === 'deposit') totalDeposits += tx.amount; });
+  const maxBorrow = Math.floor(totalDeposits * (loanSettings.disciplineMultiplier || 1.5));
 
+  // Generate receipt image
+  generateTransactionReceipt(member, txType, amount, description, loanBalance, accountBalance, maxBorrow).then(imageData => {
+    const modal = document.createElement('div');
+    modal.className = 'ov on';
+    modal.style.zIndex = '20020';
+    modal.innerHTML = `
+      <div class="bs" style="max-width: 600px;">
+        <div class="bs-title">📄 Transaction Receipt Preview</div>
+        <div style="text-align: center; margin-bottom: 16px;">
+          ${imageData ? `<img src="${imageData}" style="max-width: 100%; border-radius: 12px; border: 1px solid #ccc;">` : '<div class="hint-box">⚠️ Receipt image not available</div>'}
+        </div>
+        <div style="display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;">
+          <button class="btn btn-gold" id="receipt-confirm-send">✅ Confirm & Send via WhatsApp</button>
+          <button class="btn btn-green" id="receipt-confirm-nosend">✅ Confirm & Don't Send</button>
+          <button class="btn btn-red" id="receipt-cancel">🗑️ Don't Save</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    const confirmSendBtn = modal.querySelector('#receipt-confirm-send');
+    const confirmNoSendBtn = modal.querySelector('#receipt-confirm-nosend');
+    const cancelBtn = modal.querySelector('#receipt-cancel');
+
+    const closeModal = () => {
+      modal.classList.remove('on');
+      setTimeout(() => modal.remove(), 300);
+    };
+
+    confirmSendBtn.onclick = async () => {
+      closeModal();
+      if (imageData) {
+        try {
+          const blob = await (await fetch(imageData)).blob();
+          const file = new File([blob], 'receipt.png', { type: 'image/png' });
+          if (navigator.share && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+            await navigator.share({
+              title: 'Transaction Receipt',
+              text: `${txType.toUpperCase()} of UGX ${amount.toLocaleString()} for ${member.name}`,
+              files: [file]
+            });
+            toast('Receipt shared!', '#10b981');
+          } else {
+            const link = document.createElement('a');
+            link.download = `receipt_${member.id}.png`;
+            link.href = imageData;
+            link.click();
+            toast('Image downloaded. Send manually on WhatsApp.', '#f59e0b');
+          }
+        } catch (err) {
+          console.error(err);
+          toast('Failed to share image, but transaction will be saved.', '#ef4444');
+        }
+      }
+      if (onConfirmSend) onConfirmSend();
+    };
+
+    confirmNoSendBtn.onclick = () => {
+      closeModal();
+      if (onConfirmNoSend) onConfirmNoSend();
+      toast('Transaction saved (no receipt sent).', '#10b981');
+    };
+
+    cancelBtn.onclick = () => {
+      closeModal();
+      if (onCancel) onCancel();
+      toast('Transaction cancelled.', '#f59e0b');
+    };
+  });
+}
 function attachDepositPreviewHandler() {
   // All preview logic lives in window.updateTxPreview — just wire up listeners
   // and trigger once so the preview is fresh when the modal opens.
