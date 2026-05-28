@@ -10493,16 +10493,18 @@ window.manualDebtReview = async function() {
   const activeMembers = members.filter(m => m.approved === true);
   const dailyAmount = settings.dailyAmount || 2000;
   const welfareAmount = settings.welfareAmount || 500;
- const principal = (settings.dailyAmount || 2000) + (settings.welfareAmount || 500);
-const baseRate = settings.autoDebtInterest || 5;
-const extraWeekly = settings.autoDebtExtraWeekly || 2;
-const weeks = settings.autoDebtWeeks || 4;
-const totalRate = baseRate + (weeks - 1) * extraWeekly;
-const interest = Math.floor(principal * totalRate / 100);
-const totalRepay = principal + interest;
-const dueDate = Date.now() + weeks * 7 * 86400000;
+  const principal = dailyAmount + welfareAmount;
+  
+  // --- Use NEW group settings for auto‑debt interest ---
+  const baseRate = settings.autoDebtInterest || 5;          // from Group Settings
+  const extraWeekly = settings.autoDebtExtraWeekly || 2;    // from Group Settings
+  const weeks = settings.autoDebtWeeks || 4;                // from Group Settings
+  const totalRate = baseRate + (weeks - 1) * extraWeekly;
+  const interest = Math.floor(principal * totalRate / 100);
+  const totalRepay = principal + interest;
+  const dueDate = Date.now() + weeks * 7 * 86400000;
 
-  // Members with any transaction today
+  // Find members with any transaction today
   const membersWithActivity = new Set();
   transactions.forEach(tx => {
     if (tx.date >= todayStart && tx.date <= todayEnd && tx.memberPhone) {
@@ -10547,7 +10549,6 @@ const dueDate = Date.now() + weeks * 7 * 86400000;
   };
   await db.ref('autoDebtReports/' + reportId).set(reportData);
 
-  // Notify admin
   const adminNotifs = notifications.admin || [];
   adminNotifs.push({
     id: Date.now(),
