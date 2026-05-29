@@ -3366,7 +3366,7 @@ async function generateTransactionReceipt(member, txType, amount, description, l
       </div>
       <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
       <div style="font-size: 0.9rem;">
-        <div><strong>Remaining Loan Balance:</strong> UGX ${loanBalance.toLocaleString()}</div>
+        <div><strong>Remaining Loan Balance (after this):</strong> UGX ${loanBalance.toLocaleString()}</div>
         <div><strong>Current Account Balance:</strong> UGX ${accountBalance.toLocaleString()}</div>
         <div><strong>You can borrow up to:</strong> UGX ${maxBorrow.toLocaleString()}</div>
         <div class="micro muted" style="margin-top: 8px;">⚠️ Please clear your debt on time to avoid penalties. Borrow only what you can repay.</div>
@@ -3579,7 +3579,7 @@ async function updateLoanRepaidStatus(phone) {
     console.log(`Member not found for phone ${phone}`);
     return;
   }
-  
+
   // Get fresh loans from Firebase
   const snap = await db.ref('loans').orderByChild('memberPhone').equalTo(phone).once('value');
   const freshLoans = snap.val() ? Object.entries(snap.val()).map(([id, l]) => ({ ...l, id })) : [];
@@ -3588,19 +3588,21 @@ async function updateLoanRepaidStatus(phone) {
     console.log(`No pending repay loans for ${member.name}`);
     return;
   }
-  
+
   const outstanding = memberLoans[phone] || 0;
   console.log(`Outstanding loan balance for ${member.name}: ${outstanding}`);
-  
+
   if (outstanding === 0) {
+    // Mark loans as repaid
     for (let loan of pendingRepayLoans) {
       console.log(`Marking loan ${loan.id} as repaid`);
       await db.ref('loans/' + loan.id).update({ repaid: true, repaidAt: Date.now() });
     }
     toast(`Loan cleared for ${member.name}`, '#10b981');
     
-    // *** AUTO-ADVANCE LOAN RECEIVER TO NEXT MEMBER ***
-    if (loanRotationOrder.length > 0) {
+    // *** AUTO-ADVANCE LOAN RECEIVER ONLY IF THE CLEARED LOAN WAS REQUESTED BY THE MEMBER (has loanQuestions) ***
+    const anyApplicationLoanCleared = pendingRepayLoans.some(loan => loan.loanQuestions && loan.loanQuestions.length > 0);
+    if (anyApplicationLoanCleared && loanRotationOrder.length > 0) {
       loanReceiverIndex = (loanReceiverIndex + 1) % loanRotationOrder.length;
       await db.ref('settings/loanReceiverIndex').set(loanReceiverIndex);
       toast(`Loan fully repaid! Loan receiver advanced to next member.`, '#10b981');
@@ -3610,7 +3612,6 @@ async function updateLoanRepaidStatus(phone) {
     // Force refresh loans array and admin UI
     const allLoansSnap = await db.ref('loans').once('value');
     loans = allLoansSnap.val() ? Object.entries(allLoansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
-    console.log(`Loans after refresh: ${loans.length}`);
     if (currentAdminTab === 'savings') renderAdminTab();
     if (currentScreen === 'account') updateAccountBalances();
   } else {
@@ -7807,15 +7808,20 @@ window.assignDebtAsLoan = async function() {
   }
   const dueDate = new Date(dueDateStr).getTime();
 
+  // Calculate new loan balance after assignment
+  const currentLoanBalance = memberLoans[member.phone] || 0;
+  const totalRepay = Math.floor(principal * (1 + interestRate / 100));
+  const newLoanBalance = currentLoanBalance + totalRepay;
+
   showTransactionReceiptModal(member, 'loan_disbursement', principal, reason,
     async () => {
-      // Create loan and transactions
-      const totalRepay = Math.floor(principal * (1 + interestRate / 100));
-      const interest = totalRepay - principal;
+      // Confirm & Send (or just Save)
+      const totalRepayLoan = Math.floor(principal * (1 + interestRate / 100));
+      const interest = totalRepayLoan - principal;
       const loanRef = db.ref('loans').push();
       await loanRef.set({
         id: loanRef.key, memberId: member.id, memberName: member.name, memberPhone: phone,
-        amount: principal, interestRate: interestRate, totalRepay: totalRepay, reason: reason,
+        amount: principal, interestRate: interestRate, totalRepay: totalRepayLoan, reason: reason,
         status: 'approved', requestedAt: Date.now(), approvedAt: Date.now(), dueDate: dueDate,
         repaid: false, penaltyApplied: false
       });
@@ -7834,13 +7840,13 @@ window.assignDebtAsLoan = async function() {
       closeOv('ov-assign-debt');
     },
     async () => {
-      // Same as above but without sending (still create loan)
-      const totalRepay = Math.floor(principal * (1 + interestRate / 100));
-      const interest = totalRepay - principal;
+      // Confirm & Don't Send – same but without sending (still create loan)
+      const totalRepayLoan = Math.floor(principal * (1 + interestRate / 100));
+      const interest = totalRepayLoan - principal;
       const loanRef = db.ref('loans').push();
       await loanRef.set({
         id: loanRef.key, memberId: member.id, memberName: member.name, memberPhone: phone,
-        amount: principal, interestRate: interestRate, totalRepay: totalRepay, reason: reason,
+        amount: principal, interestRate: interestRate, totalRepay: totalRepayLoan, reason: reason,
         status: 'approved', requestedAt: Date.now(), approvedAt: Date.now(), dueDate: dueDate,
         repaid: false, penaltyApplied: false
       });
@@ -7858,7 +7864,8 @@ window.assignDebtAsLoan = async function() {
       computePots(); refreshUI();
       closeOv('ov-assign-debt');
     },
-    () => closeOv('ov-assign-debt')
+    () => closeOv('ov-assign-debt'),
+    newLoanBalance  // Pass projected loan balance to receipt modal
   );
 };
 window.previewProfitDistribution = function() {
@@ -10186,16 +10193,15 @@ window.deleteNotifPopup = async function(id) {
     showNotificationsPopup(); // refresh list
   }
 };
-function showTransactionReceiptModal(member, txType, amount, description, onConfirmSend, onConfirmNoSend, onCancel) {
-  // Compute current financial stats
+function showTransactionReceiptModal(member, txType, amount, description, onConfirmSend, onConfirmNoSend, onCancel, customLoanBalance = null) {
   computePots();
-  const loanBalance = memberLoans[member.phone] || 0;
+  // Determine loan balance to display (if custom provided, use it; else current)
+  let loanBalance = (customLoanBalance !== null) ? customLoanBalance : (memberLoans[member.phone] || 0);
   const accountBalance = memberBalances[member.phone] || 0;
   let totalDeposits = 0;
   transactions.forEach(tx => { if (tx.memberPhone === member.phone && tx.type === 'deposit') totalDeposits += tx.amount; });
   const maxBorrow = Math.floor(totalDeposits * (loanSettings.disciplineMultiplier || 1.5));
 
-  // Generate receipt image
   generateTransactionReceipt(member, txType, amount, description, loanBalance, accountBalance, maxBorrow).then(imageData => {
     const modal = document.createElement('div');
     modal.className = 'ov on';
@@ -10224,30 +10230,44 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
       setTimeout(() => modal.remove(), 300);
     };
 
+    // Helper: share (mobile) or copy to clipboard (desktop)
+    async function shareOrCopyImage(blob, fileName) {
+      if (navigator.share && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+        const file = new File([blob], fileName, { type: 'image/png' });
+        await navigator.share({
+          title: 'Transaction Receipt',
+          text: `${txType.toUpperCase()} of UGX ${amount.toLocaleString()} for ${member.name}`,
+          files: [file]
+        });
+        toast('Receipt shared!', '#10b981');
+      } else {
+        // Desktop: copy image to clipboard
+        try {
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              [blob.type]: blob
+            })
+          ]);
+          toast('📋 Receipt image copied to clipboard! You can now paste (Ctrl+V) directly into WhatsApp Web.', '#06b6d4');
+        } catch (err) {
+          console.error('Clipboard write failed', err);
+          // Final fallback: download
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = fileName;
+          a.click();
+          URL.revokeObjectURL(url);
+          toast('Image downloaded. Please send it manually on WhatsApp.', '#f59e0b');
+        }
+      }
+    }
+
     confirmSendBtn.onclick = async () => {
       closeModal();
       if (imageData) {
-        try {
-          const blob = await (await fetch(imageData)).blob();
-          const file = new File([blob], 'receipt.png', { type: 'image/png' });
-          if (navigator.share && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-            await navigator.share({
-              title: 'Transaction Receipt',
-              text: `${txType.toUpperCase()} of UGX ${amount.toLocaleString()} for ${member.name}`,
-              files: [file]
-            });
-            toast('Receipt shared!', '#10b981');
-          } else {
-            const link = document.createElement('a');
-            link.download = `receipt_${member.id}.png`;
-            link.href = imageData;
-            link.click();
-            toast('Image downloaded. Send manually on WhatsApp.', '#f59e0b');
-          }
-        } catch (err) {
-          console.error(err);
-          toast('Failed to share image, but transaction will be saved.', '#ef4444');
-        }
+        const blob = await (await fetch(imageData)).blob();
+        await shareOrCopyImage(blob, `receipt_${member.id}.png`);
       }
       if (onConfirmSend) onConfirmSend();
     };
