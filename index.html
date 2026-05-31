@@ -3397,178 +3397,143 @@ async function generateTransactionReceipt(member, txType, amount, description, l
     return null;
   }
 }
-async function generateWeeklyPayoutReceipt() {
-  const idx = rotation.currentIndex || 0;
-  const beneId = rotation.order?.[idx];
-  const beneficiary = members.find(m => m.id === beneId);
-  if (!beneficiary) {
-    toast('No valid beneficiary for this week', '#ef4444');
-    return;
-  }
-
-  const dailyNet = getNetDaily();
-  const weeklyGross = dailyNet * 7 * members.filter(m => m.approved).length;
-  const debt = memberDebts[beneficiary.phone] || 0;
-  const loan = memberLoans[beneficiary.phone] || 0;
-  const netPayout = Math.max(0, weeklyGross - debt - loan);
+async function generateWeeklyPayoutReceiptImage(beneficiary, weeklyGross, debt, loan, netPayout) {
+  const dateLabel = new Date().toLocaleDateString('en-UG', { year: 'numeric', month: 'long', day: 'numeric' });
+  const receiptId = `PAYOUT-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${beneficiary.id.slice(-4)}`;
 
   const receiptHtml = `
     <div class="weekly-receipt-card" style="
-      max-width: 600px;
+      max-width: 500px;
       margin: 0 auto;
       border: 2px solid #e2e8f0;
       border-radius: 20px;
-      padding: 24px;
+      padding: 20px;
       background: white;
       font-family: 'DM Sans', sans-serif;
     ">
-      <div style="text-align: center; margin-bottom: 16px;">
-        <div style="font-size: 2rem;">🌾</div>
-        <div style="font-weight: 800; font-size: 1.5rem; color: #b45309;">HARVEST TRUST FINANCE</div>
-        <div style="font-size: 0.8rem; color: #64748b;">Weekly Payout Receipt</div>
+      <div style="text-align: center; margin-bottom: 12px;">
+        <div style="font-size: 1.8rem;">🌾</div>
+        <div style="font-weight: 800; font-size: 1.2rem; color: #b45309;">HARVEST TRUST FINANCE</div>
+        <div style="font-size: 0.7rem; color: #64748b;">Weekly Payout Receipt</div>
       </div>
-      <div style="border-top: 2px solid #f59e0b; margin: 12px 0;"></div>
-      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px; font-size: 1rem;">
-        <div><strong>Beneficiary:</strong></div><div>${escapeHtml(beneficiary.name)}</div>
-        <div><strong>Phone:</strong></div><div>${beneficiary.phone}</div>
-        <div><strong>Payout Date:</strong></div><div>${new Date().toLocaleDateString()}</div>
+      <div style="border-top: 1px solid #e2e8f0; margin: 8px 0;"></div>
+      <div style="font-size: 0.9rem;">
+        <div><strong>Receipt No.</strong> ${receiptId}</div>
+        <div><strong>Date:</strong> ${dateLabel}</div>
+        <div><strong>Beneficiary:</strong> ${escapeHtml(beneficiary.name)}</div>
+        <div><strong>Phone:</strong> ${beneficiary.phone}</div>
       </div>
       <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
-      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px; font-size: 1rem;">
-        <div><strong>Full Weekly Amount:</strong></div><div>UGX ${weeklyGross.toLocaleString()}</div>
-        <div><strong>Member Debt:</strong></div><div>- UGX ${debt.toLocaleString()}</div>
-        <div><strong>Outstanding Loan:</strong></div><div>- UGX ${loan.toLocaleString()}</div>
-        <div><strong style="color: var(--green);">Net Payout:</strong></div><div><strong>UGX ${netPayout.toLocaleString()}</strong></div>
+      <div style="font-size: 1rem;">
+        <div><strong>Full Weekly Amount:</strong> UGX ${weeklyGross.toLocaleString()}</div>
+        <div><strong>Debt Deducted:</strong> - UGX ${debt.toLocaleString()}</div>
+        <div><strong>Loan Deducted:</strong> - UGX ${loan.toLocaleString()}</div>
+        <div><strong>Net Payout:</strong> UGX ${netPayout.toLocaleString()}</div>
       </div>
-      <div style="border-top: 1px solid #e2e8f0; margin: 16px 0;"></div>
-      <div style="text-align: center; font-size: 0.7rem; color: #94a3b8;">This payout clears all debts and loans for the member.</div>
-      <div style="text-align: center; font-size: 0.6rem; margin-top: 8px;">Authorised by Harvest Trust Finance</div>
+      <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
+      <div class="micro muted" style="text-align:center;">This payout clears all debts and loans for the member. Thank you for being part of Harvest Trust Finance.</div>
+      <div style="text-align: center; font-size: 0.7rem; margin-top: 8px;">Authorised by Harvest Trust Finance</div>
     </div>
   `;
 
-  // Show modal with options: Print, Share as Image, Cancel
-  return new Promise((resolve) => {
+  const tempDiv = document.createElement('div');
+  tempDiv.style.position = 'absolute';
+  tempDiv.style.top = '-9999px';
+  tempDiv.style.left = '-9999px';
+  tempDiv.innerHTML = receiptHtml;
+  document.body.appendChild(tempDiv);
+  try {
+    const canvas = await html2canvas(tempDiv.querySelector('.weekly-receipt-card'), {
+      scale: 1.5, backgroundColor: '#ffffff', logging: false
+    });
+    document.body.removeChild(tempDiv);
+    return canvas.toDataURL('image/png');
+  } catch (err) {
+    document.body.removeChild(tempDiv);
+    console.error('Weekly payout receipt image generation failed', err);
+    return null;
+  }
+}
+function showWeeklyPayoutReceiptModal(beneficiary, weeklyGross, debt, loan, netPayout, onConfirmShare, onConfirmNoShare, onPrint, onCancel) {
+  generateWeeklyPayoutReceiptImage(beneficiary, weeklyGross, debt, loan, netPayout).then(imageData => {
     const modal = document.createElement('div');
     modal.className = 'ov on';
-    modal.style.zIndex = '20010';
+    modal.style.zIndex = '20020';
     modal.innerHTML = `
-      <div class="bs" style="max-width: 650px;">
-        <div class="bs-title">📄 Weekly Payout Receipt</div>
-        <div id="weekly-receipt-preview" style="max-height: 60vh; overflow-y: auto; margin-bottom: 16px;">
-          ${receiptHtml}
+      <div class="bs" style="max-width: 600px;">
+        <div class="bs-title">📄 Weekly Payout Receipt Preview</div>
+        <div style="text-align: center; margin-bottom: 16px;">
+          ${imageData ? `<img src="${imageData}" style="max-width: 100%; border-radius: 12px; border: 1px solid #ccc;">` : '<div class="hint-box">⚠️ Receipt image not available</div>'}
         </div>
-        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-          <button class="btn btn-gold" style="flex:1" id="print-weekly-receipt">🖨️ Print Receipt</button>
-          <button class="btn btn-teal" style="flex:1" id="share-weekly-receipt">📸 Share as Image</button>
-          <button class="btn btn-sec" style="flex:1" id="close-weekly-modal">Close</button>
+        <div style="display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;">
+          <button class="btn btn-gold" id="payout-confirm-share">✅ Confirm & Share via WhatsApp</button>
+          <button class="btn btn-green" id="payout-confirm-noshare">✅ Confirm & Don't Share</button>
+          <button class="btn btn-purple" id="payout-print">🖨️ Print</button>
+          <button class="btn btn-red" id="payout-cancel">🗑️ Cancel</button>
         </div>
       </div>
     `;
     document.body.appendChild(modal);
 
-    const printBtn = modal.querySelector('#print-weekly-receipt');
-    const shareBtn = modal.querySelector('#share-weekly-receipt');
-    const closeBtn = modal.querySelector('#close-weekly-modal');
+    const confirmShareBtn = modal.querySelector('#payout-confirm-share');
+    const confirmNoShareBtn = modal.querySelector('#payout-confirm-noshare');
+    const printBtn = modal.querySelector('#payout-print');
+    const cancelBtn = modal.querySelector('#payout-cancel');
 
-    const cleanup = () => {
+    const closeModal = () => {
       modal.classList.remove('on');
       setTimeout(() => modal.remove(), 300);
     };
 
-    // Print function
-    printBtn.onclick = () => {
-      const printWindow = window.open('', '_blank');
-      printWindow.document.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Harvest Trust Finance - Weekly Payout Receipt</title>
-          <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body {
-              font-family: 'DM Sans', 'Segoe UI', sans-serif;
-              background: white;
-              display: flex;
-              justify-content: center;
-              align-items: center;
-              min-height: 100vh;
-              padding: 20px;
-            }
-            .weekly-receipt-card {
-              max-width: 700px;
-              width: 100%;
-              margin: 0 auto;
-              border: 1px solid #e2e8f0;
-              border-radius: 24px;
-              padding: 32px;
-              background: white;
-            }
-            @media print {
-              body { padding: 0; margin: 0; }
-              .weekly-receipt-card { box-shadow: none; border: none; }
-              @page { margin: 0.5in; }
-            }
-          </style>
-        </head>
-        <body>
-          ${receiptHtml}
-        </body>
-        </html>
-      `);
-      printWindow.document.close();
-      printWindow.focus();
-      printWindow.print();
-      cleanup();
-      resolve(true);
-    };
-
-    // Share as image
-    shareBtn.onclick = async () => {
-      cleanup();
-      const tempDiv = document.createElement('div');
-      tempDiv.style.position = 'absolute';
-      tempDiv.style.top = '-9999px';
-      tempDiv.style.left = '-9999px';
-      tempDiv.innerHTML = receiptHtml;
-      document.body.appendChild(tempDiv);
-
-      try {
-        const canvas = await html2canvas(tempDiv.querySelector('.weekly-receipt-card'), {
-          scale: 2,
-          backgroundColor: '#ffffff',
-          logging: false
+    async function shareOrCopyImage(blob, fileName) {
+      if (navigator.share && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+        const file = new File([blob], fileName, { type: 'image/png' });
+        await navigator.share({
+          title: 'Weekly Payout Receipt',
+          text: `Payout of UGX ${netPayout.toLocaleString()} to ${beneficiary.name}`,
+          files: [file]
         });
-        document.body.removeChild(tempDiv);
-        const imageData = canvas.toDataURL('image/png');
-        const blob = await (await fetch(imageData)).blob();
-        const file = new File([blob], `weekly_payout_${beneficiary.id}.png`, { type: 'image/png' });
-
-        if (navigator.share && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-          await navigator.share({
-            title: 'Harvest Trust Finance Weekly Payout',
-            text: `Payout receipt for ${beneficiary.name} - UGX ${netPayout.toLocaleString()}`,
-            files: [file]
-          });
-          toast(`✅ Weekly payout receipt shared!`, '#10b981');
-        } else {
-          const link = document.createElement('a');
-          link.download = `weekly_payout_${beneficiary.id}.png`;
-          link.href = imageData;
-          link.click();
-          toast(`📸 Weekly payout receipt downloaded. Share it manually.`, '#f59e0b');
+        toast('Receipt shared!', '#10b981');
+      } else {
+        try {
+          await navigator.clipboard.write([ new ClipboardItem({ [blob.type]: blob }) ]);
+          toast('📋 Receipt image copied to clipboard! Paste (Ctrl+V) into WhatsApp Web.', '#06b6d4');
+        } catch (err) {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = fileName;
+          a.click();
+          URL.revokeObjectURL(url);
+          toast('Image downloaded. Send manually on WhatsApp.', '#f59e0b');
         }
-        resolve(true);
-      } catch (err) {
-        console.error('Share error:', err);
-        document.body.removeChild(tempDiv);
-        toast('❌ Failed to generate image', '#ef4444');
-        resolve(false);
       }
+    }
+
+    confirmShareBtn.onclick = async () => {
+      closeModal();
+      if (imageData) {
+        const blob = await (await fetch(imageData)).blob();
+        await shareOrCopyImage(blob, `payout_${beneficiary.id}.png`);
+      }
+      if (onConfirmShare) onConfirmShare();
     };
 
-    closeBtn.onclick = () => {
-      cleanup();
-      resolve(false);
+    confirmNoShareBtn.onclick = () => {
+      closeModal();
+      if (onConfirmNoShare) onConfirmNoShare();
+      toast('Payout completed (no receipt sent).', '#10b981');
+    };
+
+    printBtn.onclick = () => {
+      closeModal();
+      if (onPrint) onPrint();
+    };
+
+    cancelBtn.onclick = () => {
+      closeModal();
+      if (onCancel) onCancel();
+      toast('Payout cancelled.', '#f59e0b');
     };
   });
 }
@@ -6836,7 +6801,6 @@ function renderAdminTab() {
         <div class="sec-h">🌾 Harvest Actions</div>
         <button class="btn btn-teal btn-full" onclick="openAddTransaction()">➕ Add Transaction</button>
         <button class="btn btn-green btn-full" onclick="openOv('ov-mark-paid')">✅ Mark Weekly Payout</button>
-        <button class="btn btn-purple btn-full" onclick="generateWeeklyPayoutReceipt()">📄 Weekly Payout Receipt (Preview/Share)</button>
         <button class="btn btn-purple btn-full" onclick="openOv('ov-rot-manage'); buildDragRotation();">🔄 Manage Payout Rotation</button>
         <button class="btn btn-amber btn-full" onclick="advanceLoanReceiver()">⏩ Advance Loan Receiver</button>
         <button class="btn btn-purple btn-full" onclick="openOv('ov-loan-rot-manage'); buildLoanDragRotation();">🔄 Manage Loan Rotation</button>
@@ -7611,79 +7575,60 @@ window.addTransactionWithPreview = async function() {
   const amount = parseFloat(document.getElementById('tx-amount')?.value);
   const desc = document.getElementById('tx-desc')?.value;
   const member = members.find(m => m.phone === phone);
-
   if (!member || !amount || amount <= 0) {
     toast('Select member and enter valid amount', '#ef4444');
     return;
   }
 
-  // For deposit, we need to preview the breakdown first? We'll keep the existing preview but then show receipt modal.
   if (type === 'deposit') {
-    // Optional: show the deposit breakdown (existing preview) before final receipt? We'll skip for simplicity.
-    // Instead, directly show receipt modal.
-    showTransactionReceiptModal(member, 'deposit', amount, desc || 'Deposit', 
+    showTransactionReceiptModal(member, 'deposit', amount, desc || 'Deposit',
       async () => {
-        // Confirm & Send
         const depositTxs = await processDepositWithFutureDays(member, amount, Date.now(), desc || 'Manual deposit');
         const writes = depositTxs.map(tx => db.ref('transactions').push(tx));
         await Promise.all(writes);
         toast(`Deposit saved! ${money(amount)} applied.`, '#10b981');
-        computePots();
-        refreshUI();
+        computePots(); refreshUI();
         closeOv('ov-add-tx');
       },
       async () => {
-        // Confirm & Don't Send
         const depositTxs = await processDepositWithFutureDays(member, amount, Date.now(), desc || 'Manual deposit');
         const writes = depositTxs.map(tx => db.ref('transactions').push(tx));
         await Promise.all(writes);
         toast(`Deposit saved! ${money(amount)} applied.`, '#10b981');
-        computePots();
-        refreshUI();
+        computePots(); refreshUI();
         closeOv('ov-add-tx');
       },
-      () => {
-        // Cancel – do nothing
-        closeOv('ov-add-tx');
-      }
+      () => closeOv('ov-add-tx'),
+      null,
+      null
     );
   } else {
-    // For other types (withdraw, fine, welfare, expense)
     showTransactionReceiptModal(member, type, amount, desc || type,
       async () => {
         await db.ref('transactions').push({
-          memberPhone: phone,
-          memberName: member.name,
-          type: type,
-          amount: amount,
-          description: desc || type,
-          date: Date.now()
+          memberPhone: phone, memberName: member.name, type: type,
+          amount: amount, description: desc || type, date: Date.now()
         });
         toast(`${type} recorded!`, '#10b981');
-        computePots();
-        refreshUI();
+        computePots(); refreshUI();
         closeOv('ov-add-tx');
       },
       async () => {
         await db.ref('transactions').push({
-          memberPhone: phone,
-          memberName: member.name,
-          type: type,
-          amount: amount,
-          description: desc || type,
-          date: Date.now()
+          memberPhone: phone, memberName: member.name, type: type,
+          amount: amount, description: desc || type, date: Date.now()
         });
         toast(`${type} recorded!`, '#10b981');
-        computePots();
-        refreshUI();
+        computePots(); refreshUI();
         closeOv('ov-add-tx');
       },
-      () => {
-        closeOv('ov-add-tx');
-      }
+      () => closeOv('ov-add-tx'),
+      null,
+      null
     );
   }
 };
+
 window.addFine = async function() {
   const phone = document.getElementById('fine-member').value;
   const reason = document.getElementById('fine-reason').value;
@@ -7694,8 +7639,8 @@ window.addFine = async function() {
   showTransactionReceiptModal(member, 'fine', amount, reason || 'Fine',
     async () => {
       await db.ref('transactions').push({
-        memberPhone: phone, memberName: member.name,
-        type: 'fine', amount, description: reason || 'Fine', date: Date.now()
+        memberPhone: phone, memberName: member.name, type: 'fine',
+        amount: amount, description: reason || 'Fine', date: Date.now()
       });
       toast('Fine applied!', '#f59e0b');
       computePots(); refreshUI();
@@ -7703,14 +7648,16 @@ window.addFine = async function() {
     },
     async () => {
       await db.ref('transactions').push({
-        memberPhone: phone, memberName: member.name,
-        type: 'fine', amount, description: reason || 'Fine', date: Date.now()
+        memberPhone: phone, memberName: member.name, type: 'fine',
+        amount: amount, description: reason || 'Fine', date: Date.now()
       });
       toast('Fine applied!', '#f59e0b');
       computePots(); refreshUI();
       closeOv('ov-add-fine');
     },
-    () => closeOv('ov-add-fine')
+    () => closeOv('ov-add-fine'),
+    null,
+    null
   );
 };
 
@@ -7724,8 +7671,8 @@ window.addWelfare = async function() {
   showTransactionReceiptModal(member, 'welfare', amount, desc || 'Welfare',
     async () => {
       await db.ref('transactions').push({
-        memberPhone: phone, memberName: member.name,
-        type: 'welfare', amount, description: desc || 'Welfare', date: Date.now()
+        memberPhone: phone, memberName: member.name, type: 'welfare',
+        amount: amount, description: desc || 'Welfare', date: Date.now()
       });
       toast('Welfare recorded!', '#8b5cf6');
       computePots(); refreshUI();
@@ -7733,14 +7680,16 @@ window.addWelfare = async function() {
     },
     async () => {
       await db.ref('transactions').push({
-        memberPhone: phone, memberName: member.name,
-        type: 'welfare', amount, description: desc || 'Welfare', date: Date.now()
+        memberPhone: phone, memberName: member.name, type: 'welfare',
+        amount: amount, description: desc || 'Welfare', date: Date.now()
       });
       toast('Welfare recorded!', '#8b5cf6');
       computePots(); refreshUI();
       closeOv('ov-add-welfare');
     },
-    () => closeOv('ov-add-welfare')
+    () => closeOv('ov-add-welfare'),
+    null,
+    null
   );
 };
 window.addExpense=function(){const desc=document.getElementById('exp-desc').value,amount=+document.getElementById('exp-amount').value;if(!desc||!amount){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('transactions').push({type:'expense',amount,description:desc,date:Date.now()}).then(()=>{toast(t('record_expense_btn'),'#ef4444');['exp-desc','exp-amount','exp-paidto'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});closeOv('ov-add-exp');});};
@@ -7808,14 +7757,12 @@ window.assignDebtAsLoan = async function() {
   }
   const dueDate = new Date(dueDateStr).getTime();
 
-  // Calculate new loan balance after assignment
   const currentLoanBalance = memberLoans[member.phone] || 0;
   const totalRepay = Math.floor(principal * (1 + interestRate / 100));
   const newLoanBalance = currentLoanBalance + totalRepay;
 
   showTransactionReceiptModal(member, 'loan_disbursement', principal, reason,
     async () => {
-      // Confirm & Send (or just Save)
       const totalRepayLoan = Math.floor(principal * (1 + interestRate / 100));
       const interest = totalRepayLoan - principal;
       const loanRef = db.ref('loans').push();
@@ -7840,7 +7787,6 @@ window.assignDebtAsLoan = async function() {
       closeOv('ov-assign-debt');
     },
     async () => {
-      // Confirm & Don't Send – same but without sending (still create loan)
       const totalRepayLoan = Math.floor(principal * (1 + interestRate / 100));
       const interest = totalRepayLoan - principal;
       const loanRef = db.ref('loans').push();
@@ -7865,7 +7811,8 @@ window.assignDebtAsLoan = async function() {
       closeOv('ov-assign-debt');
     },
     () => closeOv('ov-assign-debt'),
-    newLoanBalance  // Pass projected loan balance to receipt modal
+    newLoanBalance,
+    null
   );
 };
 window.previewProfitDistribution = function() {
@@ -8175,68 +8122,68 @@ window.loadMarkPaidInfo = function() {
   `;
 };
 window.confirmMarkPaid = function() {
-  requirePasswordConfirmation(() => {
-    const idx = rotation.currentIndex || 0;
-    const bene = members.find(m => m.id === rotation.order?.[idx]);
-    if (!bene) { toast(t('select_member'), '#ef4444'); return; }
-    
-    const target = getNetDaily() * 7 * members.length;
-    const debt = memberDebts[bene.phone] || 0;
-    const loan = memberLoans[bene.phone] || 0;
-    const net = Math.max(0, target - debt - loan);
-    
-    const writes = [
-      db.ref('transactions').push({
-        memberPhone: bene.phone,
-        memberName: bene.name,
-        type: 'payout',
-        amount: net,
-        description: 'Weekly payout',
-        date: Date.now()
-      })
-    ];
-    if (debt > 0) {
-      writes.push(db.ref('transactions').push({
-        memberPhone: bene.phone,
-        memberName: bene.name,
-        type: 'debt_cleared',
-        amount: debt,
-        description: 'Debt cleared on payout',
-        date: Date.now() + 1
-      }));
-    }
-    if (loan > 0) {
-      writes.push(db.ref('transactions').push({
-        memberPhone: bene.phone,
-        memberName: bene.name,
-        type: 'loan_repayment',
-        amount: loan,
-        description: 'Loan cleared on payout',
-        date: Date.now() + 2
-      }));
-    }
-    
-    Promise.all(writes).then(async () => {
-      const txSnap = await db.ref('transactions').once('value');
-      transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
-      const loansSnap = await db.ref('loans').once('value');
-      loans = loansSnap.val() ? Object.entries(loansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
-      computePots();
-      updateHomeUI();
-      updateAccountBalances();
-      if (isLedgerActive()) loadLedger('all');
-      if (currentAdminTab === 'savings') renderAdminTab();
-      const nextIndex = (idx + 1) % rotation.order.length;
-      await db.ref('rotation').update({ currentIndex: nextIndex });
-      rotation.currentIndex = nextIndex;
-      toast('Payout completed! All debts and loans cleared.', '#10b981');
-      closeOv('ov-mark-paid');
-    }).catch(err => {
-      console.error(err);
-      toast('Failed to complete payout', '#ef4444');
-    });
-  }, 'Mark Weekly Payout');
+  const idx = rotation.currentIndex || 0;
+  const beneId = rotation.order?.[idx];
+  const beneficiary = members.find(m => m.id === beneId);
+  if (!beneficiary) {
+    toast('No valid beneficiary for payout. Check rotation order.', '#ef4444');
+    return;
+  }
+  const dailyNet = getNetDaily();
+  const weeklyGross = dailyNet * 7 * members.filter(m => m.approved).length;
+  const debt = memberDebts[beneficiary.phone] || 0;
+  const loan = memberLoans[beneficiary.phone] || 0;
+  const netPayout = Math.max(0, weeklyGross - debt - loan);
+
+  showWeeklyPayoutReceiptModal(
+    beneficiary, weeklyGross, debt, loan, netPayout,
+    async () => { await executeWeeklyPayout(beneficiary, weeklyGross, debt, loan, netPayout); },
+    async () => { await executeWeeklyPayout(beneficiary, weeklyGross, debt, loan, netPayout); },
+    () => {
+      generateWeeklyPayoutReceiptImage(beneficiary, weeklyGross, debt, loan, netPayout).then(img => {
+        if (!img) { toast('Failed to generate receipt', '#ef4444'); return; }
+        const w = window.open('', '_blank');
+        w.document.write(`<!DOCTYPE html><html><head><title>Weekly Payout Receipt</title><style>body{margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff;}img{max-width:100%;height:auto;}</style></head><body><img src="${img}"></body></html>`);
+        w.document.close(); w.focus(); w.print();
+      });
+    },
+    () => { /* cancel – do nothing */ }
+  );
 };
+async function executeWeeklyPayout(beneficiary, weeklyGross, debt, loan, netPayout) {
+  const writes = [
+    db.ref('transactions').push({
+      memberPhone: beneficiary.phone, memberName: beneficiary.name,
+      type: 'payout', amount: netPayout, description: 'Weekly payout', date: Date.now()
+    })
+  ];
+  if (debt > 0) {
+    writes.push(db.ref('transactions').push({
+      memberPhone: beneficiary.phone, memberName: beneficiary.name,
+      type: 'debt_cleared', amount: debt, description: 'Debt cleared on payout', date: Date.now() + 1
+    }));
+  }
+  if (loan > 0) {
+    writes.push(db.ref('transactions').push({
+      memberPhone: beneficiary.phone, memberName: beneficiary.name,
+      type: 'loan_repayment', amount: loan, description: 'Loan cleared on payout', date: Date.now() + 2
+    }));
+  }
+  await Promise.all(writes);
+  const txSnap = await db.ref('transactions').once('value');
+  transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
+  const loansSnap = await db.ref('loans').once('value');
+  loans = loansSnap.val() ? Object.entries(loansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
+  computePots();
+  updateHomeUI();
+  updateAccountBalances();
+  if (isLedgerActive()) loadLedger('all');
+  if (currentAdminTab === 'savings') renderAdminTab();
+  const nextIndex = (rotation.currentIndex + 1) % rotation.order.length;
+  await db.ref('rotation').update({ currentIndex: nextIndex });
+  rotation.currentIndex = nextIndex;
+  toast('Payout completed! All debts and loans cleared.', '#10b981');
+}
 window.confirmApproveLoan = async function(loanId) {
   const loan = loans.find(l => l.id === loanId);
   if (!loan) return;
@@ -10193,9 +10140,8 @@ window.deleteNotifPopup = async function(id) {
     showNotificationsPopup(); // refresh list
   }
 };
-function showTransactionReceiptModal(member, txType, amount, description, onConfirmSend, onConfirmNoSend, onCancel, customLoanBalance = null) {
+function showTransactionReceiptModal(member, txType, amount, description, onConfirmSend, onConfirmNoSend, onCancel, customLoanBalance = null, onPrint = null) {
   computePots();
-  // Determine loan balance to display (if custom provided, use it; else current)
   let loanBalance = (customLoanBalance !== null) ? customLoanBalance : (memberLoans[member.phone] || 0);
   const accountBalance = memberBalances[member.phone] || 0;
   let totalDeposits = 0;
@@ -10215,6 +10161,7 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
         <div style="display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;">
           <button class="btn btn-gold" id="receipt-confirm-send">✅ Confirm & Send via WhatsApp</button>
           <button class="btn btn-green" id="receipt-confirm-nosend">✅ Confirm & Don't Send</button>
+          <button class="btn btn-purple" id="receipt-print">🖨️ Print</button>
           <button class="btn btn-red" id="receipt-cancel">🗑️ Don't Save</button>
         </div>
       </div>
@@ -10223,6 +10170,7 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
 
     const confirmSendBtn = modal.querySelector('#receipt-confirm-send');
     const confirmNoSendBtn = modal.querySelector('#receipt-confirm-nosend');
+    const printBtn = modal.querySelector('#receipt-print');
     const cancelBtn = modal.querySelector('#receipt-cancel');
 
     const closeModal = () => {
@@ -10230,7 +10178,6 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
       setTimeout(() => modal.remove(), 300);
     };
 
-    // Helper: share (mobile) or copy to clipboard (desktop)
     async function shareOrCopyImage(blob, fileName) {
       if (navigator.share && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
         const file = new File([blob], fileName, { type: 'image/png' });
@@ -10241,24 +10188,17 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
         });
         toast('Receipt shared!', '#10b981');
       } else {
-        // Desktop: copy image to clipboard
         try {
-          await navigator.clipboard.write([
-            new ClipboardItem({
-              [blob.type]: blob
-            })
-          ]);
-          toast('📋 Receipt image copied to clipboard! You can now paste (Ctrl+V) directly into WhatsApp Web.', '#06b6d4');
+          await navigator.clipboard.write([ new ClipboardItem({ [blob.type]: blob }) ]);
+          toast('📋 Receipt image copied to clipboard! Paste (Ctrl+V) into WhatsApp Web.', '#06b6d4');
         } catch (err) {
-          console.error('Clipboard write failed', err);
-          // Final fallback: download
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = fileName;
+          a.download = `receipt_${member.id}.png`;
           a.click();
           URL.revokeObjectURL(url);
-          toast('Image downloaded. Please send it manually on WhatsApp.', '#f59e0b');
+          toast('Image downloaded. Send manually on WhatsApp.', '#f59e0b');
         }
       }
     }
@@ -10276,6 +10216,30 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
       closeModal();
       if (onConfirmNoSend) onConfirmNoSend();
       toast('Transaction saved (no receipt sent).', '#10b981');
+    };
+
+    printBtn.onclick = () => {
+      closeModal();
+      if (onPrint) {
+        onPrint();
+      } else if (imageData) {
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Transaction Receipt</title>
+            <style>body{margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff;}img{max-width:100%;height:auto;}</style>
+          </head>
+          <body><img src="${imageData}"></body>
+          </html>
+        `);
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
+      } else {
+        toast('No image to print', '#ef4444');
+      }
     };
 
     cancelBtn.onclick = () => {
