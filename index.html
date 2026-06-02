@@ -7580,28 +7580,33 @@ window.addTransactionWithPreview = async function() {
     return;
   }
 
-  if (type === 'deposit') {
-    showTransactionReceiptModal(member, 'deposit', amount, desc || 'Deposit',
-      async () => {
-        const depositTxs = await processDepositWithFutureDays(member, amount, Date.now(), desc || 'Manual deposit');
-        const writes = depositTxs.map(tx => db.ref('transactions').push(tx));
-        await Promise.all(writes);
-        toast(`Deposit saved! ${money(amount)} applied.`, '#10b981');
-        computePots(); refreshUI();
-        closeOv('ov-add-tx');
-      },
-      async () => {
-        const depositTxs = await processDepositWithFutureDays(member, amount, Date.now(), desc || 'Manual deposit');
-        const writes = depositTxs.map(tx => db.ref('transactions').push(tx));
-        await Promise.all(writes);
-        toast(`Deposit saved! ${money(amount)} applied.`, '#10b981');
-        computePots(); refreshUI();
-        closeOv('ov-add-tx');
-      },
-      () => closeOv('ov-add-tx'),
-      null,
-      null
-    );
+ if (type === 'deposit') {
+  // Compute projected loan balance after this deposit
+  const projectedLoanBalance = await calculateProjectedLoanBalanceAfterDeposit(member, amount);
+  
+  showTransactionReceiptModal(member, 'deposit', amount, desc || 'Deposit',
+    async () => {
+      // Confirm & Send
+      const depositTxs = await processDepositWithFutureDays(member, amount, Date.now(), desc || 'Manual deposit');
+      const writes = depositTxs.map(tx => db.ref('transactions').push(tx));
+      await Promise.all(writes);
+      toast(`Deposit saved! ${money(amount)} applied.`, '#10b981');
+      computePots(); refreshUI();
+      closeOv('ov-add-tx');
+    },
+    async () => {
+      // Confirm & Don't Send
+      const depositTxs = await processDepositWithFutureDays(member, amount, Date.now(), desc || 'Manual deposit');
+      const writes = depositTxs.map(tx => db.ref('transactions').push(tx));
+      await Promise.all(writes);
+      toast(`Deposit saved! ${money(amount)} applied.`, '#10b981');
+      computePots(); refreshUI();
+      closeOv('ov-add-tx');
+    },
+    () => closeOv('ov-add-tx'),
+    projectedLoanBalance,  // Pass projected loan balance to receipt modal
+    null
+  );
   } else {
     showTransactionReceiptModal(member, type, amount, desc || type,
       async () => {
@@ -8957,6 +8962,49 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
   }
 
   return writes;
+}
+async function calculateProjectedLoanBalanceAfterDeposit(member, depositAmount) {
+  // Simulate the deposit allocation without writing to database
+  let remaining = depositAmount;
+  const todayStart = new Date().setHours(0,0,0,0);
+  const dailyAmount = settings.dailyAmount || 2000;
+  const welfareAmount = settings.welfareAmount || 500;
+  const requiredToday = dailyAmount + welfareAmount;
+
+  // 1. Today's requirement
+  let paidDailyToday = 0;
+  let welfarePaidToday = false;
+  transactions.forEach(tx => {
+    if (tx.memberPhone === member.phone && tx.date >= todayStart && tx.date < todayStart + 86400000) {
+      if (tx.type === 'deposit') paidDailyToday += tx.amount;
+      if (tx.type === 'welfare') welfarePaidToday = true;
+    }
+  });
+  const neededDaily = Math.max(0, dailyAmount - paidDailyToday);
+  const neededWelfare = welfarePaidToday ? 0 : welfareAmount;
+  const deficitToday = neededDaily + neededWelfare;
+
+  let usedToday = 0;
+  if (deficitToday > 0) {
+    usedToday = Math.min(remaining, deficitToday);
+    remaining -= usedToday;
+  }
+
+  // 2. Debt + loan repayment
+  let totalOutstanding = (memberDebts[member.phone] || 0) + (memberLoans[member.phone] || 0);
+  let usedForOutstanding = 0;
+  if (totalOutstanding > 0 && remaining > 0) {
+    usedForOutstanding = Math.min(remaining, totalOutstanding);
+    remaining -= usedForOutstanding;
+    totalOutstanding -= usedForOutstanding;
+  }
+
+  // The new loan balance is the original loan minus the portion of usedForOutstanding that came from loan
+  const originalLoan = memberLoans[member.phone] || 0;
+  const loanPortion = Math.min(usedForOutstanding, originalLoan);
+  const newLoanBalance = originalLoan - loanPortion;
+
+  return newLoanBalance;
 }
 async function loadPendingReferralBonuses() {
   const pendingSnap = await db.ref('transactions').orderByChild('type').equalTo('pending_referral_bonus').once('value');
