@@ -3486,30 +3486,29 @@ function showWeeklyPayoutReceiptModal(beneficiary, weeklyGross, debt, loan, netP
     };
 
     async function shareOrCopyImage(blob, fileName) {
-      if (navigator.share && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-        const file = new File([blob], fileName, { type: 'image/png' });
-        await navigator.share({
-          title: 'Weekly Payout Receipt',
-          text: `Payout of UGX ${netPayout.toLocaleString()} to ${beneficiary.name}`,
-          files: [file]
-        });
-        toast('Receipt shared!', '#10b981');
-      } else {
-        try {
-          await navigator.clipboard.write([ new ClipboardItem({ [blob.type]: blob }) ]);
-          toast('📋 Receipt image copied to clipboard! Paste (Ctrl+V) into WhatsApp Web.', '#06b6d4');
-        } catch (err) {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = fileName;
-          a.click();
-          URL.revokeObjectURL(url);
-          toast('Image downloaded. Send manually on WhatsApp.', '#f59e0b');
-        }
-      }
+  if (navigator.share) {
+    const file = new File([blob], fileName, { type: 'image/png' });
+    await navigator.share({
+      title: 'Weekly Payout Receipt',
+      text: `Payout of UGX ${netPayout.toLocaleString()} to ${beneficiary.name}`,
+      files: [file]
+    });
+    toast('Receipt shared!', '#10b981');
+  } else {
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+      toast('📋 Receipt image copied to clipboard! Paste (Ctrl+V) into WhatsApp Web.', '#06b6d4');
+    } catch (err) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('Image downloaded. Send manually on WhatsApp.', '#f59e0b');
     }
-
+  }
+}
     confirmShareBtn.onclick = async () => {
       closeModal();
       if (imageData) {
@@ -10227,29 +10226,32 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
     };
 
     async function shareOrCopyImage(blob, fileName) {
-      if (navigator.share && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-        const file = new File([blob], fileName, { type: 'image/png' });
-        await navigator.share({
-          title: 'Transaction Receipt',
-          text: `${txType.toUpperCase()} of UGX ${amount.toLocaleString()} for ${member.name}`,
-          files: [file]
-        });
-        toast('Receipt shared!', '#10b981');
-      } else {
-        try {
-          await navigator.clipboard.write([ new ClipboardItem({ [blob.type]: blob }) ]);
-          toast('📋 Receipt image copied to clipboard! Paste (Ctrl+V) into WhatsApp Web.', '#06b6d4');
-        } catch (err) {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `receipt_${member.id}.png`;
-          a.click();
-          URL.revokeObjectURL(url);
-          toast('Image downloaded. Send manually on WhatsApp.', '#f59e0b');
-        }
-      }
+  // Use native share if available (Android, iOS, etc.)
+  if (navigator.share) {
+    const file = new File([blob], fileName, { type: 'image/png' });
+    await navigator.share({
+      title: 'Transaction Receipt',
+      text: `${txType.toUpperCase()} of UGX ${amount.toLocaleString()} for ${member.name}`,
+      files: [file]
+    });
+    toast('Receipt shared!', '#10b981');
+  } else {
+    // Desktop fallback: copy to clipboard
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+      toast('📋 Receipt image copied to clipboard! Paste (Ctrl+V) into WhatsApp Web.', '#06b6d4');
+    } catch (err) {
+      // Final fallback: download
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('Image downloaded. Send manually on WhatsApp.', '#f59e0b');
     }
+  }
+}
 
     confirmSendBtn.onclick = async () => {
       closeModal();
