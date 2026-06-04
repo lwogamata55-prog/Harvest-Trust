@@ -8304,34 +8304,18 @@ window.changeAdminPassword = function() {
   }).catch(err => { console.error(err); toast('Failed to change password', '#ef4444'); });
 };
 window.dragOrder = [];
-window.buildDragRotation = function() {
-  if (!rotation.order || rotation.order.length === 0) {
-    // Create default order from all approved members
-    dragOrder = members.filter(m => m.approved !== false).map(m => m.id);
-  } else {
-    // Filter out deleted members
-    const validIds = new Set(members.filter(m => m.approved !== false).map(m => m.id));
-    dragOrder = rotation.order.filter(id => validIds.has(id));
-    if (dragOrder.length === 0 && members.length) {
-      dragOrder = members.filter(m => m.approved !== false).map(m => m.id);
-    }
-  }
-  renderDragList();
-};
-let loanDragOrder = [];
-
 window.buildLoanDragRotation = function() {
   const container = document.getElementById('loan-rot-drag-list');
   if (!container) return;
 
-  // Get all approved members (active only)
+  // Get all approved members
   const allMembers = members.filter(m => m.approved === true);
   if (allMembers.length === 0) {
     container.innerHTML = '<div class="empty-state">No approved members found.</div>';
     return;
   }
 
-  // If loanRotationOrder is empty or contains invalid/deleted members, reset to all members
+  // If loanRotationOrder is empty or contains invalid IDs, rebuild from all members
   let needsReset = false;
   if (!loanRotationOrder || loanRotationOrder.length === 0) {
     needsReset = true;
@@ -8343,7 +8327,7 @@ window.buildLoanDragRotation = function() {
         break;
       }
     }
-    // Also ensure no missing members (if a new member was added after last order)
+    // Also ensure no missing members
     if (loanRotationOrder.length !== allMembers.length) {
       needsReset = true;
     }
@@ -8364,11 +8348,21 @@ window.buildLoanDragRotation = function() {
     db.ref('settings/loanReceiverIndex').set(loanReceiverIndex);
   }
 
+  // Get discipline multiplier from loanSettings (default 1.5)
+  const disciplineMultiplier = (loanSettings && loanSettings.disciplineMultiplier) ? loanSettings.disciplineMultiplier : 1.5;
+
   // Render the draggable list
   container.innerHTML = '';
   loanRotationOrder.forEach((id, index) => {
     const member = members.find(m => m.id === id);
     if (!member) return;
+
+    // Calculate total deposits for this member
+    let totalDeposits = 0;
+    transactions.forEach(tx => {
+      if (tx.memberPhone === member.phone && tx.type === 'deposit') totalDeposits += tx.amount;
+    });
+    const maxLoan = Math.floor(totalDeposits * disciplineMultiplier);
 
     const div = document.createElement('div');
     div.className = 'rot-drag-item';
@@ -8376,7 +8370,10 @@ window.buildLoanDragRotation = function() {
     div.setAttribute('data-id', id);
     div.innerHTML = `
       <span class="drag-handle">⠿</span>
-      <span style="flex:1">${index + 1}. ${escapeHtml(member.name)}</span>
+      <span style="flex:1">
+        ${index + 1}. ${escapeHtml(member.name)}
+        <span class="pill-badge pill-green" style="margin-left: 8px; font-size: 0.6rem;">Loan up to: UGX ${maxLoan.toLocaleString()}</span>
+      </span>
       ${index === loanReceiverIndex ? '<span class="pill-badge pill-amber" style="margin-left:8px;">⭐ CURRENT BORROWER</span>' : ''}
     `;
 
@@ -8397,8 +8394,10 @@ window.buildLoanDragRotation = function() {
     });
     container.appendChild(div);
   });
-};
 
+  // Optional: add reset button (if you want to keep it)
+  addLoanRotationResetButton();
+};
 // Save loan rotation order to Firebase
 window.saveLoanRotationOrder = function() {
   if (!loanRotationOrder || loanRotationOrder.length === 0) {
