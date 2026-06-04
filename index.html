@@ -1711,7 +1711,6 @@ setTimeout(function(){
   background: var(--bg);
   backdrop-filter: blur(0);
 ">
-  <!-- Copy the decorative orbs from blank-screen if desired, but optional -->
   <div class="bs-orb bs-orb-1"></div>
   <div class="bs-orb bs-orb-2"></div>
   <div class="bs-orb bs-orb-3"></div>
@@ -1720,13 +1719,12 @@ setTimeout(function(){
     <div style="font-size: 3.5rem; margin-bottom: 16px; animation: welcomeFloat 1.2s ease-in-out infinite;">🌾</div>
     <div style="font-family: 'Syne', sans-serif; font-size: 1.3rem; font-weight: 600; color: var(--t3);">Welcome User</div>
     <div id="post-login-welcome-name" style="font-family: 'Syne', sans-serif; font-size: 2rem; font-weight: 900; background: linear-gradient(135deg, var(--teal) 0%, var(--gold) 45%, var(--teal) 100%); -webkit-background-clip: text; background-clip: text; color: transparent; margin: 8px 0;">—</div>
-    <div style="font-size: 0.9rem; color: var(--t2); letter-spacing: 2px;">to Harvest Trust Finance</div>
+    <div id="post-login-referral-code" style="font-size: 0.9rem; color: var(--t2); letter-spacing: 2px;">Your Referral Code: <strong style="color: var(--gold);">—</strong></div>
     <div style="width: 50px; height: 2px; background: var(--gold3); border-radius: 2px; margin: 20px auto 0; overflow: hidden;">
       <div style="width: 40%; height: 100%; background: var(--gold); animation: loaderSlide 1s ease-in-out infinite;"></div>
     </div>
   </div>
 </div>
-
 <style>
 @keyframes welcomeFloat {
   0%, 100% { transform: translateY(0px); }
@@ -4825,12 +4823,18 @@ function showPendingScreen(m){
 function showMainApp() {
   const blankDiv = document.getElementById('post-login-blank');
   const nameSpan = document.getElementById('post-login-welcome-name');
+  const referralSpan = document.getElementById('post-login-referral-code');
   
-  // Set the member name on the welcome screen
-  if (nameSpan && currentUser && !currentUser.isAdmin) {
-    nameSpan.innerText = currentUser.name;
-  } else if (nameSpan && currentUser && currentUser.isAdmin) {
-    nameSpan.innerText = 'Admin';
+  // Set the member name and referral code on the welcome screen
+  if (currentUser && !currentUser.isAdmin) {
+    if (nameSpan) nameSpan.innerText = currentUser.name;
+    if (referralSpan) {
+      const referralCode = currentUser.id?.slice(-6) || currentUser.phone?.slice(-4) || 'HTF';
+      referralSpan.innerHTML = `Your Referral Code: <strong style="color: var(--gold);">${escapeHtml(referralCode)}</strong>`;
+    }
+  } else if (currentUser && currentUser.isAdmin) {
+    if (nameSpan) nameSpan.innerText = 'Admin';
+    if (referralSpan) referralSpan.innerHTML = `Admin Access – No Referral Code`;
   }
   
   if (blankDiv) {
@@ -4860,7 +4864,7 @@ function showMainApp() {
       document.getElementById('app').classList.add('on');
       syncCurrentUserFromMembers();
       computePots();
-updateAccountBalances();
+      updateAccountBalances();
       updateAccountUI();
       checkMembershipRenewal(currentUser);
       goTab('home', document.getElementById('ni-home'));
