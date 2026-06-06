@@ -5362,20 +5362,17 @@ window.shareReceiptAsImage = async function() {
 
   toast('Generating image...', '#06b6d4');
 
-  // Clone the receipt card to avoid modifying the visible one
+  // Clone the receipt card
   const cloneCard = originalCard.cloneNode(true);
-  
-  // Apply inline styles that override problematic CSS
   cloneCard.style.filter = 'none';
   cloneCard.style.backdropFilter = 'none';
-  cloneCard.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)'; // simple shadow
+  cloneCard.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
   cloneCard.style.transform = 'none';
-  
-  // Remove any images that might be cross-origin (if any) – replace with data URL fallback
+
+  // Remove any external images (fallback)
   const images = cloneCard.querySelectorAll('img');
   for (let img of images) {
     if (img.src && !img.src.startsWith('data:')) {
-      // Replace with a placeholder or remove
       const parent = img.parentNode;
       const placeholder = document.createElement('div');
       placeholder.textContent = '🖼️';
@@ -5384,46 +5381,59 @@ window.shareReceiptAsImage = async function() {
       parent.replaceChild(placeholder, img);
     }
   }
-  
-  // Temporarily append clone to body (off-screen) to render
+
   cloneCard.style.position = 'absolute';
   cloneCard.style.top = '-9999px';
   cloneCard.style.left = '-9999px';
   document.body.appendChild(cloneCard);
-  
+
   try {
     const canvas = await html2canvas(cloneCard, {
       scale: 2,
       backgroundColor: '#ffffff',
       logging: false,
-      useCORS: false,           // we already removed external images
+      useCORS: false,
       allowTaint: false,
       windowWidth: cloneCard.scrollWidth,
       windowHeight: cloneCard.scrollHeight
     });
-    
-    // Remove clone
     document.body.removeChild(cloneCard);
-    
+
     const imageData = canvas.toDataURL('image/png');
-    
-    // Share or download
-    if (navigator.share && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
-      const blob = await (await fetch(imageData)).blob();
+    const blob = await (await fetch(imageData)).blob();
+
+    // Extract member name for the share text
+    const memberName = originalCard.querySelector('div:nth-child(3) div:nth-child(6)')?.innerText || 'Member';
+    const amountText = originalCard.querySelector('.amount-value')?.innerText || 'UGX 0';
+
+    // --- Sharing logic ---
+    if (navigator.share) {
+      // Mobile: use native share
       const file = new File([blob], 'harvest_receipt.png', { type: 'image/png' });
       await navigator.share({
         title: 'Harvest Trust Finance Receipt',
-        text: `Receipt for ${originalCard.querySelector('div:nth-child(3) div:nth-child(6)')?.innerText || 'member'}`,
+        text: `Receipt for ${memberName} – ${amountText}`,
         files: [file]
       });
       toast('Image shared!', '#10b981');
     } else {
-      // Download
-      const link = document.createElement('a');
-      link.download = 'harvest_receipt.png';
-      link.href = imageData;
-      link.click();
-      toast('Image downloaded. Share it on WhatsApp.', '#10b981');
+      // Desktop: copy to clipboard
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            [blob.type]: blob
+          })
+        ]);
+        toast('📋 Receipt image copied to clipboard! Paste (Ctrl+V) into WhatsApp Web.', '#06b6d4');
+      } catch (err) {
+        console.error('Clipboard failed, downloading', err);
+        // Fallback: download
+        const link = document.createElement('a');
+        link.download = 'harvest_receipt.png';
+        link.href = imageData;
+        link.click();
+        toast('Image downloaded. Send it manually on WhatsApp.', '#f59e0b');
+      }
     }
   } catch (err) {
     console.error('html2canvas error:', err);
