@@ -652,7 +652,54 @@ select.inp option{background:#0a1628;color:var(--t)}
   70% { opacity: 1; transform: translateY(6px) rotate(2deg); }
   100% { opacity: 1; transform: translateY(0) rotate(0); }
 }
-
+/* Admin grid cards – modern, animated, attractive */
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  padding: 12px;
+  animation: fadeInUp 0.4s ease-out;
+}
+.admin-grid-item {
+  background: var(--card);
+  border: 1px solid var(--br);
+  border-radius: 20px;
+  padding: 12px 6px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.admin-grid-item:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--sh);
+  border-color: var(--gold);
+}
+.admin-grid-item:active {
+  transform: scale(0.96);
+}
+.admin-back-btn {
+  background: var(--surf);
+  border: 1px solid var(--br);
+  border-radius: 40px;
+  padding: 6px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  margin-bottom: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--t2);
+}
+.admin-back-btn:hover {
+  background: var(--gold3);
+  color: var(--gold);
+  transform: translateX(-2px);
+}
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 /* Ranking leaderboard styles */
 .ranking-leaderboard {
   display: flex;
@@ -1903,6 +1950,7 @@ setTimeout(function(){
       <div id="adm-panel" class="hidden">
         <div class="admin-header-strip">
           <div><div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1rem;color:var(--gold)">Admin Panel 🔓</div><div class="micro">Full control · Harvest Trust Finance</div></div>
+          <button class="btn btn-sm btn-purple" onclick="showAdminGrid()">← Back to Menu</button>
           <button class="btn btn-sm btn-red" onclick="lockAdmin()">🔒 Lock</button>
         </div>
         <div class="admin-tabs">
@@ -1914,14 +1962,6 @@ setTimeout(function(){
           <div class="admin-tab" data-tab="settings" onclick="switchAdminTab('settings')">⚙️ Settings</div>
         </div>
         <div id="admin-content"></div>
-        <div class="danger-zone">
-          <div class="danger-zone-label">⚠️ Danger Zone</div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="btn btn-sm btn-sec" onclick="refreshLoans()">⟳ Refresh Loans</button>
-            <button class="btn btn-sm btn-sec" onclick="resetGroup()">🗑️ Full Reset</button>
-            <button class="btn btn-sm btn-sec" onclick="resetDataKeepMembers()">🔄 Reset Data</button>
-          </div>
-        </div>
       </div>
     </div>
   </div>
@@ -2396,6 +2436,22 @@ setTimeout(function(){
     </div>
   </div>
 </div>
+<!-- Member Status Messages Modal -->
+<div class="ov" id="ov-member-status" onclick="maybeClose(event,'ov-member-status')">
+  <div class="bs" style="max-width: 600px;">
+    <div class="bs-title">📨 Send Member Status Message</div>
+    <div class="fgrp">
+      <label class="flbl">Select Member</label>
+      <select id="status-member-select" class="inp">
+        <option value="">-- Select Member --</option>
+      </select>
+    </div>
+    <div id="status-messages-container" style="max-height: 55vh; overflow-y: auto; margin-top: 12px;">
+      <div class="empty-state">Select a member to see suggested messages.</div>
+    </div>
+    <button class="btn btn-sec btn-full" onclick="closeOv('ov-member-status')">Close</button>
+  </div>
+</div>
 <!-- Group Report Modal -->
 <div class="ov" id="ov-group-report" onclick="maybeClose(event,'ov-group-report')">
   <div class="bs" style="max-width: 700px; width: 90%;">
@@ -2508,6 +2564,7 @@ let settings = {
   renewalFee: 10000,
   termsAndConditions: ``   // <-- add
 };
+let adminShowGrid = true;   // true = show grid, false = show normal admin tab content
 let currentUser=null,adminUnlocked=false,currentAdminTab='savings';
 let memberBalances={},memberDebts={},memberLoans={};
 let cashFromDeposits=0,groupProfit=0;
@@ -3591,12 +3648,6 @@ async function updateLoanRepaidStatus(phone) {
   } else {
     console.log(`Outstanding not zero: ${outstanding}`);
   }
-}
-
-async function refreshLoans() {
-  const snap = await db.ref('loans').on('value', snap => {
-  loans = snap.val() ? Object.entries(snap.val()).map(([id, l]) => ({ ...l, id })) : [];
-  if (currentScreen === 'admin' && adminUnlocked && currentAdminTab ==='savings') renderAdminTab();updateLoanIndicator();});
 }
 async function getOrCreateActiveLoan(memberId, memberPhone, memberName) {
   // Find an existing active (approved, not repaid) loan for this member
@@ -5818,6 +5869,164 @@ window.openSecurityModal = function() {
   };
   showModalEl(content, 'Change PIN');
 };
+// Open modal and populate member dropdown
+window.openMemberStatusMessages = function() {
+  const select = document.getElementById('status-member-select');
+  if (!select) return;
+  select.innerHTML = '<option value="">-- Select Member --</option>' + 
+    members.filter(m => m.approved).map(m => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('');
+  select.onchange = () => {
+    const memberId = select.value;
+    if (memberId) generateStatusMessages(memberId);
+    else document.getElementById('status-messages-container').innerHTML = '<div class="empty-state">Select a member to see suggested messages.</div>';
+  };
+  openOv('ov-member-status');
+};
+
+// Helper: copy text to clipboard
+window.copyMessageToClipboard = function(text) {
+  navigator.clipboard.writeText(text).then(() => {
+    toast('Message copied to clipboard!', '#10b981');
+  }).catch(() => {
+    toast('Failed to copy', '#ef4444');
+  });
+};
+
+// Helper: send message via WhatsApp (opens wa.me link)
+window.sendMessageViaWhatsApp = function(phone, text) {
+  let normalizedPhone = phone.replace(/\s+/g, '').replace(/[()-]/g, '');
+  if (normalizedPhone.startsWith('0')) normalizedPhone = '+256' + normalizedPhone.slice(1);
+  if (!normalizedPhone.startsWith('+')) normalizedPhone = '+' + normalizedPhone;
+  const encoded = encodeURIComponent(text);
+  window.open(`https://wa.me/${normalizedPhone}?text=${encoded}`, '_blank');
+};
+
+// Generate message templates based on member's status
+async function generateStatusMessages(memberId) {
+  const member = members.find(m => m.id === memberId);
+  if (!member) return;
+
+  computePots();
+  const debts = memberDebts[member.phone] || 0;
+  const loans = memberLoans[member.phone] || 0;
+  let totalDeposits = 0;
+  let daysWithDeposit = new Set();
+  transactions.forEach(tx => {
+    if (tx.memberPhone === member.phone) {
+      if (tx.type === 'deposit') {
+        totalDeposits += tx.amount;
+        daysWithDeposit.add(new Date(tx.date).toISOString().slice(0, 10));
+      }
+    }
+  });
+  const consistencyDays = daysWithDeposit.size;
+  const maxLoan = Math.floor(totalDeposits * (loanSettings.disciplineMultiplier || 1.5));
+
+  // Prepaid future days
+  const todayStart = new Date().setHours(0, 0, 0, 0);
+  let futureCoveredDays = 0;
+  let checkDay = todayStart + 86400000;
+  for (let i = 0; i < 30; i++) {
+    const status = getDailyStatusForDate(member, checkDay);
+    if (status.deficit === 0) futureCoveredDays++;
+    else break;
+    checkDay += 86400000;
+  }
+
+  // Message templates (title and text)
+  const templates = [];
+
+ // 1. Remind about debt/loan
+if (debts > 0 || loans > 0) {
+  templates.push({
+    title: "⚠️ Remind: Clear Debt/Loan",
+    text: `Dear ${member.name},\n\nYou currently have ${debts > 0 ? `an outstanding debt of UGX ${debts.toLocaleString()}` : ''}${debts > 0 && loans > 0 ? ' and ' : ''}${loans > 0 ? `a loan balance of UGX ${loans.toLocaleString()}` : ''}. Please clear it as soon as possible to avoid additional penalties.\n\n🌾 Harvest Trust Finance\n\nLwogamata, 
+    Admin`
+  });
+}
+
+// 2. Advise about borrowing
+templates.push({
+  title: "💰 Advise: Loan Eligibility",
+  text: `Dear ${member.name},\n\nBased on your total savings of ${money(totalDeposits)}, you are eligible to request a loan of up to ${money(maxLoan)}. Interest rates are fair. Click "Request Loan" in your account tab when you need support.\n\n🌾 Harvest Trust Finance\n\nLwogamata, 
+  Admin`
+});
+
+// 3. Encourage consistency
+if (consistencyDays >= 10) {
+  templates.push({
+    title: "🏆 Encourage: Great Consistency",
+    text: `Dear ${member.name},\n\nYou have made deposits on ${consistencyDays} days! Your discipline is building a strong financial future. Keep it up!\n\n🌾 Harvest Trust Finance\n\n— Lwogamata,
+    Admin`
+  });
+} else {
+  templates.push({
+    title: "🌱 Encourage: Start Saving",
+    text: `Dear ${member.name},\n\nEvery great journey begins with a single step. Start saving daily – even a small amount adds up over time. We believe in you!\n\n🌾 Harvest Trust Finance\n\nLwogamata,
+    Admin`
+  });
+}
+
+// 4. Prepay advice
+if (futureCoveredDays > 0) {
+  templates.push({
+    title: "📅 Prepay: You're Ahead!",
+    text: `Dear ${member.name},\n\nYou have already covered your daily savings for the next ${futureCoveredDays} day(s). Great planning! You can add more to increase your borrowing limit.\n\n🌾 Harvest Trust Finance\n\nLwogamata,
+    Admin`
+  });
+} else {
+  templates.push({
+    title: "📅 Prepay: Plan Ahead",
+    text: `Dear ${member.name},\n\nDid you know you can prepay your daily savings for future days? Ask the admin to help you set up prepayment – it keeps you ahead and increases your total deposits.\n\n🌾 Harvest Trust Finance\n\nLwogamata,
+    Admin`
+  });
+}
+
+// 5. General group benefits
+templates.push({
+  title: "🎉 Group Benefits",
+  text: `Dear ${member.name},\n\nAs a member of Harvest Trust Finance, you benefit from weekly payouts, low‑interest loans, welfare support, and annual profit sharing. Stay active and enjoy these opportunities!\n\n🌾 Harvest Trust Finance\n\nLwogamata,
+  Admin`
+});
+
+  // Render as buttons
+  const container = document.getElementById('status-messages-container');
+  if (!container) return;
+  let html = `<div style="margin-bottom: 8px;"><strong>Select a message type for ${escapeHtml(member.name)}:</strong></div>`;
+  html += '<div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px;">';
+  templates.forEach((tmpl, idx) => {
+    html += `<button class="btn btn-sm btn-purple" data-msg-index="${idx}">${tmpl.title}</button>`;
+  });
+  html += '</div>';
+  html += '<div id="status-message-preview" style="background: rgba(0,0,0,0.05); border-radius: 12px; padding: 12px; display: none;"></div>';
+  container.innerHTML = html;
+
+  // Add event listeners to buttons
+  const btns = container.querySelectorAll('button[data-msg-index]');
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.getAttribute('data-msg-index'));
+      const tmpl = templates[idx];
+      const previewDiv = document.getElementById('status-message-preview');
+      if (previewDiv && tmpl) {
+        previewDiv.style.display = 'block';
+        previewDiv.innerHTML = `
+          <div style="margin-bottom: 8px;"><strong>${tmpl.title}</strong></div>
+          <div style="font-size: 0.85rem; margin-bottom: 12px; white-space: pre-wrap;">${escapeHtml(tmpl.text)}</div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-sm btn-gold" id="copy-message-btn">📋 Copy</button>
+            <button class="btn btn-sm btn-teal" id="whatsapp-message-btn">📱 Send via WhatsApp</button>
+          </div>
+        `;
+        const copyBtn = previewDiv.querySelector('#copy-message-btn');
+        const waBtn = previewDiv.querySelector('#whatsapp-message-btn');
+        copyBtn.onclick = () => copyMessageToClipboard(tmpl.text);
+        waBtn.onclick = () => sendMessageViaWhatsApp(member.phone, tmpl.text);
+      }
+    });
+  });
+}
+/////////////////////////////////////////////
 window.openNotificationsModal = function() {
   if (!currentUser) return;
   if (currentUser.isAdmin) {
@@ -5877,31 +6086,6 @@ window.deleteAdminNotif = async function(id) {
   notifications.admin = newArr;
   updateNotificationBadge();
   openNotificationsModal(); // refresh modal
-};
-// Send in‑app notification to all members (broadcast)
-window.sendBroadcastNotification = async function() {
-  const msg = document.getElementById('broadcast-msg')?.value.trim();
-  if (!msg) {
-    toast('Enter a message to broadcast', '#ef4444');
-    return;
-  }
-  requirePasswordConfirmation(async () => {
-    const allMembers = members.filter(m => m.approved && !m.isAdmin);
-    const writes = [];
-    for (let member of allMembers) {
-      const memberNotifs = notifications[member.id] || [];
-      memberNotifs.push({
-        id: Date.now(),
-        text: msg,
-        date: Date.now(),
-        read: false
-      });
-      writes.push(db.ref('notifications/' + member.id).set(memberNotifs));
-    }
-    await Promise.all(writes);
-    toast(`Broadcast sent to ${allMembers.length} members`, '#10b981');
-    document.getElementById('broadcast-msg').value = '';
-  }, 'Send Broadcast');
 };
 
 // Copy WhatsApp reminder message to clipboard and optionally open group link
@@ -6604,8 +6788,26 @@ window.confirmDailySavings = async function() {
 };
 window.switchAdminTab=function(tab){currentAdminTab=tab;document.querySelectorAll('.admin-tab').forEach(t=>t.classList.remove('active'));document.querySelector(`.admin-tab[data-tab="${tab}"]`)?.classList.add('active');renderAdminTab();};
 function renderAdminTab() {
+  // If grid should be shown, display grid instead (no back button)
+  if (adminShowGrid) {
+    showAdminGrid();
+    return;
+  }
+
   const c = document.getElementById('admin-content');
   if (!c) return;
+
+  // Add a Back button (only once) when a tab is active
+  if (!c.querySelector('.admin-back-btn')) {
+    const backBtn = document.createElement('div');
+    backBtn.className = 'admin-back-btn';
+    backBtn.innerHTML = '← Back to Admin Menu';
+    backBtn.onclick = () => {
+      adminShowGrid = true;
+      showAdminGrid();
+    };
+    c.insertBefore(backBtn, c.firstChild);
+  }
 
   const pendingLoans = loans.filter(l => l.status === 'pending');
   // For active loans grouping (used in Savings tab)
@@ -6638,186 +6840,142 @@ function renderAdminTab() {
   function money(n) { n = Math.round(Number(n) || 0); return (n < 0 ? '-' : '') + 'UGX ' + Math.abs(n).toLocaleString(); }
 
   // ----- Savings tab -----
- if (currentAdminTab === 'savings') {
-  // Helper: get today's deposit status
-  function getTodaysDepositStatus() {
-    const todayStart = new Date().setHours(0, 0, 0, 0);
-    const todayEnd = todayStart + 86400000 - 1;
-    const hasActionToday = new Set();
-    transactions.forEach(tx => {
-      if (tx.date >= todayStart && tx.date <= todayEnd && tx.memberPhone) {
-        hasActionToday.add(tx.memberPhone);
-      }
-    });
-    const allMembers = members.filter(m => m.approved);
-    const noAction = allMembers.filter(m => !hasActionToday.has(m.phone));
-    return { notDeposited: noAction, allCount: allMembers.length, depositedCount: hasActionToday.size };
-  }
-
-  const { notDeposited, allCount, depositedCount } = getTodaysDepositStatus();
-  const pendingActivityHtml = notDeposited.length === 0
-    ? `<div class="card" style="background: rgba(16,185,129,0.1); border-color: #10b981;">
-        <div style="display:flex; align-items:center; gap:10px;">
-          <span style="font-size:1.5rem;">✅</span>
-          <div><strong>All members are up to date!</strong><br>${depositedCount}/${allCount} are worked upon today.</div>
-        </div>
-      </div>`
-    : `<div class="card" style="background: rgba(245,158,11,0.1); border-color: #f59e0b;">
-        <div style="margin-bottom:8px;"><strong>⚠️ Pending deposits (${notDeposited.length} members)</strong></div>
-        <div style="display:flex; flex-wrap:wrap; gap:6px;">
-          ${notDeposited.map(m => `<span class="pill-badge pill-amber" style="background:rgba(245,158,11,0.2);">⚠️ ${escapeHtml(m.name)}</span>`).join('')}
-        </div>
-        <div class="micro muted" style="margin-top:6px;">These members have not deposited today. Auto‑penalty applies at midnight.</div>
-      </div>`;
-
-  // Profit pool card
-  const profitPoolHtml = `
-    <div class="card">
-      <div class="sec-h">🏦 Profit Pool</div>
-      <div style="display:flex; align-items:center; gap:14px; margin-bottom:14px">
-        <div style="width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,var(--green),#059669);display:flex;align-items:center;justify-content:center;font-size:1.6rem">💰</div>
-        <div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:1.6rem;font-weight:700;color:${groupProfit < 0 ? 'var(--red)' : 'var(--green)'}">${money(groupProfit)}</div>
-          <div class="micro">Prorated share – use preview to see breakdown</div>
-        </div>
-      </div>
-      <button class="btn btn-green btn-full" onclick="previewProfitDistribution()">🎉 Distribute Profit to All Members</button>
-    </div>
-  `;
-
-  // Pending loans card
-  const pendingLoansHtml = pendingLoans.length
-    ? `<div class="card">
-        <div class="sec-h">📋 Pending Loan Requests <span class="pill-badge pill-amber">${pendingLoans.length}</span></div>
-        ${pendingLoans.map(l => `
-          <div class="mc">
-            <div>
-              <div class="mc-name">${l.memberName}</div>
-              <div class="mc-phone">UGX ${l.amount.toLocaleString()} · Repay: UGX ${l.totalRepay.toLocaleString()} (${l.interestRate}%)</div>
-              <div class="micro">${l.reason}</div>
-            </div>
-            <div>
-              <button class="btn btn-sm btn-green" onclick="approveLoan('${l.id}')">✅ Approve</button>
-              <button class="btn btn-sm btn-red" onclick="rejectLoan('${l.id}')">✕ Reject</button>
-            </div>
-          </div>
-        `).join('')}
-      </div>`
-    : '';
-
-  // Active loans – grouped by member
-  const activeByMember = {};
-  loans.forEach(l => {
-    if (l.status === 'approved' && !l.repaid) {
-      const memberExists = members.some(m => m.id === l.memberId && m.approved !== false);
-      if (!memberExists) return;
-      if (!activeByMember[l.memberId]) {
-        activeByMember[l.memberId] = {
-          memberName: l.memberName,
-          memberPhone: l.memberPhone,
-          totalPrincipal: 0,
-          totalRepay: 0,
-          weightedInterest: 0,
-          count: 0,
-          dueDate: 0
-        };
-      }
-      activeByMember[l.memberId].totalPrincipal += l.amount;
-      activeByMember[l.memberId].totalRepay += l.totalRepay;
-      activeByMember[l.memberId].weightedInterest += l.amount * (l.interestRate || 0);
-      activeByMember[l.memberId].count++;
-      if (l.dueDate > activeByMember[l.memberId].dueDate) activeByMember[l.memberId].dueDate = l.dueDate;
+  if (currentAdminTab === 'savings') {
+    function getTodaysDepositStatus() {
+      const todayStart = new Date().setHours(0, 0, 0, 0);
+      const todayEnd = todayStart + 86400000 - 1;
+      const hasActionToday = new Set();
+      transactions.forEach(tx => {
+        if (tx.date >= todayStart && tx.date <= todayEnd && tx.memberPhone) {
+          hasActionToday.add(tx.memberPhone);
+        }
+      });
+      const allMembers = members.filter(m => m.approved);
+      const noAction = allMembers.filter(m => !hasActionToday.has(m.phone));
+      return { notDeposited: noAction, allCount: allMembers.length, depositedCount: hasActionToday.size };
     }
-  });
-  const entries = Object.entries(activeByMember);
 
-  let activeLoansHtml = '';
-  if (entries.length) {
-    activeLoansHtml = `
-      <div id="activeLoansContainer" style="display: none;">
-        <div class="card">
-          <div class="sec-h">💳 Active Loans <span class="pill-badge pill-green">${entries.length}</span></div>
-          ${entries.map(([memberId, data]) => {
-            const member = members.find(m => m.id === memberId);
-            const memberName = member ? member.name : 'Deleted Member';
-            const avgRate = data.totalPrincipal ? (data.weightedInterest / data.totalPrincipal).toFixed(1) : 0;
-            const balance = memberLoans[data.memberPhone] || 0;
-            const paid = Math.max(0, data.totalRepay - balance);
-            const isOverdue = data.dueDate && data.dueDate < Date.now();
-            return `
-              <div class="mc" style="border-left: 4px solid ${isOverdue ? 'var(--red)' : 'var(--green)'};">
-                <div>
-                  <div class="mc-name" style="font-size: 1rem; margin-bottom: 4px;">${memberName}</div>
-                  <div style="display: flex; flex-wrap: wrap; gap: 12px; margin: 6px 0;">
-                    <span style="background: rgba(245,158,11,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--gold);">💰 Borrowed: UGX ${data.totalPrincipal.toLocaleString()}</span>
-                    <span style="background: rgba(6,182,212,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--teal);">📈 Interest: ${avgRate}%</span>
-                    <span style="background: rgba(251,146,60,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--amber);">💸 Repay: UGX ${data.totalRepay.toLocaleString()}</span>
-                  </div>
-                  <div style="display: flex; flex-wrap: wrap; gap: 12px; margin: 6px 0;">
-                    <span style="background: rgba(34,197,94,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--green);">✅ Paid: UGX ${paid.toLocaleString()}</span>
-                    <span style="background: ${balance > 0 ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)'}; padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: ${balance > 0 ? 'var(--red)' : 'var(--green)'};">⚖️ Balance: UGX ${balance.toLocaleString()}</span>
-                    <span style="background: rgba(100,116,139,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.65rem; font-weight: 600; color: var(--t3);">📅 Due: ${new Date(data.dueDate).toLocaleDateString()}</span>
-                    ${data.count > 1 ? `<span style="background: rgba(139,92,246,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.65rem; font-weight: 600; color: var(--purple);">📚 ${data.count} loans</span>` : ''}
-                  </div>
-                </div>
-                <span class="pill-badge pill-green">${isOverdue ? '⚠️ Overdue' : 'Active'}</span>
-              </div>
-            `;
-          }).join('')}
+    const { notDeposited, allCount, depositedCount } = getTodaysDepositStatus();
+    const pendingActivityHtml = notDeposited.length === 0
+      ? `<div class="card" style="background: rgba(16,185,129,0.1); border-color: #10b981;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="font-size:1.5rem;">✅</span>
+            <div><strong>All members are up to date!</strong><br>${depositedCount}/${allCount} are worked upon today.</div>
+          </div>
+        </div>`
+      : `<div class="card" style="background: rgba(245,158,11,0.1); border-color: #f59e0b;">
+          <div style="margin-bottom:8px;"><strong>⚠️ Pending deposits (${notDeposited.length} members)</strong></div>
+          <div style="display:flex; flex-wrap:wrap; gap:6px;">
+            ${notDeposited.map(m => `<span class="pill-badge pill-amber" style="background:rgba(245,158,11,0.2);">⚠️ ${escapeHtml(m.name)}</span>`).join('')}
+          </div>
+          <div class="micro muted" style="margin-top:6px;">These members have not deposited today. Auto‑penalty applies at midnight.</div>
+        </div>`;
+
+    const profitPoolHtml = `
+      <div class="card">
+        <div class="sec-h">🏦 Profit Pool</div>
+        <div style="display:flex; align-items:center; gap:14px; margin-bottom:14px">
+          <div style="width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,var(--green),#059669);display:flex;align-items:center;justify-content:center;font-size:1.6rem">💰</div>
+          <div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:1.6rem;font-weight:700;color:${groupProfit < 0 ? 'var(--red)' : 'var(--green)'}">${money(groupProfit)}</div>
+            <div class="micro">Prorated share – use preview to see breakdown</div>
+          </div>
         </div>
+        <button class="btn btn-green btn-full" onclick="previewProfitDistribution()">🎉 Distribute Profit to All Members</button>
       </div>
-      <button class="btn btn-purple btn-full" onclick="toggleActiveLoans()" style="margin-top: 8px;">📋 Show/Hide Active Loans</button>
+    `;
+
+    const pendingLoansHtml = pendingLoans.length
+      ? `<div class="card">
+          <div class="sec-h">📋 Pending Loan Requests <span class="pill-badge pill-amber">${pendingLoans.length}</span></div>
+          ${pendingLoans.map(l => `
+            <div class="mc">
+              <div>
+                <div class="mc-name">${l.memberName}</div>
+                <div class="mc-phone">UGX ${l.amount.toLocaleString()} · Repay: UGX ${l.totalRepay.toLocaleString()} (${l.interestRate}%)</div>
+                <div class="micro">${l.reason}</div>
+              </div>
+              <div>
+                <button class="btn btn-sm btn-green" onclick="approveLoan('${l.id}')">✅ Approve</button>
+                <button class="btn btn-sm btn-red" onclick="rejectLoan('${l.id}')">✕ Reject</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>`
+      : '';
+
+    let activeLoansHtml = '';
+    if (entries.length) {
+      activeLoansHtml = `
+        <div id="activeLoansContainer" style="display: none;">
+          <div class="card">
+            <div class="sec-h">💳 Active Loans <span class="pill-badge pill-green">${entries.length}</span></div>
+            ${entries.map(([memberId, data]) => {
+              const member = members.find(m => m.id === memberId);
+              const memberName = member ? member.name : 'Deleted Member';
+              const avgRate = data.totalPrincipal ? (data.weightedInterest / data.totalPrincipal).toFixed(1) : 0;
+              const balance = memberLoans[data.memberPhone] || 0;
+              const paid = Math.max(0, data.totalRepay - balance);
+              const isOverdue = data.dueDate && data.dueDate < Date.now();
+              return `
+                <div class="mc" style="border-left: 4px solid ${isOverdue ? 'var(--red)' : 'var(--green)'};">
+                  <div>
+                    <div class="mc-name" style="font-size: 1rem; margin-bottom: 4px;">${memberName}</div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 12px; margin: 6px 0;">
+                      <span style="background: rgba(245,158,11,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--gold);">💰 Borrowed: UGX ${data.totalPrincipal.toLocaleString()}</span>
+                      <span style="background: rgba(6,182,212,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--teal);">📈 Interest: ${avgRate}%</span>
+                      <span style="background: rgba(251,146,60,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--amber);">💸 Repay: UGX ${data.totalRepay.toLocaleString()}</span>
+                    </div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 12px; margin: 6px 0;">
+                      <span style="background: rgba(34,197,94,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--green);">✅ Paid: UGX ${paid.toLocaleString()}</span>
+                      <span style="background: ${balance > 0 ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)'}; padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: ${balance > 0 ? 'var(--red)' : 'var(--green)'};">⚖️ Balance: UGX ${balance.toLocaleString()}</span>
+                      <span style="background: rgba(100,116,139,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.65rem; font-weight: 600; color: var(--t3);">📅 Due: ${new Date(data.dueDate).toLocaleDateString()}</span>
+                      ${data.count > 1 ? `<span style="background: rgba(139,92,246,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.65rem; font-weight: 600; color: var(--purple);">📚 ${data.count} loans</span>` : ''}
+                    </div>
+                  </div>
+                  <span class="pill-badge pill-green">${isOverdue ? '⚠️ Overdue' : 'Active'}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+        <button class="btn btn-purple btn-full" onclick="toggleActiveLoans()" style="margin-top: 8px;">📋 Show/Hide Active Loans</button>
+      `;
+    }
+
+    c.innerHTML = `
+      ${profitPoolHtml}
+      ${pendingActivityHtml}
+      ${pendingLoansHtml}
+      ${activeLoansHtml}
     `;
   }
 
-  c.innerHTML = `
-    ${profitPoolHtml}
-    ${pendingActivityHtml}
-    ${pendingLoansHtml}
-    ${activeLoansHtml}
-  `;
-}
-
   // ----- Notice tab -----
- else if (currentAdminTab === 'notice') {
-  const broadcastHtmlContent = `
-    <div id="broadcastContainer" style="display: none;">
-      <div class="card">
-        <div class="sec-h">📢 Broadcast to All Members</div>
-        <div class="fgrp">
-          <label class="flbl">Notification Message</label>
-          <textarea id="broadcast-msg" class="inp" rows="3" placeholder="Type message for all members..."></textarea>
+  else if (currentAdminTab === 'notice') {
+    const carouselHtml = `
+      <div id="carouselNoticesContainer" style="display: none; margin-top: 16px;">
+        <div class="card">
+          <div class="sec-h">🎠 Carousel Notices <span class="pill-badge pill-amber">${mainCarouselNotifs.length}/5</span></div>
+          <div id="carousel-drag-list" style="margin-bottom: 12px;">
+            ${mainCarouselNotifs.map((n, idx) => `
+              <div class="rot-drag-item" data-notice-key="${n.key}" draggable="true" style="display: flex; justify-content: space-between; align-items: center;">
+                <span class="drag-handle">⠿</span>
+                <span style="flex:1; margin-left: 8px;">${n.icon || '📢'} ${escapeHtml(n.text.slice(0,50))}${n.text.length > 50 ? '…' : ''}</span>
+                <button class="btn btn-sm btn-red" onclick="removeCarouselNotice('${n.key}')">🗑️</button>
+              </div>
+            `).join('')}
+          </div>
+          ${mainCarouselNotifs.length < 5 ? `<button class="btn btn-teal btn-full" onclick="openOv('ov-carousel-compose')">➕ Add Carousel Notice</button>` : '<div class="hint-box" style="text-align:center;">Maximum 5 notices reached. Delete one to add more.</div>'}
+          <button class="btn btn-gold btn-full" onclick="saveCarouselOrder()" style="margin-top: 12px;">💾 Save Order</button>
         </div>
-        <button class="btn btn-gold btn-full" onclick="sendBroadcastNotification()">📨 Send to All Members (in‑app)</button>
       </div>
-    </div>
-    <button class="btn btn-purple btn-full" onclick="toggleBroadcast()" style="margin-top: 8px;">📢 Show/Hide Broadcast</button>
-  `;
-
-  const carouselHtmlContent = `
-    <div id="carouselNoticesContainer" style="display: none; margin-top: 16px;">
-      <div class="card">
-        <div class="sec-h">🎠 Carousel Notices <span class="pill-badge pill-amber">${mainCarouselNotifs.length}/5</span></div>
-        <div id="carousel-drag-list" style="margin-bottom: 12px;">
-          ${mainCarouselNotifs.map((n, idx) => `
-            <div class="rot-drag-item" data-notice-key="${n.key}" draggable="true" style="display: flex; justify-content: space-between; align-items: center;">
-              <span class="drag-handle">⠿</span>
-              <span style="flex:1; margin-left: 8px;">${n.icon || '📢'} ${escapeHtml(n.text.slice(0,50))}${n.text.length > 50 ? '…' : ''}</span>
-              <button class="btn btn-sm btn-red" onclick="removeCarouselNotice('${n.key}')">🗑️</button>
-            </div>
-          `).join('')}
-        </div>
-        ${mainCarouselNotifs.length < 5 ? `<button class="btn btn-teal btn-full" onclick="openOv('ov-carousel-compose')">➕ Add Carousel Notice</button>` : '<div class="hint-box" style="text-align:center;">Maximum 5 notices reached. Delete one to add more.</div>'}
-        <button class="btn btn-gold btn-full" onclick="saveCarouselOrder()" style="margin-top: 12px;">💾 Save Order</button>
-      </div>
-    </div>
-    <button class="btn btn-purple btn-full" onclick="toggleCarouselNotices()" style="margin-top: 8px;">🎠 Show/Hide Carousel Notices</button>
-  `;
-
-  c.innerHTML = broadcastHtmlContent + carouselHtmlContent;
-  // Initialize drag & drop after rendering
-  setTimeout(() => initCarouselDrag(), 100);
-}
+      <button class="btn btn-purple btn-full" onclick="toggleCarouselNotices()" style="margin-top: 8px;">🎠 Show/Hide Carousel Notices</button>
+      <button class="btn btn-purple btn-full" onclick="openMemberStatusMessages()" style="margin-top: 8px;">📨 Send Member Status Message</button>
+    `;
+    c.innerHTML = carouselHtml;
+    setTimeout(() => initCarouselDrag(), 100);
+  }
 
   // ----- Harvest tab -----
   else if (currentAdminTab === 'harvest') {
@@ -6835,57 +6993,66 @@ function renderAdminTab() {
 
   // ----- Users tab -----
   else if (currentAdminTab === 'users') {
-  const membersListHtml = `
-    <div id="allMembersContainer" style="display: none;">
-      <div class="card">
-        <div class="sec-h" style="display: flex; justify-content: space-between; align-items: center;">
-          <span>👥 All Members <span class="pill-badge pill-green">${members.length}</span></span>
-          <div style="display: flex; gap: 8px;">
-            <button class="btn btn-sm btn-amber" onclick="openMultiAssignDebt()">💰 Assign Debt to Selected</button>
-            <button class="btn btn-sm btn-teal" onclick="openMultiAddTransaction()">➕ Add Transaction to Selected</button>
+    const membersListHtml = `
+      <div id="allMembersContainer" style="display: none;">
+        <div class="card">
+          <div class="sec-h" style="display: flex; justify-content: space-between; align-items: center;">
+            <span>👥 All Members <span class="pill-badge pill-green">${members.length}</span></span>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-sm btn-amber" onclick="openMultiAssignDebt()">💰 Assign Debt to Selected</button>
+              <button class="btn btn-sm btn-teal" onclick="openMultiAddTransaction()">➕ Add Transaction to Selected</button>
+            </div>
           </div>
+          <div id="admin-members-list"></div>
         </div>
-        <div id="admin-members-list"></div>
       </div>
-    </div>
-    <button class="btn btn-purple btn-full" onclick="toggleAllMembers()" style="margin-top: 8px;">👥 Show/Hide All Members</button>
-  `;
+      <button class="btn btn-purple btn-full" onclick="toggleAllMembers()" style="margin-top: 8px;">👥 Show/Hide All Members</button>
+    `;
 
-  c.innerHTML = `
-    <div class="card">
-      <div class="sec-h">⚡ Quick Actions</div>
-      <button class="btn btn-gold btn-full" onclick="openOv('ov-add-mbr')">👤 Add New Member</button>
-      <button class="btn btn-teal btn-full" onclick="loadApplications()">📝 View Applications<span id="apps-badge-wrap" style="display:none;background:var(--red);color:#fff;border-radius:99px;padding:1px 7px;font-size:0.65rem;font-weight:800;margin-left:4px"><span id="apps-count">0</span></span></button>
-    </div>
-    ${membersListHtml}
-  `;
+    c.innerHTML = `
+      <div class="card">
+        <div class="sec-h">⚡ Quick Actions</div>
+        <button class="btn btn-gold btn-full" onclick="openOv('ov-add-mbr')">👤 Add New Member</button>
+        <button class="btn btn-teal btn-full" onclick="loadApplications()">📝 View Applications<span id="apps-badge-wrap" style="display:none;background:var(--red);color:#fff;border-radius:99px;padding:1px 7px;font-size:0.65rem;font-weight:800;margin-left:4px"><span id="apps-count">0</span></span></button>
+      </div>
+      ${membersListHtml}
+    `;
 
-  // Populate the members list (it will be hidden initially, but the data is ready when shown)
-  updateAdminMembersList();
-}
+    updateAdminMembersList();
+  }
+
   // ----- Fines tab -----
- else if (currentAdminTab === 'fines') {
-  c.innerHTML = `
-    <div class="card">
-      <div class="sec-h">⚡ Fines & Finances</div>
-      <button class="btn btn-amber btn-full" onclick="openOv('ov-add-fine');populateMemberDropdowns()">⚡ Apply Fine to Member</button>
-      <button class="btn btn-red btn-full" onclick="openOv('ov-assign-debt');populateMemberDropdowns()">🧾 Assign Debt to Member</button>
-      <button class="btn btn-purple btn-full" onclick="openOv('ov-group-transaction')">📦 Add Group Transaction (Welfare, Expense, Deposit)</button>
-    </div>
-  `;
-}
+  else if (currentAdminTab === 'fines') {
+    c.innerHTML = `
+      <div class="card">
+        <div class="sec-h">⚡ Fines & Finances</div>
+        <button class="btn btn-amber btn-full" onclick="openOv('ov-add-fine');populateMemberDropdowns()">⚡ Apply Fine to Member</button>
+        <button class="btn btn-red btn-full" onclick="openOv('ov-assign-debt');populateMemberDropdowns()">🧾 Assign Debt to Member</button>
+        <button class="btn btn-purple btn-full" onclick="openOv('ov-group-transaction')">📦 Add Group Transaction (Welfare, Expense, Deposit)</button>
+      </div>
+    `;
+  }
 
   // ----- Settings tab -----
- else if (currentAdminTab === 'settings') {
-  c.innerHTML = `
-    <div class="card">
-      <div class="sec-h">⚙️ Configuration</div>
-      <button class="btn btn-gold btn-full" onclick="openOv('ov-settings');loadSettings()">⚙️ Group Settings</button>
-      <button class="btn btn-purple btn-full" onclick="openEditTermsModal()">📝 Edit Group Terms</button>
-      <button class="btn btn-amber btn-full" onclick="openOv('ov-loan-settings');loadLoanSettings()">💰 Loan Settings</button>
-       <button class="btn btn-purple btn-full" onclick="generateGroupReport()">📊 Group Report (Start Date → Now)</button></div>
-  `;
-}
+  else if (currentAdminTab === 'settings') {
+    c.innerHTML = `
+      <div class="card">
+        <div class="sec-h">⚙️ Configuration</div>
+        <button class="btn btn-gold btn-full" onclick="openOv('ov-settings');loadSettings()">⚙️ Group Settings</button>
+        <button class="btn btn-purple btn-full" onclick="openEditTermsModal()">📝 Edit Group Terms</button>
+        <button class="btn btn-amber btn-full" onclick="openOv('ov-loan-settings');loadLoanSettings()">💰 Loan Settings</button>
+        <button class="btn btn-purple btn-full" onclick="generateGroupReport()">📊 Group Report (Start Date → Now)</button>
+      </div>
+      <div class="danger-zone">
+        <div class="danger-zone-label">⚠️ Danger Zone</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-sm btn-sec" onclick="resetGroup()">🗑️ Full Reset</button>
+          <button class="btn btn-sm btn-sec" onclick="resetDataKeepMembers()">🔄 Reset Data</button>
+        </div>
+      </div>
+    `;
+  }
+
   // Update the pending applications badge count (for the Users tab button)
   if (currentAdminTab === 'users') {
     db.ref('applications').orderByChild('status').equalTo('pending').once('value', snap => {
@@ -7085,16 +7252,7 @@ function toggleActiveLoans() {
     }
   }
 }
-function toggleBroadcast() {
-  const container = document.getElementById('broadcastContainer');
-  if (container) {
-    if (container.style.display === 'none') {
-      container.style.display = 'block';
-    } else {
-      container.style.display = 'none';
-    }
-  }
-}
+
 function toggleCarouselNotices() {
   const container = document.getElementById('carouselNoticesContainer');
   if (container) {
@@ -7115,7 +7273,20 @@ function toggleAllMembers() {
     }
   }
 }
-
+function addAdminBackButton() {
+  const container = document.getElementById('admin-content');
+  if (!container) return;
+  if (!container.querySelector('.admin-back-btn')) {
+    const backBtn = document.createElement('div');
+    backBtn.className = 'admin-back-btn';
+    backBtn.innerHTML = '← Back to Admin Menu';
+    backBtn.onclick = () => {
+      adminShowGrid = true;
+      showAdminGrid();
+    };
+    container.insertBefore(backBtn, container.firstChild);
+  }
+}
 // Open modal to add transaction to selected members
 function openMultiAddTransaction() {
   const selected = getSelectedMembers();
@@ -9327,10 +9498,11 @@ window.unlockAdmin = function() {
     document.getElementById('adm-lock').classList.add('hidden');
     document.getElementById('adm-panel').classList.remove('hidden');
     document.getElementById('adm-pwd').value = '';
-    currentAdminTab = 'savings';
-    document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
-    document.querySelector('[data-tab="savings"]')?.classList.add('active');
-    renderAdminTab();
+    adminShowGrid = true;
+    // Hide the admin-tabs bar initially
+    const adminTabs = document.querySelector('.admin-tabs');
+    if (adminTabs) adminTabs.style.display = 'none';
+    showAdminWelcome();   // shows 3‑second welcome then grid
     toast('Admin unlocked! 🔓', '#10b981');
   } else {
     toast('Incorrect admin password', '#ef4444');
@@ -9350,15 +9522,19 @@ window.goTab = function(tab, btn) {
   if (tab === 'home') { updateHomeRecent(); updateHomeUI(); }
   if (tab === 'account') { updateAccountUI(); updateAccountBalances(); }
   if (tab === 'admin') {
-    if (currentUser?.isAdmin && adminUnlocked) {
-      document.getElementById('adm-lock').classList.add('hidden');
-      document.getElementById('adm-panel').classList.remove('hidden');
-      renderAdminTab();
-    } else {
-      document.getElementById('adm-lock').classList.remove('hidden');
-      document.getElementById('adm-panel').classList.add('hidden');
-    }
+  if (currentUser?.isAdmin && adminUnlocked) {
+    document.getElementById('adm-lock').classList.add('hidden');
+    document.getElementById('adm-panel').classList.remove('hidden');
+    adminShowGrid = true;
+    // Hide the top tabs
+    const adminTabs = document.querySelector('.admin-tabs');
+    if (adminTabs) adminTabs.style.display = 'none';
+    showAdminWelcome();   // shows welcome then grid
+  } else {
+    document.getElementById('adm-lock').classList.remove('hidden');
+    document.getElementById('adm-panel').classList.add('hidden');
   }
+}
   if (tab === 'statistics') renderStatistics();
 };
 function showModal(content, title) {
@@ -10200,6 +10376,67 @@ function showTabLoadingAnimation(text, callback) {
     if (callback) callback();
     loadingTimeout = null;
   }, 3000);
+}
+// Show welcome message for 3 seconds, then show the grid
+function showAdminWelcome() {
+  const adminContent = document.getElementById('admin-content');
+  if (!adminContent) return;
+  adminContent.innerHTML = `
+    <div id="admin-welcome" style="display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 40px 20px; animation: fadeIn 0.5s;">
+      <div style="font-size: 3rem; margin-bottom: 16px;">🌾</div>
+      <div style="font-size: 1.8rem; font-weight: 800; color: var(--gold);">Welcome back, Admin</div>
+      <div class="micro muted" style="margin-top: 8px;">Loading admin dashboard...</div>
+      <div style="width: 50px; height: 2px; background: var(--gold3); border-radius: 2px; margin: 20px auto 0; overflow: hidden;">
+        <div style="width: 40%; height: 100%; background: var(--gold); animation: loaderSlide 1s ease-in-out infinite;"></div>
+      </div>
+    </div>
+  `;
+  // After 3 seconds, replace with the grid
+  setTimeout(() => {
+    if (adminUnlocked) showAdminGrid();
+  }, 3000);
+}
+
+// Show the grid of admin sub‑tabs
+function showAdminGrid() {
+  const adminContent = document.getElementById('admin-content');
+  if (!adminContent) return;
+  const adminTabs = document.querySelector('.admin-tabs');
+  if (adminTabs) adminTabs.style.display = 'none';
+
+  const tabs = [
+    { id: 'savings', name: 'Savings', icon: '💰' },
+    { id: 'notice', name: 'Notice', icon: '📢' },
+    { id: 'harvest', name: 'Harvest', icon: '🌾' },
+    { id: 'users', name: 'Users', icon: '👥' },
+    { id: 'fines', name: 'Fines', icon: '⚡' },
+    { id: 'settings', name: 'Settings', icon: '⚙️' }
+  ];
+
+  let html = `<div class="admin-grid">`;
+  tabs.forEach(tab => {
+    html += `
+      <div class="admin-grid-item" data-tab="${tab.id}">
+        <div style="font-size: 2rem;">${tab.icon}</div>
+        <div style="font-weight: 700; font-size: 0.85rem; margin-top: 4px;">${tab.name}</div>
+      </div>
+    `;
+  });
+  html += `</div>`;
+  adminContent.innerHTML = html;
+  adminShowGrid = false;
+
+  document.querySelectorAll('.admin-grid-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const tabId = item.getAttribute('data-tab');
+      item.style.transform = 'scale(0.96)';
+      setTimeout(() => { item.style.transform = ''; }, 150);
+      switchAdminTab(tabId);
+      renderAdminTab();
+      document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+      document.querySelector(`.admin-tab[data-tab="${tabId}"]`)?.classList.add('active');
+    });
+  });
 }
 function showNotificationsPopup() {
   if (!currentUser || currentUser.isAdmin) return;
