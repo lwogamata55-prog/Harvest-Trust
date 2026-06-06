@@ -2633,7 +2633,27 @@ function getNextMidnight() {
   midnight.setHours(24, 0, 0, 0); // next midnight
   return midnight.getTime();
 }
+function getDailyStatusForDate(member, dateTimestamp) {
+  const dayStart = new Date(dateTimestamp);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = dayStart.getTime() + 86400000 - 1;
+  const dailyAmount = settings.dailyAmount || 2000;
+  const welfareAmount = settings.welfareAmount || 500;
 
+  let depositTotal = 0;
+  let welfarePaid = false;
+  transactions.forEach(tx => {
+    if (tx.memberPhone === member.phone && tx.date >= dayStart && tx.date <= dayEnd) {
+      if (tx.type === 'deposit') depositTotal += tx.amount;
+      if (tx.type === 'welfare') welfarePaid = true;
+    }
+  });
+  const required = dailyAmount + (welfarePaid ? 0 : welfareAmount);
+  const paid = depositTotal + (welfarePaid ? welfareAmount : 0);
+  const deficit = Math.max(0, required - paid);
+  const surplus = Math.max(0, paid - required);
+  return { required, paid, deficit, surplus, dayStart: dayStart.getTime() };
+}
 // Update countdown timer on home page
 function updateMidnightTimer() {
   const timerEl = document.getElementById('midnight-timer');
@@ -3098,6 +3118,7 @@ function getDailyRequiredForMember(memberId) {
   // Loan installment is no longer forced – return only daily savings + welfare
   return dailySavings;
 }
+
 function getAllowedBorrowerIndex(receiverIndex, totalMembers) {
   // Returns the index of the member allowed to borrow for a given receiver index.
   // For 10 members: 0 ↔ 9, 1 ↔ 8, 2 ↔ 7, 3 ↔ 6, 4 ↔ 5.
@@ -7485,17 +7506,17 @@ window.updateTxPreview = function() {
   const member = members.find(m => m.phone === phone);
   if (!member) return;
 
-  computePots(); // ensure latest debts/loans
+  computePots();
 
   let remaining = amount;
   const lines = [];
 
-  // 1. Today's requirement
   const dailyAmount = settings.dailyAmount || 2000;
   const welfareAmount = settings.welfareAmount || 500;
   const requiredToday = dailyAmount + welfareAmount;
+  const todayStart = new Date().setHours(0, 0, 0, 0);
 
-  const todayStart = new Date().setHours(0,0,0,0);
+  // 1. Today's requirement
   let paidDailyToday = 0;
   let welfarePaidToday = false;
   transactions.forEach(tx => {
@@ -7540,33 +7561,42 @@ window.updateTxPreview = function() {
     lines.push(`✅ No outstanding debt or loans.`);
   }
 
-  // Update remaining outstanding after clearing
   const remainingOutstanding = totalOutstanding - usedForOutstanding;
   const todayFullyCovered = (usedToday === deficitToday);
 
-  // 3. Prepay future days (only if today fully satisfied AND no outstanding remains)
+  // 3. Prepay future days (starting from first uncovered day)
   if (todayFullyCovered && remainingOutstanding === 0 && remaining > 0) {
-    let futureDayStart = todayStart + 86400000;
-    let daysFullyCovered = 0;
-    let remainingPartial = remaining;
-
-    while (remainingPartial >= requiredToday && daysFullyCovered < 30) {
-      remainingPartial -= requiredToday;
-      daysFullyCovered++;
-      const dateStr = new Date(futureDayStart).toLocaleDateString();
-      lines.push(`📅 ${dateStr}: full day (${money(requiredToday)})`);
-      futureDayStart += 86400000;
+    let currentDay = todayStart + 86400000;
+    const maxFutureDays = 365;
+    let daysChecked = 0;
+    while (daysChecked < maxFutureDays) {
+      const dayStatus = getDailyStatusForDate(member, currentDay);
+      if (dayStatus.deficit > 0) break;
+      currentDay += 86400000;
+      daysChecked++;
     }
 
-    if (remainingPartial > 0 && daysFullyCovered < 30) {
-      const dateStr = new Date(futureDayStart).toLocaleDateString();
-      const dailyPortion = Math.min(remainingPartial, dailyAmount);
-      const welfarePortion = Math.max(0, remainingPartial - dailyPortion);
-      lines.push(`⚡ ${dateStr}: partial – ${money(dailyPortion)} savings, ${money(welfarePortion)} welfare`);
+    let daysProcessed = 0;
+    const maxDays = 30;
+    while (remaining > 0 && daysProcessed < maxDays) {
+      const dayStatus = getDailyStatusForDate(member, currentDay);
+      const neededForDay = dayStatus.deficit;
+      if (neededForDay > 0) {
+        const usedForDay = Math.min(remaining, neededForDay);
+        remaining -= usedForDay;
+        const dailyPortion = Math.min(usedForDay, dailyAmount);
+        const welfarePortion = usedForDay - dailyPortion;
+        const dateStr = new Date(currentDay).toLocaleDateString();
+        lines.push(`📅 ${dateStr}: ${usedForDay === neededForDay ? 'full' : 'partial'} day (${money(usedForDay)} – ${money(dailyPortion)} savings, ${money(welfarePortion)} welfare)`);
+        if (usedForDay < neededForDay) break;
+      }
+      currentDay += 86400000;
+      daysProcessed++;
     }
-
-    if (remainingPartial === 0 && daysFullyCovered > 0) {
-      lines.push(`✨ Surplus fully allocated to ${daysFullyCovered} future day(s).`);
+    if (remaining === 0 && daysProcessed > 0) {
+      lines.push(`✨ Surplus fully allocated to ${daysProcessed} future day(s).`);
+    } else if (remaining > 0) {
+      lines.push(`⚠️ Remaining ${money(remaining)} after covering ${daysProcessed} days (limit reached).`);
     }
   } else if (remaining > 0) {
     lines.push(`💡 Remaining ${money(remaining)} will be used once today's requirement is met and outstanding cleared.`);
@@ -8858,13 +8888,13 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
   const writes = [];
   let remaining = depositAmount;
   const now = depositTimestamp || Date.now();
-  const todayStart = new Date(now).setHours(0,0,0,0);
+  const todayStart = new Date(now).setHours(0, 0, 0, 0);
 
   const dailyAmount = settings.dailyAmount || 2000;
   const welfareAmount = settings.welfareAmount || 500;
   const requiredToday = dailyAmount + welfareAmount;
 
-  // --- 1. Cover today's requirement ---
+  // ---------- 1. Today's requirement ----------
   let paidDailyToday = 0;
   let welfarePaidToday = false;
   transactions.forEach(tx => {
@@ -8904,10 +8934,11 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
     }
   }
 
-  // --- 2. Clear combined outstanding (debt + loan) ---
+  // ---------- 2. Clear outstanding debt + loan ----------
   let totalOutstanding = (memberDebts[member.phone] || 0) + (memberLoans[member.phone] || 0);
+  let usedForOutstanding = 0;
   if (totalOutstanding > 0 && remaining > 0) {
-    const usedForOutstanding = Math.min(remaining, totalOutstanding);
+    usedForOutstanding = Math.min(remaining, totalOutstanding);
     remaining -= usedForOutstanding;
     totalOutstanding -= usedForOutstanding;
 
@@ -8933,54 +8964,55 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
     }
   }
 
-  // --- 3. Prepay future days (only if today fully satisfied AND no outstanding remains) ---
+  // ---------- 3. Prepay future days (starting from the first uncovered day) ----------
   const todayFullyCovered = (usedToday === deficitToday);
-  const remainingOutstanding = totalOutstanding; // already updated after clearing
+  const remainingOutstanding = totalOutstanding;
   if (todayFullyCovered && remainingOutstanding === 0 && remaining > 0) {
-    let currentDayStart = todayStart + 86400000;
+    let currentDay = todayStart + 86400000; // start from tomorrow
+    const maxFutureDays = 365;
+    let daysChecked = 0;
+    while (daysChecked < maxFutureDays) {
+      const dayStatus = getDailyStatusForDate(member, currentDay);
+      if (dayStatus.deficit > 0) break;
+      currentDay += 86400000;
+      daysChecked++;
+    }
+
     let daysProcessed = 0;
     const maxDays = 30;
-    while (remaining >= requiredToday && daysProcessed < maxDays) {
-      writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'deposit', amount: dailyAmount,
-        description: `Daily savings for ${new Date(currentDayStart).toLocaleDateString()}`,
-        date: currentDayStart + 1500
-      });
-      writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'welfare', amount: welfareAmount,
-        description: `Welfare for ${new Date(currentDayStart).toLocaleDateString()}`,
-        date: currentDayStart + 500,
-        autoDeduction: true
-      });
-      remaining -= requiredToday;
-      currentDayStart += 86400000;
+    while (remaining > 0 && daysProcessed < maxDays) {
+      const dayStatus = getDailyStatusForDate(member, currentDay);
+      const neededForDay = dayStatus.deficit;
+      if (neededForDay > 0) {
+        const usedForDay = Math.min(remaining, neededForDay);
+        remaining -= usedForDay;
+        const dailyPortion = Math.min(usedForDay, dailyAmount);
+        const welfarePortion = usedForDay - dailyPortion;
+        if (dailyPortion > 0) {
+          writes.push({
+            memberPhone: member.phone, memberName: member.name,
+            type: 'deposit', amount: dailyPortion,
+            description: `Daily savings for ${new Date(currentDay).toLocaleDateString()}`,
+            date: currentDay + 1500
+          });
+        }
+        if (welfarePortion > 0) {
+          writes.push({
+            memberPhone: member.phone, memberName: member.name,
+            type: 'welfare', amount: welfarePortion,
+            description: `Welfare for ${new Date(currentDay).toLocaleDateString()}`,
+            date: currentDay + 500,
+            autoDeduction: true
+          });
+        }
+        if (usedForDay < neededForDay) break;
+      }
+      currentDay += 86400000;
       daysProcessed++;
     }
-    if (remaining > 0 && daysProcessed < maxDays) {
-      const dailyPortion = Math.min(remaining, dailyAmount);
-      const welfarePortion = Math.max(0, remaining - dailyPortion);
-      if (dailyPortion > 0) {
-        writes.push({
-          memberPhone: member.phone, memberName: member.name,
-          type: 'deposit', amount: dailyPortion,
-          description: `Daily savings for ${new Date(currentDayStart).toLocaleDateString()}`,
-          date: currentDayStart + 1500
-        });
-      }
-      if (welfarePortion > 0) {
-        writes.push({
-          memberPhone: member.phone, memberName: member.name,
-          type: 'welfare', amount: welfarePortion,
-          description: `Welfare for ${new Date(currentDayStart).toLocaleDateString()}`,
-          date: currentDayStart + 500,
-          autoDeduction: true
-        });
-      }
-    }
-  } else if (remaining > 0) {
-    // Surplus that cannot be applied (today not fully covered or outstanding remains) – store as extra balance
+  }
+
+  if (remaining > 0) {
     writes.push({
       memberPhone: member.phone, memberName: member.name,
       type: 'deposit', amount: remaining,
