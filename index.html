@@ -2432,6 +2432,7 @@ setTimeout(function(){
     <div style="display: flex; gap: 12px; margin-top: 16px; flex-wrap: wrap;">
       <button class="btn btn-gold btn-full" style="flex:1" onclick="printSingleReceipt()">🖨️ Print Receipt</button>
       <button class="btn btn-teal btn-full" style="flex:1" onclick="shareReceiptAsImage()">📸 Share as Image</button>
+       <button class="btn btn-teal btn-full" style="flex:1" id="single-receipt-wa-text">📱 Send Text via WhatsApp</button>
       <button class="btn btn-sec btn-full" style="flex:1" onclick="closeOv('ov-single-receipt')">Close</button>
     </div>
   </div>
@@ -3542,7 +3543,8 @@ function showWeeklyPayoutReceiptModal(beneficiary, weeklyGross, debt, loan, netP
           ${imageData ? `<img src="${imageData}" style="max-width: 100%; border-radius: 12px; border: 1px solid #ccc;">` : '<div class="hint-box">⚠️ Receipt image not available</div>'}
         </div>
         <div style="display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;">
-          <button class="btn btn-gold" id="payout-confirm-share">✅ Confirm & Send via WhatsApp</button>
+          <button class="btn btn-gold" id="payout-confirm-share">✅ Confirm & Send Image</button>
+          <button class="btn btn-teal" id="payout-wa-text">📱 Send Text via WhatsApp</button>
           <button class="btn btn-green" id="payout-confirm-noshare">✅ Confirm & Don't Send</button>
           <button class="btn btn-purple" id="payout-print">🖨️ Print</button>
           <button class="btn btn-red" id="payout-cancel">🗑️ Cancel</button>
@@ -3552,6 +3554,7 @@ function showWeeklyPayoutReceiptModal(beneficiary, weeklyGross, debt, loan, netP
     document.body.appendChild(modal);
 
     const confirmShareBtn = modal.querySelector('#payout-confirm-share');
+    const waTextBtn = modal.querySelector('#payout-wa-text');
     const confirmNoShareBtn = modal.querySelector('#payout-confirm-noshare');
     const printBtn = modal.querySelector('#payout-print');
     const cancelBtn = modal.querySelector('#payout-cancel');
@@ -3564,7 +3567,7 @@ function showWeeklyPayoutReceiptModal(beneficiary, weeklyGross, debt, loan, netP
     async function copyImageToClipboard(blob, fileName) {
       try {
         await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-        toast('📋 Receipt image copied to clipboard! Paste (Ctrl+V) into WhatsApp.', '#06b6d4');
+        toast('📋 Receipt image copied to clipboard! Paste (Ctrl+V) into WhatsApp Web.', '#06b6d4');
       } catch (err) {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -3585,6 +3588,30 @@ function showWeeklyPayoutReceiptModal(beneficiary, weeklyGross, debt, loan, netP
       if (onConfirmShare) onConfirmShare();
     };
 
+    waTextBtn.onclick = async () => {
+      closeModal();
+      if (onConfirmShare) await onConfirmShare(); // save payout first
+      const dateLabel = new Date().toLocaleDateString('en-UG', { year: 'numeric', month: 'long', day: 'numeric' });
+      const message = `🌾 *HARVEST TRUST FINANCE* 🌾\n\n` +
+        `📄 *WEEKLY PAYOUT RECEIPT*\n` +
+        `📅 Date: ${dateLabel}\n` +
+        `👤 Beneficiary: ${beneficiary.name}\n` +
+        `📞 Phone: ${beneficiary.phone}\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n` +
+        `💰 Full Weekly Amount: UGX ${weeklyGross.toLocaleString()}\n` +
+        `📋 Debt Deducted: UGX ${debt.toLocaleString()}\n` +
+        `🏦 Loan Deducted: UGX ${loan.toLocaleString()}\n` +
+        `💎 Net Payout: UGX ${netPayout.toLocaleString()}\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n` +
+        `🙏 Thank you for being part of Harvest Trust Finance.`;
+      const encoded = encodeURIComponent(message);
+      let phone = beneficiary.phone.replace(/\s+/g, '').replace(/[()-]/g, '');
+      if (phone.startsWith('0')) phone = '+256' + phone.slice(1);
+      if (!phone.startsWith('+')) phone = '+' + phone;
+      window.open(`https://wa.me/${phone}?text=${encoded}`, '_blank');
+      toast('Payout completed and WhatsApp opened.', '#10b981');
+    };
+
     confirmNoShareBtn.onclick = () => {
       closeModal();
       if (onConfirmNoShare) onConfirmNoShare();
@@ -3594,6 +3621,19 @@ function showWeeklyPayoutReceiptModal(beneficiary, weeklyGross, debt, loan, netP
     printBtn.onclick = () => {
       closeModal();
       if (onPrint) onPrint();
+      else if (imageData) {
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+          <head><title>Weekly Payout Receipt</title>
+          <style>body{margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff;}img{max-width:100%;height:auto;}</style>
+          </head><body><img src="${imageData}"></body></html>
+        `);
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
+      } else toast('No image to print', '#ef4444');
     };
 
     cancelBtn.onclick = () => {
@@ -5398,6 +5438,27 @@ window.showMemberReceipt = function(memberId, dateStr = null) {
   
   document.getElementById('single-receipt-content').innerHTML = receiptHtml;
   openOv('ov-single-receipt');
+  document.getElementById('single-receipt-wa-text').onclick = () => {
+  const receiptCard = document.querySelector('#single-receipt-content .single-receipt-card');
+  if (!receiptCard) return;
+  // Extract member name and phone from the receipt (or use the passed member object)
+  const memberName = member.name;
+  const memberPhone = member.phone;
+  const dateLabel = new Date().toLocaleDateString('en-UG', { year: 'numeric', month: 'long', day: 'numeric' });
+  const message = `🌾 *HARVEST TRUST FINANCE* 🌾\n\n` +
+    `📄 *MEMBER RECEIPT*\n` +
+    `📅 Date: ${dateLabel}\n` +
+    `👤 Member: ${memberName}\n` +
+    `📞 Phone: ${memberPhone}\n` +
+    `━━━━━━━━━━━━━━━━━━━━━\n` +
+    `For detailed transaction history, please log in to your account.\n\n` +
+    `🙏 Thank you for saving with Harvest Trust Finance.`;
+  const encoded = encodeURIComponent(message);
+  let phone = memberPhone.replace(/\s+/g, '').replace(/[()-]/g, '');
+  if (phone.startsWith('0')) phone = '+256' + phone.slice(1);
+  if (!phone.startsWith('+')) phone = '+' + phone;
+  window.open(`https://wa.me/${phone}?text=${encoded}`, '_blank');
+  toast('WhatsApp chat opened. Send the message manually.', '#06b6d4');};
 };
 window.shareReceiptAsImage = async function() {
   const originalCard = document.querySelector('#single-receipt-content .single-receipt-card');
@@ -7745,11 +7806,12 @@ window.updateTxPreview = function() {
   const remainingOutstanding = totalOutstanding - usedForOutstanding;
   const todayFullyCovered = (usedToday === deficitToday);
 
-  // 3. Prepay future days (starting from first uncovered day)
+  // 3. Prepay future days (only if today satisfied AND no outstanding)
   if (todayFullyCovered && remainingOutstanding === 0 && remaining > 0) {
-    let currentDay = todayStart + 86400000;
+    let currentDay = todayStart + 86400000; // start from tomorrow
     const maxFutureDays = 365;
     let daysChecked = 0;
+    // Find first day that is not fully covered
     while (daysChecked < maxFutureDays) {
       const dayStatus = getDailyStatusForDate(member, currentDay);
       if (dayStatus.deficit > 0) break;
@@ -7757,27 +7819,33 @@ window.updateTxPreview = function() {
       daysChecked++;
     }
 
-    let daysProcessed = 0;
-    const maxDays = 30;
-    while (remaining > 0 && daysProcessed < maxDays) {
-      const dayStatus = getDailyStatusForDate(member, currentDay);
-      const neededForDay = dayStatus.deficit;
-      if (neededForDay > 0) {
-        const usedForDay = Math.min(remaining, neededForDay);
-        remaining -= usedForDay;
-        const dailyPortion = Math.min(usedForDay, dailyAmount);
-        const welfarePortion = usedForDay - dailyPortion;
-        const dateStr = new Date(currentDay).toLocaleDateString();
-        lines.push(`📅 ${dateStr}: ${usedForDay === neededForDay ? 'full' : 'partial'} day (${money(usedForDay)} – ${money(dailyPortion)} savings, ${money(welfarePortion)} welfare)`);
-        if (usedForDay < neededForDay) break;
-      }
+    let daysFullyCovered = 0;
+    let remainingPartial = remaining;
+    // Full days (while we can cover the entire required amount for the current day)
+    while (remainingPartial >= requiredToday && daysFullyCovered < 30) {
+      remainingPartial -= requiredToday;
+      daysFullyCovered++;
+      const dateStr = new Date(currentDay).toLocaleDateString();
+      lines.push(`📅 ${dateStr}: full day (${money(requiredToday)})`);
       currentDay += 86400000;
-      daysProcessed++;
     }
-    if (remaining === 0 && daysProcessed > 0) {
-      lines.push(`✨ Surplus fully allocated to ${daysProcessed} future day(s).`);
-    } else if (remaining > 0) {
-      lines.push(`⚠️ Remaining ${money(remaining)} after covering ${daysProcessed} days (limit reached).`);
+
+    // Partial day
+    if (remainingPartial > 0 && daysFullyCovered < 30) {
+      // Get the current deficit for this day (before this deposit)
+      const dayStatus = getDailyStatusForDate(member, currentDay);
+      const currentDeficit = dayStatus.deficit; // how much is still needed to cover this day
+      const usedForThisDay = Math.min(remainingPartial, currentDeficit);
+      const newDeficit = currentDeficit - usedForThisDay;
+      const dateStr = new Date(currentDay).toLocaleDateString();
+      lines.push(`⚡ ${dateStr}: partial – ${money(usedForThisDay)} applied. Remaining deficit for that day: ${money(newDeficit)}`);
+      remainingPartial -= usedForThisDay;
+    }
+
+    if (remainingPartial === 0 && daysFullyCovered > 0) {
+      lines.push(`✨ Surplus fully allocated to ${daysFullyCovered} future day(s).`);
+    } else if (remainingPartial > 0) {
+      lines.push(`⚠️ Remaining ${money(remainingPartial)} after covering ${daysFullyCovered} days (limit reached).`);
     }
   } else if (remaining > 0) {
     lines.push(`💡 Remaining ${money(remaining)} will be used once today's requirement is met and outstanding cleared.`);
@@ -10514,7 +10582,8 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
           ${imageData ? `<img src="${imageData}" style="max-width: 100%; border-radius: 12px; border: 1px solid #ccc;">` : '<div class="hint-box">⚠️ Receipt image not available</div>'}
         </div>
         <div style="display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;">
-          <button class="btn btn-gold" id="receipt-confirm-send">✅ Confirm & Send via WhatsApp</button>
+          <button class="btn btn-gold" id="receipt-confirm-send">✅ Confirm & Send Image</button>
+          <button class="btn btn-teal" id="receipt-wa-text">📱 Send Text via WhatsApp</button>
           <button class="btn btn-green" id="receipt-confirm-nosend">✅ Confirm & Don't Send</button>
           <button class="btn btn-purple" id="receipt-print">🖨️ Print</button>
           <button class="btn btn-red" id="receipt-cancel">🗑️ Don't Save</button>
@@ -10524,6 +10593,7 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
     document.body.appendChild(modal);
 
     const confirmSendBtn = modal.querySelector('#receipt-confirm-send');
+    const waTextBtn = modal.querySelector('#receipt-wa-text');
     const confirmNoSendBtn = modal.querySelector('#receipt-confirm-nosend');
     const printBtn = modal.querySelector('#receipt-print');
     const cancelBtn = modal.querySelector('#receipt-cancel');
@@ -10533,14 +10603,11 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
       setTimeout(() => modal.remove(), 300);
     };
 
-    // Clipboard-only sharing (no share sheet)
     async function copyImageToClipboard(blob, fileName) {
       try {
         await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-        toast('📋 Receipt image copied to clipboard! Paste (Ctrl+V) into WhatsApp.', '#06b6d4');
+        toast('📋 Receipt image copied to clipboard! Paste (Ctrl+V) into WhatsApp Web.', '#06b6d4');
       } catch (err) {
-        console.error('Clipboard failed', err);
-        // Fallback: download
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -10560,6 +10627,32 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
       if (onConfirmSend) onConfirmSend();
     };
 
+    waTextBtn.onclick = async () => {
+      closeModal();
+      // Save the transaction first
+      if (onConfirmSend) await onConfirmSend();
+      // Build WhatsApp text message
+      const dateLabel = new Date().toLocaleDateString('en-UG', { year: 'numeric', month: 'long', day: 'numeric' });
+      const message = `🌾 *HARVEST TRUST FINANCE* 🌾\n\n` +
+        `📄 *RECEIPT*\n` +
+        `🔖 Receipt No.: HTF-${member.id.slice(-4)}\n` +
+        `📅 Date: ${dateLabel}\n` +
+        `👤 Member: ${member.name}\n` +
+        `📞 Phone: ${member.phone}\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n` +
+        `💰 *Transaction:* ${txType.toUpperCase()}\n` +
+        `💵 *Amount:* UGX ${amount.toLocaleString()}\n` +
+        `📝 *Description:* ${description || txType}\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n` +
+        `🙏 Thank you for transacting with Harvest Trust Finance.`;
+      const encoded = encodeURIComponent(message);
+      let phone = member.phone.replace(/\s+/g, '').replace(/[()-]/g, '');
+      if (phone.startsWith('0')) phone = '+256' + phone.slice(1);
+      if (!phone.startsWith('+')) phone = '+' + phone;
+      window.open(`https://wa.me/${phone}?text=${encoded}`, '_blank');
+      toast('Transaction saved and WhatsApp opened.', '#10b981');
+    };
+
     confirmNoSendBtn.onclick = () => {
       closeModal();
       if (onConfirmNoSend) onConfirmNoSend();
@@ -10568,26 +10661,20 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
 
     printBtn.onclick = () => {
       closeModal();
-      if (onPrint) {
-        onPrint();
-      } else if (imageData) {
+      if (onPrint) onPrint();
+      else if (imageData) {
         const printWindow = window.open('', '_blank');
         printWindow.document.write(`
           <!DOCTYPE html>
           <html>
-          <head>
-            <title>Transaction Receipt</title>
-            <style>body{margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff;}img{max-width:100%;height:auto;}</style>
-          </head>
-          <body><img src="${imageData}"></body>
-          </html>
+          <head><title>Transaction Receipt</title>
+          <style>body{margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff;}img{max-width:100%;height:auto;}</style>
+          </head><body><img src="${imageData}"></body></html>
         `);
         printWindow.document.close();
         printWindow.focus();
         printWindow.print();
-      } else {
-        toast('No image to print', '#ef4444');
-      }
+      } else toast('No image to print', '#ef4444');
     };
 
     cancelBtn.onclick = () => {
