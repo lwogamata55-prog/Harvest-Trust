@@ -3719,6 +3719,7 @@ function refreshUI() {
   updateNotificationBadge();
   if (currentScreen === 'statistics') renderStatistics();
 }
+
 async function processDepositWithCarryover(member, depositAmount, timestamp, description) {
   const writes = [];
   let remaining = depositAmount;
@@ -7580,26 +7581,67 @@ async function updateMemberPrepaid(memberId, newPrepaid) {
 window.updateMember = function() {
   const id = document.getElementById('edit-member-id').value;
   const name = document.getElementById('edit-mbr-name').value.trim();
-  const phone = document.getElementById('edit-mbr-phone').value.trim();
+  let phone = document.getElementById('edit-mbr-phone').value.trim();
   const join = document.getElementById('edit-mbr-join').value;
   const photoData = document.getElementById('edit-mbr-photo').value;
   if (!name || !phone) { toast('Fill all fields', '#ef4444'); return; }
-  
+
   const originalMember = members.find(m => m.id === id);
-  if (originalMember && originalMember.phone !== phone) {
-    const confirmChange = confirm(`⚠️ WARNING: Changing the phone number from ${originalMember.phone} to ${phone} will break all historical transactions and loans for this member (balance will become 0). Are you absolutely sure?`);
+  if (!originalMember) return;
+
+  // If phone number has changed, warn and update related records
+  const phoneChanged = (originalMember.phone !== phone);
+  if (phoneChanged) {
+    const confirmChange = confirm(`⚠️ WARNING: Changing the phone number from ${originalMember.phone} to ${phone} will also update all transactions and loans for this member. This is required to keep financial records consistent. Do you want to proceed?`);
     if (!confirmChange) return;
   }
-  
-  // No normalization – save exactly as entered
+
+  // Normalize phone (optional – keep as is or use original format)
+  // We'll keep the phone as entered by admin (no automatic conversion)
   db.ref('members/' + id).update({
     name,
     phone: phone,
     joinDate: join,
     photoData: photoData || ''
-  }).then(() => {
-    toast(name + ' updated!', '#10b981');
+  }).then(async () => {
+    // If phone changed, update all transactions and loans for this member
+    if (phoneChanged) {
+      const updates = {};
+      // Update transactions
+      transactions.forEach(tx => {
+        if (tx.memberPhone === originalMember.phone) {
+          updates[`transactions/${tx.id}/memberPhone`] = phone;
+          updates[`transactions/${tx.id}/memberName`] = name;
+        }
+      });
+      // Update loans
+      loans.forEach(loan => {
+        if (loan.memberPhone === originalMember.phone) {
+          updates[`loans/${loan.id}/memberPhone`] = phone;
+          updates[`loans/${loan.id}/memberName`] = name;
+        }
+      });
+      // Also update any other nodes that reference the phone (e.g., memberDebts, memberLoans are computed, not stored)
+      if (Object.keys(updates).length) {
+        await db.ref().update(updates);
+        // Refresh local data
+        const membersSnap = await db.ref('members').once('value');
+        members = membersSnap.val() ? Object.entries(membersSnap.val()).map(([id, m]) => ({ ...m, id, prepaid: m.prepaid || 0 })) : [];
+        const txSnap = await db.ref('transactions').once('value');
+        transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
+        const loansSnap = await db.ref('loans').once('value');
+        loans = loansSnap.val() ? Object.entries(loansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
+        computePots();
+        refreshUI();
+      }
+      toast(`${name} updated and all related records migrated to new phone!`, '#10b981');
+    } else {
+      toast(name + ' updated!', '#10b981');
+    }
     closeOv('ov-edit-member');
+  }).catch(err => {
+    console.error(err);
+    toast('Update failed', '#ef4444');
   });
 };
 window.deleteMember = function(id) {
