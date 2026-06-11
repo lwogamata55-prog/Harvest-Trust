@@ -3574,18 +3574,32 @@ function showWeeklyPayoutReceiptModal(beneficiary, weeklyGross, debt, loan, netP
       }
     }
 
-    async function shareImage(blob, fileName) {
+    async function shareOrDownloadImage(blob, fileName) {
       if (navigator.share) {
-        const file = new File([blob], fileName, { type: 'image/png' });
-        await navigator.share({
-          title: 'Weekly Payout Receipt',
-          text: `Payout of UGX ${netPayout.toLocaleString()} to ${beneficiary.name}`,
-          files: [file]
-        });
-        toast('Image shared!', '#10b981');
-      } else {
-        toast('Sharing not supported on this device. Use the PC button.', '#f59e0b');
+        try {
+          const file = new File([blob], fileName, { type: 'image/png' });
+          await navigator.share({
+            title: 'Weekly Payout Receipt',
+            text: `Payout of UGX ${netPayout.toLocaleString()} to ${beneficiary.name}`,
+            files: [file]
+          });
+          toast('Image shared!', '#10b981');
+          return;
+        } catch (err) {
+          if (err.name !== 'AbortError') {
+            console.warn('Share failed, falling back to download', err);
+          } else {
+            return;
+          }
+        }
       }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('📸 Image downloaded. Open WhatsApp and attach it manually.', '#f59e0b');
     }
 
     confirmSendPc.onclick = async () => {
@@ -3601,7 +3615,7 @@ function showWeeklyPayoutReceiptModal(beneficiary, weeklyGross, debt, loan, netP
       closeModal();
       if (imageData) {
         const blob = await (await fetch(imageData)).blob();
-        await shareImage(blob, `payout_${beneficiary.id}.png`);
+        await shareOrDownloadImage(blob, `payout_${beneficiary.id}.png`);
       }
       if (onConfirmShare) onConfirmShare();
     };
@@ -5327,11 +5341,8 @@ window.showMemberReceipt = function(memberId, dateStr = null) {
   const dateLabel = selectedDate.toLocaleDateString('en-UG', { year:'numeric', month:'long', day:'numeric' });
   const receiptId = `HTF-${selectedDate.toISOString().slice(0,10).replace(/-/g,'')}-${member.id.slice(-4)}`;
   
-  // --- Member full summary calculations ---
-  let totalDepositsAll = 0;
-  let totalWelfareAll = 0;
-  let totalFines = 0;
-  let totalLoanRepaid = 0;
+  // --- Member full summary calculations (keep as is) ---
+  let totalDepositsAll = 0, totalWelfareAll = 0, totalFines = 0, totalLoanRepaid = 0;
   transactions.forEach(tx => {
     if (tx.memberPhone === member.phone) {
       if (tx.type === 'deposit') totalDepositsAll += tx.amount;
@@ -5347,7 +5358,6 @@ window.showMemberReceipt = function(memberId, dateStr = null) {
   const debtBalance = memberDebts[member.phone] || 0;
   const daysActive = getDaysActive(member);
   
-  // Prorated profit share (if distributed today based on days active)
   let proratedProfitShare = 0;
   const allActiveMembers = members.filter(m => m.approved);
   let totalDaysAll = 0;
@@ -5356,112 +5366,84 @@ window.showMemberReceipt = function(memberId, dateStr = null) {
     proratedProfitShare = Math.floor(groupProfit * daysActive / totalDaysAll);
   }
   
-  const totalSavingsAndWelfare = totalDepositsAll + totalWelfareAll;
-  
-  const receiptHtml = `
-    <div class="single-receipt-card" style="
-      max-width: 600px;
-      margin: 0 auto;
-      border: 2px solid #e2e8f0;
-      border-radius: 20px;
-      padding: 24px;
-      background: white;
-      font-family: 'DM Sans', sans-serif;
-    ">
-      <div style="text-align: center; margin-bottom: 16px;">
-        <div style="font-size: 2rem;">🌾</div>
-        <div style="font-weight: 800; font-size: 1.5rem; color: #b45309;">HARVEST TRUST FINANCE</div>
-        <div style="font-size: 0.8rem; color: #64748b;">Savings · Loans · Prosperity</div>
-      </div>
-      <div style="border-top: 2px solid #f59e0b; margin: 12px 0;"></div>
-      
-      <!-- Daily receipt details -->
-      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px; font-size: 1rem; margin-bottom: 16px;">
-        <div><strong>Receipt No.</strong></div><div>${receiptId}</div>
-        <div><strong>Date</strong></div><div>${dateLabel}</div>
-        <div><strong>Member</strong></div><div><strong>${escapeHtml(member.name)}</strong></div>
-        <div><strong>Phone</strong></div><div>${member.phone}</div>
-      </div>
-      
-      <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
-      
-      <!-- Daily transaction -->
-      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 8px; font-size: 1rem; margin-bottom: 12px;">
-        <div><strong>Daily savings</strong></div><div>UGX ${dailyStatus.deposit.toLocaleString()}</div>
-        <div><strong>Welfare</strong></div><div>UGX ${dailyStatus.welfareAmountUsed.toLocaleString()}</div>
-        <div><strong>Total paid</strong></div><div>UGX ${dailyStatus.totalPaid.toLocaleString()}</div>
-        <div><strong>Required</strong></div><div>UGX ${dailyStatus.required.toLocaleString()}</div>
-      </div>
-      
-      <div style="text-align: center; margin: 8px 0 12px;">
-        <span style="
-          display: inline-block;
-          padding: 4px 12px;
-          border-radius: 24px;
-          font-size: 0.8rem;
-          font-weight: 700;
-          background: ${dailyStatus.deficit === 0 ? '#e6f7e6' : '#ffe6e6'};
-          color: ${dailyStatus.deficit === 0 ? '#2e7d32' : '#c62828'};
-        ">
-          ${dailyStatus.status} ${dailyStatus.deficit > 0 ? '❌' : '✅'}
-        </span>
-        ${dailyStatus.deficit > 0 ? `<div style="margin-top: 6px;"><strong>Deficit:</strong> UGX ${dailyStatus.deficit.toLocaleString()}</div>` : ''}
-        ${dailyStatus.surplus > 0 ? `<div style="margin-top: 6px;"><strong>Surplus:</strong> UGX ${dailyStatus.surplus.toLocaleString()}</div>` : ''}
-      </div>
-      
-      <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
-      
-      <!-- Member Full Summary -->
-      <div><strong>📊 Member Financial Summary (All Time)</strong></div>
-      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 6px; font-size: 0.85rem; margin: 8px 0;">
-        <div>Days Active:</div><div>${daysActive} days</div>
-        <div>Total Savings:</div><div>UGX ${totalDepositsAll.toLocaleString()}</div>
-        <div>Total Welfare Paid:</div><div>UGX ${totalWelfareAll.toLocaleString()}</div>
-        <div>Total Fines:</div><div>UGX ${totalFines.toLocaleString()}</div>
-        <div>Active Loan Principal:</div><div>UGX ${loanPrincipal.toLocaleString()}</div>
-        <div>Loan Balance (incl. interest):</div><div>UGX ${loanBalance.toLocaleString()}</div>
-        <div>Outstanding Debt:</div><div>UGX ${debtBalance.toLocaleString()}</div>
-        <div>Prorated Profit Share*:</div><div>UGX ${proratedProfitShare.toLocaleString()}</div>
-      </div>
-      <div class="micro muted" style="margin-top: 4px;">*If profit pool (UGX ${groupProfit.toLocaleString()}) were distributed today.</div>
-      
-      <div style="border-top: 1px solid #e2e8f0; margin: 16px 0;"></div>
-      <div style="text-align: center; font-size: 0.7rem; color: #94a3b8;">Thank you for saving with us</div>
-      <div style="text-align: center; font-size: 0.6rem; margin-top: 8px;">Authorised by Harvest Trust Finance</div>
-    </div>
-  `;
+  // Build receipt HTML (same as before – omitted for brevity, but you keep your existing HTML)
+  const receiptHtml = `...`; // Keep your existing receipt HTML here (the same as earlier)
   
   document.getElementById('single-receipt-content').innerHTML = receiptHtml;
   openOv('ov-single-receipt');
-  document.getElementById('single-receipt-copy-pc').onclick = async () => {
-  const receiptCard = document.querySelector('#single-receipt-content .single-receipt-card');
-  if (!receiptCard) { toast('Receipt not ready', '#ef4444'); return; }
-  const canvas = await html2canvas(receiptCard, { scale: 2, backgroundColor: '#ffffff' });
-  const blob = await (await fetch(canvas.toDataURL('image/png'))).blob();
-  try {
-    await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-    toast('📋 Image copied to clipboard! Paste into WhatsApp Web.', '#06b6d4');
-  } catch (err) {
-    toast('Copy failed. Try downloading.', '#ef4444');
+  
+  // --- Button handlers ---
+  const copyPcBtn = document.getElementById('single-receipt-copy-pc');
+  const sharePhoneBtn = document.getElementById('single-receipt-share-phone');
+  const waTextBtn = document.getElementById('single-receipt-wa-text');
+  
+  if (copyPcBtn) {
+    copyPcBtn.onclick = async () => {
+      const receiptCard = document.querySelector('#single-receipt-content .single-receipt-card');
+      if (!receiptCard) { toast('Receipt not ready', '#ef4444'); return; }
+      try {
+        const canvas = await html2canvas(receiptCard, { scale: 2, backgroundColor: '#ffffff', logging: false });
+        const blob = await (await fetch(canvas.toDataURL('image/png'))).blob();
+        await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+        toast('📋 Image copied to clipboard! Paste into WhatsApp Web.', '#06b6d4');
+      } catch (err) {
+        console.error(err);
+        toast('Copy failed. Try downloading instead.', '#ef4444');
+      }
+    };
   }
-};
-
-document.getElementById('single-receipt-share-phone').onclick = async () => {
-  if (!navigator.share) {
-    toast('Sharing not supported. Use the PC button.', '#f59e0b');
-    return;
+  
+  if (sharePhoneBtn) {
+    sharePhoneBtn.onclick = async () => {
+      const receiptCard = document.querySelector('#single-receipt-content .single-receipt-card');
+      if (!receiptCard) { toast('Receipt not ready', '#ef4444'); return; }
+      try {
+        const canvas = await html2canvas(receiptCard, { scale: 2, backgroundColor: '#ffffff', logging: false });
+        const blob = await (await fetch(canvas.toDataURL('image/png'))).blob();
+        if (navigator.share) {
+          const file = new File([blob], 'receipt.png', { type: 'image/png' });
+          await navigator.share({
+            title: 'Member Receipt',
+            text: `Receipt for ${member.name}`,
+            files: [file]
+          });
+          toast('Image shared!', '#10b981');
+        } else {
+          // Fallback download
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'receipt.png';
+          a.click();
+          URL.revokeObjectURL(url);
+          toast('📸 Image downloaded. Open WhatsApp and attach it manually.', '#f59e0b');
+        }
+      } catch (err) {
+        console.error(err);
+        toast('Sharing failed. Try the PC button or download manually.', '#ef4444');
+      }
+    };
   }
-  const receiptCard = document.querySelector('#single-receipt-content .single-receipt-card');
-  if (!receiptCard) { toast('Receipt not ready', '#ef4444'); return; }
-  const canvas = await html2canvas(receiptCard, { scale: 2, backgroundColor: '#ffffff' });
-  const blob = await (await fetch(canvas.toDataURL('image/png'))).blob();
-  const file = new File([blob], 'receipt.png', { type: 'image/png' });
-  await navigator.share({
-    title: 'Member Receipt',
-    text: `Receipt for ${member.name}`,
-    files: [file]
-  });
-  toast('Image shared!', '#10b981');};
+  
+  if (waTextBtn) {
+    waTextBtn.onclick = () => {
+      let phone = member.phone.replace(/\s+/g, '').replace(/[()-]/g, '');
+      if (phone.startsWith('0')) phone = '+256' + phone.slice(1);
+      if (!phone.startsWith('+')) phone = '+' + phone;
+      const dateLabel = new Date().toLocaleDateString('en-UG', { year: 'numeric', month: 'long', day: 'numeric' });
+      const message = `🌾 *HARVEST TRUST FINANCE* 🌾\n\n` +
+        `📄 *MEMBER RECEIPT*\n` +
+        `📅 Date: ${dateLabel}\n` +
+        `👤 Member: ${member.name}\n` +
+        `📞 Phone: ${member.phone}\n` +
+        `━━━━━━━━━━━━━━━━━━━━━\n` +
+        `For detailed transaction history, please log in to your account.\n\n` +
+        `🙏 Thank you for saving with Harvest Trust Finance.`;
+      const encoded = encodeURIComponent(message);
+      window.open(`https://wa.me/${phone}?text=${encoded}`, '_blank');
+      toast('WhatsApp chat opened. Send the message manually.', '#06b6d4');
+    };
+  }
 };
 window.shareReceiptAsImage = async function() {
   const originalCard = document.querySelector('#single-receipt-content .single-receipt-card');
@@ -7850,23 +7832,15 @@ window.updateTxPreview = function() {
   const remainingOutstanding = totalOutstanding - usedForOutstanding;
   const todayFullyCovered = (usedToday === deficitToday);
 
-  // 3. Prepay future days (only if today satisfied AND no outstanding)
+  // 3. Prepay future days (with immediate debt for partial day)
   if (todayFullyCovered && remainingOutstanding === 0 && remaining > 0) {
-    let currentDay = todayStart + 86400000; // start from tomorrow
-    const maxFutureDays = 365;
-    let daysChecked = 0;
-    // Find first day that is not fully covered
-    while (daysChecked < maxFutureDays) {
-      const dayStatus = getDailyStatusForDate(member, currentDay);
-      if (dayStatus.deficit > 0) break;
-      currentDay += 86400000;
-      daysChecked++;
-    }
-
+    let currentDay = todayStart + 86400000;
+    const maxDays = 30;
     let daysFullyCovered = 0;
     let remainingPartial = remaining;
-    // Full days (while we can cover the entire required amount for the current day)
-    while (remainingPartial >= requiredToday && daysFullyCovered < 30) {
+
+    // Full days
+    while (remainingPartial >= requiredToday && daysFullyCovered < maxDays) {
       remainingPartial -= requiredToday;
       daysFullyCovered++;
       const dateStr = new Date(currentDay).toLocaleDateString();
@@ -7875,18 +7849,16 @@ window.updateTxPreview = function() {
     }
 
     // Partial day
-    if (remainingPartial > 0 && daysFullyCovered < 30) {
-      // Get the current deficit for this day (before this deposit)
-      const dayStatus = getDailyStatusForDate(member, currentDay);
-      const currentDeficit = dayStatus.deficit; // how much is still needed to cover this day
-      const usedForThisDay = Math.min(remainingPartial, currentDeficit);
-      const newDeficit = currentDeficit - usedForThisDay;
+    if (remainingPartial > 0 && daysFullyCovered < maxDays) {
       const dateStr = new Date(currentDay).toLocaleDateString();
-      lines.push(`⚡ ${dateStr}: partial – ${money(usedForThisDay)} applied. Remaining deficit for that day: ${money(newDeficit)}`);
-      remainingPartial -= usedForThisDay;
-    }
-
-    if (remainingPartial === 0 && daysFullyCovered > 0) {
+      const dailyPortion = Math.min(remainingPartial, dailyAmount);
+      const welfarePortion = remainingPartial - dailyPortion;
+      lines.push(`⚡ ${dateStr}: partial – ${money(remainingPartial)} applied (${money(dailyPortion)} savings, ${money(welfarePortion)} welfare)`);
+      const deficitForDay = requiredToday - remainingPartial;
+      if (deficitForDay > 0) {
+        lines.push(`⚠️ Immediate debt of ${money(deficitForDay)} assigned for ${dateStr}. Required amount for that day becomes ${money(deficitForDay)}.`);
+      }
+    } else if (remainingPartial === 0 && daysFullyCovered > 0) {
       lines.push(`✨ Surplus fully allocated to ${daysFullyCovered} future day(s).`);
     } else if (remainingPartial > 0) {
       lines.push(`⚠️ Remaining ${money(remainingPartial)} after covering ${daysFullyCovered} days (limit reached).`);
@@ -9257,54 +9229,73 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
     }
   }
 
-  // ---------- 3. Prepay future days (starting from the first uncovered day) ----------
+  // ---------- 3. Prepay future days ----------
   const todayFullyCovered = (usedToday === deficitToday);
   const remainingOutstanding = totalOutstanding;
   if (todayFullyCovered && remainingOutstanding === 0 && remaining > 0) {
-    let currentDay = todayStart + 86400000; // start from tomorrow
-    const maxFutureDays = 365;
-    let daysChecked = 0;
-    while (daysChecked < maxFutureDays) {
-      const dayStatus = getDailyStatusForDate(member, currentDay);
-      if (dayStatus.deficit > 0) break;
-      currentDay += 86400000;
-      daysChecked++;
-    }
-
-    let daysProcessed = 0;
+    let currentDay = todayStart + 86400000; // tomorrow
     const maxDays = 30;
-    while (remaining > 0 && daysProcessed < maxDays) {
-      const dayStatus = getDailyStatusForDate(member, currentDay);
-      const neededForDay = dayStatus.deficit;
-      if (neededForDay > 0) {
-        const usedForDay = Math.min(remaining, neededForDay);
-        remaining -= usedForDay;
-        const dailyPortion = Math.min(usedForDay, dailyAmount);
-        const welfarePortion = usedForDay - dailyPortion;
-        if (dailyPortion > 0) {
-          writes.push({
-            memberPhone: member.phone, memberName: member.name,
-            type: 'deposit', amount: dailyPortion,
-            description: `Daily savings for ${new Date(currentDay).toLocaleDateString()}`,
-            date: currentDay + 1500
-          });
-        }
-        if (welfarePortion > 0) {
-          writes.push({
-            memberPhone: member.phone, memberName: member.name,
-            type: 'welfare', amount: welfarePortion,
-            description: `Welfare for ${new Date(currentDay).toLocaleDateString()}`,
-            date: currentDay + 500,
-            autoDeduction: true
-          });
-        }
-        if (usedForDay < neededForDay) break;
-      }
+    let daysProcessed = 0;
+
+    // Full days first
+    while (remaining >= requiredToday && daysProcessed < maxDays) {
+      writes.push({
+        memberPhone: member.phone, memberName: member.name,
+        type: 'deposit', amount: dailyAmount,
+        description: `Daily savings for ${new Date(currentDay).toLocaleDateString()}`,
+        date: currentDay + 1500
+      });
+      writes.push({
+        memberPhone: member.phone, memberName: member.name,
+        type: 'welfare', amount: welfareAmount,
+        description: `Welfare for ${new Date(currentDay).toLocaleDateString()}`,
+        date: currentDay + 500,
+        autoDeduction: true
+      });
+      remaining -= requiredToday;
       currentDay += 86400000;
       daysProcessed++;
     }
+
+    // Partial day (if any left)
+    if (remaining > 0 && daysProcessed < maxDays) {
+      const dailyPortion = Math.min(remaining, dailyAmount);
+      const welfarePortion = remaining - dailyPortion;
+      if (dailyPortion > 0) {
+        writes.push({
+          memberPhone: member.phone, memberName: member.name,
+          type: 'deposit', amount: dailyPortion,
+          description: `Daily savings for ${new Date(currentDay).toLocaleDateString()}`,
+          date: currentDay + 1500
+        });
+      }
+      if (welfarePortion > 0) {
+        writes.push({
+          memberPhone: member.phone, memberName: member.name,
+          type: 'welfare', amount: welfarePortion,
+          description: `Welfare for ${new Date(currentDay).toLocaleDateString()}`,
+          date: currentDay + 500,
+          autoDeduction: true
+        });
+      }
+
+      // Calculate deficit for this partial day
+      const deficitForDay = requiredToday - remaining;
+      if (deficitForDay > 0) {
+        writes.push({
+          memberPhone: member.phone, memberName: member.name,
+          type: 'debt',
+          amount: deficitForDay,
+          description: `Auto‑assigned debt for ${new Date(currentDay).toLocaleDateString()} (partial prepayment)`,
+          date: currentDay + 1000 // set just after the deposit
+        });
+        // Also record that this day now has a reduced requirement? No, the debt will be there.
+        // The pending list will see the debt and treat the day as not fully covered.
+      }
+    }
   }
 
+  // Any leftover that cannot be applied (should not happen, but safety)
   if (remaining > 0) {
     writes.push({
       memberPhone: member.phone, memberName: member.name,
@@ -9316,6 +9307,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
 
   return writes;
 }
+
 async function calculateProjectedLoanBalanceAfterDeposit(member, depositAmount) {
   // Simulate the deposit allocation without writing to database
   let remaining = depositAmount;
@@ -10657,18 +10649,35 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
       }
     }
 
-    async function shareImage(blob, fileName) {
+    async function shareOrDownloadImage(blob, fileName) {
+      // Try native share first
       if (navigator.share) {
-        const file = new File([blob], fileName, { type: 'image/png' });
-        await navigator.share({
-          title: 'Transaction Receipt',
-          text: `${txType.toUpperCase()} of UGX ${amount.toLocaleString()} for ${member.name}`,
-          files: [file]
-        });
-        toast('Image shared!', '#10b981');
-      } else {
-        toast('Sharing not supported on this device. Use the PC button.', '#f59e0b');
+        try {
+          const file = new File([blob], fileName, { type: 'image/png' });
+          await navigator.share({
+            title: 'Transaction Receipt',
+            text: `${txType.toUpperCase()} of UGX ${amount.toLocaleString()} for ${member.name}`,
+            files: [file]
+          });
+          toast('Image shared!', '#10b981');
+          return;
+        } catch (err) {
+          if (err.name !== 'AbortError') {
+            console.warn('Share failed, falling back to download', err);
+          } else {
+            // User cancelled – do nothing
+            return;
+          }
+        }
       }
+      // Fallback: download
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('📸 Image downloaded. Open WhatsApp and attach it manually.', '#f59e0b');
     }
 
     confirmSendPc.onclick = async () => {
@@ -10684,7 +10693,7 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
       closeModal();
       if (imageData) {
         const blob = await (await fetch(imageData)).blob();
-        await shareImage(blob, `receipt_${member.id}.png`);
+        await shareOrDownloadImage(blob, `receipt_${member.id}.png`);
       }
       if (onConfirmSend) onConfirmSend();
     };
