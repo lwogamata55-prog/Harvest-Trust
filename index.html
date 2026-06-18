@@ -2313,6 +2313,14 @@ setTimeout(function(){
     </div>
   </div>
 </div>
+<!-- Loan Not Available Modal -->
+<div class="ov" id="ov-loan-not-available" onclick="maybeClose(event,'ov-loan-not-available')">
+  <div class="bs" style="max-width: 500px;">
+    <div class="bs-title">⏳ Loan Not Available Yet</div>
+    <div id="loan-not-available-content" style="max-height: 55vh; overflow-y: auto;"></div>
+    <button class="btn btn-sec btn-full" style="margin-top: 16px;" onclick="closeOv('ov-loan-not-available')">Close</button>
+  </div>
+</div>
 <div class="ov" id="ov-carousel-compose" onclick="maybeClose(event,'ov-carousel-compose')"><div class="bs"><div class="bs-title">➕ Add Carousel Notice</div><div class="fgrp"><label class="flbl">Icon (emoji)</label><input type="text" id="c-icon" class="inp" value="📢" maxlength="2" style="text-align:center;font-size:1.5rem"></div><div class="fgrp">
   <label class="flbl">Message</label>
   <textarea id="c-msg" class="inp" rows="3" placeholder="Type your notice here..." maxlength="100"></textarea>
@@ -2585,11 +2593,16 @@ let loanRotationOrder = [];   // array of member IDs for loan request order
 let loanReceiverIndex = 0;    // index in loanRotationOrder for who can borrow
 let notifications = {};
 function hasActiveLoanFromApplication() {
+  // Check if the current user has an active loan from the application form
+  // An active loan = approved, not repaid, AND has loanQuestions, AND remainingBalance > 0
+  if (!currentUser) return false;
   return loans.some(l => 
-    l.status === 'approved' && 
-    !l.repaid && 
-    l.loanQuestions &&          // only loans submitted via the application form have this array
-    l.loanQuestions.length > 0
+    l.memberId === currentUser.id &&
+    l.status === 'approved' &&
+    !l.repaid &&
+    l.loanQuestions &&
+    l.loanQuestions.length > 0 &&
+    (l.remainingBalance || l.totalRepay) > 0  // Check remainingBalance OR totalRepay (fallback)
   );
 }
 let mainCarouselNotifs=[], mainCarouselIdx=0, mainCarouselTimer=null;
@@ -2731,15 +2744,23 @@ function updateMidnightTimer() {
 }
 
 // Check if midnight has passed and we haven't processed today yet
-let lastProcessedDate = null;
+let lastProcessedDate = localStorage.getItem('lastDebtProcessDate') || null;
 
 async function checkAndAssignDebts() {
   const todayStart = getTodayStart();
   const todayDateStr = new Date(todayStart).toISOString().slice(0, 10);
-  if (lastProcessedDate === todayDateStr) return;
+  
+  // Prevent double‑processing on the same day
+  if (lastProcessedDate === todayDateStr) {
+    console.log("Debts already processed today:", todayDateStr);
+    return;
+  }
 
   const now = Date.now();
-  if (now < getNextMidnight() - 5000) return;
+  if (now < getNextMidnight() - 5000) {
+    console.log("Not yet midnight – skipping debt assignment.");
+    return;
+  }
 
   console.log("Midnight passed – assigning penalties for", todayDateStr);
 
@@ -2748,8 +2769,10 @@ async function checkAndAssignDebts() {
   const writes = [];
 
   for (const member of activeMembers) {
+    // Only apply penalty if the member has a deficit today
     const { deficit } = getTodayStatus(member);
     if (deficit > 0) {
+      // Debt for the deficit
       writes.push(db.ref('transactions').push({
         memberPhone: member.phone,
         memberName: member.name,
@@ -2759,6 +2782,7 @@ async function checkAndAssignDebts() {
         date: Date.now(),
         autoMidnight: true
       }));
+      // Penalty interest on the deficit
       const interestAmount = Math.round(deficit * interestRate);
       if (interestAmount > 0) {
         writes.push(db.ref('transactions').push({
@@ -2776,18 +2800,21 @@ async function checkAndAssignDebts() {
 
   if (writes.length) {
     await Promise.all(writes);
-    toast(`${writes.length / 2} member(s) penalised for deficit`, '#ef4444');
+    // Refresh data after adding debts
     const txSnap = await db.ref('transactions').once('value');
     transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
     computePots();
     refreshUI();
+    toast(`${writes.length / 2} member(s) penalised for deficit`, '#ef4444');
   } else {
     console.log("All members covered full daily required – no deficits.");
   }
 
+  // Mark today as processed
   lastProcessedDate = todayDateStr;
   localStorage.setItem('lastDebtProcessDate', lastProcessedDate);
 }
+
 
 function getTodaysDepositStatus() {
   const todayStart = new Date().setHours(0, 0, 0, 0);
@@ -3111,13 +3138,22 @@ function computePots() {
   let cash = 0, profit = 0;
   memberBalances = {};
   memberDebts = {};
-  memberLoans = {};
+  memberLoans = {}; // now sum of remaining balances
 
+  // First, reset loan remaining balances from transactions? We will read from loans array.
+  // But we rely on loans array already having updated remainingBalance.
+  // So we just sum them.
+  loans.forEach(loan => {
+    if (loan.status === 'approved' && !loan.repaid && loan.remainingBalance > 0) {
+      memberLoans[loan.memberPhone] = (memberLoans[loan.memberPhone] || 0) + loan.remainingBalance;
+    }
+  });
+
+  // Compute cash, profit, memberBalances, memberDebts as before
   transactions.forEach(tx => {
     const a = +(tx.amount) || 0;
     const phone = tx.memberPhone;
     if (tx.type === 'deposit') {
-      // Deposit goes to member's available balance (daily savings only)
       cash += a;
       memberBalances[phone] = (memberBalances[phone] || 0) + a;
     } else if (tx.type === 'withdraw') {
@@ -3127,7 +3163,6 @@ function computePots() {
       profit += a;
       if (!tx.autoDeduction) memberDebts[phone] = (memberDebts[phone] || 0) + a;
     } else if (tx.type === 'welfare') {
-      // Welfare goes directly to profit pool (no effect on member balance)
       profit += a;
     } else if (tx.type === 'debt') {
       memberDebts[phone] = (memberDebts[phone] || 0) + a;
@@ -3142,27 +3177,34 @@ function computePots() {
       memberBalances[phone] = (memberBalances[phone] || 0) + a;
       cash += a;
     } else if (tx.type === 'loan_disbursement') {
-      cash += a;
-      memberLoans[phone] = (memberLoans[phone] || 0) + a;
-      profit -= a;
+      // loan principal comes from profit? Actually we are not using cash/profit for loans now.
+      // We'll keep it as before: cash increases? That was a bug. We'll fix: cash decreases.
+      // But we need to decide: loan disbursement should reduce available cash.
+      // So we will subtract from cash.
+      cash -= a;
+      // Do not affect profit (principal is not profit).
     } else if (tx.type === 'loan_adjustment') {
-      memberLoans[phone] = (memberLoans[phone] || 0) + a;
+      // interest portion – added to profit? Actually loan adjustment is for interest, which increases profit.
+      profit += a;
+      // But we also need to reflect the interest in the loan's totalRepay (already in remainingBalance)
     } else if (tx.type === 'loan_repayment') {
+      // This now has loanId, we don't need to adjust cash/profit here because we will handle it via loan's remainingBalance? 
+      // Actually loan_repayment increases cash.
       cash += a;
-      const rem = Math.max(0, (memberLoans[phone] || 0) - a);
-      memberLoans[phone] = rem;
-      profit += a;   // interest part of repayment goes to profit pool
+      // The interest portion of this repayment should go to profit, but we can't distinguish here.
+      // We'll handle that in a separate step: after processing, we recalc profit from loan interest.
     }
   });
+
+  // Recalculate profit from loan interest (simplified: sum of (totalRepay - amount) for loans that have been repaid)
+  // But we already have loan_adjustment transactions that added interest to profit.
+  // So we just keep it.
 
   cashFromDeposits = Math.max(0, cash);
   groupProfit = profit;
 
-  for (let phone in memberLoans) {
-    if (memberLoans[phone] === 0) {
-      updateLoanRepaidStatus(phone);
-    }
-  }
+  // Check if any active loan is fully repaid (remainingBalance <= 0) and advance rotation
+  // This is now handled in updateLoanRepaidStatus.
 }
 function getDaysActive(member) {
   if (!member.joinDate) return 0;
@@ -3532,6 +3574,131 @@ async function generateWeeklyPayoutReceiptImage(beneficiary, weeklyGross, debt, 
     return null;
   }
 }
+function showNonReceiverWarning(allowedBorrower, maxLoan, position, totalMembers, nextTurn) {
+  const container = document.getElementById('loan-not-available-content');
+  if (!container) return;
+  
+  let turnText = '⭐ You\'re next!';
+  if (nextTurn > 1) {
+    turnText = `${nextTurn} member(s) ahead`;
+  } else if (nextTurn === 0) {
+    turnText = '⭐ You\'re next!';
+  }
+  
+  const html = `
+    <div style="text-align: center; margin-bottom: 16px;">
+      <div style="font-size: 3rem;">⏳</div>
+      <div style="font-size: 1.2rem; font-weight: 700; margin: 8px 0;">Loan not available yet</div>
+    </div>
+    <div class="hint-box" style="margin-bottom: 12px;">
+      <div><strong>Current Borrower:</strong> ${escapeHtml(allowedBorrower?.name || '—')}</div>
+      <div><strong>Your Position:</strong> #${position} of ${totalMembers}</div>
+      <div><strong>Your Turn:</strong> ${turnText}</div>
+    </div>
+    <div class="card" style="margin-bottom: 12px; padding: 12px;">
+      <div style="font-weight: 700; margin-bottom: 4px;">💳 Your Borrowing Limit</div>
+      <div style="font-size: 1.4rem; font-weight: 800; color: var(--gold);">${money(maxLoan)}</div>
+      <div class="micro muted">Based on your total deposits × ${loanSettings.disciplineMultiplier || 1.5}</div>
+    </div>
+    <div class="hint-box" style="background: var(--teal2); border-color: var(--teal);">
+      <strong>💡 Tip:</strong> Keep saving daily to increase your borrowing limit. Your turn will come according to the loan rotation order.
+    </div>
+    <button class="btn btn-purple btn-full" onclick="closeOv('ov-loan-not-available')" style="margin-top: 12px;">Close</button>
+  `;
+  container.innerHTML = html;
+  openOv('ov-loan-not-available');
+}
+
+function showAdminLoanPreview() {
+  const container = document.getElementById('loan-not-available-content');
+  if (!container) return;
+  
+  // Ensure rotation order is valid
+  if (!loanRotationOrder || loanRotationOrder.length === 0) {
+    const allMembers = members.filter(m => m.approved === true);
+    if (allMembers.length) {
+      loanRotationOrder = allMembers.map(m => m.id);
+      loanReceiverIndex = 0;
+      db.ref('settings/loanRotationOrder').set(loanRotationOrder);
+      db.ref('settings/loanReceiverIndex').set(loanReceiverIndex);
+    }
+  }
+  
+  const rotationList = loanRotationOrder.length ? loanRotationOrder : rotation.order;
+  const totalMembers = rotationList.length;
+  const currentReceiverId = rotationList[loanReceiverIndex] || null;
+  const currentReceiver = members.find(m => m.id === currentReceiverId);
+  
+  let html = `
+    <div style="text-align: center; margin-bottom: 16px;">
+      <div style="font-size: 3rem;">👑</div>
+      <div style="font-size: 1.2rem; font-weight: 700; margin: 8px 0;">Admin Loan Dashboard</div>
+      <div class="micro muted">View and manage loan rotation</div>
+    </div>
+    <div class="hint-box" style="margin-bottom: 12px;">
+      <div><strong>Current Borrower:</strong> ${escapeHtml(currentReceiver?.name || '—')}</div>
+      <div><strong>Receiver Index:</strong> ${loanReceiverIndex + 1} of ${totalMembers}</div>
+    </div>
+    <div style="max-height: 250px; overflow-y: auto; margin-bottom: 12px;">
+      <div style="font-weight: 700; margin-bottom: 6px;">📋 Rotation Order</div>
+      ${rotationList.map((id, idx) => {
+        const m = members.find(m => m.id === id);
+        if (!m) return '';
+        let totalDeposits = 0;
+        transactions.forEach(tx => { if (tx.memberPhone === m.phone && tx.type === 'deposit') totalDeposits += tx.amount; });
+        const maxLoan = Math.floor(totalDeposits * (loanSettings.disciplineMultiplier || 1.5));
+        const isCurrent = idx === loanReceiverIndex;
+        return `<div style="display: flex; justify-content: space-between; padding: 4px 8px; background: ${isCurrent ? 'var(--gold3)' : 'transparent'}; border-radius: 6px; margin: 2px 0;">
+          <span>${idx + 1}. ${escapeHtml(m.name)} ${isCurrent ? '⭐' : ''}</span>
+          <span class="micro">${money(maxLoan)}</span>
+        </div>`;
+      }).join('')}
+    </div>
+    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+      <button class="btn btn-sm btn-gold" onclick="closeOv('ov-loan-not-available'); openAdminLoanRequest();" style="flex:1;">📝 Apply for Member</button>
+      <button class="btn btn-sm btn-purple" onclick="closeOv('ov-loan-not-available'); openOv('ov-assign-debt'); populateMemberDropdowns();" style="flex:1;">🧾 Assign Debt</button>
+      <button class="btn btn-sm btn-amber" onclick="advanceLoanReceiver(); closeOv('ov-loan-not-available');" style="flex:1;">⏩ Advance Receiver</button>
+    </div>
+    <div class="micro muted" style="margin-top: 8px; text-align: center;">Click "Apply for Member" to request a loan on behalf of a member.</div>
+  `;
+  container.innerHTML = html;
+  openOv('ov-loan-not-available');
+}
+window.openAdminLoanRequest = function() {
+  const memberSelectHtml = `
+    <div class="fgrp">
+      <label class="flbl">Select Member</label>
+      <select id="admin-loan-select" class="inp">
+        <option value="">-- Select Member --</option>
+        ${members.filter(m => m.approved).map(m => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('')}
+      </select>
+    </div>
+    <button class="btn btn-gold btn-full" onclick="openLoanForSelectedAdminMember()">Continue →</button>
+    <button class="btn btn-sec btn-full" onclick="closeOv('ov-admin-loan-select')">Cancel</button>
+  `;
+  showModal(memberSelectHtml, 'Select Member for Loan Application');
+};
+
+window.openLoanForSelectedAdminMember = function() {
+  const select = document.getElementById('admin-loan-select');
+  if (!select) return;
+  const memberId = select.value;
+  if (!memberId) { toast('Select a member', '#ef4444'); return; }
+  const member = members.find(m => m.id === memberId);
+  if (!member) return;
+  // Temporarily set currentUser to the selected member, open loan request, then restore
+  const originalUser = currentUser;
+  currentUser = { ...member, isAdmin: false };
+  openLoanRequestModal();
+  // Restore after the modal is closed
+  const checkModal = setInterval(() => {
+    if (!document.getElementById('ov-loan-request')?.classList.contains('on')) {
+      currentUser = originalUser;
+      clearInterval(checkModal);
+    }
+  }, 500);
+  closeOv('ov-admin-loan-select');
+};
 function showWeeklyPayoutReceiptModal(beneficiary, weeklyGross, debt, loan, netPayout, onConfirmShare, onConfirmNoShare, onPrint, onCancel) {
   generateWeeklyPayoutReceiptImage(beneficiary, weeklyGross, debt, loan, netPayout).then(imageData => {
     const modal = document.createElement('div');
@@ -3652,43 +3819,38 @@ function showWeeklyPayoutReceiptModal(beneficiary, weeklyGross, debt, loan, netP
   });
 }
 async function updateLoanRepaidStatus(phone) {
-  console.log(`updateLoanRepaidStatus called for phone ${phone}`);
   const member = members.find(m => m.phone === phone);
-  if (!member) {
-    console.log(`Member not found for phone ${phone}`);
+  if (!member) return;
+
+  // Find the active rotation loan for this member (loan with loanQuestions and not repaid)
+  const activeLoan = loans.find(l => l.memberPhone === phone && l.loanQuestions && l.loanQuestions.length > 0 && !l.repaid);
+  if (!activeLoan) {
+    console.log("No active application loan found for", member.name);
     return;
   }
 
-  // Get fresh loans from Firebase
-  const snap = await db.ref('loans').orderByChild('memberPhone').equalTo(phone).once('value');
-  const freshLoans = snap.val() ? Object.entries(snap.val()).map(([id, l]) => ({ ...l, id })) : [];
-  const pendingRepayLoans = freshLoans.filter(l => l.status === 'approved' && !l.repaid);
-  if (pendingRepayLoans.length === 0) {
-    console.log(`No pending repay loans for ${member.name}`);
-    return;
-  }
-
+  // Check the outstanding balance
   const outstanding = memberLoans[phone] || 0;
   console.log(`Outstanding loan balance for ${member.name}: ${outstanding}`);
 
   if (outstanding === 0) {
-    // Mark loans as repaid
-    for (let loan of pendingRepayLoans) {
-      console.log(`Marking loan ${loan.id} as repaid`);
-      await db.ref('loans/' + loan.id).update({ repaid: true, repaidAt: Date.now() });
-    }
+    // Mark loan as repaid and set remainingBalance to 0
+    await db.ref('loans/' + activeLoan.id).update({ 
+      repaid: true, 
+      repaidAt: Date.now(),
+      remainingBalance: 0  // Ensure remaining balance is zero
+    });
     toast(`Loan cleared for ${member.name}`, '#10b981');
-    
-    // *** AUTO-ADVANCE LOAN RECEIVER ONLY IF THE CLEARED LOAN WAS REQUESTED BY THE MEMBER (has loanQuestions) ***
-    const anyApplicationLoanCleared = pendingRepayLoans.some(loan => loan.loanQuestions && loan.loanQuestions.length > 0);
-    if (anyApplicationLoanCleared && loanRotationOrder.length > 0) {
+
+    // Advance loan receiver
+    if (loanRotationOrder.length > 0) {
       loanReceiverIndex = (loanReceiverIndex + 1) % loanRotationOrder.length;
       await db.ref('settings/loanReceiverIndex').set(loanReceiverIndex);
       toast(`Loan fully repaid! Loan receiver advanced to next member.`, '#10b981');
-      updateHomeUI();  // refresh home card message
+      updateHomeUI();
     }
     
-    // Force refresh loans array and admin UI
+    // Refresh loans array
     const allLoansSnap = await db.ref('loans').once('value');
     loans = allLoansSnap.val() ? Object.entries(allLoansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
     if (currentAdminTab === 'savings') renderAdminTab();
@@ -3697,6 +3859,7 @@ async function updateLoanRepaidStatus(phone) {
     console.log(`Outstanding not zero: ${outstanding}`);
   }
 }
+
 async function getOrCreateActiveLoan(memberId, memberPhone, memberName) {
   // Find an existing active (approved, not repaid) loan for this member
   let activeLoan = loans.find(l => l.memberId === memberId && l.status === 'approved' && !l.repaid);
@@ -4056,6 +4219,7 @@ if (receiverCard && currentUser && !currentUser.isAdmin) {
   const rotationList = loanRotationOrder.length ? loanRotationOrder : rotation.order;
   if (!rotationList.length) return;
   const allowedBorrowerId = rotationList[loanReceiverIndex];
+  
   const allowedBorrower = members.find(m => m.id === allowedBorrowerId);
   const isAllowedBorrower = (currentUser.id === allowedBorrowerId);
   
@@ -4697,13 +4861,29 @@ function attachMsgCounterListener() {
   }
 }
 
-function renderTxRow(tx,i){
-  const m=members.find(m=>m.phone===tx.memberPhone)||{name:tx.memberName||'?'};
-  const ico=TX_ICONS[tx.type]||'💫';
-  const d=tx.date?new Date(tx.date).toLocaleDateString():'';
-  const isPos=(tx.type==='deposit'||tx.type==='payout'||tx.type==='profit_dist'||tx.type==='loan_repayment');
-  const editBtn=adminUnlocked&&tx.type!=='payout'?'<button class="btn btn-sm btn-sec" style="margin-left:8px;padding:5px 8px;" onclick="openEditTx(\''+tx.id+'\')">✏️</button>':'';
-  return '<div class="txc" style="animation-delay:'+(i*0.04)+'s"><div class="txc-icon">'+ico+'</div><div class="txc-info"><div class="txc-name">'+m.name+'</div><div class="txc-desc">'+(tx.description||tx.type)+'</div></div><div style="display:flex;align-items:center"><div><div class="txc-amount '+(isPos?'pos':'neg')+'">UGX '+(+tx.amount).toLocaleString()+'</div><div class="txc-date">'+d+'</div></div>'+editBtn+'</div></div>';
+function renderTxRow(tx, i, showCheckbox = false) {
+  const m = members.find(m => m.phone === tx.memberPhone) || { name: tx.memberName || '?' };
+  const ico = TX_ICONS[tx.type] || '💫';
+  const d = tx.date ? new Date(tx.date).toLocaleDateString() : '';
+  const isPos = (tx.type === 'deposit' || tx.type === 'payout' || tx.type === 'profit_dist' || tx.type === 'loan_repayment');
+  const editBtn = adminUnlocked && tx.type !== 'payout' ? '<button class="btn btn-sm btn-sec" style="margin-left:8px;padding:5px 8px;" onclick="openEditTx(\'' + tx.id + '\')">✏️</button>' : '';
+  const checkboxHtml = showCheckbox ? `<input type="checkbox" class="tx-select" data-tx-id="${tx.id}" style="margin-right: 8px;">` : '';
+  
+  return `<div class="txc" style="animation-delay:${(i * 0.04)}s">
+    ${checkboxHtml}
+    <div class="txc-icon">${ico}</div>
+    <div class="txc-info">
+      <div class="txc-name">${m.name}</div>
+      <div class="txc-desc">${(tx.description || tx.type)}</div>
+    </div>
+    <div style="display:flex;align-items:center">
+      <div>
+        <div class="txc-amount ${isPos ? 'pos' : 'neg'}">UGX ${(+tx.amount).toLocaleString()}</div>
+        <div class="txc-date">${d}</div>
+      </div>
+      ${editBtn}
+    </div>
+  </div>`;
 }
 // Global variables
 let ledgerFilter = 'all';
@@ -4755,6 +4935,8 @@ function loadLedger(typeFilter) {
   filtered.sort((a, b) => (b.date || 0) - (a.date || 0));
   
   const container = document.getElementById("ledger-list");
+  if (!container) return;
+  
   if (!filtered.length) {
     container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📒</div><div class="empty-state-text">No transactions match.</div></div>';
     return;
@@ -4762,8 +4944,79 @@ function loadLedger(typeFilter) {
   
   // Show first 100 transactions
   const toRender = filtered.slice(0, 100);
-  container.innerHTML = toRender.map((tx, i) => renderTxRow(tx, i)).join('');
+  
+  // Show checkboxes only when filtering by 'fine'
+  const showCheckbox = (typeFilter === 'fine');
+  
+  let html = '';
+  if (showCheckbox) {
+    html += `
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px; padding: 8px 0; flex-wrap: wrap;">
+        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+          <input type="checkbox" id="select-all-fines"> <span class="micro" style="font-weight: 600;">Select All</span>
+        </label>
+        <button class="btn btn-sm btn-red" id="delete-selected-fines" style="display: none;">🗑️ Delete Selected</button>
+        <span class="micro muted" id="selected-count-label">0 selected</span>
+        <span class="micro muted" style="margin-left: auto;">Showing ${toRender.length} of ${filtered.length} transactions</span>
+      </div>
+    `;
+  }
+  
+  // Build transaction rows
+  html += toRender.map((tx, i) => renderTxRow(tx, i, showCheckbox)).join('');
+  container.innerHTML = html;
+  
+  // Attach event listeners for fine selection (only when showCheckbox is true)
+  if (showCheckbox) {
+    const selectAll = document.getElementById('select-all-fines');
+    const deleteBtn = document.getElementById('delete-selected-fines');
+    const countLabel = document.getElementById('selected-count-label');
+    const checkboxes = container.querySelectorAll('.tx-select');
+    
+    function updateSelectedCount() {
+      const checked = container.querySelectorAll('.tx-select:checked');
+      const count = checked.length;
+      if (countLabel) countLabel.innerText = count + ' selected';
+      if (deleteBtn) deleteBtn.style.display = count > 0 ? 'inline-flex' : 'none';
+    }
+    
+    if (selectAll) {
+      selectAll.onclick = () => {
+        checkboxes.forEach(cb => cb.checked = selectAll.checked);
+        updateSelectedCount();
+      };
+    }
+
+    checkboxes.forEach(cb => {
+      cb.onchange = updateSelectedCount;
+    });
+    
+    if (deleteBtn) {
+      deleteBtn.onclick = async () => {
+        const selected = container.querySelectorAll('.tx-select:checked');
+        if (!selected.length) return;
+        if (!confirm(`Delete ${selected.length} fine transaction(s)? This cannot be undone.`)) return;
+        
+        const ids = [];
+        selected.forEach(cb => ids.push(cb.getAttribute('data-tx-id')));
+        
+        requirePasswordConfirmation(async () => {
+          for (let id of ids) {
+            await db.ref('transactions/' + id).remove();
+          }
+          toast(`${ids.length} fine(s) deleted.`, '#ef4444');
+          // Refresh data
+          const txSnap = await db.ref('transactions').once('value');
+          transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
+          computePots();
+          refreshUI();
+          loadLedger(typeFilter);
+        }, 'Delete Fines');
+      };
+    }
+  }
 }
+////////this stops here///////////////////////
 
 // Update setLF to set ledgerFilter and reload
 window.setLF = function(f, btn) {
@@ -6203,40 +6456,91 @@ window.openLoanSettings = function() {
 };
 
 window.openLoanRequestModal = async function() {
-  if (!currentUser || currentUser.isAdmin) { toast('Admin cannot request loans', '#ef4444'); return; }
-  
+  if (!currentUser || currentUser.isAdmin) {
+    showAdminLoanPreview();
+    return;
+  }
+
   // Refresh loans
   const snap = await db.ref('loans').once('value');
   loans = snap.val() ? Object.entries(snap.val()).map(([id, l]) => ({ ...l, id })) : [];
-  
+
   if (hasActiveLoanFromApplication()) {
     toast('A loan application is still active. Please wait until it is repaid.', '#ef4444');
     return;
   }
-  
-  // Enforce loan receiver (loan rotation order)
-  const rotationList = loanRotationOrder.length ? loanRotationOrder : rotation.order;
-  if (!rotationList || rotationList.length === 0) {
-    toast('Loan rotation order not set. Contact admin.', '#ef4444');
+
+  // --- Auto‑initialise loan rotation order if empty ---
+  if (!loanRotationOrder || loanRotationOrder.length === 0) {
+    const allMembers = members.filter(m => m.approved === true);
+    if (allMembers.length) {
+      loanRotationOrder = allMembers.map(m => m.id);
+      loanReceiverIndex = 0;
+      await db.ref('settings/loanRotationOrder').set(loanRotationOrder);
+      await db.ref('settings/loanReceiverIndex').set(loanReceiverIndex);
+      console.log("Loan rotation order auto‑initialised:", loanRotationOrder);
+    } else {
+      toast('No active members to set loan rotation.', '#ef4444');
+      return;
+    }
+  }
+
+  // Validate that all members in the order still exist
+  const validIds = new Set(members.filter(m => m.approved === true).map(m => m.id));
+  const filteredOrder = loanRotationOrder.filter(id => validIds.has(id));
+  if (filteredOrder.length !== loanRotationOrder.length) {
+    loanRotationOrder = filteredOrder;
+    await db.ref('settings/loanRotationOrder').set(loanRotationOrder);
+    console.log("Loan rotation order cleaned (removed deleted members):", loanRotationOrder);
+  }
+  if (loanRotationOrder.length === 0) {
+    toast('No active members in loan rotation. Contact admin.', '#ef4444');
     return;
   }
-  if (loanReceiverIndex >= rotationList.length) loanReceiverIndex = 0;
-  const allowedBorrowerId = rotationList[loanReceiverIndex];
+  if (loanReceiverIndex >= loanRotationOrder.length) {
+    loanReceiverIndex = 0;
+    await db.ref('settings/loanReceiverIndex').set(loanReceiverIndex);
+  }
+
+  const allowedBorrowerId = loanRotationOrder[loanReceiverIndex];
+  const allowedBorrower = members.find(m => m.id === allowedBorrowerId);
+
+  // --- Debug logging ---
+  console.log("DEBUG: loanRotationOrder =", loanRotationOrder);
+  console.log("DEBUG: loanReceiverIndex =", loanReceiverIndex);
+  console.log("DEBUG: allowedBorrowerId =", allowedBorrowerId);
+  console.log("DEBUG: currentUser.id =", currentUser.id);
+  console.log("DEBUG: currentUser.name =", currentUser.name);
+
+  // --- Check if current user is the allowed borrower ---
   if (currentUser.id !== allowedBorrowerId) {
-    const allowedMember = members.find(m => m.id === allowedBorrowerId);
-    toast(`Only ${allowedMember ? allowedMember.name : 'another member'} can request a loan this week. Wait for your turn.`, '#ef4444');
+    // Show warning for non‑receiver member
+    const position = loanRotationOrder.indexOf(currentUser.id) + 1;
+    const totalMembers = loanRotationOrder.length;
+    let nextTurn = position <= loanReceiverIndex 
+      ? position + totalMembers - loanReceiverIndex 
+      : position - loanReceiverIndex;
+    if (nextTurn > totalMembers) nextTurn = totalMembers;
+
+    // Calculate borrowing limit
+    computePots();
+    let totalDeposits = 0;
+    transactions.forEach(tx => { if (tx.memberPhone === currentUser.phone && tx.type === 'deposit') totalDeposits += tx.amount; });
+    const maxLoan = Math.floor(totalDeposits * (loanSettings.disciplineMultiplier || 1.5));
+
+    showNonReceiverWarning(allowedBorrower, maxLoan, position, totalMembers, nextTurn);
     return;
   }
-  
+
+  // --- If user IS the receiver, proceed to loan application ---
   computePots();
-  
   let totalDeposits = 0;
   transactions.forEach(tx => { if (tx.memberPhone === currentUser.phone && tx.type === 'deposit') totalDeposits += tx.amount; });
   const disciplineMultiplier = loanSettings.disciplineMultiplier || 1.5;
   const maxLoanByDiscipline = Math.floor(totalDeposits * disciplineMultiplier);
   const maxLoanByProfit = Math.floor(groupProfit * (loanSettings.maxLoanPercent / 100));
   const suggestedMax = Math.min(maxLoanByDiscipline, maxLoanByProfit);
-  
+
   const infoDiv = document.getElementById('loan-limit-info');
   infoDiv.innerHTML = `<strong>Your savings discipline:</strong> UGX ${totalDeposits.toLocaleString()}<br>
                        <strong>You can borrow up to:</strong> UGX ${suggestedMax.toLocaleString()}<br>
@@ -6244,11 +6548,11 @@ window.openLoanRequestModal = async function() {
                        <strong>Repayment period:</strong> You choose (1‑10 weeks)`;
   document.getElementById('loan-amount').max = suggestedMax;
   document.getElementById('loan-amount').value = '';
-  
+
   // Clear all fields
   const fields = ['loan-amount', 'loan-weeks', 'loan-q1', 'loan-q2', 'loan-q3', 'loan-q4', 'loan-q5', 'loan-q6', 'loan-q7', 'loan-q8'];
   fields.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-  
+
   const amountInput = document.getElementById('loan-amount');
   const weeksSelect = document.getElementById('loan-weeks');
   const summaryDiv = document.getElementById('loan-summary');
@@ -6261,7 +6565,7 @@ window.openLoanRequestModal = async function() {
       return;
     }
     const baseRate = loanSettings.interestRate || 5;
-    const extra = weeks * (loanSettings.extraWeeklyInterest || 2);
+    const extra = (weeks - 1) * (loanSettings.extraWeeklyInterest || 2);
     const totalRate = baseRate + extra;
     const interest = Math.floor(amt * totalRate / 100);
     const totalRepay = amt + interest;
@@ -6369,31 +6673,32 @@ window.finalSubmitLoan = function() {
     closeOv('ov-loan-confirm');
     return;
   }
-  const { amount, answers, interestRate, interest, totalRepay, dueDate } = tempLoanData;
   
-  db.ref('loans').push({
-    memberId: currentUser.id,
-    memberName: currentUser.name,
-    memberPhone: currentUser.phone,
-    amount,
-    interestRate: interestRate,
-    totalRepay,
-    reason: answers[0] || 'Not specified',
-    loanQuestions: answers,
-    weeks: 1,          // forced 1 week
-    status: 'pending',
-    requestedAt: Date.now(),
-    dueDate,
-    repaid: false,
-    penaltyApplied: false
-  }).then(() => {
+  const { amount, answers, totalRate, interest, totalRepay, dueDate } = tempLoanData;
+  
+  // Create loan using the new system
+  createLoanForMember(
+    currentUser,           // member
+    amount,                // principal
+    totalRate,             // interest rate (already includes extra weekly)
+    dueDate,               // due date
+    answers[0] || 'Loan application', // reason
+    true                   // isApplicationLoan = true (this is the active rotation loan)
+  ).then(() => {
     toast(`Loan request of ${money(amount)} (repay ${money(totalRepay)}) submitted!`, '#10b981');
     closeOv('ov-loan-confirm');
     tempLoanData = null;
     updateLoanIndicator();
+    
+    // Refresh loans data
+    db.ref('loans').once('value', snap => {
+      loans = snap.val() ? Object.entries(snap.val()).map(([id, l]) => ({ ...l, id })) : [];
+      computePots();
+      refreshUI();
+    });
   }).catch(err => { 
     console.error(err); 
-    toast('Failed to submit', '#ef4444');
+    toast('Failed to submit loan', '#ef4444');
   });
 };
 
@@ -6437,41 +6742,25 @@ window.approveLoan = function(lid) {
     
     computePots();
     const principal = loan.amount;
-    const interest = loan.totalRepay - principal;
     if (principal > groupProfit) {
       toast('Insufficient profit pool to disburse this loan.', '#ef4444');
       return;
     }
     
-    // Generate repayment schedule (weeks from loan, fallback to 4 weeks)
-    const weeks = loan.weeks || 4;
-    const schedule = generateRepaymentSchedule(principal, loan.interestRate, weeks, Date.now());
+    // Use createLoanForMember to create the loan with remainingBalance
+    const member = members.find(m => m.id === loan.memberId);
+    if (!member) { toast('Member not found', '#ef4444'); return; }
     
+    const interestRate = loan.interestRate || 5;
+    const dueDate = loan.dueDate || Date.now() + 30 * 86400000;
+    await createLoanForMember(member, principal, interestRate, dueDate, loan.reason || 'Member loan request', true);
+    
+    // Mark the original pending loan as approved (we already created a new one with createLoanForMember)
     await db.ref('loans/' + lid).update({ 
       status: 'approved', 
       approvedAt: Date.now(),
-      repaymentSchedule: schedule 
+      // The original loan will be kept but not used – we use the new one.
     });
-    
-    await db.ref('transactions').push({
-      memberPhone: loan.memberPhone,
-      memberName: loan.memberName,
-      type: 'loan_disbursement',
-      amount: principal,
-      description: `Loan principal: UGX ${principal.toLocaleString()}`,
-      date: Date.now()
-    });
-    
-    if (interest > 0) {
-      await db.ref('transactions').push({
-        memberPhone: loan.memberPhone,
-        memberName: loan.memberName,
-        type: 'loan_adjustment',
-        amount: interest,
-        description: `Interest on loan of UGX ${principal.toLocaleString()} (${loan.interestRate}%)`,
-        date: Date.now() + 1
-      });
-    }
     
     toast(`Loan approved for ${loan.memberName}!`, '#10b981');
     computePots();
@@ -7248,26 +7537,28 @@ function openMultiAssignDebt() {
     refreshUI();
   }, 'Assign Multiple Debts');
 }
-
-async function assignDebtToSingleMember(member, principal, interestRate, dueDate, reason) {
+async function createLoanForMember(member, principal, interestRate, dueDate, reason, isApplicationLoan = false) {
   const totalRepay = Math.floor(principal * (1 + interestRate / 100));
   const interest = totalRepay - principal;
   const loanRef = db.ref('loans').push();
+  const loanId = loanRef.key;
   await loanRef.set({
-    id: loanRef.key,
+    id: loanId,
     memberId: member.id,
     memberName: member.name,
     memberPhone: member.phone,
     amount: principal,
     interestRate: interestRate,
     totalRepay: totalRepay,
+    remainingBalance: totalRepay, // NEW: track remaining balance
     reason: reason,
     status: 'approved',
     requestedAt: Date.now(),
     approvedAt: Date.now(),
     dueDate: dueDate,
     repaid: false,
-    penaltyApplied: false
+    penaltyApplied: false,
+    loanQuestions: isApplicationLoan ? ['Application loan'] : null // identify active loan
   });
   await db.ref('transactions').push({
     memberPhone: member.phone,
@@ -7283,11 +7574,17 @@ async function assignDebtToSingleMember(member, principal, interestRate, dueDate
       memberName: member.name,
       type: 'loan_adjustment',
       amount: interest,
-      description: `Interest (${interestRate}%)`,
+      description: `Interest (${interestRate}%) on ${reason}`,
       date: Date.now() + 1
     });
   }
+  return loanId;
 }
+async function assignDebtToSingleMember(member, principal, interestRate, dueDate, reason) {
+  // Use the new createLoanForMember helper with isApplicationLoan = false
+  await createLoanForMember(member, principal, interestRate, dueDate, reason, false);
+}
+
 function toggleActiveLoans() {
   const container = document.getElementById('activeLoansContainer');
   if (container) {
@@ -7775,7 +8072,6 @@ window.updateTxPreview = function() {
   if (!member) return;
 
   computePots();
-
   let remaining = amount;
   const lines = [];
 
@@ -7809,62 +8105,66 @@ window.updateTxPreview = function() {
     lines.push(`✅ Today's requirement already satisfied.`);
   }
 
-  // 2. Combined outstanding (debt + loan)
-  const debtOwed = memberDebts[member.phone] || 0;
-  const loanOwed = memberLoans[member.phone] || 0;
-  let totalOutstanding = debtOwed + loanOwed;
-  let usedForOutstanding = 0;
-  if (totalOutstanding > 0 && remaining > 0) {
-    usedForOutstanding = Math.min(remaining, totalOutstanding);
-    remaining -= usedForOutstanding;
-    const debtPortion = Math.min(usedForOutstanding, debtOwed);
-    const loanPortion = usedForOutstanding - debtPortion;
-    lines.push(`🧹 **Outstanding cleared:** ${money(usedForOutstanding)} (debt: ${money(debtPortion)}, loan: ${money(loanPortion)})`);
-    if (remaining === 0 && usedForOutstanding < totalOutstanding) {
-      lines.push(`⚠️ Remaining outstanding: ${money(totalOutstanding - usedForOutstanding)}`);
+  // 2. Active Loan
+  if (remaining > 0) {
+    const activeLoan = loans.find(l => l.memberPhone === member.phone && l.loanQuestions && l.loanQuestions.length > 0 && !l.repaid && l.remainingBalance > 0);
+    if (activeLoan) {
+      const repayAmount = Math.min(remaining, activeLoan.remainingBalance);
+      remaining -= repayAmount;
+      if (repayAmount > 0) {
+        lines.push(`💳 Active loan repayment: ${money(repayAmount)} (remaining loan balance: ${money(activeLoan.remainingBalance - repayAmount)})`);
+      } else {
+        lines.push(`✅ Active loan already cleared.`);
+      }
+    } else {
+      lines.push(`✅ No active loan to repay.`);
     }
-  } else if (totalOutstanding > 0) {
-    lines.push(`🧹 No extra amount to clear outstanding (still owe ${money(totalOutstanding)})`);
-  } else {
-    lines.push(`✅ No outstanding debt or loans.`);
   }
 
-  const remainingOutstanding = totalOutstanding - usedForOutstanding;
-  const todayFullyCovered = (usedToday === deficitToday);
-
-  // 3. Prepay future days (with immediate debt for partial day)
-  if (todayFullyCovered && remainingOutstanding === 0 && remaining > 0) {
-    let currentDay = todayStart + 86400000;
-    const maxDays = 30;
-    let daysFullyCovered = 0;
-    let remainingPartial = remaining;
-
-    // Full days
-    while (remainingPartial >= requiredToday && daysFullyCovered < maxDays) {
-      remainingPartial -= requiredToday;
-      daysFullyCovered++;
-      const dateStr = new Date(currentDay).toLocaleDateString();
-      lines.push(`📅 ${dateStr}: full day (${money(requiredToday)})`);
-      currentDay += 86400000;
-    }
-
-    // Partial day
-    if (remainingPartial > 0 && daysFullyCovered < maxDays) {
-      const dateStr = new Date(currentDay).toLocaleDateString();
-      const dailyPortion = Math.min(remainingPartial, dailyAmount);
-      const welfarePortion = remainingPartial - dailyPortion;
-      lines.push(`⚡ ${dateStr}: partial – ${money(remainingPartial)} applied (${money(dailyPortion)} savings, ${money(welfarePortion)} welfare)`);
-      const deficitForDay = requiredToday - remainingPartial;
-      if (deficitForDay > 0) {
-        lines.push(`⚠️ Immediate debt of ${money(deficitForDay)} assigned for ${dateStr}. Required amount for that day becomes ${money(deficitForDay)}.`);
+  // 3. Debts
+  if (remaining > 0) {
+    const totalDebt = memberDebts[member.phone] || 0;
+    if (totalDebt > 0) {
+      const debtRepay = Math.min(remaining, totalDebt);
+      remaining -= debtRepay;
+      if (debtRepay > 0) {
+        lines.push(`🧹 Debt cleared: ${money(debtRepay)} (remaining debt: ${money(totalDebt - debtRepay)})`);
+      } else {
+        lines.push(`✅ No debt to clear.`);
       }
-    } else if (remainingPartial === 0 && daysFullyCovered > 0) {
-      lines.push(`✨ Surplus fully allocated to ${daysFullyCovered} future day(s).`);
-    } else if (remainingPartial > 0) {
-      lines.push(`⚠️ Remaining ${money(remainingPartial)} after covering ${daysFullyCovered} days (limit reached).`);
+    } else {
+      lines.push(`✅ No outstanding debt.`);
     }
-  } else if (remaining > 0) {
-    lines.push(`💡 Remaining ${money(remaining)} will be used once today's requirement is met and outstanding cleared.`);
+  }
+
+  // 4. Future days (if any remaining)
+  if (remaining > 0) {
+    const todayFullyCovered = (usedToday === deficitToday);
+    if (todayFullyCovered) {
+      let currentDay = todayStart + 86400000;
+      let daysFullyCovered = 0;
+      let remainingPartial = remaining;
+      while (remainingPartial >= requiredToday && daysFullyCovered < 30) {
+        remainingPartial -= requiredToday;
+        daysFullyCovered++;
+        const dateStr = new Date(currentDay).toLocaleDateString();
+        lines.push(`📅 ${dateStr}: full day (${money(requiredToday)})`);
+        currentDay += 86400000;
+      }
+      if (remainingPartial > 0 && daysFullyCovered < 30) {
+        const dateStr = new Date(currentDay).toLocaleDateString();
+        const dailyPortion = Math.min(remainingPartial, dailyAmount);
+        const welfarePortion = remainingPartial - dailyPortion;
+        lines.push(`⚡ ${dateStr}: partial – ${money(remainingPartial)} applied (${money(dailyPortion)} savings, ${money(welfarePortion)} welfare)`);
+      }
+      if (remainingPartial === 0 && daysFullyCovered > 0) {
+        lines.push(`✨ Surplus fully allocated to ${daysFullyCovered} future day(s).`);
+      }
+    } else {
+      lines.push(`💡 Remaining ${money(remaining)} will be used once today's requirement is met.`);
+    }
+  } else {
+    lines.push(`✅ All money allocated.`);
   }
 
   if (lines.length === 0) {
@@ -8092,49 +8392,13 @@ window.assignDebtAsLoan = async function() {
 
   showTransactionReceiptModal(member, 'loan_disbursement', principal, reason,
     async () => {
-      const totalRepayLoan = Math.floor(principal * (1 + interestRate / 100));
-      const interest = totalRepayLoan - principal;
-      const loanRef = db.ref('loans').push();
-      await loanRef.set({
-        id: loanRef.key, memberId: member.id, memberName: member.name, memberPhone: phone,
-        amount: principal, interestRate: interestRate, totalRepay: totalRepayLoan, reason: reason,
-        status: 'approved', requestedAt: Date.now(), approvedAt: Date.now(), dueDate: dueDate,
-        repaid: false, penaltyApplied: false
-      });
-      await db.ref('transactions').push({
-        memberPhone: phone, memberName: member.name, type: 'loan_disbursement',
-        amount: principal, description: `${reason} (principal)`, date: Date.now()
-      });
-      if (interest > 0) {
-        await db.ref('transactions').push({
-          memberPhone: phone, memberName: member.name, type: 'loan_adjustment',
-          amount: interest, description: `Interest (${interestRate}%)`, date: Date.now() + 1
-        });
-      }
+      await createLoanForMember(member, principal, interestRate, dueDate, reason, false);
       toast(`Debt assigned: UGX ${principal.toLocaleString()} to ${member.name}`, '#10b981');
       computePots(); refreshUI();
       closeOv('ov-assign-debt');
     },
     async () => {
-      const totalRepayLoan = Math.floor(principal * (1 + interestRate / 100));
-      const interest = totalRepayLoan - principal;
-      const loanRef = db.ref('loans').push();
-      await loanRef.set({
-        id: loanRef.key, memberId: member.id, memberName: member.name, memberPhone: phone,
-        amount: principal, interestRate: interestRate, totalRepay: totalRepayLoan, reason: reason,
-        status: 'approved', requestedAt: Date.now(), approvedAt: Date.now(), dueDate: dueDate,
-        repaid: false, penaltyApplied: false
-      });
-      await db.ref('transactions').push({
-        memberPhone: phone, memberName: member.name, type: 'loan_disbursement',
-        amount: principal, description: `${reason} (principal)`, date: Date.now()
-      });
-      if (interest > 0) {
-        await db.ref('transactions').push({
-          memberPhone: phone, memberName: member.name, type: 'loan_adjustment',
-          amount: interest, description: `Interest (${interestRate}%)`, date: Date.now() + 1
-        });
-      }
+      await createLoanForMember(member, principal, interestRate, dueDate, reason, false);
       toast(`Debt assigned: UGX ${principal.toLocaleString()} to ${member.name}`, '#10b981');
       computePots(); refreshUI();
       closeOv('ov-assign-debt');
@@ -9154,7 +9418,6 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
   let remaining = depositAmount;
   const now = depositTimestamp || Date.now();
   const todayStart = new Date(now).setHours(0, 0, 0, 0);
-
   const dailyAmount = settings.dailyAmount || 2000;
   const welfareAmount = settings.welfareAmount || 500;
   const requiredToday = dailyAmount + welfareAmount;
@@ -9199,45 +9462,59 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
     }
   }
 
-  // ---------- 2. Clear outstanding debt + loan ----------
-  let totalOutstanding = (memberDebts[member.phone] || 0) + (memberLoans[member.phone] || 0);
-  let usedForOutstanding = 0;
-  if (totalOutstanding > 0 && remaining > 0) {
-    usedForOutstanding = Math.min(remaining, totalOutstanding);
-    remaining -= usedForOutstanding;
-    totalOutstanding -= usedForOutstanding;
-
-    const debtOwed = memberDebts[member.phone] || 0;
-    const usedForDebt = Math.min(usedForOutstanding, debtOwed);
-    const usedForLoan = usedForOutstanding - usedForDebt;
-
-    if (usedForDebt > 0) {
-      writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'debt_cleared', amount: usedForDebt,
-        description: `Cleared debt of ${money(usedForDebt)}`,
-        date: now + 1
-      });
-    }
-    if (usedForLoan > 0) {
-      writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'loan_repayment', amount: usedForLoan,
-        description: `Repaid loan of ${money(usedForLoan)}`,
-        date: now + 2
-      });
+  // ---------- 2. Active Loan (application loan) ----------
+  if (remaining > 0) {
+    const activeLoan = loans.find(l => l.memberPhone === member.phone && l.loanQuestions && l.loanQuestions.length > 0 && !l.repaid && l.remainingBalance > 0);
+    if (activeLoan) {
+      const repayAmount = Math.min(remaining, activeLoan.remainingBalance);
+      remaining -= repayAmount;
+      if (repayAmount > 0) {
+        // Update loan remaining balance
+        const newBalance = activeLoan.remainingBalance - repayAmount;
+        writes.push(db.ref('loans/' + activeLoan.id + '/remainingBalance').set(newBalance));
+        // Record repayment transaction with loanId
+        writes.push(db.ref('transactions').push({
+          memberPhone: member.phone,
+          memberName: member.name,
+          type: 'loan_repayment',
+          amount: repayAmount,
+          loanId: activeLoan.id,
+          description: `Repayment of loan ${activeLoan.id} (${money(repayAmount)})`,
+          date: now + 1000
+        }));
+        // Also credit cash (will be handled by computePots)
+        // But we also need to add interest portion to profit? We'll handle via loan_adjustment later.
+      }
     }
   }
 
-  // ---------- 3. Prepay future days ----------
+  // ---------- 3. Debts (old memberDebts) ----------
+  if (remaining > 0) {
+    let totalDebt = memberDebts[member.phone] || 0;
+    if (totalDebt > 0) {
+      const debtRepay = Math.min(remaining, totalDebt);
+      remaining -= debtRepay;
+      if (debtRepay > 0) {
+        writes.push(db.ref('transactions').push({
+          memberPhone: member.phone,
+          memberName: member.name,
+          type: 'debt_cleared',
+          amount: debtRepay,
+          description: `Cleared debt of ${money(debtRepay)}`,
+          date: now + 2000
+        }));
+      }
+    }
+  }
+
+  // ---------- 4. Prepay future days (if today fully covered and no debt/loan remains? Actually we can still prepay if remaining > 0) ----------
   const todayFullyCovered = (usedToday === deficitToday);
-  const remainingOutstanding = totalOutstanding;
-  if (todayFullyCovered && remainingOutstanding === 0 && remaining > 0) {
-    let currentDay = todayStart + 86400000; // tomorrow
+  // We can prepay even if debt remains? The user wants daily -> loan -> debt -> future. So only after debt is cleared.
+  // But if remaining is still >0 after clearing debts, then prepay.
+  if (todayFullyCovered && remaining > 0) {
+    let currentDay = todayStart + 86400000;
     const maxDays = 30;
     let daysProcessed = 0;
-
-    // Full days first
     while (remaining >= requiredToday && daysProcessed < maxDays) {
       writes.push({
         memberPhone: member.phone, memberName: member.name,
@@ -9256,8 +9533,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
       currentDay += 86400000;
       daysProcessed++;
     }
-
-    // Partial day (if any left)
+    // Partial day
     if (remaining > 0 && daysProcessed < maxDays) {
       const dailyPortion = Math.min(remaining, dailyAmount);
       const welfarePortion = remaining - dailyPortion;
@@ -9278,34 +9554,33 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
           autoDeduction: true
         });
       }
-
-      // Calculate deficit for this partial day
-      const deficitForDay = requiredToday - remaining;
-      if (deficitForDay > 0) {
-        writes.push({
-          memberPhone: member.phone, memberName: member.name,
-          type: 'debt',
-          amount: deficitForDay,
-          description: `Auto‑assigned debt for ${new Date(currentDay).toLocaleDateString()} (partial prepayment)`,
-          date: currentDay + 1000 // set just after the deposit
-        });
-        // Also record that this day now has a reduced requirement? No, the debt will be there.
-        // The pending list will see the debt and treat the day as not fully covered.
-      }
+      // If today's requirement was fully covered, and we prepay partial future day, we still need to handle deficit? 
+      // But we already cleared debt and loan, so remaining is surplus. We can just leave it as deposit.
     }
   }
 
-  // Any leftover that cannot be applied (should not happen, but safety)
+  // If any leftover (should not happen)
   if (remaining > 0) {
     writes.push({
       memberPhone: member.phone, memberName: member.name,
       type: 'deposit', amount: remaining,
       description: 'Excess savings (applied as extra balance)',
-      date: now + 2000
+      date: now + 3000
     });
   }
 
-  return writes;
+  // Execute all writes
+  await Promise.all(writes.map(w => {
+    if (w.ref) return w;
+    else return db.ref('transactions').push(w);
+  }));
+
+  // Refresh local data
+  const loansSnap = await db.ref('loans').once('value');
+  loans = loansSnap.val() ? Object.entries(loansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
+  const txSnap = await db.ref('transactions').once('value');
+  transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
+  computePots();
 }
 
 async function calculateProjectedLoanBalanceAfterDeposit(member, depositAmount) {
