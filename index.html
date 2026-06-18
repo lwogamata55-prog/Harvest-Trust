@@ -2661,12 +2661,17 @@ function updateAnniversaryCountdown() {
 
 // Get the start of today (local midnight)
 function getTodayStart() {
-  const d = new Date();
+  const now = getServerNow();
+  const d = new Date(now);
   d.setHours(0, 0, 0, 0);
   return d.getTime();
 }
 function getTodayStatus(member) {
-  const todayStart = new Date().setHours(0, 0, 0, 0);
+  // Use server time for today
+  const todayStart = new Date(getServerNow());
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = todayStart.getTime() + 86400000 - 1;
+  
   const dailyAmount = settings.dailyAmount || 2000;
   const welfareAmount = settings.welfareAmount || 500;
   const requiredPerDay = dailyAmount + welfareAmount;
@@ -2674,7 +2679,7 @@ function getTodayStatus(member) {
   let paidDaily = 0;
   let welfarePaid = false;
   transactions.forEach(tx => {
-    if (tx.memberPhone === member.phone && tx.date >= todayStart && tx.date < todayStart + 86400000) {
+    if (tx.memberPhone === member.phone && tx.date >= todayStart && tx.date <= todayEnd) {
       if (tx.type === 'deposit') paidDaily += tx.amount;
       if (tx.type === 'welfare') welfarePaid = true;
     }
@@ -2691,17 +2696,14 @@ function getTodayStatus(member) {
   let prepaidUsed = Math.min(prepaid, Math.max(0, totalRequired - paidDaily));
   let newPrepaid = Math.max(0, surplus);
   
-  // If prepaid was used, update the member's prepaid in Firebase (asynchronously, but we'll let the caller do that)
-  // We'll return values and let the calling function update the prepaid if it changes.
-  
   return { deficit, surplus, paidDaily, welfarePaid, requiredPerDay, prepaidUsed, newPrepaid, totalAvailable, totalRequired };
 }
 
 // Get next midnight (today's midnight if not passed, else tomorrow's)
 function getNextMidnight() {
-  const now = new Date();
+  const now = getServerNow();
   const midnight = new Date(now);
-  midnight.setHours(24, 0, 0, 0); // next midnight
+  midnight.setHours(24, 0, 0, 0);
   return midnight.getTime();
 }
 function getDailyStatusForDate(member, dateTimestamp) {
@@ -2729,7 +2731,7 @@ function getDailyStatusForDate(member, dateTimestamp) {
 function updateMidnightTimer() {
   const timerEl = document.getElementById('midnight-timer');
   if (!timerEl) return;
-  const now = Date.now();
+  const now = getServerNow();
   const next = getNextMidnight();
   const diff = next - now;
   if (diff <= 0) {
@@ -2749,13 +2751,12 @@ async function checkAndAssignDebts() {
   const todayStart = getTodayStart();
   const todayDateStr = new Date(todayStart).toISOString().slice(0, 10);
   
-  // Prevent double‑processing on the same day
   if (lastProcessedDate === todayDateStr) {
     console.log("Debts already processed today:", todayDateStr);
     return;
   }
 
-  const now = Date.now();
+  const now = getServerNow();
   if (now < getNextMidnight() - 5000) {
     console.log("Not yet midnight – skipping debt assignment.");
     return;
@@ -2768,20 +2769,17 @@ async function checkAndAssignDebts() {
   const writes = [];
 
   for (const member of activeMembers) {
-    // Only apply penalty if the member has a deficit today
     const { deficit } = getTodayStatus(member);
     if (deficit > 0) {
-      // Debt for the deficit
       writes.push(db.ref('transactions').push({
         memberPhone: member.phone,
         memberName: member.name,
         type: 'debt',
         amount: deficit,
         description: `Auto penalty (deficit) for ${todayDateStr} – missing ${money(deficit)} of daily required`,
-        date: Date.now(),
+        date: getServerNow(),
         autoMidnight: true
       }));
-      // Penalty interest on the deficit
       const interestAmount = Math.round(deficit * interestRate);
       if (interestAmount > 0) {
         writes.push(db.ref('transactions').push({
@@ -2790,7 +2788,7 @@ async function checkAndAssignDebts() {
           type: 'fine',
           amount: interestAmount,
           description: `Auto penalty interest (${settings.penaltyInterestRate}%) on deficit for ${todayDateStr}`,
-          date: Date.now() + 1,
+          date: getServerNow() + 1,
           autoMidnight: true
         }));
       }
@@ -2799,7 +2797,6 @@ async function checkAndAssignDebts() {
 
   if (writes.length) {
     await Promise.all(writes);
-    // Refresh data after adding debts
     const txSnap = await db.ref('transactions').once('value');
     transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
     computePots();
@@ -2809,20 +2806,19 @@ async function checkAndAssignDebts() {
     console.log("All members covered full daily required – no deficits.");
   }
 
-  // Mark today as processed
   lastProcessedDate = todayDateStr;
   localStorage.setItem('lastDebtProcessDate', lastProcessedDate);
 }
 
-
 function getTodaysDepositStatus() {
-  const todayStart = new Date().setHours(0, 0, 0, 0);
-  const todayEnd = todayStart + 86400000 - 1;
+  // Use server time for today
+  const todayStart = new Date(getServerNow());
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = todayStart.getTime() + 86400000 - 1;
+  
   const hasActionToday = new Set();
-
   transactions.forEach(tx => {
     if (tx.date >= todayStart && tx.date <= todayEnd && tx.memberPhone) {
-      // Any transaction (deposit, debt, fine, welfare) counts as action
       hasActionToday.add(tx.memberPhone);
     }
   });
@@ -3134,81 +3130,97 @@ const debouncedUpdateHomeRecent = updateHomeRecent;
 
 // ===== CORE FINANCE =====
 function computePots() {
-  let cash = 0, profit = 0;
+  let cash = 0;
+  let profit = 0;
   memberBalances = {};
   memberDebts = {};
-  memberLoans = {}; // now sum of remaining balances
+  memberLoans = {};
 
-  // First, reset loan remaining balances from transactions? We will read from loans array.
-  // But we rely on loans array already having updated remainingBalance.
-  // So we just sum them.
+  // --- 1. Sum loan remaining balances ---
   loans.forEach(loan => {
     if (loan.status === 'approved' && !loan.repaid && loan.remainingBalance > 0) {
       memberLoans[loan.memberPhone] = (memberLoans[loan.memberPhone] || 0) + loan.remainingBalance;
     }
   });
 
-  // Compute cash, profit, memberBalances, memberDebts as before
+  // --- 2. Process transactions ---
   transactions.forEach(tx => {
     const a = +(tx.amount) || 0;
     const phone = tx.memberPhone;
+
     if (tx.type === 'deposit') {
+      // Deposit: goes to available cash (daily savings)
       cash += a;
       memberBalances[phone] = (memberBalances[phone] || 0) + a;
-    } else if (tx.type === 'withdraw') {
-      cash -= a;
+    } 
+    else if (tx.type === 'welfare') {
+      // Welfare: goes to profit pool
+      profit += a;
+    } 
+    else if (tx.type === 'withdraw') {
+      // Withdrawal: goes to profit (not cash)
+      profit -= a;
       memberBalances[phone] = (memberBalances[phone] || 0) - a;
-    } else if (tx.type === 'fine') {
+    } 
+    else if (tx.type === 'fine') {
+      // Fine: goes to profit, member owes it
       profit += a;
-      if (!tx.autoDeduction) memberDebts[phone] = (memberDebts[phone] || 0) + a;
-    } else if (tx.type === 'welfare') {
-      profit += a;
-    } else if (tx.type === 'debt') {
-      memberDebts[phone] = (memberDebts[phone] || 0) + a;
-    } else if (tx.type === 'debt_cleared') {
-      memberDebts[phone] = Math.max(0, (memberDebts[phone] || 0) - a);
-    } else if (tx.type === 'expense') {
+      if (!tx.autoDeduction) {
+        memberDebts[phone] = (memberDebts[phone] || 0) + a;
+      }
+    } 
+    else if (tx.type === 'debt') {
+      // DEBT ASSIGNED: PROFIT DECREASES (member owes money)
       profit -= a;
-    } else if (tx.type === 'payout') {
+      memberDebts[phone] = (memberDebts[phone] || 0) + a;
+    } 
+    else if (tx.type === 'debt_cleared') {
+      // DEBT REPAID: PROFIT INCREASES (money comes back)
+      const remaining = memberDebts[phone] || 0;
+      memberDebts[phone] = Math.max(0, remaining - a);
+      profit += a;
+    } 
+    else if (tx.type === 'expense') {
+      // Expense: deducted from profit
+      profit -= a;
+    } 
+    else if (tx.type === 'payout') {
+      // Payout: cash decreases (available cash)
       cash -= a;
-    } else if (tx.type === 'profit_dist') {
+    } 
+    else if (tx.type === 'profit_dist') {
+      // Profit distribution: profit decreases, member balance increases
       profit -= a;
       memberBalances[phone] = (memberBalances[phone] || 0) + a;
-      cash += a;
-    } else if (tx.type === 'loan_disbursement') {
-      // loan principal comes from profit? Actually we are not using cash/profit for loans now.
-      // We'll keep it as before: cash increases? That was a bug. We'll fix: cash decreases.
-      // But we need to decide: loan disbursement should reduce available cash.
-      // So we will subtract from cash.
-      cash -= a;
-      // Do not affect profit (principal is not profit).
-    } else if (tx.type === 'loan_adjustment') {
-      // interest portion – added to profit? Actually loan adjustment is for interest, which increases profit.
+    } 
+    else if (tx.type === 'loan_disbursement') {
+      // Loan given: profit decreases (money leaves the group)
+      profit -= a;
+    } 
+    else if (tx.type === 'loan_adjustment') {
+      // Interest: profit increases
       profit += a;
-      // But we also need to reflect the interest in the loan's totalRepay (already in remainingBalance)
-    } else if (tx.type === 'loan_repayment') {
-      // This now has loanId, we don't need to adjust cash/profit here because we will handle it via loan's remainingBalance? 
-      // Actually loan_repayment increases cash.
-      cash += a;
-      // The interest portion of this repayment should go to profit, but we can't distinguish here.
-      // We'll handle that in a separate step: after processing, we recalc profit from loan interest.
+    } 
+    else if (tx.type === 'loan_repayment') {
+      // Loan repayment: profit increases (money comes back)
+      profit += a;
     }
   });
 
-  // Recalculate profit from loan interest (simplified: sum of (totalRepay - amount) for loans that have been repaid)
-  // But we already have loan_adjustment transactions that added interest to profit.
-  // So we just keep it.
+  // --- 3. Ensure memberBalances are not negative ---
+  for (let phone in memberBalances) {
+    if (memberBalances[phone] < 0) memberBalances[phone] = 0;
+  }
 
-  cashFromDeposits = Math.max(0, cash);
+  // --- 4. Set global variables ---
+  cashFromDeposits = cash;
   groupProfit = profit;
-
-  // Check if any active loan is fully repaid (remainingBalance <= 0) and advance rotation
-  // This is now handled in updateLoanRepaidStatus.
 }
+
 function getDaysActive(member) {
   if (!member.joinDate) return 0;
   const join = new Date(member.joinDate);
-  const today = new Date();
+  const today = new Date(getServerNow());
   today.setHours(0, 0, 0, 0);
   const diff = Math.floor((today - join) / (1000 * 60 * 60 * 24));
   return Math.max(0, diff);
@@ -3402,8 +3414,9 @@ function updatePendingDepositWarning() {
   const container = document.getElementById('pending-deposit-list');
   if (!container) return;
 
-  const todayStart = new Date().setHours(0,0,0,0);
-  const todayEnd = new Date().setHours(23,59,59,999);
+  const todayStart = new Date(getServerNow());
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = todayStart.getTime() + 86400000 - 1;
   
   const depositedToday = new Set();
   transactions.forEach(tx => {
@@ -3419,7 +3432,6 @@ function updatePendingDepositWarning() {
     return;
   }
   
-  // 4‑column responsive grid, each member as a compact badge
   const badgesHtml = pending.map(m => `
     <div style="
       background: rgba(245,158,11,0.12);
@@ -3451,21 +3463,13 @@ function updatePendingDepositWarning() {
 }
 
 async function generateTransactionReceipt(member, txType, amount, description, loanBalance, accountBalance, maxBorrow) {
-  const date = new Date();
+  const date = new Date(getServerNow());
   const receiptId = `HTF-${date.toISOString().slice(0,10).replace(/-/g,'')}-${member.id.slice(-4)}`;
   const dateLabel = date.toLocaleDateString('en-UG', { year:'numeric', month:'long', day:'numeric' });
   const txTypeUpper = txType.toUpperCase();
 
   const receiptHtml = `
-    <div class="tx-receipt-card" style="
-      max-width: 500px;
-      margin: 0 auto;
-      border: 2px solid #e2e8f0;
-      border-radius: 20px;
-      padding: 20px;
-      background: white;
-      font-family: 'DM Sans', sans-serif;
-    ">
+    <div class="tx-receipt-card" style="max-width: 500px; margin: 0 auto; border: 2px solid #e2e8f0; border-radius: 20px; padding: 20px; background: white; font-family: 'DM Sans', sans-serif;">
       <div style="text-align: center; margin-bottom: 12px;">
         <div style="font-size: 1.8rem;">🌾</div>
         <div style="font-weight: 800; font-size: 1.2rem; color: #b45309;">HARVEST TRUST FINANCE</div>
@@ -3516,20 +3520,14 @@ async function generateTransactionReceipt(member, txType, amount, description, l
     return null;
   }
 }
+
 async function generateWeeklyPayoutReceiptImage(beneficiary, weeklyGross, debt, loan, netPayout) {
-  const dateLabel = new Date().toLocaleDateString('en-UG', { year: 'numeric', month: 'long', day: 'numeric' });
-  const receiptId = `PAYOUT-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${beneficiary.id.slice(-4)}`;
+  const date = new Date(getServerNow());
+  const dateLabel = date.toLocaleDateString('en-UG', { year: 'numeric', month: 'long', day: 'numeric' });
+  const receiptId = `PAYOUT-${date.toISOString().slice(0,10).replace(/-/g,'')}-${beneficiary.id.slice(-4)}`;
 
   const receiptHtml = `
-    <div class="weekly-receipt-card" style="
-      max-width: 500px;
-      margin: 0 auto;
-      border: 2px solid #e2e8f0;
-      border-radius: 20px;
-      padding: 20px;
-      background: white;
-      font-family: 'DM Sans', sans-serif;
-    ">
+    <div class="weekly-receipt-card" style="max-width: 500px; margin: 0 auto; border: 2px solid #e2e8f0; border-radius: 20px; padding: 20px; background: white; font-family: 'DM Sans', sans-serif;">
       <div style="text-align: center; margin-bottom: 12px;">
         <div style="font-size: 1.8rem;">🌾</div>
         <div style="font-weight: 800; font-size: 1.2rem; color: #b45309;">HARVEST TRUST FINANCE</div>
@@ -4018,15 +4016,35 @@ function buildDepositTransactions(member, dailyAmount, timestamp, description) {
 function initFirebase(){
   console.log("Initializing Firebase...");
   try{
-    if(firebase.database?.INTERNAL?.forceWebSockets)firebase.database.INTERNAL.forceWebSockets();
-    if(!firebase.apps.length)firebase.initializeApp(FIREBASE_CONFIG);
-    db=firebase.database();
-    if(db.goOnline)db.goOnline();
+    if(firebase.database?.INTERNAL?.forceWebSockets) firebase.database.INTERNAL.forceWebSockets();
+    if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.database();
+    if(db.goOnline) db.goOnline();
     enableFastFirebaseSync();
+
+    // --- Server Time Setup ---
+    let serverTimeOffset = 0;
+    db.ref('.info/serverTimeOffset').on('value', (snap) => {
+      serverTimeOffset = snap.val() || 0;
+      console.log("Server time offset (ms):", serverTimeOffset);
+    });
+
+    function getServerNow() {
+      return Date.now() + serverTimeOffset;
+    }
+
+    // Make getServerNow globally available
+    window.getServerNow = getServerNow;
+
     console.log("Firebase connected");
     loadAllData();
     setInterval(checkOverdueLoans, 3600000);
-  }catch(e){console.error("Firebase init error",e);toast("Firebase connection failed.","#ef4444");forceShowLogin();}
+    startMidnightChecker();
+  } catch(e){
+    console.error("Firebase init error", e);
+    toast("Firebase connection failed.","#ef4444");
+    forceShowLogin();
+  }
 }
 function enableFastFirebaseSync(){
   if(!db)return;
@@ -4227,7 +4245,7 @@ function updateHomeUI() {
     profitsDisplay.innerText = 'UGX ' + groupProfit.toLocaleString();
     profitsDisplay.className = 'ss-val ' + (groupProfit < 0 ? '' : 'sv-teal');
     profitsDisplay.style.color = groupProfit < 0 ? 'var(--red)' : '';
-    if (profitsLabel) profitsLabel.innerText = 'Group Profit';
+    if (profitsLabel) profitsLabel.innerText = 'Group Fund';
   }
 
   // --- Show loan receiver message on home card using loan rotation order ---
@@ -8097,15 +8115,16 @@ window.updateTxPreview = function() {
   if (!member) return;
 
   computePots();
+
   let remaining = amount;
   const lines = [];
 
   const dailyAmount = settings.dailyAmount || 2000;
   const welfareAmount = settings.welfareAmount || 500;
   const requiredToday = dailyAmount + welfareAmount;
-  const todayStart = new Date().setHours(0, 0, 0, 0);
+  const todayStart = new Date(getServerNow()).setHours(0, 0, 0, 0);
 
-  // 1. Today's requirement
+  // --- 1. Today's requirement ---
   let paidDailyToday = 0;
   let welfarePaidToday = false;
   transactions.forEach(tx => {
@@ -8130,66 +8149,68 @@ window.updateTxPreview = function() {
     lines.push(`✅ Today's requirement already satisfied.`);
   }
 
-  // 2. Active Loan
-  if (remaining > 0) {
-    const activeLoan = loans.find(l => l.memberPhone === member.phone && l.loanQuestions && l.loanQuestions.length > 0 && !l.repaid && l.remainingBalance > 0);
-    if (activeLoan) {
-      const repayAmount = Math.min(remaining, activeLoan.remainingBalance);
-      remaining -= repayAmount;
-      if (repayAmount > 0) {
-        lines.push(`💳 Active loan repayment: ${money(repayAmount)} (remaining loan balance: ${money(activeLoan.remainingBalance - repayAmount)})`);
-      } else {
-        lines.push(`✅ Active loan already cleared.`);
-      }
-    } else {
-      lines.push(`✅ No active loan to repay.`);
+  // --- 2. Combined outstanding (debt + loan) ---
+  const debtOwed = memberDebts[member.phone] || 0;
+  const loanOwed = memberLoans[member.phone] || 0;
+  let totalOutstanding = debtOwed + loanOwed;
+  let usedForOutstanding = 0;
+  if (totalOutstanding > 0 && remaining > 0) {
+    usedForOutstanding = Math.min(remaining, totalOutstanding);
+    remaining -= usedForOutstanding;
+    const debtPortion = Math.min(usedForOutstanding, debtOwed);
+    const loanPortion = usedForOutstanding - debtPortion;
+    lines.push(`🧹 **Outstanding cleared:** ${money(usedForOutstanding)} (debt: ${money(debtPortion)}, loan: ${money(loanPortion)})`);
+    if (remaining === 0 && usedForOutstanding < totalOutstanding) {
+      lines.push(`⚠️ Remaining outstanding: ${money(totalOutstanding - usedForOutstanding)}`);
     }
-  }
-
-  // 3. Debts
-  if (remaining > 0) {
-    const totalDebt = memberDebts[member.phone] || 0;
-    if (totalDebt > 0) {
-      const debtRepay = Math.min(remaining, totalDebt);
-      remaining -= debtRepay;
-      if (debtRepay > 0) {
-        lines.push(`🧹 Debt cleared: ${money(debtRepay)} (remaining debt: ${money(totalDebt - debtRepay)})`);
-      } else {
-        lines.push(`✅ No debt to clear.`);
-      }
-    } else {
-      lines.push(`✅ No outstanding debt.`);
-    }
-  }
-
-  // 4. Future days (if any remaining)
-  if (remaining > 0) {
-    const todayFullyCovered = (usedToday === deficitToday);
-    if (todayFullyCovered) {
-      let currentDay = todayStart + 86400000;
-      let daysFullyCovered = 0;
-      let remainingPartial = remaining;
-      while (remainingPartial >= requiredToday && daysFullyCovered < 30) {
-        remainingPartial -= requiredToday;
-        daysFullyCovered++;
-        const dateStr = new Date(currentDay).toLocaleDateString();
-        lines.push(`📅 ${dateStr}: full day (${money(requiredToday)})`);
-        currentDay += 86400000;
-      }
-      if (remainingPartial > 0 && daysFullyCovered < 30) {
-        const dateStr = new Date(currentDay).toLocaleDateString();
-        const dailyPortion = Math.min(remainingPartial, dailyAmount);
-        const welfarePortion = remainingPartial - dailyPortion;
-        lines.push(`⚡ ${dateStr}: partial – ${money(remainingPartial)} applied (${money(dailyPortion)} savings, ${money(welfarePortion)} welfare)`);
-      }
-      if (remainingPartial === 0 && daysFullyCovered > 0) {
-        lines.push(`✨ Surplus fully allocated to ${daysFullyCovered} future day(s).`);
-      }
-    } else {
-      lines.push(`💡 Remaining ${money(remaining)} will be used once today's requirement is met.`);
-    }
+  } else if (totalOutstanding > 0) {
+    lines.push(`🧹 No extra amount to clear outstanding (still owe ${money(totalOutstanding)})`);
   } else {
-    lines.push(`✅ All money allocated.`);
+    lines.push(`✅ No outstanding debt or loans.`);
+  }
+
+  const remainingOutstanding = totalOutstanding - usedForOutstanding;
+  const todayFullyCovered = (usedToday === deficitToday);
+
+  // --- 3. Prepay future days ---
+  if (todayFullyCovered && remainingOutstanding === 0 && remaining > 0) {
+    let currentDay = todayStart + 86400000;
+    const maxFutureDays = 365;
+    let daysChecked = 0;
+    while (daysChecked < maxFutureDays) {
+      const dayStatus = getDailyStatusForDate(member, currentDay);
+      if (dayStatus.deficit > 0) break;
+      currentDay += 86400000;
+      daysChecked++;
+    }
+
+    let daysFullyCovered = 0;
+    let remainingPartial = remaining;
+    while (remainingPartial >= requiredToday && daysFullyCovered < 30) {
+      remainingPartial -= requiredToday;
+      daysFullyCovered++;
+      const dateStr = new Date(currentDay).toLocaleDateString();
+      lines.push(`📅 ${dateStr}: full day (${money(requiredToday)})`);
+      currentDay += 86400000;
+    }
+
+    if (remainingPartial > 0 && daysFullyCovered < 30) {
+      const dayStatus = getDailyStatusForDate(member, currentDay);
+      const currentDeficit = dayStatus.deficit;
+      const usedForThisDay = Math.min(remainingPartial, currentDeficit);
+      const newDeficit = currentDeficit - usedForThisDay;
+      const dateStr = new Date(currentDay).toLocaleDateString();
+      lines.push(`⚡ ${dateStr}: partial – ${money(usedForThisDay)} applied. Remaining deficit for that day: ${money(newDeficit)}`);
+      remainingPartial -= usedForThisDay;
+    }
+
+    if (remainingPartial === 0 && daysFullyCovered > 0) {
+      lines.push(`✨ Surplus fully allocated to ${daysFullyCovered} future day(s).`);
+    } else if (remainingPartial > 0) {
+      lines.push(`⚠️ Remaining ${money(remainingPartial)} after covering ${daysFullyCovered} days (limit reached).`);
+    }
+  } else if (remaining > 0) {
+    lines.push(`💡 Remaining ${money(remaining)} will be used once today's requirement is met and outstanding cleared.`);
   }
 
   if (lines.length === 0) {
@@ -9441,7 +9462,7 @@ function confirmUpcoming() {
 async function processDepositWithFutureDays(member, depositAmount, depositTimestamp, description) {
   const writes = [];
   let remaining = depositAmount;
-  const now = depositTimestamp || Date.now();
+  const now = depositTimestamp || getServerNow(); // Use server time
   const todayStart = new Date(now).setHours(0, 0, 0, 0);
   const dailyAmount = settings.dailyAmount || 2000;
   const welfareAmount = settings.welfareAmount || 500;
@@ -9505,10 +9526,8 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
           amount: repayAmount,
           loanId: activeLoan.id,
           description: `Repayment of loan ${activeLoan.id} (${money(repayAmount)})`,
-          date: now + 1000
+          date: getServerNow() + 1000 // Use server time
         }));
-        // Also credit cash (will be handled by computePots)
-        // But we also need to add interest portion to profit? We'll handle via loan_adjustment later.
       }
     }
   }
@@ -9526,16 +9545,14 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
           type: 'debt_cleared',
           amount: debtRepay,
           description: `Cleared debt of ${money(debtRepay)}`,
-          date: now + 2000
+          date: getServerNow() + 2000 // Use server time
         }));
       }
     }
   }
 
-  // ---------- 4. Prepay future days (if today fully covered and no debt/loan remains? Actually we can still prepay if remaining > 0) ----------
+  // ---------- 4. Prepay future days ----------
   const todayFullyCovered = (usedToday === deficitToday);
-  // We can prepay even if debt remains? The user wants daily -> loan -> debt -> future. So only after debt is cleared.
-  // But if remaining is still >0 after clearing debts, then prepay.
   if (todayFullyCovered && remaining > 0) {
     let currentDay = todayStart + 86400000;
     const maxDays = 30;
@@ -9579,8 +9596,6 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
           autoDeduction: true
         });
       }
-      // If today's requirement was fully covered, and we prepay partial future day, we still need to handle deficit? 
-      // But we already cleared debt and loan, so remaining is surplus. We can just leave it as deposit.
     }
   }
 
@@ -9590,7 +9605,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
       memberPhone: member.phone, memberName: member.name,
       type: 'deposit', amount: remaining,
       description: 'Excess savings (applied as extra balance)',
-      date: now + 3000
+      date: getServerNow() + 3000 // Use server time
     });
   }
 
