@@ -2593,16 +2593,15 @@ let loanRotationOrder = [];   // array of member IDs for loan request order
 let loanReceiverIndex = 0;    // index in loanRotationOrder for who can borrow
 let notifications = {};
 function hasActiveLoanFromApplication() {
-  // Check if the current user has an active loan from the application form
-  // An active loan = approved, not repaid, AND has loanQuestions, AND remainingBalance > 0
   if (!currentUser) return false;
+  // Check for loans that are approved, NOT repaid, have loanQuestions, AND remainingBalance > 0
   return loans.some(l => 
     l.memberId === currentUser.id &&
     l.status === 'approved' &&
     !l.repaid &&
     l.loanQuestions &&
     l.loanQuestions.length > 0 &&
-    (l.remainingBalance || l.totalRepay) > 0  // Check remainingBalance OR totalRepay (fallback)
+    (l.remainingBalance || 0) > 0
   );
 }
 let mainCarouselNotifs=[], mainCarouselIdx=0, mainCarouselTimer=null;
@@ -3686,10 +3685,14 @@ window.openLoanForSelectedAdminMember = function() {
   if (!memberId) { toast('Select a member', '#ef4444'); return; }
   const member = members.find(m => m.id === memberId);
   if (!member) return;
-  // Temporarily set currentUser to the selected member, open loan request, then restore
+  
+  // Temporarily switch currentUser to the selected member
   const originalUser = currentUser;
   currentUser = { ...member, isAdmin: false };
+  
+  // Open the loan request modal for this member
   openLoanRequestModal();
+  
   // Restore after the modal is closed
   const checkModal = setInterval(() => {
     if (!document.getElementById('ov-loan-request')?.classList.contains('on')) {
@@ -3824,22 +3827,11 @@ async function updateLoanRepaidStatus(phone) {
 
   // Find the active rotation loan for this member (loan with loanQuestions and not repaid)
   const activeLoan = loans.find(l => l.memberPhone === phone && l.loanQuestions && l.loanQuestions.length > 0 && !l.repaid);
-  if (!activeLoan) {
-    console.log("No active application loan found for", member.name);
-    return;
-  }
+  if (!activeLoan) return;
 
-  // Check the outstanding balance
-  const outstanding = memberLoans[phone] || 0;
-  console.log(`Outstanding loan balance for ${member.name}: ${outstanding}`);
-
-  if (outstanding === 0) {
-    // Mark loan as repaid and set remainingBalance to 0
-    await db.ref('loans/' + activeLoan.id).update({ 
-      repaid: true, 
-      repaidAt: Date.now(),
-      remainingBalance: 0  // Ensure remaining balance is zero
-    });
+  // If active loan's remainingBalance is 0, mark it as repaid and advance rotation
+  if (activeLoan.remainingBalance <= 0) {
+    await db.ref('loans/' + activeLoan.id).update({ repaid: true, repaidAt: Date.now() });
     toast(`Loan cleared for ${member.name}`, '#10b981');
 
     // Advance loan receiver
@@ -3849,14 +3841,11 @@ async function updateLoanRepaidStatus(phone) {
       toast(`Loan fully repaid! Loan receiver advanced to next member.`, '#10b981');
       updateHomeUI();
     }
-    
-    // Refresh loans array
+    // Refresh data
     const allLoansSnap = await db.ref('loans').once('value');
     loans = allLoansSnap.val() ? Object.entries(allLoansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
     if (currentAdminTab === 'savings') renderAdminTab();
     if (currentScreen === 'account') updateAccountBalances();
-  } else {
-    console.log(`Outstanding not zero: ${outstanding}`);
   }
 }
 
@@ -4204,91 +4193,138 @@ function applySettings(){
   const dr=document.getElementById('daily-rate');if(dr)dr.innerText=(settings.dailyAmount||2500).toLocaleString();
   updateHomeUI();
 }
-function updateHomeUI(){
-  document.getElementById('total-weekly-display').innerText='UGX '+computeTotalWeekly().toLocaleString();
-  document.getElementById('available-display').innerText='UGX '+cashFromDeposits.toLocaleString();
-  const profitsDisplay=document.getElementById('profits-display');
-  if(profitsDisplay){
-    profitsDisplay.innerText='UGX '+groupProfit.toLocaleString();
-    profitsDisplay.className='ss-val '+(groupProfit<0?'':'sv-teal');
-    profitsDisplay.style.color=groupProfit<0?'var(--red)':'';
-  }
-// Show loan receiver message on home card using loan rotation order
-const receiverCard = document.querySelector('.weekly-receiver-card');
-if (receiverCard && currentUser && !currentUser.isAdmin) {
-  const rotationList = loanRotationOrder.length ? loanRotationOrder : rotation.order;
-  if (!rotationList.length) return;
-  const allowedBorrowerId = rotationList[loanReceiverIndex];
+function updateHomeUI() {
+  // Weekly Total – always visible
+  document.getElementById('total-weekly-display').innerText = 'UGX ' + computeTotalWeekly().toLocaleString();
   
-  const allowedBorrower = members.find(m => m.id === allowedBorrowerId);
-  const isAllowedBorrower = (currentUser.id === allowedBorrowerId);
+  const availableEl = document.getElementById('available-display');
+  const availableLabel = availableEl?.parentElement?.querySelector('.ss-lbl');
+  const profitsDisplay = document.getElementById('profits-display');
+  const profitsLabel = profitsDisplay?.parentElement?.querySelector('.ss-lbl');
+  const availableTile = availableEl?.closest('.ss-tile');
+  const strip = document.querySelector('.stats-strip');
   
-  let msgDiv = document.getElementById('loan-turn-message');
-  if (!msgDiv) {
-    msgDiv = document.createElement('div');
-    msgDiv.id = 'loan-turn-message';
-    msgDiv.style.marginTop = '12px';
-    msgDiv.style.padding = '8px 12px';
-    msgDiv.style.borderRadius = '24px';
-    msgDiv.style.fontSize = '0.75rem';
-    msgDiv.style.fontWeight = '600';
-    msgDiv.style.textAlign = 'center';
-    msgDiv.style.backdropFilter = 'blur(4px)';
-    receiverCard.appendChild(msgDiv);
-  }
-  
-  if (isAllowedBorrower) {
-    msgDiv.style.background = 'linear-gradient(135deg, rgba(245,158,11,0.9), rgba(6,182,212,0.9))';
-    msgDiv.style.color = '#fff';
-    msgDiv.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
-    msgDiv.innerHTML = '⭐ It’s your turn to borrow this week! Click "Request Loan" above.';
+  if (currentUser && currentUser.isAdmin) {
+    // Admin: show all 3 tiles
+    if (availableTile) {
+      availableTile.style.display = '';
+    }
+    if (availableEl) {
+      availableEl.innerText = 'UGX ' + cashFromDeposits.toLocaleString();
+      if (availableLabel) availableLabel.innerText = 'Available Cash';
+    }
+    if (strip) strip.style.gridTemplateColumns = 'repeat(3, 1fr)';
   } else {
-    msgDiv.style.background = 'rgba(255,255,255,0.15)';
-    msgDiv.style.color = 'var(--t2)';
-    const borrowerName = allowedBorrower ? allowedBorrower.name : 'another member';
-    msgDiv.innerHTML = `⏳ ${borrowerName} is the designated borrower this week. Wait for your turn.`;
+    // Member: hide the middle tile
+    if (availableTile) {
+      availableTile.style.display = 'none';
+    }
+    if (strip) strip.style.gridTemplateColumns = 'repeat(2, 1fr)';
   }
-}
-  // Receiver card: animated cycle + progress bar
-  if(rotation.order?.length){
+  
+  // Profit Pool – renamed to "Group Profit" for everyone
+  if (profitsDisplay) {
+    profitsDisplay.innerText = 'UGX ' + groupProfit.toLocaleString();
+    profitsDisplay.className = 'ss-val ' + (groupProfit < 0 ? '' : 'sv-teal');
+    profitsDisplay.style.color = groupProfit < 0 ? 'var(--red)' : '';
+    if (profitsLabel) profitsLabel.innerText = 'Group Profit';
+  }
+
+  // --- Show loan receiver message on home card using loan rotation order ---
+  const receiverCard = document.querySelector('.weekly-receiver-card');
+  if (receiverCard && currentUser && !currentUser.isAdmin) {
+    const rotationList = loanRotationOrder.length ? loanRotationOrder : rotation.order;
+    if (!rotationList.length) return;
+    const allowedBorrowerId = rotationList[loanReceiverIndex];
+    const allowedBorrower = members.find(m => m.id === allowedBorrowerId);
+    const isAllowedBorrower = (currentUser.id === allowedBorrowerId);
+    
+    let msgDiv = document.getElementById('loan-turn-message');
+    if (!msgDiv) {
+      msgDiv = document.createElement('div');
+      msgDiv.id = 'loan-turn-message';
+      msgDiv.style.marginTop = '12px';
+      msgDiv.style.padding = '8px 12px';
+      msgDiv.style.borderRadius = '24px';
+      msgDiv.style.fontSize = '0.75rem';
+      msgDiv.style.fontWeight = '600';
+      msgDiv.style.textAlign = 'center';
+      msgDiv.style.backdropFilter = 'blur(4px)';
+      receiverCard.appendChild(msgDiv);
+    }
+    
+    if (isAllowedBorrower) {
+      msgDiv.style.background = 'linear-gradient(135deg, rgba(245,158,11,0.9), rgba(6,182,212,0.9))';
+      msgDiv.style.color = '#fff';
+      msgDiv.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+      msgDiv.innerHTML = '⭐ It’s your turn to borrow this week! Click "Request Loan" above.';
+    } else {
+      msgDiv.style.background = 'rgba(255,255,255,0.15)';
+      msgDiv.style.color = 'var(--t2)';
+      const borrowerName = allowedBorrower ? allowedBorrower.name : 'another member';
+      msgDiv.innerHTML = `⏳ ${borrowerName} is the designated borrower this week. Wait for your turn.`;
+    }
+  }
+
+  // --- Receiver card: animated cycle + progress bar ---
+  if (rotation.order?.length) {
     startReceiverAnimation();
   } else {
-    if(_receiverTimer){clearInterval(_receiverTimer);_receiverTimer=null;}
-    const nameEl=document.getElementById('weekly-payee-name');
-    if(nameEl)nameEl.innerText='—';
-    const infoEl=document.getElementById('payout-rotation-info');
-    if(infoEl)infoEl.innerText='';
-    const fillEl=document.getElementById('payout-progress-fill');
-    if(fillEl)fillEl.style.width='0%';
-    const lblEl=document.getElementById('payout-progress-label');
-    if(lblEl)lblEl.innerText='';
+    if (_receiverTimer) {
+      clearInterval(_receiverTimer);
+      _receiverTimer = null;
+    }
+    const nameEl = document.getElementById('weekly-payee-name');
+    if (nameEl) nameEl.innerText = '—';
+    const infoEl = document.getElementById('payout-rotation-info');
+    if (infoEl) infoEl.innerText = '';
+    const fillEl = document.getElementById('payout-progress-fill');
+    if (fillEl) fillEl.style.width = '0%';
+    const lblEl = document.getElementById('payout-progress-label');
+    if (lblEl) lblEl.innerText = '';
   }
+
+  // --- Update warnings and countdown ---
   updatePendingDepositWarning();
   updateAnniversaryCountdown();
-// Add advance button on home (optional)
-if (!document.getElementById('home-advance-btn')) {
-  const receiverCard = document.querySelector('.weekly-receiver-card');
-  if (receiverCard && !receiverCard.querySelector('.advance-btn')) {
-    const btn = document.createElement('button');
-    btn.id = 'home-advance-btn';
-    btn.className = 'btn btn-sm btn-amber';
-    btn.style.marginTop = '8px';
-    btn.innerHTML = '⏩ Advance Rotation (Admin only)';
-    btn.onclick = () => {
-      if (currentUser && currentUser.isAdmin) advanceRotation();
-      else toast('Admin only', '#ef4444');
-    };
-    receiverCard.appendChild(btn);
+
+  // --- Add advance button on home (admin only) ---
+  if (!document.getElementById('home-advance-btn')) {
+    const rc = document.querySelector('.weekly-receiver-card');
+    if (rc && !rc.querySelector('.advance-btn')) {
+      const btn = document.createElement('button');
+      btn.id = 'home-advance-btn';
+      btn.className = 'btn btn-sm btn-amber';
+      btn.style.marginTop = '8px';
+      btn.innerHTML = '⏩ Advance Rotation (Admin only)';
+      btn.onclick = () => {
+        if (currentUser && currentUser.isAdmin) advanceRotation();
+        else toast('Admin only', '#ef4444');
+      };
+      rc.appendChild(btn);
+    }
   }
-}
-  // Add contact card if not exists
-if (!document.getElementById('contact-card')) {
-  const homeDiv = document.getElementById('t-home');
-  if (homeDiv) {
-    const contactCard = document.createElement('div');
-    homeDiv.appendChild(contactCard);
+
+  // --- Contact card (admin support) ---
+  if (!document.getElementById('contact-card')) {
+    const homeDiv = document.getElementById('t-home');
+    if (homeDiv) {
+      const contactCard = document.createElement('div');
+      contactCard.id = 'contact-card';
+      contactCard.className = 'card';
+      contactCard.style.textAlign = 'center';
+      contactCard.style.marginTop = '12px';
+      contactCard.innerHTML = `
+        <div class="label">💰 Payments & Support</div>
+        <div style="font-size: 0.9rem; margin: 8px 0;">
+          📞 Call/WhatsApp: <strong>0770371720</strong><br>
+          ✉️ Email: <strong>lwogamata55@gmail.com</strong>
+        </div>
+        <div class="micro muted">For payments, inquiries, or password reset assistance, contact admin.</div>
+      `;
+      homeDiv.appendChild(contactCard);
+    }
   }
-}
 }
 function updateAccountBalances() {
   if (!currentUser || currentUser.isAdmin) return;
@@ -6456,21 +6492,23 @@ window.openLoanSettings = function() {
 };
 
 window.openLoanRequestModal = async function() {
+  // --- Admin flow ---
   if (!currentUser || currentUser.isAdmin) {
     showAdminLoanPreview();
     return;
   }
 
-  // Refresh loans
+  // --- Refresh loans ---
   const snap = await db.ref('loans').once('value');
   loans = snap.val() ? Object.entries(snap.val()).map(([id, l]) => ({ ...l, id })) : [];
 
+  // --- Check for active loan ---
   if (hasActiveLoanFromApplication()) {
     toast('A loan application is still active. Please wait until it is repaid.', '#ef4444');
     return;
   }
 
-  // --- Auto‑initialise loan rotation order if empty ---
+  // --- Ensure loan rotation order exists ---
   if (!loanRotationOrder || loanRotationOrder.length === 0) {
     const allMembers = members.filter(m => m.approved === true);
     if (allMembers.length) {
@@ -6478,20 +6516,18 @@ window.openLoanRequestModal = async function() {
       loanReceiverIndex = 0;
       await db.ref('settings/loanRotationOrder').set(loanRotationOrder);
       await db.ref('settings/loanReceiverIndex').set(loanReceiverIndex);
-      console.log("Loan rotation order auto‑initialised:", loanRotationOrder);
     } else {
       toast('No active members to set loan rotation.', '#ef4444');
       return;
     }
   }
 
-  // Validate that all members in the order still exist
+  // --- Validate and clean order ---
   const validIds = new Set(members.filter(m => m.approved === true).map(m => m.id));
   const filteredOrder = loanRotationOrder.filter(id => validIds.has(id));
   if (filteredOrder.length !== loanRotationOrder.length) {
     loanRotationOrder = filteredOrder;
     await db.ref('settings/loanRotationOrder').set(loanRotationOrder);
-    console.log("Loan rotation order cleaned (removed deleted members):", loanRotationOrder);
   }
   if (loanRotationOrder.length === 0) {
     toast('No active members in loan rotation. Contact admin.', '#ef4444');
@@ -6505,16 +6541,12 @@ window.openLoanRequestModal = async function() {
   const allowedBorrowerId = loanRotationOrder[loanReceiverIndex];
   const allowedBorrower = members.find(m => m.id === allowedBorrowerId);
 
-  // --- Debug logging ---
-  console.log("DEBUG: loanRotationOrder =", loanRotationOrder);
-  console.log("DEBUG: loanReceiverIndex =", loanReceiverIndex);
-  console.log("DEBUG: allowedBorrowerId =", allowedBorrowerId);
-  console.log("DEBUG: currentUser.id =", currentUser.id);
-  console.log("DEBUG: currentUser.name =", currentUser.name);
-
-  // --- Check if current user is the allowed borrower ---
+  // --- Member is NOT the receiver → show warning ---
   if (currentUser.id !== allowedBorrowerId) {
-    // Show warning for non‑receiver member
+    computePots();
+    let totalDeposits = 0;
+    transactions.forEach(tx => { if (tx.memberPhone === currentUser.phone && tx.type === 'deposit') totalDeposits += tx.amount; });
+    const maxLoan = Math.floor(totalDeposits * (loanSettings.disciplineMultiplier || 1.5));
     const position = loanRotationOrder.indexOf(currentUser.id) + 1;
     const totalMembers = loanRotationOrder.length;
     let nextTurn = position <= loanReceiverIndex 
@@ -6522,17 +6554,11 @@ window.openLoanRequestModal = async function() {
       : position - loanReceiverIndex;
     if (nextTurn > totalMembers) nextTurn = totalMembers;
 
-    // Calculate borrowing limit
-    computePots();
-    let totalDeposits = 0;
-    transactions.forEach(tx => { if (tx.memberPhone === currentUser.phone && tx.type === 'deposit') totalDeposits += tx.amount; });
-    const maxLoan = Math.floor(totalDeposits * (loanSettings.disciplineMultiplier || 1.5));
-
     showNonReceiverWarning(allowedBorrower, maxLoan, position, totalMembers, nextTurn);
     return;
   }
 
-  // --- If user IS the receiver, proceed to loan application ---
+  // --- Member IS the receiver → show loan form ---
   computePots();
   let totalDeposits = 0;
   transactions.forEach(tx => { if (tx.memberPhone === currentUser.phone && tx.type === 'deposit') totalDeposits += tx.amount; });
@@ -6544,12 +6570,11 @@ window.openLoanRequestModal = async function() {
   const infoDiv = document.getElementById('loan-limit-info');
   infoDiv.innerHTML = `<strong>Your savings discipline:</strong> UGX ${totalDeposits.toLocaleString()}<br>
                        <strong>You can borrow up to:</strong> UGX ${suggestedMax.toLocaleString()}<br>
-                       <strong>Interest rate:</strong> ${loanSettings.interestRate}% + ${loanSettings.extraWeeklyInterest || 2}% per extra week (applied from week 1)<br>
+                       <strong>Interest rate:</strong> ${loanSettings.interestRate}% + ${loanSettings.extraWeeklyInterest || 2}% per extra week<br>
                        <strong>Repayment period:</strong> You choose (1‑10 weeks)`;
   document.getElementById('loan-amount').max = suggestedMax;
   document.getElementById('loan-amount').value = '';
 
-  // Clear all fields
   const fields = ['loan-amount', 'loan-weeks', 'loan-q1', 'loan-q2', 'loan-q3', 'loan-q4', 'loan-q5', 'loan-q6', 'loan-q7', 'loan-q8'];
   fields.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
 
@@ -6576,7 +6601,7 @@ window.openLoanRequestModal = async function() {
       Interest: ${money(interest)}<br>
       Total to repay: ${money(totalRepay)}<br>
       Due date: ${dueDate.toLocaleDateString()}<br>
-      <span class="micro">You can repay any amount at any time, but the full amount must be cleared by the due date. Late payment incurs a penalty.</span>`;
+      <span class="micro">You can repay any amount at any time, but the full amount must be cleared by the due date.</span>`;
     summaryDiv.style.display = 'block';
   };
   amountInput.oninput = updateSummary;
