@@ -2336,21 +2336,30 @@ setTimeout(function(){
     <button class="btn btn-sec btn-full" style="margin-top:12px" onclick="closeOv('ov-apps')">Close</button>
   </div>
 </div>
+<!-- ========================================== -->
+<!-- ASSIGN DEBT MODAL - CHECK THIS HTML       -->
+<!-- ========================================== -->
+
 <div class="ov" id="ov-assign-debt" onclick="maybeClose(event,'ov-assign-debt')">
   <div class="bs">
     <div class="bs-title">🧾 Assign Debt (as Loan)</div>
     <div class="fgrp">
       <label class="flbl">Member</label>
-      <select id="debt-member" class="inp" onchange="updateDebtPreview()"></select>
+      <select id="debt-member" class="inp" onchange="updateDebtPreview()">
+        <option value="">Select member</option>
+      </select>
     </div>
+    
+    <!-- ===== PREVIEW DIV - Make sure this exists ===== -->
     <div id="debt-preview" class="hint-box" style="display: none;"></div>
+    
     <div class="fgrp">
       <label class="flbl">Principal Amount (UGX)</label>
-      <input type="number" id="debt-amount" class="inp" placeholder="Amount">
+      <input type="number" id="debt-amount" class="inp" placeholder="Amount" oninput="updateDebtPreview()">
     </div>
     <div class="fgrp">
       <label class="flbl">Interest Rate (%)</label>
-      <input type="number" id="debt-interest" class="inp" step="0.5" value="5">
+      <input type="number" id="debt-interest" class="inp" step="0.5" value="5" oninput="updateDebtPreview()">
     </div>
     <div class="fgrp">
       <label class="flbl">Due Date</label>
@@ -2364,6 +2373,7 @@ setTimeout(function(){
     <button class="btn btn-sec btn-full" onclick="closeOv('ov-assign-debt')">Cancel</button>
   </div>
 </div>
+
 <div class="ov" id="ov-group-transaction" onclick="maybeClose(event,'ov-group-transaction')">
   <div class="bs">
     <div class="bs-title">📦 Add Group Transaction</div>
@@ -4020,21 +4030,34 @@ function updatePendingDepositWarning() {
   `;
 }
 
-async function generateTransactionReceipt(member, txType, amount, description, loanBalance, debtBalance, accountBalance, maxBorrow) {
+// ==========================================
+// GENERATE TRANSACTION RECEIPT - FIXED
+// ==========================================
+
+async function generateTransactionReceipt(member, txType, amount, description, loanBalance, accountBalance, maxBorrow) {
+  console.log('📋 generateTransactionReceipt called');
+  console.log('📊 Parameters:', { member: member?.name, txType, amount, description, loanBalance, accountBalance, maxBorrow });
+  
+  // ===== FIX: Ensure all values are numbers =====
+  const safeLoanBalance = Number(loanBalance) || 0;
+  const safeAccountBalance = Number(accountBalance) || 0;
+  const safeMaxBorrow = Number(maxBorrow) || 0;
+  const safeAmount = Number(amount) || 0;
+  
   const date = new Date();
-  const receiptId = `HTF-${date.toISOString().slice(0,10).replace(/-/g,'')}-${member.id.slice(-4)}`;
+  const receiptId = `HTF-${date.toISOString().slice(0,10).replace(/-/g,'')}-${member?.id?.slice(-4) || '0000'}`;
   const dateLabel = date.toLocaleDateString('en-UG', { year:'numeric', month:'long', day:'numeric' });
-  const txTypeUpper = txType.toUpperCase();
+  const txTypeUpper = (txType || 'transaction').toUpperCase();
 
   // Get active loans for this member
   const activeLoans = loans.filter(l => 
-    l.memberPhone === member.phone && 
+    l.memberPhone === member?.phone && 
     l.status === 'approved' && 
     !l.repaid
   );
   
   const totalLoanBalance = activeLoans.reduce((sum, l) => sum + (l.totalRepay - (l.repaidAmount || 0)), 0);
-  const totalDebtBalance = memberDebts[member.phone] || 0;
+  const totalDebtBalance = memberDebts[member?.phone] || 0;
   const totalOwed = totalLoanBalance + totalDebtBalance;
 
   const receiptHtml = `
@@ -4055,22 +4078,22 @@ async function generateTransactionReceipt(member, txType, amount, description, l
       <div style="font-size: 0.9rem;">
         <div><strong>Receipt No.</strong> ${receiptId}</div>
         <div><strong>Date:</strong> ${dateLabel}</div>
-        <div><strong>Member:</strong> ${escapeHtml(member.name)}</div>
-        <div><strong>Phone:</strong> ${member.phone}</div>
+        <div><strong>Member:</strong> ${escapeHtml(member?.name || 'Unknown')}</div>
+        <div><strong>Phone:</strong> ${member?.phone || 'N/A'}</div>
       </div>
       <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
       <div style="font-size: 1rem;">
         <div><strong>Transaction:</strong> ${txTypeUpper}</div>
-        <div><strong>Amount:</strong> UGX ${amount.toLocaleString()}</div>
-        <div><strong>Description:</strong> ${escapeHtml(description || txType)}</div>
+        <div><strong>Amount:</strong> UGX ${safeAmount.toLocaleString()}</div>
+        <div><strong>Description:</strong> ${escapeHtml(description || txType || 'Transaction')}</div>
       </div>
       <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
       <div style="font-size: 0.9rem;">
         <div><strong>Current Loan Balance:</strong> UGX ${totalLoanBalance.toLocaleString()}</div>
         <div><strong>Current Debt Balance:</strong> UGX ${totalDebtBalance.toLocaleString()}</div>
         <div><strong>Total Owed:</strong> UGX ${totalOwed.toLocaleString()}</div>
-        <div><strong>Account Balance:</strong> UGX ${accountBalance.toLocaleString()}</div>
-        <div><strong>You can borrow up to:</strong> UGX ${maxBorrow.toLocaleString()}</div>
+        <div><strong>Account Balance:</strong> UGX ${safeAccountBalance.toLocaleString()}</div>
+        <div><strong>You can borrow up to:</strong> UGX ${safeMaxBorrow.toLocaleString()}</div>
         <div class="micro muted" style="margin-top: 8px;">
           ⚠️ Loans are repaid before debts. When your loan is fully cleared, the next member in rotation can borrow.
         </div>
@@ -4101,6 +4124,7 @@ async function generateTransactionReceipt(member, txType, amount, description, l
     return null;
   }
 }
+
 async function generateWeeklyPayoutReceiptImage(beneficiary, weeklyGross, debt, loan, netPayout) {
   const dateLabel = new Date().toLocaleDateString('en-UG', { year: 'numeric', month: 'long', day: 'numeric' });
   const receiptId = `PAYOUT-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${beneficiary.id.slice(-4)}`;
@@ -9258,24 +9282,57 @@ window.advanceRotation = function() {
     });
   }
 };
+// ==========================================
+// POPULATE MEMBER DROPDOWNS - FIXED
+// ==========================================
+
 window.populateMemberDropdowns = function() {
-  ['tx-member', 'fine-member', 'welfare-member', 'debt-member', 'cover-member'].forEach(sid => {
+  console.log('📋 populateMemberDropdowns called');
+  
+  const dropdownIds = ['tx-member', 'fine-member', 'welfare-member', 'debt-member', 'cover-member'];
+  
+  dropdownIds.forEach(sid => {
     const sel = document.getElementById(sid);
     if (sel) {
+      const activeMembers = members.filter(m => m.approved !== false);
       sel.innerHTML = '<option value="">Select member</option>' + 
-        members.filter(m => m.approved !== false).map(m => '<option value="' + m.phone + '">' + escapeHtml(m.name) + '</option>').join('');
+        activeMembers.map(m => '<option value="' + m.phone + '">' + escapeHtml(m.name) + '</option>').join('');
+      console.log(`✅ ${sid} populated with ${activeMembers.length} members`);
+    } else {
+      console.warn(`⚠️ ${sid} element not found`);
     }
   });
+  
   // Attach live update for debt preview on member change AND amount input
   const debtMember = document.getElementById('debt-member');
   const debtAmount = document.getElementById('debt-amount');
+  const debtInterest = document.getElementById('debt-interest');
+  
   if (debtMember) {
-    debtMember.onchange = function() { updateDebtPreview(); };
+    debtMember.onchange = function() { 
+      console.log('🔄 debt-member changed');
+      updateDebtPreview(); 
+    };
   }
+  
   if (debtAmount) {
-    debtAmount.oninput = function() { updateDebtPreview(); };
+    debtAmount.oninput = function() { 
+      console.log('🔄 debt-amount changed');
+      updateDebtPreview(); 
+    };
   }
+  
+  if (debtInterest) {
+    debtInterest.oninput = function() { 
+      console.log('🔄 debt-interest changed');
+      updateDebtPreview(); 
+    };
+  }
+  
+  // Initial preview if member is already selected
+  setTimeout(updateDebtPreview, 100);
 };
+
 window.saveSavingsSettings=function(){settings.dailyAmount=+document.getElementById('admin-daily').value;settings.welfareAmount=+document.getElementById('admin-welfare').value;settings.fineContribution=+document.getElementById('admin-finecontrib').value;settings.fineAmount=+document.getElementById('admin-fine').value;db.ref('settings').update({dailyAmount:settings.dailyAmount,welfareAmount:settings.welfareAmount,fineContribution:settings.fineContribution,fineAmount:settings.fineAmount});toast(t('save_rates'),'#10b981');renderAdminTab();updateHomeUI();};
 window.updateNotice = function() {
   const noticeText = document.getElementById('admin-notice-text').value.trim();
@@ -9306,20 +9363,34 @@ window.updateNotice = function() {
     toast('Publish failed', '#ef4444');
   });
 };
+// ==========================================
+// OPEN ADD TRANSACTION - COMPLETE FUNCTION
+// ==========================================
+
 function openAddTransaction() {
+  console.log('📋 openAddTransaction called');
+  
   // Recompute pots so debt/loan balances are fresh when preview runs
   computePots();
+  
   // Populate member dropdown
   const memberSelect = document.getElementById('tx-member');
   if (memberSelect) {
     memberSelect.innerHTML = '<option value="">Select member</option>' +
       members.filter(m => m.approved).map(m => `<option value="${m.phone}">${escapeHtml(m.name)}</option>`).join('');
+    console.log('✅ Member dropdown populated with', members.filter(m => m.approved).length, 'members');
+  } else {
+    console.error('❌ tx-member element not found');
+    toast('Error: Member dropdown not found', '#ef4444');
+    return;
   }
+  
   // Reset fields
   const typeSelect = document.getElementById('tx-type');
   const amountInput = document.getElementById('tx-amount');
   const descInput = document.getElementById('tx-desc');
   const previewDiv = document.getElementById('tx-preview');
+  
   if (typeSelect) typeSelect.value = 'deposit';
   if (amountInput) amountInput.value = '';
   if (descInput) descInput.value = '';
@@ -9328,14 +9399,25 @@ function openAddTransaction() {
   // Attach preview handler
   attachDepositPreviewHandler();
   
+  // Open the modal
   openOv('ov-add-tx');
+  console.log('✅ Add transaction modal opened');
 }
+
+// ==========================================
+// UPDATE TRANSACTION PREVIEW
+// ==========================================
+
 window.updateTxPreview = function() {
   const phone = document.getElementById('tx-member')?.value;
   const type = document.getElementById('tx-type')?.value;
   const amount = parseFloat(document.getElementById('tx-amount')?.value);
   const previewEl = document.getElementById('tx-preview');
-  if (!previewEl) return;
+  
+  if (!previewEl) {
+    console.warn('⚠️ tx-preview element not found');
+    return;
+  }
 
   if (type !== 'deposit' || !phone || !amount || amount <= 0) {
     previewEl.style.display = 'none';
@@ -9343,7 +9425,10 @@ window.updateTxPreview = function() {
   }
 
   const member = members.find(m => m.phone === phone);
-  if (!member) return;
+  if (!member) {
+    previewEl.style.display = 'none';
+    return;
+  }
 
   computePots();
 
@@ -9445,14 +9530,26 @@ window.updateTxPreview = function() {
   }
   previewEl.style.display = 'block';
 };
+// ==========================================
+// ADD TRANSACTION WITH PREVIEW
+// ==========================================
+
 window.addTransactionWithPreview = async function() {
+  console.log('📋 addTransactionWithPreview called');
+  
   const phone = document.getElementById('tx-member')?.value;
   const type = document.getElementById('tx-type')?.value;
   const amount = parseFloat(document.getElementById('tx-amount')?.value);
   const desc = document.getElementById('tx-desc')?.value;
   const member = members.find(m => m.phone === phone);
-  if (!member || !amount || amount <= 0) {
-    toast('Select member and enter valid amount', '#ef4444');
+  
+  if (!member) {
+    toast('Please select a member', '#ef4444');
+    return;
+  }
+  
+  if (!amount || amount <= 0) {
+    toast('Enter a valid amount', '#ef4444');
     return;
   }
 
@@ -9483,52 +9580,73 @@ window.addTransactionWithPreview = async function() {
 
     showTransactionReceiptModal(member, 'deposit', amount, desc || 'Deposit',
       async () => {
+        console.log('✅ Confirm & Send receipt selected');
         const depositTxs = await processDepositWithFutureDays(member, amount, Date.now(), desc || 'Manual deposit');
         const writes = depositTxs.map(tx => db.ref('transactions').push(tx));
         await Promise.all(writes);
         toast(`Deposit saved! ${money(amount)} applied.`, '#10b981');
-        computePots(); refreshUI();
+        computePots(); 
+        refreshUI();
         closeOv('ov-add-tx');
       },
       async () => {
+        console.log('✅ Confirm & Don\'t Send selected');
         const depositTxs = await processDepositWithFutureDays(member, amount, Date.now(), desc || 'Manual deposit');
         const writes = depositTxs.map(tx => db.ref('transactions').push(tx));
         await Promise.all(writes);
         toast(`Deposit saved! ${money(amount)} applied.`, '#10b981');
-        computePots(); refreshUI();
+        computePots(); 
+        refreshUI();
         closeOv('ov-add-tx');
       },
-      () => closeOv('ov-add-tx'),
+      () => {
+        console.log('❌ Transaction cancelled');
+        closeOv('ov-add-tx');
+      },
       projectedLoanBalance,
       null
     );
   } else {
     showTransactionReceiptModal(member, type, amount, desc || type,
       async () => {
+        console.log('✅ Confirm & Send receipt selected');
         await db.ref('transactions').push({
-          memberPhone: phone, memberName: member.name, type: type,
-          amount: amount, description: desc || type, date: Date.now()
+          memberPhone: phone, 
+          memberName: member.name, 
+          type: type,
+          amount: amount, 
+          description: desc || type, 
+          date: Date.now()
         });
         toast(`${type} recorded!`, '#10b981');
-        computePots(); refreshUI();
+        computePots(); 
+        refreshUI();
         closeOv('ov-add-tx');
       },
       async () => {
+        console.log('✅ Confirm & Don\'t Send selected');
         await db.ref('transactions').push({
-          memberPhone: phone, memberName: member.name, type: type,
-          amount: amount, description: desc || type, date: Date.now()
+          memberPhone: phone, 
+          memberName: member.name, 
+          type: type,
+          amount: amount, 
+          description: desc || type, 
+          date: Date.now()
         });
         toast(`${type} recorded!`, '#10b981');
-        computePots(); refreshUI();
+        computePots(); 
+        refreshUI();
         closeOv('ov-add-tx');
       },
-      () => closeOv('ov-add-tx'),
+      () => {
+        console.log('❌ Transaction cancelled');
+        closeOv('ov-add-tx');
+      },
       null,
       null
     );
   }
 };
-
 window.addFine = async function() {
   const phone = document.getElementById('fine-member').value;
   const reason = document.getElementById('fine-reason').value;
@@ -9644,77 +9762,372 @@ window.addGroupTransaction = async function() {
   refreshUI();
 };
 
+// ==========================================
+// ASSIGN DEBT AS LOAN - WITH RECEIPT PREVIEW
+// ==========================================
+
 window.assignDebtAsLoan = async function() {
+  console.log('📋 assignDebtAsLoan called');
+  
   const phone = document.getElementById('debt-member')?.value;
   const principal = parseFloat(document.getElementById('debt-amount')?.value);
   const interestRate = parseFloat(document.getElementById('debt-interest')?.value);
   const dueDateStr = document.getElementById('debt-due-date')?.value;
   const reason = document.getElementById('debt-reason')?.value || 'Admin assigned debt';
-  const member = members.find(m => m.phone === phone);
-  if (!member || !principal || isNaN(interestRate) || !dueDateStr) {
-    toast('Fill all fields correctly', '#ef4444');
+  
+  console.log('📊 Values:', { phone, principal, interestRate, dueDateStr, reason });
+  
+  // Validate inputs
+  if (!phone) {
+    toast('Please select a member', '#ef4444');
     return;
   }
+  
+  const member = members.find(m => m.phone === phone);
+  if (!member) {
+    toast('Member not found', '#ef4444');
+    return;
+  }
+  
+  if (!principal || principal <= 0) {
+    toast('Enter a valid amount', '#ef4444');
+    return;
+  }
+  
+  if (isNaN(interestRate) || interestRate < 0) {
+    toast('Enter a valid interest rate', '#ef4444');
+    return;
+  }
+  
+  if (!dueDateStr) {
+    toast('Select a due date', '#ef4444');
+    return;
+  }
+  
   const dueDate = new Date(dueDateStr).getTime();
-
-  const currentLoanBalance = memberLoans[member.phone] || 0;
+  console.log('✅ All validations passed');
+  
+  // Calculate total repay
   const totalRepay = Math.floor(principal * (1 + interestRate / 100));
-  const newLoanBalance = currentLoanBalance + totalRepay;
-
-  showTransactionReceiptModal(member, 'loan_disbursement', principal, reason,
+  const interest = totalRepay - principal;
+  
+  // Check if member already has an active application loan
+  const hasAppLoan = loans.some(l => 
+    l.memberId === member.id && 
+    l.status === 'approved' && 
+    !l.repaid && 
+    l.loanQuestions && 
+    l.loanQuestions.length > 0
+  );
+  
+  if (hasAppLoan) {
+    toast('⚠️ Member already has an active application loan. Please wait for it to be repaid.', '#ef4444');
+    return;
+  }
+  
+  // ===== SHOW RECEIPT PREVIEW BEFORE SAVING =====
+  showDebtReceiptModal(
+    member, 
+    principal, 
+    interestRate, 
+    interest, 
+    totalRepay, 
+    reason, 
+    dueDate,
     async () => {
-      const totalRepayLoan = Math.floor(principal * (1 + interestRate / 100));
-      const interest = totalRepayLoan - principal;
-      const loanRef = db.ref('loans').push();
-      await loanRef.set({
-        id: loanRef.key, memberId: member.id, memberName: member.name, memberPhone: phone,
-        amount: principal, interestRate: interestRate, totalRepay: totalRepayLoan, reason: reason,
-        status: 'approved', requestedAt: Date.now(), approvedAt: Date.now(), dueDate: dueDate,
-        repaid: false, penaltyApplied: false
-      });
-      await db.ref('transactions').push({
-        memberPhone: phone, memberName: member.name, type: 'loan_disbursement',
-        amount: principal, description: `${reason} (principal)`, date: Date.now()
-      });
-      if (interest > 0) {
-        await db.ref('transactions').push({
-          memberPhone: phone, memberName: member.name, type: 'loan_adjustment',
-          amount: interest, description: `Interest (${interestRate}%)`, date: Date.now() + 1
-        });
-      }
-      toast(`Debt assigned: UGX ${principal.toLocaleString()} to ${member.name}`, '#10b981');
-      computePots(); refreshUI();
+      // On Confirm & Send
+      await executeDebtAssignment(member, principal, interestRate, interest, totalRepay, reason, dueDate);
+      toast(`✅ Debt of UGX ${principal.toLocaleString()} assigned to ${member.name}`, '#10b981');
+      computePots();
+      refreshUI();
       closeOv('ov-assign-debt');
     },
     async () => {
-      const totalRepayLoan = Math.floor(principal * (1 + interestRate / 100));
-      const interest = totalRepayLoan - principal;
-      const loanRef = db.ref('loans').push();
-      await loanRef.set({
-        id: loanRef.key, memberId: member.id, memberName: member.name, memberPhone: phone,
-        amount: principal, interestRate: interestRate, totalRepay: totalRepayLoan, reason: reason,
-        status: 'approved', requestedAt: Date.now(), approvedAt: Date.now(), dueDate: dueDate,
-        repaid: false, penaltyApplied: false
-      });
-      await db.ref('transactions').push({
-        memberPhone: phone, memberName: member.name, type: 'loan_disbursement',
-        amount: principal, description: `${reason} (principal)`, date: Date.now()
-      });
-      if (interest > 0) {
-        await db.ref('transactions').push({
-          memberPhone: phone, memberName: member.name, type: 'loan_adjustment',
-          amount: interest, description: `Interest (${interestRate}%)`, date: Date.now() + 1
-        });
-      }
-      toast(`Debt assigned: UGX ${principal.toLocaleString()} to ${member.name}`, '#10b981');
-      computePots(); refreshUI();
+      // On Confirm & Don't Send
+      await executeDebtAssignment(member, principal, interestRate, interest, totalRepay, reason, dueDate);
+      toast(`✅ Debt of UGX ${principal.toLocaleString()} assigned to ${member.name}`, '#10b981');
+      computePots();
+      refreshUI();
       closeOv('ov-assign-debt');
     },
-    () => closeOv('ov-assign-debt'),
-    newLoanBalance,
-    null
+    () => {
+      // On Cancel
+      toast('Debt assignment cancelled.', '#f59e0b');
+      closeOv('ov-assign-debt');
+    }
   );
 };
+
+// ==========================================
+// EXECUTE DEBT ASSIGNMENT - Helper Function
+// ==========================================
+
+async function executeDebtAssignment(member, principal, interestRate, interest, totalRepay, reason, dueDate) {
+  console.log('📋 executeDebtAssignment called');
+  
+  // Create loan record
+  const loanRef = db.ref('loans').push();
+  const loanId = loanRef.key;
+  
+  console.log('📝 Creating loan with ID:', loanId);
+  
+  const loanData = {
+    id: loanId,
+    memberId: member.id,
+    memberName: member.name,
+    memberPhone: member.phone,
+    amount: principal,
+    interestRate: interestRate,
+    totalRepay: totalRepay,
+    reason: reason,
+    status: 'approved',
+    requestedAt: Date.now(),
+    approvedAt: Date.now(),
+    dueDate: dueDate,
+    repaid: false,
+    penaltyApplied: false,
+    repaidAmount: 0,
+    loanQuestions: [],
+    weeks: 1
+  };
+  
+  await loanRef.set(loanData);
+  console.log('✅ Loan created successfully');
+  
+  // Create disbursement transaction
+  await db.ref('transactions').push({
+    memberPhone: member.phone,
+    memberName: member.name,
+    type: 'loan_disbursement',
+    amount: principal,
+    description: `${reason} (principal) - Debt assigned by admin`,
+    date: Date.now(),
+    loanId: loanId
+  });
+  console.log('✅ Disbursement transaction created');
+  
+  // Create interest transaction if applicable
+  if (interest > 0) {
+    await db.ref('transactions').push({
+      memberPhone: member.phone,
+      memberName: member.name,
+      type: 'loan_interest',
+      amount: interest,
+      description: `Interest (${interestRate}%) on assigned debt`,
+      date: Date.now() + 1,
+      loanId: loanId
+    });
+    console.log('✅ Interest transaction created');
+  }
+  
+  // Refresh loans data
+  const loansSnap = await db.ref('loans').once('value');
+  loans = loansSnap.val() ? Object.entries(loansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
+  
+  console.log('✅ Debt assignment complete');
+}
+
+// ==========================================
+// SHOW DEBT RECEIPT MODAL
+// ==========================================
+
+function showDebtReceiptModal(member, principal, interestRate, interest, totalRepay, reason, dueDate, onConfirmSend, onConfirmNoSend, onCancel) {
+  console.log('📋 showDebtReceiptModal called');
+  
+  // Generate receipt image
+  generateDebtReceiptImage(member, principal, interestRate, interest, totalRepay, reason, dueDate).then(imageData => {
+    const modal = document.createElement('div');
+    modal.className = 'ov on';
+    modal.style.zIndex = '20020';
+    modal.innerHTML = `
+      <div class="bs" style="max-width: 600px;">
+        <div class="bs-title">📄 Debt Assignment Receipt Preview</div>
+        <div style="text-align: center; margin-bottom: 16px;">
+          ${imageData ? `<img src="${imageData}" style="max-width: 100%; border-radius: 12px; border: 1px solid #ccc;">` : '<div class="hint-box">⚠️ Receipt image not available</div>'}
+        </div>
+        <div style="display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;">
+          <button class="btn btn-gold" id="debt-confirm-send-pc">💻 Confirm & Copy Image (PC)</button>
+          <button class="btn btn-teal" id="debt-confirm-send-phone">📱 Confirm & Send Image (Phone)</button>
+          <button class="btn btn-green" id="debt-confirm-nosend">✅ Confirm & Don't Send</button>
+          <button class="btn btn-purple" id="debt-print">🖨️ Print</button>
+          <button class="btn btn-red" id="debt-cancel">🗑️ Don't Save</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    const confirmSendPc = modal.querySelector('#debt-confirm-send-pc');
+    const confirmSendPhone = modal.querySelector('#debt-confirm-send-phone');
+    const confirmNoSendBtn = modal.querySelector('#debt-confirm-nosend');
+    const printBtn = modal.querySelector('#debt-print');
+    const cancelBtn = modal.querySelector('#debt-cancel');
+
+    const closeModal = () => {
+      modal.classList.remove('on');
+      setTimeout(() => modal.remove(), 300);
+    };
+
+    async function copyImageToClipboard(blob, fileName) {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+        toast('📋 Receipt image copied to clipboard! Paste (Ctrl+V) into WhatsApp Web.', '#06b6d4');
+      } catch (err) {
+        console.error(err);
+        toast('Failed to copy image. Try downloading instead.', '#ef4444');
+      }
+    }
+
+    async function shareOrDownloadImage(blob, fileName) {
+      if (navigator.share) {
+        try {
+          const file = new File([blob], fileName, { type: 'image/png' });
+          await navigator.share({
+            title: 'Debt Assignment Receipt',
+            text: `Debt of UGX ${principal.toLocaleString()} assigned to ${member.name}`,
+            files: [file]
+          });
+          toast('Image shared!', '#10b981');
+          return;
+        } catch (err) {
+          if (err.name !== 'AbortError') {
+            console.warn('Share failed, falling back to download', err);
+          } else {
+            return;
+          }
+        }
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('📸 Image downloaded. Open WhatsApp and attach it manually.', '#f59e0b');
+    }
+
+    confirmSendPc.onclick = async () => {
+      closeModal();
+      if (imageData) {
+        const blob = await (await fetch(imageData)).blob();
+        await copyImageToClipboard(blob, `debt_${member.id}.png`);
+      }
+      if (onConfirmSend) onConfirmSend();
+    };
+
+    confirmSendPhone.onclick = async () => {
+      closeModal();
+      if (imageData) {
+        const blob = await (await fetch(imageData)).blob();
+        await shareOrDownloadImage(blob, `debt_${member.id}.png`);
+      }
+      if (onConfirmSend) onConfirmSend();
+    };
+
+    confirmNoSendBtn.onclick = () => {
+      closeModal();
+      if (onConfirmNoSend) onConfirmNoSend();
+      toast('Debt assignment saved (no receipt sent).', '#10b981');
+    };
+
+    printBtn.onclick = () => {
+      closeModal();
+      if (imageData) {
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+          <head><title>Debt Assignment Receipt</title>
+          <style>body{margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff;}img{max-width:100%;height:auto;}</style>
+          </head><body><img src="${imageData}"></body></html>
+        `);
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
+      } else toast('No image to print', '#ef4444');
+    };
+
+    cancelBtn.onclick = () => {
+      closeModal();
+      if (onCancel) onCancel();
+      toast('Debt assignment cancelled.', '#f59e0b');
+    };
+  });
+}
+
+// ==========================================
+// GENERATE DEBT RECEIPT IMAGE
+// ==========================================
+
+async function generateDebtReceiptImage(member, principal, interestRate, interest, totalRepay, reason, dueDate) {
+  console.log('📋 generateDebtReceiptImage called');
+  
+  const date = new Date();
+  const receiptId = `DEBT-${date.toISOString().slice(0,10).replace(/-/g,'')}-${member.id.slice(-4)}`;
+  const dateLabel = date.toLocaleDateString('en-UG', { year:'numeric', month:'long', day:'numeric' });
+  const dueDateLabel = new Date(dueDate).toLocaleDateString('en-UG', { year:'numeric', month:'long', day:'numeric' });
+
+  const receiptHtml = `
+    <div class="debt-receipt-card" style="
+      max-width: 500px;
+      margin: 0 auto;
+      border: 2px solid #e2e8f0;
+      border-radius: 20px;
+      padding: 20px;
+      background: white;
+      font-family: 'DM Sans', sans-serif;
+    ">
+      <div style="text-align: center; margin-bottom: 12px;">
+        <div style="font-size: 1.8rem;">🌾</div>
+        <div style="font-weight: 800; font-size: 1.2rem; color: #b45309;">HARVEST TRUST FINANCE</div>
+        <div style="font-size: 0.7rem; color: #64748b;">Debt Assignment Receipt</div>
+      </div>
+      <div style="border-top: 1px solid #e2e8f0; margin: 8px 0;"></div>
+      <div style="font-size: 0.9rem;">
+        <div><strong>Receipt No.</strong> ${receiptId}</div>
+        <div><strong>Date:</strong> ${dateLabel}</div>
+        <div><strong>Member:</strong> ${escapeHtml(member.name)}</div>
+        <div><strong>Phone:</strong> ${member.phone}</div>
+      </div>
+      <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
+      <div style="font-size: 1rem;">
+        <div><strong>Assignment Type:</strong> Debt (Loan)</div>
+        <div><strong>Principal Amount:</strong> UGX ${principal.toLocaleString()}</div>
+        <div><strong>Interest Rate:</strong> ${interestRate}%</div>
+        <div><strong>Interest Amount:</strong> UGX ${interest.toLocaleString()}</div>
+        <div><strong>Total to Repay:</strong> UGX ${totalRepay.toLocaleString()}</div>
+        <div><strong>Due Date:</strong> ${dueDateLabel}</div>
+        <div><strong>Reason:</strong> ${escapeHtml(reason)}</div>
+      </div>
+      <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
+      <div class="micro muted" style="text-align:center;">
+        ⚠️ This debt is assigned as a loan. Repayment will be deducted from daily deposits.
+        <br>Late payment will incur additional penalties.
+      </div>
+      <div style="text-align: center; font-size: 0.7rem; margin-top: 8px;">Authorised by Harvest Trust Finance</div>
+    </div>
+  `;
+
+  const tempDiv = document.createElement('div');
+  tempDiv.style.position = 'absolute';
+  tempDiv.style.top = '-9999px';
+  tempDiv.style.left = '-9999px';
+  tempDiv.innerHTML = receiptHtml;
+  document.body.appendChild(tempDiv);
+
+  try {
+    const canvas = await html2canvas(tempDiv.querySelector('.debt-receipt-card'), {
+      scale: 1.5,
+      backgroundColor: '#ffffff',
+      logging: false
+    });
+    document.body.removeChild(tempDiv);
+    return canvas.toDataURL('image/png');
+  } catch (err) {
+    document.body.removeChild(tempDiv);
+    console.error('Debt receipt image generation failed', err);
+    return null;
+  }
+}
 window.previewProfitDistribution = function() {
   if (groupProfit <= 0) {
     toast('No profit to distribute', '#ef4444');
@@ -10455,38 +10868,71 @@ function getMemberPaymentStatus(member) {
   return { missedDays, aheadDays };
 }
 
+// ==========================================
+// UPDATE DEBT PREVIEW - FIXED
+// ==========================================
+
 function updateDebtPreview() {
+  console.log('📋 updateDebtPreview called');
+  
   const phone = document.getElementById('debt-member')?.value;
   const previewDiv = document.getElementById('debt-preview');
-  if (!phone) {
-    previewDiv.style.display = 'none';
+  
+  if (!previewDiv) {
+    console.error('❌ debt-preview element not found');
     return;
   }
+  
+  if (!phone) {
+    previewDiv.style.display = 'none';
+    console.log('ℹ️ No member selected');
+    return;
+  }
+  
   const member = members.find(m => m.phone === phone);
-  if (!member) return;
+  if (!member) {
+    previewDiv.style.display = 'none';
+    console.log('❌ Member not found for phone:', phone);
+    return;
+  }
 
-  // Get today's status (deficit / surplus)
-  const { deficit, surplus, paidDaily, welfarePaid } = getTodayStatus(member);
+  console.log('📊 Member found:', member.name);
+
+  // Get today's status
+  const todayStart = new Date().setHours(0, 0, 0, 0);
   const dailyAmount = settings.dailyAmount || 2000;
   const welfareAmount = settings.welfareAmount || 500;
   const requiredToday = dailyAmount + welfareAmount;
 
   // Amount already paid today (deposits only)
   let paidDailyToday = 0;
-  const todayStart = new Date().setHours(0,0,0,0);
   transactions.forEach(tx => {
     if (tx.memberPhone === member.phone && tx.type === 'deposit' && tx.date >= todayStart && tx.date < todayStart + 86400000) {
       paidDailyToday += tx.amount;
     }
   });
+  
+  // Check welfare paid today
+  let welfarePaidToday = false;
+  transactions.forEach(tx => {
+    if (tx.memberPhone === member.phone && tx.type === 'welfare' && tx.date >= todayStart && tx.date < todayStart + 86400000) {
+      welfarePaidToday = true;
+    }
+  });
+  
+  const neededDaily = Math.max(0, dailyAmount - paidDailyToday);
+  const neededWelfare = welfarePaidToday ? 0 : welfareAmount;
+  const deficitToday = neededDaily + neededWelfare;
   const surplusToday = Math.max(0, paidDailyToday - requiredToday);
 
   let existingDebt = memberDebts[member.phone] || 0;
   let totalLoanBalance = memberLoans[member.phone] || 0;
-  let suggestedPrincipal = requiredToday - paidDailyToday + existingDebt + totalLoanBalance;
+  let suggestedPrincipal = deficitToday + existingDebt + totalLoanBalance;
   if (suggestedPrincipal < 0) suggestedPrincipal = 0;
 
   const enteredAmount = parseFloat(document.getElementById('debt-amount')?.value) || 0;
+  const interestRate = parseFloat(document.getElementById('debt-interest')?.value) || loanSettings.interestRate || 5;
+  
   let finalDebt = enteredAmount;
   let deductionNote = '';
 
@@ -10495,32 +10941,39 @@ function updateDebtPreview() {
     deductionNote = `<div style="color:var(--green); margin-top:4px;">✨ Today's surplus of ${money(surplusToday)} will be applied to this debt automatically.</div>`;
   }
 
-  const interestRate = parseFloat(document.getElementById('debt-interest')?.value) || 5;
   const interestAmount = Math.floor(finalDebt * interestRate / 100);
   const totalRepay = finalDebt + interestAmount;
 
+  console.log('📊 Preview data:', { member: member.name, finalDebt, interestRate, totalRepay });
+
   previewDiv.innerHTML = `
     <div style="margin-bottom:8px;"><strong>Member: ${escapeHtml(member.name)}</strong></div>
-    <div>Today's required: ${money(requiredToday)}</div>
-    <div>Already paid today: ${money(paidDailyToday)}</div>
-    <div>Today's ${paidDailyToday >= requiredToday ? 'surplus' : 'deficit'}: ${money(paidDailyToday >= requiredToday ? paidDailyToday - requiredToday : requiredToday - paidDailyToday)}</div>
-    <div>Existing debt: ${money(existingDebt)}</div>
-    <div>Outstanding loan: ${money(totalLoanBalance)}</div>
+    <div>📅 Days Active: <strong>${getDaysActive(member)} days</strong></div>
+    <div>💰 Today's required: ${money(requiredToday)}</div>
+    <div>💳 Already paid today: ${money(paidDailyToday)}</div>
+    <div>${paidDailyToday >= requiredToday ? '✅' : '⚠️'} Today's ${paidDailyToday >= requiredToday ? 'surplus' : 'deficit'}: ${money(paidDailyToday >= requiredToday ? paidDailyToday - requiredToday : requiredToday - paidDailyToday)}</div>
     <hr>
-    <div><strong>Entered principal:</strong> ${money(enteredAmount)}</div>
+    <div>🧾 Existing debt: ${money(existingDebt)}</div>
+    <div>🏦 Outstanding loan: ${money(totalLoanBalance)}</div>
+    <hr>
+    <div><strong>💰 Entered principal:</strong> ${money(enteredAmount)}</div>
     ${deductionNote}
-    <div><strong>Effective debt after today's surplus:</strong> ${money(finalDebt)}</div>
-    <div><strong>Interest (${interestRate}%):</strong> ${money(interestAmount)}</div>
-    <div><strong>Total to repay:</strong> ${money(totalRepay)}</div>
-    <div class="micro muted">This debt will be added as a loan. Today's surplus reduces it immediately.</div>
+    <div><strong>📊 Effective debt after today's surplus:</strong> ${money(finalDebt)}</div>
+    <div><strong>📈 Interest (${interestRate}%):</strong> ${money(interestAmount)}</div>
+    <div><strong>💸 Total to repay:</strong> ${money(totalRepay)}</div>
+    <div class="micro muted" style="margin-top:8px;">This debt will be added as a loan. Today's surplus reduces it immediately.</div>
   `;
   previewDiv.style.display = 'block';
+  
+  // Auto-fill suggested amount if empty
   const amountInput = document.getElementById('debt-amount');
   if (amountInput && !amountInput.value) {
     amountInput.value = suggestedPrincipal;
+    console.log('💡 Auto-filled suggested amount:', suggestedPrincipal);
   }
+  
   const interestInput = document.getElementById('debt-interest');
-  if (interestInput && interestInput.value == 5) {
+  if (interestInput && !interestInput.value) {
     interestInput.value = loanSettings.interestRate || 5;
   }
 }
@@ -13384,15 +13837,32 @@ window.deleteNotifPopup = async function(id) {
     showNotificationsPopup(); // refresh list
   }
 };
+// ==========================================
+// SHOW TRANSACTION RECEIPT MODAL - FIXED
+// ==========================================
+
 function showTransactionReceiptModal(member, txType, amount, description, onConfirmSend, onConfirmNoSend, onCancel, customLoanBalance = null, onPrint = null) {
+  console.log('📋 showTransactionReceiptModal called');
+  
+  // ===== FIX: Ensure values are numbers =====
+  const safeAmount = Number(amount) || 0;
+  
   computePots();
-  let loanBalance = (customLoanBalance !== null) ? customLoanBalance : (memberLoans[member.phone] || 0);
-  const accountBalance = memberBalances[member.phone] || 0;
+  
+  // ===== FIX: Safely get balances =====
+  let loanBalance = (customLoanBalance !== null) ? Number(customLoanBalance) : (memberLoans[member?.phone] || 0);
+  let accountBalance = memberBalances[member?.phone] || 0;
+  
+  // ===== FIX: Calculate max borrow =====
   let totalDeposits = 0;
-  transactions.forEach(tx => { if (tx.memberPhone === member.phone && tx.type === 'deposit') totalDeposits += tx.amount; });
+  transactions.forEach(tx => { 
+    if (tx.memberPhone === member?.phone && tx.type === 'deposit') totalDeposits += tx.amount; 
+  });
   const maxBorrow = Math.floor(totalDeposits * (loanSettings.disciplineMultiplier || 1.5));
 
-  generateTransactionReceipt(member, txType, amount, description, loanBalance, accountBalance, maxBorrow).then(imageData => {
+  console.log('📊 Safe values:', { loanBalance, accountBalance, maxBorrow, totalDeposits });
+
+  generateTransactionReceipt(member, txType, safeAmount, description, loanBalance, accountBalance, maxBorrow).then(imageData => {
     const modal = document.createElement('div');
     modal.className = 'ov on';
     modal.style.zIndex = '20020';
@@ -13435,13 +13905,12 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
     }
 
     async function shareOrDownloadImage(blob, fileName) {
-      // Try native share first
       if (navigator.share) {
         try {
           const file = new File([blob], fileName, { type: 'image/png' });
           await navigator.share({
             title: 'Transaction Receipt',
-            text: `${txType.toUpperCase()} of UGX ${amount.toLocaleString()} for ${member.name}`,
+            text: `${txType.toUpperCase()} of UGX ${safeAmount.toLocaleString()} for ${member?.name || 'Member'}`,
             files: [file]
           });
           toast('Image shared!', '#10b981');
@@ -13450,12 +13919,10 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
           if (err.name !== 'AbortError') {
             console.warn('Share failed, falling back to download', err);
           } else {
-            // User cancelled – do nothing
             return;
           }
         }
       }
-      // Fallback: download
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -13469,7 +13936,7 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
       closeModal();
       if (imageData) {
         const blob = await (await fetch(imageData)).blob();
-        await copyImageToClipboard(blob, `receipt_${member.id}.png`);
+        await copyImageToClipboard(blob, `receipt_${member?.id || 'unknown'}.png`);
       }
       if (onConfirmSend) onConfirmSend();
     };
@@ -13478,7 +13945,7 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
       closeModal();
       if (imageData) {
         const blob = await (await fetch(imageData)).blob();
-        await shareOrDownloadImage(blob, `receipt_${member.id}.png`);
+        await shareOrDownloadImage(blob, `receipt_${member?.id || 'unknown'}.png`);
       }
       if (onConfirmSend) onConfirmSend();
     };
@@ -13514,26 +13981,35 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
     };
   });
 }
+// ==========================================
+// ATTACH DEPOSIT PREVIEW HANDLER
+// ==========================================
+
 function attachDepositPreviewHandler() {
-  // All preview logic lives in window.updateTxPreview — just wire up listeners
-  // and trigger once so the preview is fresh when the modal opens.
-  const typeSelect   = document.getElementById('tx-type');
-  const amountInput  = document.getElementById('tx-amount');
+  console.log('📋 attachDepositPreviewHandler called');
+  
+  // All preview logic lives in window.updateTxPreview
+  // Wire up listeners and trigger once so the preview is fresh when the modal opens.
+  const typeSelect = document.getElementById('tx-type');
+  const amountInput = document.getElementById('tx-amount');
   const memberSelect = document.getElementById('tx-member');
 
   // Remove stale listeners from a previous modal open
   if (window._previewAttached) {
-    typeSelect?.removeEventListener('change',  window.updateTxPreview);
-    amountInput?.removeEventListener('input',  window.updateTxPreview);
+    typeSelect?.removeEventListener('change', window.updateTxPreview);
+    amountInput?.removeEventListener('input', window.updateTxPreview);
     memberSelect?.removeEventListener('change', window.updateTxPreview);
   }
 
-  typeSelect?.addEventListener('change',  window.updateTxPreview);
-  amountInput?.addEventListener('input',  window.updateTxPreview);
+  typeSelect?.addEventListener('change', window.updateTxPreview);
+  amountInput?.addEventListener('input', window.updateTxPreview);
   memberSelect?.addEventListener('change', window.updateTxPreview);
 
   window._previewAttached = true;
-  window.updateTxPreview(); // show preview immediately if fields already filled
+  
+  // Show preview immediately if fields already filled
+  window.updateTxPreview();
+  console.log('✅ Preview handler attached');
 }
 function promptAdminAccess() {
   const password = prompt("Enter admin password to access panel:");
