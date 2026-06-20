@@ -2920,6 +2920,150 @@ Thank you for your patience and understanding. 🙏
     <button class="btn btn-sec btn-full" style="margin-top: 16px;" onclick="closeOv('ov-help')">Close</button>
   </div>
 </div>
+<!-- ========================================== -->
+<!-- MAINTENANCE OVERLAY (Hidden by default)    -->
+<!-- ========================================== -->
+<div id="maintenance-overlay" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); backdrop-filter: blur(12px); z-index: 10000; align-items: center; justify-content: center; padding: 20px;">
+  <div style="
+    background: var(--card);
+    border-radius: 28px;
+    padding: 32px 24px;
+    max-width: 480px;
+    width: 100%;
+    border: 2px solid var(--gold3);
+    box-shadow: var(--sh2);
+    text-align: center;
+    position: relative;
+  ">
+    <!-- PADLOCK ICON - Top Right Corner -->
+    <div id="maintenance-padlock" style="
+      position: absolute;
+      top: 12px;
+      right: 16px;
+      cursor: pointer;
+      font-size: 1.2rem;
+      padding: 8px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.05);
+      transition: all 0.3s ease;
+      border: 1px solid rgba(255,255,255,0.1);
+      color: var(--t3);
+      line-height: 1;
+    " 
+    onclick="showAdminPasswordPrompt()"
+    onmouseover="this.style.background='rgba(245,158,11,0.2)'; this.style.borderColor='var(--gold)'; this.style.color='var(--gold)';"
+    onmouseout="this.style.background='rgba(255,255,255,0.05)'; this.style.borderColor='rgba(255,255,255,0.1)'; this.style.color='var(--t3)';"
+    title="Admin Access - Enter password to bypass maintenance">
+      🔒
+    </div>
+    
+    <span style="font-size: 3.5rem; display: block; margin-bottom: 8px;">🛠️</span>
+    <div style="font-family: 'Syne', sans-serif; font-size: 1.3rem; font-weight: 800; color: var(--gold); margin-bottom: 6px;">🔧 Under Maintenance</div>
+    <div id="maintenance-overlay-message" style="font-size: 0.9rem; color: var(--t2); line-height: 1.6; white-space: pre-wrap; max-width: 500px; margin: 0 auto;">
+      Loading message...
+    </div>
+    <div style="margin-top: 12px; padding: 8px 16px; background: rgba(245,158,11,0.12); border-radius: 20px; display: inline-block; font-size: 0.75rem; font-weight: 600; color: var(--gold);">
+      ⏰ We'll be back soon!
+    </div>
+    <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--br);">
+      <div class="micro muted">For urgent matters, contact admin on:</div>
+      <div style="font-weight: 600; color: var(--gold);">📞 0770371720</div>
+    </div>
+    <button onclick="location.reload()" style="
+      margin-top: 12px;
+      padding: 8px 20px;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid var(--br);
+      border-radius: 20px;
+      color: var(--t2);
+      cursor: pointer;
+      font-size: 0.75rem;
+      transition: all 0.2s;
+    " onmouseover="this.style.background='rgba(255,255,255,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">
+      🔄 Refresh
+    </button>
+  </div>
+</div>
+
+<!-- ========================================== -->
+<!-- ADMIN PASSWORD PROMPT MODAL                -->
+<!-- ========================================== -->
+<div class="ov" id="ov-admin-password-prompt" onclick="maybeClose(event,'ov-admin-password-prompt')">
+  <div class="bs" style="max-width: 400px; text-align: center;">
+    <div style="font-size: 3rem; margin-bottom: 12px;">🔐</div>
+    <div class="bs-title">Admin Access Required</div>
+    <div class="micro muted" style="margin-bottom: 16px;">Enter admin password to bypass maintenance mode</div>
+    
+    <div class="fgrp">
+      <label class="flbl">Admin Password</label>
+      <input type="password" id="admin-password-input" class="inp" placeholder="Enter admin password" onkeydown="if(event.key==='Enter')verifyAdminPasswordForMaintenance()">
+    </div>
+    
+    <div id="admin-password-error" style="color: var(--red); font-size: 0.8rem; font-weight: 700; min-height: 24px; margin-bottom: 8px;"></div>
+    
+    <div style="display: flex; gap: 12px; margin-top: 8px;">
+      <button class="btn btn-gold" style="flex: 1;" onclick="verifyAdminPasswordForMaintenance()">🔓 Unlock</button>
+      <button class="btn btn-sec" style="flex: 1;" onclick="closeOv('ov-admin-password-prompt')">Cancel</button>
+    </div>
+    
+    <div class="micro muted" style="margin-top: 12px;">⚠️ This will grant admin access and bypass maintenance mode</div>
+  </div>
+</div>
+
+<!-- ========================================== -->
+<!-- FLOATING EXIT BUTTON (Admin Only)         -->
+<!-- ========================================== -->
+<div id="maintenance-float-btn" style="display: none; position: fixed; bottom: 100px; right: 16px; z-index: 9999;">
+  <button onclick="exitMaintenanceMode()" style="
+    width: 64px; 
+    height: 64px; 
+    border-radius: 50%; 
+    background: linear-gradient(135deg, #ef4444, #dc2626); 
+    border: 2px solid rgba(255,255,255,0.2); 
+    color: white; 
+    font-size: 2rem; 
+    cursor: pointer; 
+    box-shadow: 0 4px 20px rgba(239,68,68,0.4);
+    transition: transform 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  " 
+  onmouseover="this.style.transform='scale(1.1)'" 
+  onmouseout="this.style.transform='scale(1)'"
+  title="Exit Maintenance Mode">
+    🚪
+  </button>
+  <div style="
+    position: absolute; 
+    top: -8px; 
+    right: -8px; 
+    background: #ef4444; 
+    color: white; 
+    font-size: 0.5rem; 
+    font-weight: 800; 
+    padding: 2px 6px; 
+    border-radius: 10px; 
+    animation: pulse 1.5s infinite;
+  ">EXIT</div>
+</div>
+
+<!-- ========================================== -->
+<!-- ADMIN MAINTENANCE BANNER                   -->
+<!-- ========================================== -->
+<div id="admin-maintenance-banner" style="display: none; background: linear-gradient(135deg, rgba(239,68,68,0.15), rgba(245,158,11,0.08)); border: 2px solid var(--red); border-radius: 12px; padding: 12px 16px; margin-bottom: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+  <div style="display: flex; align-items: center; gap: 12px;">
+    <span style="font-size: 1.5rem;">🔧</span>
+    <div>
+      <div style="font-weight: 800; color: var(--red);">MAINTENANCE MODE ACTIVE</div>
+      <div class="micro muted">Members cannot login. Click exit when ready.</div>
+    </div>
+  </div>
+  <button class="btn btn-red" onclick="exitMaintenanceMode()" style="padding: 8px 20px; font-weight: 700;">
+    🚪 Exit Maintenance
+  </button>
+</div>
+
 <script>
 // Immediately apply saved theme (light/dark) from localStorage before showing anything
 const savedThemeMode = localStorage.getItem('themeMode');
@@ -4698,32 +4842,7 @@ db.ref('settings/carouselOrder').on('value', snap => {
     if (currentScreen === 'admin' && adminUnlocked && currentAdminTab === 'resetrequests') renderAdminTab();
   });
 }
-function applySettings() {
-  applyAppTheme();
-  document.getElementById('hdr-title').innerText = settings.groupName || t('app_name');
-  
-  const lw = document.getElementById('hdr-logo-wrap');
-  const logoData = settings.bannerData || settings.bannerUrl;
-  if (logoData) {
-    lw.innerHTML = '<img src="'+logoData+'" style="width:100%;height:100%;object-fit:contain;background:transparent" onerror="this.parentElement.innerHTML=\'🌿\'">';
-  } else {
-    lw.innerHTML = '🌿';
-  }
-  
-  const dr = document.getElementById('daily-rate');
-  if (dr) dr.innerText = (settings.dailyAmount || 2500).toLocaleString();
-  
-  updateHomeUI();
-  updateMaintenanceBadge();
-  
-  // If maintenance mode is on, show overlay for NON-ADMIN users only
-  // Admin should NOT see the overlay
-  if (settings.maintenanceMode === true && !currentUser?.isAdmin) {
-    showMaintenanceOverlay();
-  } else {
-    hideMaintenanceOverlay();
-  }
-}
+
 function updateHomeUI() {
   // Weekly Total - always positive (calculated from active members)
   const weeklyTotal = computeTotalWeekly();
@@ -5587,80 +5706,6 @@ async function getMembersForLogin(){
   refreshLiveViews('login-members');
   return members;
 }
-let splashDone = false;
-
-window.doLogin = function() {
-  // Dismiss keyboard on mobile
-  if (document.activeElement && document.activeElement.blur) {
-    document.activeElement.blur();
-  }
-  
-  const pwd = document.getElementById('login-password').value.trim();
-  const errEl = document.getElementById('login-error');
-  if (!pwd) { 
-    errEl.innerText = 'Please enter your PIN or admin password'; 
-    return; 
-  }
-  
-  // STEP 1: Check if it's the admin password (ALWAYS allowed)
-  const storedAdminPwd = settings.adminPassword || ADMIN_PASSWORD;
-  if (pwd === storedAdminPwd) {
-    currentUser = { name: 'Admin', phone: 'admin', isAdmin: true };
-    adminUnlocked = true;
-    hideMaintenanceOverlay(); // Hide overlay if it was showing
-    showMainApp();
-    return;
-  }
-  
-  // STEP 2: Check if maintenance mode is active for members (NOT admin)
-  if (settings.maintenanceMode === true) {
-    showMaintenanceOverlay();
-    errEl.innerText = '🔧 System is under maintenance. Please try again later.';
-    errEl.style.color = 'var(--gold)';
-    errEl.style.fontWeight = '700';
-    toast('🔧 Maintenance mode is active', '#f59e0b');
-    return;
-  }
-  
-  // STEP 3: Check members for login
-  const match = members.find(m => m.phone && m.phone.slice(-4) === pwd);
-  if (!match) {
-    // Check if this phone has a pending application
-    db.ref('applications').orderByChild('phone').once('value', snap => {
-      let found = false;
-      snap.forEach(child => {
-        const app = child.val();
-        if (app.phone && app.phone.slice(-4) === pwd && app.status === 'pending') {
-          found = true;
-        }
-      });
-      if (found) {
-        errEl.innerText = 'Your application is under review. Please wait for admin approval.';
-      } else {
-        errEl.innerText = 'No account found. Please sign up or check your PIN.';
-      }
-    });
-    return;
-  }
-  
-  // Check if approved
-  if (match.approved === false) {
-    showPendingScreen(match);
-    return;
-  }
-  
-  // Check if fee cleared
-  if (match.feeCleared === false) {
-    errEl.innerText = `⚠️ Your account is approved but the signup fee of ${money(settings.signupFee)} is still pending. Please pay the fee to the group admin to activate your login.`;
-    return;
-  }
-  
-  // Success - member logged in
-  currentUser = match;
-  adminUnlocked = false;
-  hideMaintenanceOverlay(); // Hide overlay if it was showing
-  showMainApp();
-};
 
 function showPendingScreen(m){
   document.getElementById('login-screen').classList.add('hidden');
@@ -12197,6 +12242,7 @@ window.loadSettings = function() {
   
   // Update admin badge
   updateMaintenanceBadge();
+  loadMaintenanceSettings();
 };
 window.previewAdminTheme=function(){
   const key=document.getElementById('set-theme-color')?.value||settings.themeColor||'facebook';
@@ -13510,15 +13556,12 @@ function setAdminDoorVisibility() {
   }
 }
 // ==========================================
-// MAINTENANCE MODE - COMPLETE WORKING CODE
-// Paste this entire block into your script section
+// MAINTENANCE MODE - COMPLETE WORKING SYSTEM
 // ==========================================
 
-// ==========================================
-// MAINTENANCE FUNCTIONS
-// ==========================================
-
-// Get default maintenance message
+/**
+ * Get default maintenance message
+ */
 function getDefaultMaintenanceMessage() {
   return `🛠️ We're currently performing scheduled maintenance to improve your experience.
 
@@ -13531,27 +13574,197 @@ Thank you for your patience and understanding. 🙏
 — Harvest Trust Finance Team`;
 }
 
-// Load maintenance settings
-function loadMaintenanceSettings() {
-  const checkbox = document.getElementById('set-maintenance-mode');
-  const messageTextarea = document.getElementById('set-maintenance-message');
-  const statusDisplay = document.getElementById('maintenance-status-display');
-  const statusIcon = document.getElementById('maintenance-status-icon');
-  const statusText = document.getElementById('maintenance-status-text');
-  const exitContainer = document.getElementById('maintenance-exit-container');
-  
-  if (checkbox) {
-    checkbox.checked = settings.maintenanceMode === true;
+/**
+ * Show maintenance overlay
+ */
+function showMaintenanceOverlay() {
+  const overlay = document.getElementById('maintenance-overlay');
+  if (!overlay) {
+    console.error('Maintenance overlay element not found');
+    return;
   }
   
-  if (messageTextarea) {
-    messageTextarea.value = settings.maintenanceMessage || getDefaultMaintenanceMessage();
+  // Update the message
+  const messageEl = document.getElementById('maintenance-overlay-message');
+  if (messageEl) {
+    const message = settings.maintenanceMessage || getDefaultMaintenanceMessage();
+    messageEl.textContent = message;
   }
   
-  updateMaintenanceStatusUI();
+  // Show the overlay
+  overlay.style.display = 'flex';
+  overlay.style.opacity = '1';
 }
 
-// Update maintenance status UI
+/**
+ * Hide maintenance overlay
+ */
+function hideMaintenanceOverlay() {
+  const overlay = document.getElementById('maintenance-overlay');
+  if (!overlay) return;
+  
+  overlay.style.opacity = '0';
+  setTimeout(function() {
+    overlay.style.display = 'none';
+    overlay.style.opacity = '1';
+  }, 300);
+}
+
+/**
+ * Show admin password prompt
+ */
+function showAdminPasswordPrompt() {
+  // Clear previous error
+  const errorEl = document.getElementById('admin-password-error');
+  if (errorEl) errorEl.innerText = '';
+  
+  const input = document.getElementById('admin-password-input');
+  if (input) input.value = '';
+  
+  // Open the modal
+  openOv('ov-admin-password-prompt');
+  
+  // Focus input after modal opens
+  setTimeout(function() {
+    const inputField = document.getElementById('admin-password-input');
+    if (inputField) inputField.focus();
+  }, 400);
+}
+
+/**
+ * Verify admin password for maintenance bypass
+ */
+function verifyAdminPasswordForMaintenance() {
+  const password = document.getElementById('admin-password-input').value.trim();
+  const errorEl = document.getElementById('admin-password-error');
+  
+  if (!password) {
+    errorEl.innerText = '⚠️ Please enter the admin password';
+    errorEl.style.color = 'var(--red)';
+    return;
+  }
+  
+  const storedAdminPwd = settings.adminPassword || ADMIN_PASSWORD;
+  
+  if (password === storedAdminPwd) {
+    // Password correct
+    errorEl.innerText = '';
+    
+    // Close the modal
+    closeOv('ov-admin-password-prompt');
+    
+    // Set current user as admin
+    currentUser = { name: 'Admin', phone: 'admin', isAdmin: true };
+    adminUnlocked = true;
+    
+    // Hide maintenance overlay
+    hideMaintenanceOverlay();
+    
+    // Show the app
+    showMainApp();
+    
+    // Navigate to admin tab
+    setTimeout(function() {
+      goTab('admin', document.getElementById('ni-admin'));
+      toast('🔓 Admin access granted via maintenance bypass', '#10b981');
+    }, 400);
+    
+  } else {
+    // Password incorrect
+    errorEl.innerText = '❌ Incorrect password. Please try again.';
+    errorEl.style.color = 'var(--red)';
+    document.getElementById('admin-password-input').value = '';
+    document.getElementById('admin-password-input').focus();
+    
+    // Shake the input
+    const input = document.getElementById('admin-password-input');
+    input.classList.add('warn-shake');
+    setTimeout(function() {
+      input.classList.remove('warn-shake');
+    }, 500);
+  }
+}
+
+/**
+ * Toggle maintenance mode
+ */
+function toggleMaintenanceMode() {
+  const checkbox = document.getElementById('set-maintenance-mode');
+  const messageTextarea = document.getElementById('set-maintenance-message');
+  
+  if (!checkbox) return;
+  
+  settings.maintenanceMode = checkbox.checked;
+  
+  if (messageTextarea) {
+    settings.maintenanceMessage = messageTextarea.value;
+  }
+  
+  // Update UI
+  updateMaintenanceStatusUI();
+  updateMaintenanceUI();
+  
+  // Show/hide overlay
+  if (settings.maintenanceMode && !currentUser?.isAdmin) {
+    showMaintenanceOverlay();
+  } else {
+    hideMaintenanceOverlay();
+  }
+  
+  // Save to Firebase
+  db.ref('settings').update({
+    maintenanceMode: settings.maintenanceMode,
+    maintenanceMessage: settings.maintenanceMessage
+  }).then(() => {
+    if (settings.maintenanceMode) {
+      toast('🔧 Maintenance mode ENABLED. Members cannot login.', '#f59e0b');
+    } else {
+      toast('✅ Maintenance mode DISABLED. Members can login.', '#10b981');
+    }
+  }).catch(err => {
+    console.error('Failed to save maintenance settings:', err);
+    toast('❌ Failed to save maintenance settings', '#ef4444');
+  });
+}
+
+/**
+ * Exit maintenance mode
+ */
+function exitMaintenanceMode() {
+  if (!currentUser || !currentUser.isAdmin) {
+    toast('⚠️ Admin access required', '#ef4444');
+    return;
+  }
+  
+  if (!settings.maintenanceMode) {
+    toast('ℹ️ Maintenance mode is not active', '#06b6d4');
+    return;
+  }
+  
+  if (confirm('⚠️ Are you sure you want to exit maintenance mode?\n\nThis will immediately restore full access to all members.')) {
+    settings.maintenanceMode = false;
+    
+    const checkbox = document.getElementById('set-maintenance-mode');
+    if (checkbox) checkbox.checked = false;
+    
+    updateMaintenanceStatusUI();
+    updateMaintenanceUI();
+    hideMaintenanceOverlay();
+    
+    db.ref('settings').update({
+      maintenanceMode: false
+    }).then(() => {
+      toast('✅ Maintenance mode DISABLED. System is live!', '#10b981');
+    }).catch(err => {
+      console.error('Failed to disable maintenance:', err);
+      toast('❌ Failed to disable maintenance', '#ef4444');
+    });
+  }
+}
+
+/**
+ * Update maintenance status UI in settings
+ */
 function updateMaintenanceStatusUI() {
   const statusDisplay = document.getElementById('maintenance-status-display');
   const statusIcon = document.getElementById('maintenance-status-icon');
@@ -13586,73 +13799,9 @@ function updateMaintenanceStatusUI() {
   if (checkbox) checkbox.checked = settings.maintenanceMode;
 }
 
-// Toggle maintenance mode
-function toggleMaintenanceMode() {
-  const checkbox = document.getElementById('set-maintenance-mode');
-  const messageTextarea = document.getElementById('set-maintenance-message');
-  
-  if (!checkbox) return;
-  
-  settings.maintenanceMode = checkbox.checked;
-  
-  if (messageTextarea) {
-    settings.maintenanceMessage = messageTextarea.value;
-  }
-  
-  // Update UI
-  updateMaintenanceStatusUI();
-  updateMaintenanceUI();
-  
-  // Save to Firebase
-  db.ref('settings').update({
-    maintenanceMode: settings.maintenanceMode,
-    maintenanceMessage: settings.maintenanceMessage
-  }).then(() => {
-    if (settings.maintenanceMode) {
-      toast('🔧 Maintenance mode ENABLED. Members cannot login.', '#f59e0b');
-    } else {
-      toast('✅ Maintenance mode DISABLED. Members can login.', '#10b981');
-    }
-  }).catch(err => {
-    console.error('Failed to save maintenance settings:', err);
-    toast('❌ Failed to save maintenance settings', '#ef4444');
-  });
-}
-
-// Exit maintenance mode
-function exitMaintenanceMode() {
-  if (!currentUser || !currentUser.isAdmin) {
-    toast('⚠️ Admin access required', '#ef4444');
-    return;
-  }
-  
-  if (!settings.maintenanceMode) {
-    toast('ℹ️ Maintenance mode is not active', '#06b6d4');
-    return;
-  }
-  
-  if (confirm('⚠️ Are you sure you want to exit maintenance mode?\n\nThis will immediately restore full access to all members.')) {
-    settings.maintenanceMode = false;
-    
-    const checkbox = document.getElementById('set-maintenance-mode');
-    if (checkbox) checkbox.checked = false;
-    
-    updateMaintenanceStatusUI();
-    updateMaintenanceUI();
-    hideMaintenanceOverlay();
-    
-    db.ref('settings').update({
-      maintenanceMode: false
-    }).then(() => {
-      toast('✅ Maintenance mode DISABLED. System is live!', '#10b981');
-    }).catch(err => {
-      console.error('Failed to disable maintenance:', err);
-      toast('❌ Failed to disable maintenance', '#ef4444');
-    });
-  }
-}
-
-// Update maintenance UI elements
+/**
+ * Update maintenance UI elements
+ */
 function updateMaintenanceUI() {
   const isActive = settings.maintenanceMode === true;
   const isAdmin = currentUser?.isAdmin === true;
@@ -13673,7 +13822,9 @@ function updateMaintenanceUI() {
   updateMaintenanceBadge(isActive && isAdmin);
 }
 
-// Update maintenance badge in header
+/**
+ * Update maintenance badge in header
+ */
 function updateMaintenanceBadge(show) {
   const hdrR = document.querySelector('.hdr-r');
   if (!hdrR) return;
@@ -13708,86 +13859,29 @@ function updateMaintenanceBadge(show) {
   }
 }
 
-// Show maintenance overlay (for members only)
-function showMaintenanceOverlay() {
-  const existing = document.getElementById('maintenance-overlay');
-  if (existing) existing.remove();
+/**
+ * Load maintenance settings into settings modal
+ */
+function loadMaintenanceSettings() {
+  const checkbox = document.getElementById('set-maintenance-mode');
+  const messageTextarea = document.getElementById('set-maintenance-message');
   
-  const overlay = document.createElement('div');
-  overlay.id = 'maintenance-overlay';
-  overlay.style.cssText = `
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.85);
-    backdrop-filter: blur(12px);
-    z-index: 10000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-    animation: fadeIn 0.5s ease;
-  `;
-  
-  const message = settings.maintenanceMessage || getDefaultMaintenanceMessage();
-  
-  overlay.innerHTML = `
-    <div style="
-      background: var(--card);
-      border-radius: 28px;
-      padding: 32px 24px;
-      max-width: 480px;
-      width: 100%;
-      border: 2px solid var(--gold3);
-      box-shadow: var(--sh2);
-      animation: cardIn 0.5s var(--ease-spring) both;
-      text-align: center;
-    ">
-      <span style="font-size: 3.5rem; display: block; margin-bottom: 8px; animation: maintenanceSpin 4s linear infinite;">🛠️</span>
-      <div style="font-family: 'Syne', sans-serif; font-size: 1.3rem; font-weight: 800; color: var(--gold); margin-bottom: 6px;">🔧 Under Maintenance</div>
-      <div style="font-size: 0.9rem; color: var(--t2); line-height: 1.6; white-space: pre-wrap; max-width: 500px; margin: 0 auto;">${escapeHtml(message)}</div>
-      <div style="margin-top: 12px; padding: 8px 16px; background: rgba(245,158,11,0.12); border-radius: 20px; display: inline-block; font-size: 0.75rem; font-weight: 600; color: var(--gold);">
-        ⏰ We'll be back soon!
-      </div>
-      <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--br);">
-        <div class="micro muted">For urgent matters, contact admin on:</div>
-        <div style="font-weight: 600; color: var(--gold);">📞 0770371720</div>
-      </div>
-      <button onclick="location.reload()" style="
-        margin-top: 12px;
-        padding: 8px 20px;
-        background: rgba(255,255,255,0.1);
-        border: 1px solid var(--br);
-        border-radius: 20px;
-        color: var(--t2);
-        cursor: pointer;
-        font-size: 0.75rem;
-        transition: all 0.2s;
-      " onmouseover="this.style.background='rgba(255,255,255,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">
-        🔄 Refresh
-      </button>
-    </div>
-  `;
-  
-  document.body.appendChild(overlay);
-}
-
-// Hide maintenance overlay
-function hideMaintenanceOverlay() {
-  const overlay = document.getElementById('maintenance-overlay');
-  if (overlay) {
-    overlay.style.opacity = '0';
-    overlay.style.transition = 'opacity 0.3s ease';
-    setTimeout(() => {
-      if (overlay.parentNode) overlay.remove();
-    }, 300);
+  if (checkbox) {
+    checkbox.checked = settings.maintenanceMode === true;
   }
+  
+  if (messageTextarea) {
+    messageTextarea.value = settings.maintenanceMessage || getDefaultMaintenanceMessage();
+  }
+  
+  updateMaintenanceStatusUI();
 }
 
 // ==========================================
-// REPLACE YOUR ENTIRE doLogin() WITH THIS
+// UPDATED doLogin() FUNCTION
 // ==========================================
 
-function doLogin() {
+window.doLogin = function() {
   // Dismiss keyboard on mobile
   if (document.activeElement && document.activeElement.blur) {
     document.activeElement.blur();
@@ -13800,29 +13894,32 @@ function doLogin() {
     return; 
   }
   
-  // STEP 1: Check if it's the admin password (ALWAYS allowed)
+  // STEP 1: Check admin password (ALWAYS allowed)
   const storedAdminPwd = settings.adminPassword || ADMIN_PASSWORD;
   if (pwd === storedAdminPwd) {
     currentUser = { name: 'Admin', phone: 'admin', isAdmin: true };
     adminUnlocked = true;
     hideMaintenanceOverlay();
     showMainApp();
+    setTimeout(function() {
+      goTab('admin', document.getElementById('ni-admin'));
+    }, 300);
     return;
   }
   
-  // STEP 2: Check if maintenance mode is active for members
+  // STEP 2: Check maintenance mode for members
   if (settings.maintenanceMode === true) {
     showMaintenanceOverlay();
     errEl.innerText = '🔧 System is under maintenance. Please try again later.';
     errEl.style.color = 'var(--gold)';
     errEl.style.fontWeight = '700';
+    toast('🔧 Maintenance mode is active', '#f59e0b');
     return;
   }
   
-  // STEP 3: Check members for login
+  // STEP 3: Check members
   const match = members.find(m => m.phone && m.phone.slice(-4) === pwd);
   if (!match) {
-    // Check if this phone has a pending application
     db.ref('applications').orderByChild('phone').once('value', snap => {
       let found = false;
       snap.forEach(child => {
@@ -13850,80 +13947,56 @@ function doLogin() {
     return;
   }
   
-  // Success - member logged in
   currentUser = match;
   adminUnlocked = false;
   hideMaintenanceOverlay();
   showMainApp();
-}
+};
 
 // ==========================================
-// INITIALIZATION
+// UPDATED applySettings() FUNCTION
 // ==========================================
 
-// Add CSS styles for maintenance
-function addMaintenanceStyles() {
-  const styleId = 'maintenance-styles';
-  if (document.getElementById(styleId)) return;
+function applySettings() {
+  applyAppTheme();
+  document.getElementById('hdr-title').innerText = settings.groupName || t('app_name');
   
-  const style = document.createElement('style');
-  style.id = styleId;
-  style.textContent = `
-    @keyframes floatBounce {
-      0%, 100% { transform: translateY(0px); }
-      50% { transform: translateY(-8px); }
-    }
-    
-    @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.6; transform: scale(0.9); }
-    }
-    
-    @keyframes blinkWarning {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
-    }
-    
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-    
-    @keyframes cardIn {
-      from { opacity: 0; transform: scale(0.9) translateY(20px); }
-      to { opacity: 1; transform: scale(1) translateY(0); }
-    }
-    
-    @keyframes maintenanceSpin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-    
-    #maintenance-float-btn {
-      animation: floatBounce 2s ease-in-out infinite;
-    }
-    
-    .maintenance-indicator {
-      animation: blinkWarning 1.5s ease-in-out infinite;
-    }
-    
-    #admin-maintenance-banner {
-      animation: slideDown 0.3s ease;
-    }
-    
-    @keyframes slideDown {
-      from { opacity: 0; transform: translateY(-20px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-  `;
+  const lw = document.getElementById('hdr-logo-wrap');
+  const logoData = settings.bannerData || settings.bannerUrl;
+  if (logoData) {
+    lw.innerHTML = '<img src="'+logoData+'" style="width:100%;height:100%;object-fit:contain;background:transparent" onerror="this.parentElement.innerHTML=\'🌿\'">';
+  } else {
+    lw.innerHTML = '🌿';
+  }
   
-  document.head.appendChild(style);
+  const dr = document.getElementById('daily-rate');
+  if (dr) dr.innerText = (settings.dailyAmount || 2500).toLocaleString();
+  
+  updateHomeUI();
+  updateMaintenanceBadge();
+  
+  // Show overlay for non-admin users only
+  if (settings.maintenanceMode === true && !currentUser?.isAdmin) {
+    showMaintenanceOverlay();
+  } else {
+    hideMaintenanceOverlay();
+  }
 }
+// ==========================================
+// INITIALIZE MAINTENANCE MODE
+// ==========================================
 
-// Initialize maintenance mode
 function initMaintenanceMode() {
-  addMaintenanceStyles();
+  // Update UI
   updateMaintenanceUI();
+  
+  // Update status in settings
+  updateMaintenanceStatusUI();
+  
+  // Show overlay if maintenance is active and user is not admin
+  if (settings.maintenanceMode === true && !currentUser?.isAdmin) {
+    showMaintenanceOverlay();
+  }
   
   // Listen for real-time changes
   if (db) {
@@ -13932,8 +14005,9 @@ function initMaintenanceMode() {
       updateMaintenanceUI();
       updateMaintenanceStatusUI();
       
-      // If maintenance is turned off, hide overlay
-      if (!settings.maintenanceMode) {
+      if (settings.maintenanceMode && !currentUser?.isAdmin) {
+        showMaintenanceOverlay();
+      } else {
         hideMaintenanceOverlay();
       }
     });
@@ -13943,15 +14017,24 @@ function initMaintenanceMode() {
         settings.maintenanceMessage = snap.val();
         const textarea = document.getElementById('set-maintenance-message');
         if (textarea) textarea.value = snap.val();
+        
+        // Update overlay message if visible
+        const messageEl = document.getElementById('maintenance-overlay-message');
+        if (messageEl) {
+          messageEl.textContent = snap.val();
+        }
       }
     });
   }
   
   console.log('🔧 Maintenance mode initialized');
-  console.log(`   Status: ${settings.maintenanceMode ? '🔴 MAINTENANCE' : '🟢 LIVE'}`);
+  console.log('   Status: ' + (settings.maintenanceMode ? '🔴 MAINTENANCE' : '🟢 LIVE'));
 }
 
-// Initialize on load
+// ==========================================
+// AUTO-INITIALIZE ON LOAD
+// ==========================================
+
 document.addEventListener('DOMContentLoaded', function() {
   setTimeout(function() {
     if (db) {
@@ -13960,11 +14043,26 @@ document.addEventListener('DOMContentLoaded', function() {
   }, 1000);
 });
 
-// Expose functions globally
+// ==========================================
+// EXPOSE FUNCTIONS GLOBALLY
+// ==========================================
+
 window.toggleMaintenanceMode = toggleMaintenanceMode;
 window.exitMaintenanceMode = exitMaintenanceMode;
 window.loadMaintenanceSettings = loadMaintenanceSettings;
 window.updateMaintenanceUI = updateMaintenanceUI;
+window.showMaintenanceOverlay = showMaintenanceOverlay;
+window.hideMaintenanceOverlay = hideMaintenanceOverlay;
+window.showAdminPasswordPrompt = showAdminPasswordPrompt;
+window.verifyAdminPasswordForMaintenance = verifyAdminPasswordForMaintenance;
+// ===== AUTO-INITIALIZE =====
+document.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    if (db) {
+      initMaintenanceMode();
+    }
+  }, 1000);
+});
 ///////////////////////////////////////////////
 function toggleAdminPanel() {
   const adminPage = document.getElementById('t-admin');
