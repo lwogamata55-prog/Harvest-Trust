@@ -2866,6 +2866,18 @@ Thank you for your patience and understanding. 🙏
     <button class="btn btn-sec btn-full" onclick="closeOv('ov-member-status')">Close</button>
   </div>
 </div>
+<!-- ========================================== -->
+<!-- MEMBER LOAN DETAILS MODAL                 -->
+<!-- ========================================== -->
+<div class="ov" id="ov-member-loan-details" onclick="maybeClose(event,'ov-member-loan-details')">
+  <div class="bs" style="max-width: 500px;">
+    <div class="bs-title">💳 Loan Details</div>
+    <div id="member-loan-details-content" style="max-height: 60vh; overflow-y: auto; padding: 4px;">
+      <!-- Dynamic content -->
+    </div>
+    <button class="btn btn-sec btn-full" onclick="closeOv('ov-member-loan-details')" style="margin-top: 12px;">Close</button>
+  </div>
+</div>
 <!-- Group Report Modal -->
 <div class="ov" id="ov-group-report" onclick="maybeClose(event,'ov-group-report')">
   <div class="bs" style="max-width: 700px; width: 90%;">
@@ -3672,12 +3684,14 @@ function computePots() {
   let cash = 0, profit = 0;
   memberBalances = {};
   memberDebts = {};
-  memberLoans = {};  // This now tracks ONLY active loans (not debts)
-  memberActiveLoanIds = {};  // Track which loan IDs are active for each member
+  memberLoans = {};           // Total loan balance (all loans combined)
+  memberApplicationLoans = {}; // Only application loans (with loanQuestions)
+  memberAssignedLoans = {};   // Only assigned debt loans (without loanQuestions)
 
   transactions.forEach(tx => {
     const a = +(tx.amount) || 0;
     const phone = tx.memberPhone;
+    
     if (tx.type === 'deposit') {
       cash += a;
       memberBalances[phone] = (memberBalances[phone] || 0) + a;
@@ -3702,42 +3716,108 @@ function computePots() {
       memberBalances[phone] = (memberBalances[phone] || 0) + a;
       cash += a;
     } else if (tx.type === 'loan_disbursement') {
-      // NEW: Track individual loans separately
       cash += a;
-      // Store the loan amount against the member
       memberLoans[phone] = (memberLoans[phone] || 0) + a;
-      // Also track which loan IDs are active
-      if (tx.loanId) {
-        if (!memberActiveLoanIds[phone]) memberActiveLoanIds[phone] = [];
-        memberActiveLoanIds[phone].push(tx.loanId);
-      }
       profit -= a;
-    } else if (tx.type === 'loan_adjustment') {
-      // Interest added to the loan
+      
+      // Track separately based on loan type
+      const loan = loans.find(l => l.id === tx.loanId);
+      if (loan) {
+        if (loan.loanQuestions && loan.loanQuestions.length > 0) {
+          memberApplicationLoans[phone] = (memberApplicationLoans[phone] || 0) + a;
+        } else {
+          memberAssignedLoans[phone] = (memberAssignedLoans[phone] || 0) + a;
+        }
+      }
+    } else if (tx.type === 'loan_interest') {
       memberLoans[phone] = (memberLoans[phone] || 0) + a;
+      profit += a;
+      
+      // Track separately
+      const loan = loans.find(l => l.id === tx.loanId);
+      if (loan) {
+        if (loan.loanQuestions && loan.loanQuestions.length > 0) {
+          memberApplicationLoans[phone] = (memberApplicationLoans[phone] || 0) + a;
+        } else {
+          memberAssignedLoans[phone] = (memberAssignedLoans[phone] || 0) + a;
+        }
+      }
     } else if (tx.type === 'loan_repayment') {
       // Repayment reduces the specific loan
       cash += a;
       const remaining = Math.max(0, (memberLoans[phone] || 0) - a);
       memberLoans[phone] = remaining;
-      profit += a; // interest portion goes to profit pool
-    } else if (tx.type === 'loan_interest') {
-      // Separate interest transaction for tracking
       profit += a;
-      memberLoans[phone] = (memberLoans[phone] || 0) + a;
+      
+      // Track repayment for separate loan types
+      // We need to know which loan was repaid
+      if (tx.loanId) {
+        const loan = loans.find(l => l.id === tx.loanId);
+        if (loan) {
+          // Update the specific loan's repaid amount
+          const repaidAmount = (loan.repaidAmount || 0) + a;
+          loan.repaidAmount = repaidAmount;
+          
+          // Check if this specific loan is fully repaid
+          if (repaidAmount >= loan.totalRepay) {
+            loan.repaid = true;
+            loan.repaidAt = Date.now();
+            db.ref('loans/' + loan.id).update({ 
+              repaid: true, 
+              repaidAt: Date.now(),
+              repaidAmount: repaidAmount
+            });
+            
+            // If it's an application loan, advance rotation
+            if (loan.loanQuestions && loan.loanQuestions.length > 0) {
+              if (loanRotationOrder.length > 0) {
+                loanReceiverIndex = (loanReceiverIndex + 1) % loanRotationOrder.length;
+                db.ref('settings/loanReceiverIndex').set(loanReceiverIndex);
+                toast(`🎉 ${loan.memberName}'s application loan fully repaid! Loan receiver advanced.`, '#10b981');
+              }
+            }
+          } else {
+            // Update the loan's repaid amount in Firebase
+            db.ref('loans/' + loan.id).update({ 
+              repaidAmount: repaidAmount 
+            });
+          }
+        }
+      }
     }
   });
 
-  cashFromDeposits = Math.max(0, cash);
+  cashFromDeposits = cash;
   groupProfit = profit;
 
-  // Mark loans as fully repaid when balance reaches zero
-  for (let phone in memberLoans) {
-    if (memberLoans[phone] === 0) {
-      updateLoanRepaidStatus(phone);
-    }
-  }
+  // Recalculate separate loan balances from loans array
+  recalculateLoanBalances();
 }
+
+// ==========================================
+// RECALCULATE LOAN BALANCES
+// ==========================================
+
+function recalculateLoanBalances() {
+  // Reset separate trackers
+  memberApplicationLoans = {};
+  memberAssignedLoans = {};
+  
+  loans.forEach(loan => {
+    if (loan.status === 'approved' && !loan.repaid) {
+      const balance = loan.totalRepay - (loan.repaidAmount || 0);
+      if (balance > 0) {
+        const phone = loan.memberPhone;
+        if (loan.loanQuestions && loan.loanQuestions.length > 0) {
+          memberApplicationLoans[phone] = (memberApplicationLoans[phone] || 0) + balance;
+        } else {
+          memberAssignedLoans[phone] = (memberAssignedLoans[phone] || 0) + balance;
+        }
+      }
+    }
+  });
+}
+
 function getDaysActive(member) {
   if (!member.joinDate) return 0;
   const join = new Date(member.joinDate);
@@ -3785,6 +3865,218 @@ async function checkAndAdvanceLoanRotation(memberPhone) {
   
   return false;
 }
+// ==========================================
+// LATE PAYMENT REMINDER - APPLICATION LOANS ONLY
+// ==========================================
+
+/**
+ * Check for overdue APPLICATION loans and send harsh reminders
+ * Only checks loans with loanQuestions (application loans)
+ */
+async function checkAndSendLateReminders() {
+  // ===== ONLY APPLICATION LOANS (with loanQuestions) =====
+  const overdueAppLoans = loans.filter(l => 
+    l.status === 'approved' && 
+    !l.repaid && 
+    l.dueDate && 
+    l.dueDate < Date.now() &&
+    l.loanQuestions && 
+    l.loanQuestions.length > 0  // ONLY application loans
+  );
+  
+  if (overdueAppLoans.length === 0) return;
+
+  const now = Date.now();
+  const oneDay = 24 * 60 * 60 * 1000;
+
+  for (let loan of overdueAppLoans) {
+    const daysOverdue = Math.floor((now - loan.dueDate) / oneDay);
+    const member = members.find(m => m.id === loan.memberId);
+    if (!member) continue;
+
+    // Determine reminder severity based on days overdue
+    let severity = 'warning';
+    let emoji = '⚠️';
+    let message = '';
+    
+    if (daysOverdue >= 30) {
+      severity = 'critical';
+      emoji = '🚨🚨🚨';
+      message = `🔴 CRITICAL: Your application loan of ${money(loan.totalRepay - (loan.repaidAmount || 0))} is ${daysOverdue} days overdue! Immediate repayment required to avoid legal action. This is blocking the loan rotation for other members.`;
+    } else if (daysOverdue >= 14) {
+      severity = 'urgent';
+      emoji = '🚨';
+      message = `🔴 URGENT: Your application loan balance of ${money(loan.totalRepay - (loan.repaidAmount || 0))} is ${daysOverdue} days overdue. Please repay immediately to allow the next member to borrow.`;
+    } else if (daysOverdue >= 7) {
+      severity = 'warning';
+      emoji = '⚠️';
+      message = `⚠️ WARNING: Your application loan of ${money(loan.totalRepay - (loan.repaidAmount || 0))} is ${daysOverdue} days overdue. Penalties are being applied. Other members are waiting for the rotation to advance.`;
+    } else {
+      severity = 'notice';
+      emoji = '📢';
+      message = `📢 REMINDER: Your application loan of ${money(loan.totalRepay - (loan.repaidAmount || 0))} is ${daysOverdue} days overdue. Please make a payment to avoid penalties.`;
+    }
+
+    // Send notification to member
+    const notifRef = db.ref(`notifications/${member.id}`).push();
+    await notifRef.set({
+      id: Date.now(),
+      text: `${emoji} ${message}\n\n📅 Due date: ${new Date(loan.dueDate).toLocaleDateString()}\n💳 Outstanding: ${money(loan.totalRepay - (loan.repaidAmount || 0))}\n📞 Contact admin: 0770371720\n\n⚠️ This is an APPLICATION LOAN - your repayment allows the next member to borrow.`,
+      date: Date.now(),
+      read: false,
+      severity: severity,
+      type: 'loan_overdue'
+    });
+
+    // Send notification to admin
+    const adminNotifRef = db.ref('notifications/admin').push();
+    await adminNotifRef.set({
+      id: Date.now(),
+      text: `${emoji} ${member.name}'s APPLICATION LOAN is ${daysOverdue} days overdue!\nAmount: ${money(loan.totalRepay - (loan.repaidAmount || 0))}\nPhone: ${member.phone}\n⚠️ This is blocking the loan rotation!`,
+      date: Date.now(),
+      read: false,
+      severity: severity,
+      type: 'admin_loan_overdue'
+    });
+
+    // Show harsh toast for admin
+    if (currentUser?.isAdmin) {
+      toast(`🚨 ${member.name}'s APPLICATION LOAN ${daysOverdue} days overdue! Rotation blocked!`, '#ef4444');
+    }
+  }
+}
+
+/**
+ * Send a harsh reminder to an overdue member (Application Loan Only)
+ */
+async function sendHarshReminder(memberId) {
+  const member = members.find(m => m.id === memberId);
+  if (!member) {
+    toast('Member not found', '#ef4444');
+    return;
+  }
+
+  // ===== ONLY CHECK FOR APPLICATION LOANS =====
+  const overdueAppLoans = loans.filter(l => 
+    l.memberId === memberId && 
+    l.status === 'approved' && 
+    !l.repaid && 
+    l.dueDate && 
+    l.dueDate < Date.now() &&
+    l.loanQuestions && 
+    l.loanQuestions.length > 0  // ONLY application loans
+  );
+
+  if (overdueAppLoans.length === 0) {
+    toast(`✅ ${member.name} has no overdue application loans`, '#10b981');
+    return;
+  }
+
+  const now = Date.now();
+  const oneDay = 24 * 60 * 60 * 1000;
+
+  for (let loan of overdueAppLoans) {
+    const daysOverdue = Math.floor((now - loan.dueDate) / oneDay);
+    const balance = loan.totalRepay - (loan.repaidAmount || 0);
+    const penalty = Math.floor(balance * (loanSettings.overduePenalty || 2) / 100);
+
+    // Create a harsh notification
+    const notifRef = db.ref(`notifications/${memberId}`).push();
+    await notifRef.set({
+      id: Date.now(),
+      text: `🚨🚨🚨 FINAL NOTICE! Your APPLICATION LOAN of ${money(balance)} is ${daysOverdue} days overdue!\n\nImmediate repayment required. Penalty of ${money(penalty)} will be applied daily.\n\n⚠️ This loan is blocking the rotation - other members cannot borrow until you repay!\n\nContact: 0770371720\n\nThis is your FINAL WARNING.`,
+      date: Date.now(),
+      read: false,
+      severity: 'critical',
+      type: 'final_warning'
+    });
+
+    // Create a transaction for the penalty (if not already applied)
+    const penaltyApplied = loans.some(l => l.id === loan.id && l.penaltyApplied);
+    if (!penaltyApplied) {
+      await db.ref('transactions').push({
+        memberPhone: member.phone,
+        memberName: member.name,
+        type: 'fine',
+        amount: penalty,
+        description: `Overdue penalty (${loanSettings.overduePenalty || 2}%) - ${daysOverdue} days overdue on APPLICATION LOAN`,
+        date: Date.now()
+      });
+      await db.ref('loans/' + loan.id).update({ penaltyApplied: true });
+      
+      // Also notify admin about the penalty
+      const adminNotifRef = db.ref('notifications/admin').push();
+      await adminNotifRef.set({
+        id: Date.now(),
+        text: `💸 Penalty of ${money(penalty)} applied to ${member.name} for overdue application loan (${daysOverdue} days)`,
+        date: Date.now(),
+        read: false,
+        type: 'admin_penalty_applied'
+      });
+    }
+  }
+
+  toast(`🚨 Harsh reminder sent to ${member.name} about their overdue APPLICATION LOAN`, '#ef4444');
+}
+
+/**
+ * Start checking for overdue application loans every hour
+ */
+function startOverdueLoanChecker() {
+  // Check immediately on load
+  setTimeout(checkAndSendLateReminders, 5000);
+  
+  // Then check every hour
+  setInterval(checkAndSendLateReminders, 3600000);
+  
+  // Also check every 30 minutes if there are overdue loans
+  setInterval(() => {
+    const hasOverdue = loans.some(l => 
+      l.status === 'approved' && 
+      !l.repaid && 
+      l.dueDate && 
+      l.dueDate < Date.now() &&
+      l.loanQuestions && 
+      l.loanQuestions.length > 0
+    );
+    if (hasOverdue) {
+      checkAndSendLateReminders();
+    }
+  }, 1800000);
+}
+
+/**
+ * Add "Send Harsh Reminder" button for overdue application loans only
+ */
+function addHarshReminderButton() {
+  // Find overdue application loans
+  const overdueAppLoans = loans.filter(l => 
+    l.status === 'approved' && 
+    !l.repaid && 
+    l.dueDate && 
+    l.dueDate < Date.now() &&
+    l.loanQuestions && 
+    l.loanQuestions.length > 0
+  );
+
+  overdueAppLoans.forEach(loan => {
+    // Find the member's entry in the DOM
+    const memberElement = document.querySelector(`[data-member-id="${loan.memberId}"]`);
+    if (memberElement) {
+      const actionDiv = memberElement.querySelector('.ranking-actions');
+      if (actionDiv) {
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-sm btn-red';
+        btn.innerHTML = '🚨 Send Harsh Reminder';
+        btn.onclick = () => sendHarshReminder(loan.memberId);
+        btn.style.marginLeft = '4px';
+        actionDiv.appendChild(btn);
+      }
+    }
+  });
+}
+
+
 function generateAnniversaryBadge() {
   try {
     var groupStart = (settings && settings.groupStartDate) ? settings.groupStartDate : null;
@@ -4430,8 +4722,9 @@ async function processDepositWithCarryover(member, depositAmount, depositTimesta
         writes.push({
           memberPhone: member.phone, memberName: member.name,
           type: 'deposit', amount: dailyPart,
-          description: description || `Daily savings for ${new Date(todayStart).toLocaleDateString()}`,
-          date: todayStart + 1500
+          description: `Daily savings for ${new Date(todayStart).toLocaleDateString()}`,
+          date: todayStart + 1500,
+          isDailySavings: true
         });
       }
       if (welfarePart > 0) {
@@ -4446,114 +4739,147 @@ async function processDepositWithCarryover(member, depositAmount, depositTimesta
     }
   }
 
-  // ---------- 2. REPAY LOANS FIRST (SECOND PRIORITY) ----------
-  let loanOwed = memberLoans[member.phone] || 0;
-  let usedForLoan = 0;
-  if (loanOwed > 0 && remaining > 0) {
-    usedForLoan = Math.min(remaining, loanOwed);
-    remaining -= usedForLoan;
+  // ---------- 2. REPAY APPLICATION LOANS FIRST (SECOND PRIORITY) ----------
+  // Get all active application loans for this member (oldest first - FIFO)
+  const appLoans = loans.filter(l => 
+    l.memberPhone === member.phone && 
+    l.status === 'approved' && 
+    !l.repaid && 
+    l.loanQuestions && 
+    l.loanQuestions.length > 0
+  ).sort((a, b) => a.approvedAt - b.approvedAt);
+
+  for (let loan of appLoans) {
+    if (remaining <= 0) break;
     
-    if (usedForLoan > 0) {
-      // Find the specific loan this repayment should go to
-      // Get active loans for this member
-      const activeLoans = loans.filter(l => 
-        l.memberPhone === member.phone && 
-        l.status === 'approved' && 
-        !l.repaid
-      );
+    const loanBalance = loan.totalRepay - (loan.repaidAmount || 0);
+    if (loanBalance <= 0) continue;
+    
+    const repaymentAmount = Math.min(remaining, loanBalance);
+    remaining -= repaymentAmount;
+    
+    if (repaymentAmount > 0) {
+      const newRepaidAmount = (loan.repaidAmount || 0) + repaymentAmount;
       
-      // Sort loans by oldest first (FIFO)
-      activeLoans.sort((a, b) => a.approvedAt - b.approvedAt);
+      writes.push({
+        memberPhone: member.phone, 
+        memberName: member.name,
+        type: 'loan_repayment', 
+        amount: repaymentAmount,
+        description: `Repayment for application loan ${loan.id}`,
+        date: now + 2,
+        loanId: loan.id
+      });
       
-      let remainingToRepay = usedForLoan;
-      for (let loan of activeLoans) {
-        if (remainingToRepay <= 0) break;
+      // Update loan's repaid amount
+      await db.ref('loans/' + loan.id).update({ 
+        repaidAmount: newRepaidAmount 
+      });
+      
+      // Check if this application loan is now fully repaid
+      if (newRepaidAmount >= loan.totalRepay) {
+        await db.ref('loans/' + loan.id).update({ 
+          repaid: true, 
+          repaidAt: Date.now() 
+        });
+        toast(`🎉 Application loan fully repaid for ${member.name}! Rotation advancing...`, '#10b981');
         
-        const loanBalance = memberLoans[member.phone] || 0;
-        const loanPortion = Math.min(remainingToRepay, loanBalance);
-        
-        if (loanPortion > 0) {
-          // Create repayment transaction linked to specific loan
-          writes.push({
-            memberPhone: member.phone, 
-            memberName: member.name,
-            type: 'loan_repayment', 
-            amount: loanPortion,
-            description: `Repayment for loan ${loan.id}`,
-            date: now + 2,
-            loanId: loan.id // Link to specific loan
-          });
-          
-          // Update the loan's remaining balance
-          const remainingBalance = Math.max(0, (memberLoans[member.phone] || 0) - loanPortion);
-          memberLoans[member.phone] = remainingBalance;
-          
-          remainingToRepay -= loanPortion;
-          
-          // Check if this specific loan is now fully repaid
-          const updatedLoan = loans.find(l => l.id === loan.id);
-          if (updatedLoan) {
-            const totalRepaidForLoan = (updatedLoan.totalRepay || 0) - (memberLoans[member.phone] || 0);
-            if (totalRepaidForLoan >= (updatedLoan.totalRepay || 0)) {
-              // Mark this specific loan as repaid
-              await db.ref('loans/' + loan.id).update({ 
-                repaid: true, 
-                repaidAt: Date.now() 
-              });
-              
-              // Check if this was a loan-application loan (has loanQuestions)
-              if (updatedLoan.loanQuestions && updatedLoan.loanQuestions.length > 0) {
-                // Auto-advance the loan receiver since an application loan was cleared
-                if (loanRotationOrder.length > 0) {
-                  loanReceiverIndex = (loanReceiverIndex + 1) % loanRotationOrder.length;
-                  await db.ref('settings/loanReceiverIndex').set(loanReceiverIndex);
-                  toast(`Loan fully repaid! Loan receiver advanced to next member.`, '#10b981');
-                }
-              }
-            }
-          }
+        // Advance loan rotation
+        if (loanRotationOrder.length > 0) {
+          loanReceiverIndex = (loanReceiverIndex + 1) % loanRotationOrder.length;
+          await db.ref('settings/loanReceiverIndex').set(loanReceiverIndex);
+          toast(`✅ Loan receiver advanced to next member.`, '#10b981');
         }
       }
     }
   }
 
-  // ---------- 3. CLEAR DEBTS (THIRD PRIORITY) ----------
+  // ---------- 3. REPAY ASSIGNED DEBT LOANS (THIRD PRIORITY) ----------
+  const assignedLoans = loans.filter(l => 
+    l.memberPhone === member.phone && 
+    l.status === 'approved' && 
+    !l.repaid && 
+    (!l.loanQuestions || l.loanQuestions.length === 0)
+  ).sort((a, b) => a.approvedAt - b.approvedAt);
+
+  for (let loan of assignedLoans) {
+    if (remaining <= 0) break;
+    
+    const loanBalance = loan.totalRepay - (loan.repaidAmount || 0);
+    if (loanBalance <= 0) continue;
+    
+    const repaymentAmount = Math.min(remaining, loanBalance);
+    remaining -= repaymentAmount;
+    
+    if (repaymentAmount > 0) {
+      const newRepaidAmount = (loan.repaidAmount || 0) + repaymentAmount;
+      
+      writes.push({
+        memberPhone: member.phone, 
+        memberName: member.name,
+        type: 'loan_repayment', 
+        amount: repaymentAmount,
+        description: `Repayment for assigned debt loan ${loan.id}`,
+        date: now + 3,
+        loanId: loan.id
+      });
+      
+      await db.ref('loans/' + loan.id).update({ 
+        repaidAmount: newRepaidAmount 
+      });
+      
+      if (newRepaidAmount >= loan.totalRepay) {
+        await db.ref('loans/' + loan.id).update({ 
+          repaid: true, 
+          repaidAt: Date.now() 
+        });
+        toast(`✅ Assigned debt loan fully repaid for ${member.name}`, '#10b981');
+      }
+    }
+  }
+
+  // ---------- 4. CLEAR DEBTS (FOURTH PRIORITY) ----------
   let debtOwed = memberDebts[member.phone] || 0;
-  let usedForDebt = 0;
   if (debtOwed > 0 && remaining > 0) {
-    usedForDebt = Math.min(remaining, debtOwed);
+    const usedForDebt = Math.min(remaining, debtOwed);
     remaining -= usedForDebt;
     if (usedForDebt > 0) {
       writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'debt_cleared', amount: usedForDebt,
+        memberPhone: member.phone, 
+        memberName: member.name,
+        type: 'debt_cleared', 
+        amount: usedForDebt,
         description: `Cleared debt of ${money(usedForDebt)}`,
-        date: now + 3
+        date: now + 4
       });
     }
   }
 
-  // ---------- 4. Prepay future days (if everything else is clear) ----------
+  // ---------- 5. Prepay future days (if everything else is clear) ----------
   const todayFullyCovered = (usedToday === deficitToday);
-  const remainingLoan = memberLoans[member.phone] || 0;
-  const remainingDebt = memberDebts[member.phone] || 0;
+  const remainingLoanBalance = memberLoans[member.phone] || 0;
+  const remainingDebtBalance = memberDebts[member.phone] || 0;
   
-  if (todayFullyCovered && remainingLoan === 0 && remainingDebt === 0 && remaining > 0) {
-    let currentDay = todayStart + 86400000; // tomorrow
+  if (todayFullyCovered && remainingLoanBalance === 0 && remainingDebtBalance === 0 && remaining > 0) {
+    let currentDay = todayStart + 86400000;
     const maxDays = 30;
     let daysProcessed = 0;
 
-    // Full days first
     while (remaining >= requiredToday && daysProcessed < maxDays) {
       writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'deposit', amount: dailyAmount,
+        memberPhone: member.phone, 
+        memberName: member.name,
+        type: 'deposit', 
+        amount: dailyAmount,
+        isDailySavings: true,
         description: `Daily savings for ${new Date(currentDay).toLocaleDateString()}`,
         date: currentDay + 1500
       });
       writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'welfare', amount: welfareAmount,
+        memberPhone: member.phone, 
+        memberName: member.name,
+        type: 'welfare', 
+        amount: welfareAmount,
         description: `Welfare for ${new Date(currentDay).toLocaleDateString()}`,
         date: currentDay + 500,
         autoDeduction: true
@@ -4563,33 +4889,37 @@ async function processDepositWithCarryover(member, depositAmount, depositTimesta
       daysProcessed++;
     }
 
-    // Partial day (if any left)
     if (remaining > 0 && daysProcessed < maxDays) {
       const dailyPortion = Math.min(remaining, dailyAmount);
       const welfarePortion = remaining - dailyPortion;
       if (dailyPortion > 0) {
         writes.push({
-          memberPhone: member.phone, memberName: member.name,
-          type: 'deposit', amount: dailyPortion,
+          memberPhone: member.phone, 
+          memberName: member.name,
+          type: 'deposit', 
+          amount: dailyPortion,
+          isDailySavings: true,
           description: `Daily savings for ${new Date(currentDay).toLocaleDateString()}`,
           date: currentDay + 1500
         });
       }
       if (welfarePortion > 0) {
         writes.push({
-          memberPhone: member.phone, memberName: member.name,
-          type: 'welfare', amount: welfarePortion,
+          memberPhone: member.phone, 
+          memberName: member.name,
+          type: 'welfare', 
+          amount: welfarePortion,
           description: `Welfare for ${new Date(currentDay).toLocaleDateString()}`,
           date: currentDay + 500,
           autoDeduction: true
         });
       }
 
-      // Calculate deficit for this partial day
       const deficitForDay = requiredToday - remaining;
       if (deficitForDay > 0) {
         writes.push({
-          memberPhone: member.phone, memberName: member.name,
+          memberPhone: member.phone, 
+          memberName: member.name,
           type: 'debt',
           amount: deficitForDay,
           description: `Auto‑assigned debt for ${new Date(currentDay).toLocaleDateString()} (partial prepayment)`,
@@ -4599,12 +4929,14 @@ async function processDepositWithCarryover(member, depositAmount, depositTimesta
     }
   }
 
-  // Any leftover that cannot be applied (should not happen, but safety)
   if (remaining > 0) {
     writes.push({
-      memberPhone: member.phone, memberName: member.name,
-      type: 'deposit', amount: remaining,
-      description: 'Excess savings (applied as extra balance)',
+      memberPhone: member.phone, 
+      memberName: member.name,
+      type: 'deposit', 
+      amount: remaining,
+      isDailySavings: true,
+      description: 'Excess savings (applied as extra daily savings)',
       date: now + 2000
     });
   }
@@ -6125,6 +6457,145 @@ window.submitFinalSignup = function() {
     });
   });
 };
+// ==========================================
+// SHOW MEMBER LOAN DETAILS
+// ==========================================
+
+function showMemberLoanDetails(memberId) {
+  const member = members.find(m => m.id === memberId);
+  if (!member) {
+    toast('Member not found', '#ef4444');
+    return;
+  }
+
+  const memberLoans = loans.filter(l => 
+    l.memberId === memberId && 
+    l.status === 'approved' && 
+    !l.repaid
+  );
+
+  const appLoans = memberLoans.filter(l => l.loanQuestions && l.loanQuestions.length > 0);
+  const assignedLoans = memberLoans.filter(l => !l.loanQuestions || l.loanQuestions.length === 0);
+  const debtBalance = memberDebts[member.phone] || 0;
+  const totalBalance = memberLoans.reduce((sum, l) => sum + (l.totalRepay - (l.repaidAmount || 0)), 0);
+
+  const content = document.getElementById('member-loan-details-content');
+  
+  let html = `
+    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+      <div style="
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, ${getAvatarColor(member.name)}, ${getAvatarColor(member.name)}cc);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.1rem;
+        font-weight: 800;
+        color: white;
+        flex-shrink: 0;
+      ">
+        ${member.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+      </div>
+      <div>
+        <div style="font-size: 1rem; font-weight: 700; color: var(--t);">${escapeHtml(member.name)}</div>
+        <div style="font-size: 0.7rem; color: var(--t3);">${member.phone}</div>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px;">
+      <div style="background: rgba(255,255,255,0.04); border-radius: 8px; padding: 10px; text-align: center;">
+        <div style="font-size: 0.6rem; color: var(--t3);">Total Balance</div>
+        <div style="font-size: 1rem; font-weight: 700; color: ${totalBalance > 0 ? 'var(--red)' : 'var(--green)'};">${money(totalBalance)}</div>
+      </div>
+      <div style="background: rgba(255,255,255,0.04); border-radius: 8px; padding: 10px; text-align: center;">
+        <div style="font-size: 0.6rem; color: var(--t3);">Debt Balance</div>
+        <div style="font-size: 1rem; font-weight: 700; color: ${debtBalance > 0 ? 'var(--red)' : 'var(--green)'};">${money(debtBalance)}</div>
+      </div>
+    </div>
+  `;
+
+  // Application Loans
+  if (appLoans.length > 0) {
+    html += `
+      <div style="margin-bottom: 12px;">
+        <div style="font-size: 0.7rem; font-weight: 700; color: var(--gold); margin-bottom: 6px;">⭐ Application Loans</div>
+        ${appLoans.map(loan => {
+          const remaining = loan.totalRepay - (loan.repaidAmount || 0);
+          const repaid = loan.totalRepay - remaining;
+          const percent = loan.totalRepay > 0 ? Math.round((repaid / loan.totalRepay) * 100) : 0;
+          const isOverdue = loan.dueDate && loan.dueDate < Date.now();
+          const daysOverdue = isOverdue ? Math.floor((Date.now() - loan.dueDate) / (1000 * 60 * 60 * 24)) : 0;
+          
+          return `
+            <div style="background: rgba(245,158,11,0.06); border-left: 3px solid ${isOverdue ? 'var(--red)' : 'var(--gold)'}; border-radius: 6px; padding: 8px 10px; margin-bottom: 6px;">
+              <div style="display: flex; justify-content: space-between; font-size: 0.75rem;">
+                <span><strong>${money(loan.amount)}</strong> @ ${loan.interestRate}%</span>
+                <span style="color: ${percent >= 100 ? 'var(--green)' : 'var(--gold)'};">${percent}% repaid</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 0.65rem; color: var(--t3);">
+                <span>Remaining: ${money(remaining)}</span>
+                <span>Due: ${new Date(loan.dueDate).toLocaleDateString()}</span>
+              </div>
+              ${isOverdue ? `<div style="font-size: 0.6rem; color: var(--red); font-weight: 700;">🚨 ${daysOverdue} days overdue!</div>` : ''}
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  // Assigned Loans
+  if (assignedLoans.length > 0) {
+    html += `
+      <div style="margin-bottom: 12px;">
+        <div style="font-size: 0.7rem; font-weight: 700; color: var(--teal); margin-bottom: 6px;">📋 Assigned Debt Loans</div>
+        ${assignedLoans.map(loan => {
+          const remaining = loan.totalRepay - (loan.repaidAmount || 0);
+          const repaid = loan.totalRepay - remaining;
+          const percent = loan.totalRepay > 0 ? Math.round((repaid / loan.totalRepay) * 100) : 0;
+          
+          return `
+            <div style="background: rgba(6,182,212,0.06); border-left: 3px solid var(--teal); border-radius: 6px; padding: 8px 10px; margin-bottom: 6px;">
+              <div style="display: flex; justify-content: space-between; font-size: 0.75rem;">
+                <span><strong>${money(loan.amount)}</strong> @ ${loan.interestRate}%</span>
+                <span style="color: ${percent >= 100 ? 'var(--green)' : 'var(--teal)'};">${percent}% repaid</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; font-size: 0.65rem; color: var(--t3);">
+                <span>Remaining: ${money(remaining)}</span>
+                <span>Due: ${new Date(loan.dueDate).toLocaleDateString()}</span>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+  }
+
+  // Actions
+  html += `
+    <div style="border-top: 1px solid var(--br); padding-top: 12px; margin-top: 4px;">
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <button class="btn btn-sm btn-amber" onclick="closeOv('ov-member-loan-details'); openOv('ov-assign-debt'); populateMemberDropdowns(); document.getElementById('debt-member').value='${member.phone}'; updateDebtPreview();">
+          📋 Assign Debt
+        </button>
+        ${appLoans.some(l => l.dueDate && l.dueDate < Date.now()) ? `
+          <button class="btn btn-sm btn-red" onclick="closeOv('ov-member-loan-details'); sendHarshReminder('${memberId}')">
+            🚨 Send Reminder
+          </button>
+        ` : ''}
+        <button class="btn btn-sm btn-teal" onclick="closeOv('ov-member-loan-details'); showMemberReceipt('${memberId}')">
+          🧾 View Receipt
+        </button>
+      </div>
+    </div>
+  `;
+
+  content.innerHTML = html;
+  openOv('ov-member-loan-details');
+}
+
 window.showMemberReceipt = function(memberId, dateStr = null) {
   const member = members.find(m => m.id === memberId);
   if (!member) return;
@@ -7216,7 +7687,6 @@ window.openLoanRequestModal = async function() {
   });
 };
 
-// Enhanced loan preview function - handles ALL cases including active loans
 function showLoanPreview(user, data) {
   const modal = document.getElementById('ov-loan-preview');
   const title = document.getElementById('loan-preview-title');
@@ -7225,10 +7695,8 @@ function showLoanPreview(user, data) {
   
   if (!modal || !content) return;
   
-  // Clear previous content
   content.innerHTML = '';
   
-  // Different views for admin vs member
   if (user.isAdmin) {
     // --- ADMIN VIEW ---
     title.textContent = '👑 Admin Loan Management';
@@ -7256,8 +7724,8 @@ function showLoanPreview(user, data) {
           </div>
         </div>
         
-        <!-- Quick Actions -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <!-- Quick Stats -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
           <div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 12px; text-align: center; border: 1px solid var(--br);">
             <div style="font-size: 1.5rem; margin-bottom: 4px;">👥</div>
             <div style="font-size: 0.75rem; font-weight: 700;">Total Members</div>
@@ -7266,33 +7734,168 @@ function showLoanPreview(user, data) {
           <div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 12px; text-align: center; border: 1px solid var(--br);">
             <div style="font-size: 1.5rem; margin-bottom: 4px;">📊</div>
             <div style="font-size: 0.75rem; font-weight: 700;">Profit Pool</div>
-            <div style="font-size: 1.2rem; font-weight: 800; color: var(--green);">${money(groupProfit)}</div>
+            <div style="font-size: 1.2rem; font-weight: 800; color: ${groupProfit < 0 ? 'var(--red)' : 'var(--green)'};">${money(groupProfit)}</div>
+          </div>
+          <div style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 12px; text-align: center; border: 1px solid var(--br);">
+            <div style="font-size: 1.5rem; margin-bottom: 4px;">💰</div>
+            <div style="font-size: 0.75rem; font-weight: 700;">Available Cash</div>
+            <div style="font-size: 1.2rem; font-weight: 800; color: ${cashFromDeposits < 0 ? 'var(--red)' : 'var(--teal)'};">${money(cashFromDeposits)}</div>
           </div>
         </div>
         
-        <!-- Manage Rotation Button -->
+        <!-- Overdue Loans Alert -->
+        ${loans.some(l => l.status === 'approved' && !l.repaid && l.dueDate && l.dueDate < Date.now()) ? `
+          <div style="background: rgba(239,68,68,0.15); border: 2px solid var(--red); border-radius: 12px; padding: 12px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 1.5rem;">🚨</span>
+              <div>
+                <div style="font-weight: 800; color: var(--red);">Overdue Loans Detected!</div>
+                <div class="micro muted">Check the Active Loans tab for details.</div>
+              </div>
+            </div>
+          </div>
+        ` : ''}
+        
+        <!-- Admin Actions -->
         <button class="btn btn-amber btn-full" onclick="closeOv('ov-loan-preview'); openOv('ov-loan-rot-manage'); buildLoanDragRotation();">
           🔄 Manage Loan Rotation Order
         </button>
-        
-        <!-- Advance Button -->
         <button class="btn btn-purple btn-full" onclick="closeOv('ov-loan-preview'); advanceLoanReceiver();">
           ⏩ Advance to Next Borrower
         </button>
-        
-        <!-- Open Loan Form (for admin to test) -->
-        <div style="margin-top: 8px; padding-top: 12px; border-top: 1px solid var(--br);">
-          <div style="font-size: 0.75rem; color: var(--t3); margin-bottom: 8px;">💡 Admin can also:</div>
-          <button class="btn btn-teal btn-full" onclick="closeOv('ov-loan-preview'); openLoanRequestFormForAdmin();">
-            📝 Open Loan Application Form (Admin Test)
-          </button>
-        </div>
+        <button class="btn btn-teal btn-full" onclick="closeOv('ov-loan-preview'); openLoanRequestFormForAdmin();">
+          📝 Open Loan Application Form (Admin Test)
+        </button>
       </div>
     `;
     
     actionBtn.textContent = '🔒 Close Preview';
     actionBtn.onclick = () => closeOv('ov-loan-preview');
     actionBtn.className = 'btn btn-sec btn-full';
+    
+  } else if (data.hasActiveLoan) {
+    // --- MEMBER WITH ACTIVE LOAN ---
+    title.textContent = '💰 Current Loan Status';
+    
+    const activeLoans = loans.filter(l => 
+      l.memberId === user.id && 
+      l.status === 'approved' && 
+      !l.repaid
+    );
+    
+    const appLoans = activeLoans.filter(l => l.loanQuestions && l.loanQuestions.length > 0);
+    const assignedLoans = activeLoans.filter(l => !l.loanQuestions || l.loanQuestions.length === 0);
+    
+    const totalAppBalance = appLoans.reduce((sum, l) => sum + (l.totalRepay - (l.repaidAmount || 0)), 0);
+    const totalAssignedBalance = assignedLoans.reduce((sum, l) => sum + (l.totalRepay - (l.repaidAmount || 0)), 0);
+    const totalDebtBalance = memberDebts[user.phone] || 0;
+    
+    // Check if any loan is overdue
+    const hasOverdue = activeLoans.some(l => l.dueDate && l.dueDate < Date.now());
+    
+    content.innerHTML = `
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        <!-- Status Header -->
+        <div style="background: linear-gradient(135deg, ${hasOverdue ? 'rgba(239,68,68,0.15)' : 'rgba(16,185,129,0.1)'}, rgba(6,182,212,0.06)); border-radius: 16px; padding: 16px; border: 2px solid ${hasOverdue ? 'var(--red)' : 'var(--green)'};">
+          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+            <span style="font-size: 2rem;">${hasOverdue ? '🚨' : '📋'}</span>
+            <div>
+              <div style="font-size: 0.7rem; color: var(--t3); text-transform: uppercase; letter-spacing: 1px;">${hasOverdue ? 'OVERDUE LOANS' : 'Active Loans'}</div>
+              <div style="font-size: 1rem; font-weight: 700; color: ${hasOverdue ? 'var(--red)' : 'var(--gold)'};">${activeLoans.length} active loan(s)</div>
+            </div>
+          </div>
+          
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; background: rgba(0,0,0,0.15); border-radius: 12px; padding: 12px;">
+            ${appLoans.length > 0 ? `
+              <div>
+                <div style="font-size: 0.65rem; color: var(--t3);">⭐ Application Loans</div>
+                <div style="font-size: 1rem; font-weight: 700; color: var(--gold);">${money(totalAppBalance)}</div>
+                <div class="micro muted">${appLoans.length} loan(s)</div>
+              </div>
+            ` : ''}
+            ${assignedLoans.length > 0 ? `
+              <div>
+                <div style="font-size: 0.65rem; color: var(--t3);">📋 Assigned Debt</div>
+                <div style="font-size: 1rem; font-weight: 700; color: var(--teal);">${money(totalAssignedBalance)}</div>
+                <div class="micro muted">${assignedLoans.length} loan(s)</div>
+              </div>
+            ` : ''}
+            <div>
+              <div style="font-size: 0.65rem; color: var(--t3);">🧾 Debt Balance</div>
+              <div style="font-size: 1rem; font-weight: 700; color: var(--red);">${money(totalDebtBalance)}</div>
+            </div>
+            <div>
+              <div style="font-size: 0.65rem; color: var(--t3);">💳 Total Owed</div>
+              <div style="font-size: 1rem; font-weight: 700; color: var(--purple);">${money(totalAppBalance + totalAssignedBalance + totalDebtBalance)}</div>
+            </div>
+          </div>
+          
+          ${hasOverdue ? `
+            <div style="margin-top: 8px; padding: 8px; background: rgba(239,68,68,0.15); border-radius: 8px; text-align: center;">
+              <span style="font-size: 0.75rem; color: var(--red); font-weight: 700;">
+                🚨 OVERDUE! Please contact admin immediately. Penalties are being applied.
+              </span>
+            </div>
+          ` : ''}
+        </div>
+        
+        <!-- Repayment Priority Info -->
+        <div style="background: rgba(6,182,212,0.06); border-radius: 12px; padding: 12px; border: 1px solid rgba(6,182,212,0.15);">
+          <div style="font-size: 0.8rem; color: var(--t2);">
+            💡 <strong>Repayment Priority Order:</strong>
+            <ol style="margin-top: 4px; margin-left: 16px; font-size: 0.75rem; line-height: 1.8;">
+              <li><strong>Daily Savings</strong> - Your required daily deposit</li>
+              <li><strong>⭐ Application Loan</strong> - Repaid first (oldest first)</li>
+              <li><strong>📋 Assigned Debt</strong> - Repaid after application loans</li>
+              <li><strong>🧾 Debt</strong> - Cleared last</li>
+            </ol>
+            ${appLoans.length > 0 ? `
+              <div style="margin-top: 8px; padding: 8px; background: rgba(245,158,11,0.1); border-radius: 6px; border-left: 3px solid var(--gold);">
+                ⭐ <strong>Your application loan must be fully repaid</strong> before the next member can borrow.
+              </div>
+            ` : ''}
+          </div>
+        </div>
+        
+        <!-- List of Active Loans -->
+        ${activeLoans.length > 0 ? `
+          <div style="background: rgba(255,255,255,0.03); border-radius: 12px; padding: 12px; max-height: 200px; overflow-y: auto;">
+            <div style="font-size: 0.7rem; font-weight: 700; color: var(--t3); margin-bottom: 6px;">📋 Loan Details</div>
+            ${activeLoans.map(loan => {
+              const remaining = loan.totalRepay - (loan.repaidAmount || 0);
+              const repaid = loan.totalRepay - remaining;
+              const percent = loan.totalRepay > 0 ? Math.round((repaid / loan.totalRepay) * 100) : 0;
+              const isApp = loan.loanQuestions && loan.loanQuestions.length > 0;
+              const isOverdue = loan.dueDate && loan.dueDate < Date.now();
+              const daysOverdue = isOverdue ? Math.floor((Date.now() - loan.dueDate) / (1000 * 60 * 60 * 24)) : 0;
+              
+              return `
+                <div style="background: rgba(255,255,255,0.05); border-radius: 8px; padding: 8px; margin-bottom: 6px; border-left: 3px solid ${isOverdue ? 'var(--red)' : isApp ? 'var(--gold)' : 'var(--teal)'};">
+                  <div style="display: flex; justify-content: space-between; font-size: 0.75rem;">
+                    <span><strong>${isApp ? '⭐ Application' : '📋 Assigned'}</strong> ${money(loan.amount)} @ ${loan.interestRate}%</span>
+                    <span style="color: ${percent >= 100 ? 'var(--green)' : 'var(--gold)'};">${percent}% repaid</span>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--t3);">
+                    <span>Repaid: ${money(repaid)}</span>
+                    <span>Remaining: ${money(remaining)}</span>
+                  </div>
+                  ${loan.dueDate ? `
+                    <div style="font-size: 0.65rem; color: ${isOverdue ? 'var(--red)' : 'var(--t3)'}; display: flex; justify-content: space-between;">
+                      <span>Due: ${new Date(loan.dueDate).toLocaleDateString()}</span>
+                      ${isOverdue ? `<span style="color: var(--red); font-weight: 700;">🚨 ${daysOverdue} days overdue!</span>` : ''}
+                    </div>
+                  ` : ''}
+                </div>
+              `;
+            }).join('')}
+          </div>
+        ` : ''}
+      </div>
+    `;
+    
+    actionBtn.textContent = '✅ Got It, Close';
+    actionBtn.onclick = () => closeOv('ov-loan-preview');
+    actionBtn.className = 'btn btn-amber btn-full';
     
   // Update the active loan section in showLoanPreview
 } else if (data.hasActiveLoan) {
@@ -8253,7 +8856,6 @@ window.confirmDailySavings = async function() {
 };
 window.switchAdminTab=function(tab){currentAdminTab=tab;document.querySelectorAll('.admin-tab').forEach(t=>t.classList.remove('active'));document.querySelector(`.admin-tab[data-tab="${tab}"]`)?.classList.add('active');renderAdminTab();};
 function renderAdminTab() {
-  // If grid should be shown, display grid instead (no back button)
   if (adminShowGrid) {
     showAdminGrid();
     return;
@@ -8262,7 +8864,7 @@ function renderAdminTab() {
   const c = document.getElementById('admin-content');
   if (!c) return;
 
-  // Add a Back button (only once) when a tab is active
+  // Add Back button
   if (!c.querySelector('.admin-back-btn')) {
     const backBtn = document.createElement('div');
     backBtn.className = 'admin-back-btn';
@@ -8276,7 +8878,7 @@ function renderAdminTab() {
 
   const pendingLoans = loans.filter(l => l.status === 'pending');
   
-  // For active loans grouping (used in Savings tab)
+  // Group active loans by member
   const activeByMember = {};
   loans.forEach(l => {
     if (l.status === 'approved' && !l.repaid) {
@@ -8286,12 +8888,20 @@ function renderAdminTab() {
         activeByMember[l.memberId] = {
           memberName: l.memberName,
           memberPhone: l.memberPhone,
+          member: members.find(m => m.id === l.memberId),
           totalPrincipal: 0,
           totalRepay: 0,
           weightedInterest: 0,
           count: 0,
           dueDate: 0,
-          loans: [] // Store individual loans
+          loans: [],
+          appLoanCount: 0,
+          assignedLoanCount: 0,
+          appLoanBalance: 0,
+          assignedLoanBalance: 0,
+          isOverdue: false,
+          daysOverdue: 0,
+          overdueAppLoan: null
         };
       }
       activeByMember[l.memberId].totalPrincipal += l.amount;
@@ -8300,64 +8910,95 @@ function renderAdminTab() {
       activeByMember[l.memberId].count++;
       if (l.dueDate > activeByMember[l.memberId].dueDate) activeByMember[l.memberId].dueDate = l.dueDate;
       activeByMember[l.memberId].loans.push(l);
+      
+      if (l.loanQuestions && l.loanQuestions.length > 0) {
+        activeByMember[l.memberId].appLoanCount++;
+        activeByMember[l.memberId].appLoanBalance += (l.totalRepay - (l.repaidAmount || 0));
+        
+        if (l.dueDate && l.dueDate < Date.now()) {
+          const daysOverdue = Math.floor((Date.now() - l.dueDate) / (1000 * 60 * 60 * 24));
+          if (daysOverdue > activeByMember[l.memberId].daysOverdue) {
+            activeByMember[l.memberId].daysOverdue = daysOverdue;
+            activeByMember[l.memberId].isOverdue = true;
+            activeByMember[l.memberId].overdueAppLoan = l;
+          }
+        }
+      } else {
+        activeByMember[l.memberId].assignedLoanCount++;
+        activeByMember[l.memberId].assignedLoanBalance += (l.totalRepay - (l.repaidAmount || 0));
+      }
     }
   });
   const entries = Object.entries(activeByMember);
 
-  // Helper to format money with negative support
-  function money(n) { 
-    n = Number(n) || 0; 
-    return (n < 0 ? '-' : '') + 'UGX ' + Math.abs(n).toLocaleString(); 
+  // ===== HELPER FUNCTIONS =====
+  function money(n) { n = Number(n) || 0; return (n < 0 ? '-' : '') + 'UGX ' + Math.abs(n).toLocaleString(); }
+  function getMemberDebt(phone) { return memberDebts[phone] || 0; }
+  function getMemberLoan(phone) { return memberLoans[phone] || 0; }
+  function getMemberAppLoan(phone) { return memberApplicationLoans[phone] || 0; }
+  function getMemberAssignedLoan(phone) { return memberAssignedLoans[phone] || 0; }
+  
+  function getAvatarColor(name) { 
+    const colors = ['#f59e0b', '#10b981', '#06b6d4', '#8b5cf6', '#ef4444', '#ec4899', '#f97316', '#6366f1'];
+    return colors[(name || '').charCodeAt(0) % colors.length];
   }
 
-  // Helper to get member's total debt
-  function getMemberDebt(phone) {
-    return memberDebts[phone] || 0;
-  }
+  // ===== OVERDUE APPLICATION LOANS =====
+  const overdueWithDays = loans.filter(l => 
+    l.status === 'approved' && 
+    !l.repaid && 
+    l.dueDate && 
+    l.dueDate < Date.now() &&
+    l.loanQuestions && 
+    l.loanQuestions.length > 0
+  ).map(l => ({
+    ...l,
+    daysOverdue: Math.floor((Date.now() - l.dueDate) / (1000 * 60 * 60 * 24))
+  }));
 
-  // Helper to get member's total loan balance
-  function getMemberLoan(phone) {
-    return memberLoans[phone] || 0;
-  }
+  const hasOverdueAppLoans = overdueWithDays.length > 0;
 
-  // ----- Build warnings if negative -----
+  // ===== GLOBAL WARNINGS HTML (USED IN ALL TABS) =====
   let warningsHtml = '';
-  if (cashFromDeposits < 0) {
-    warningsHtml += `
-      <div class="warning-card" style="background: rgba(239,68,68,0.08); border: 2px solid var(--red); border-radius: 16px; padding: 16px; margin-bottom: 12px;">
-        <div style="display:flex; align-items:center; gap:12px;">
-          <span style="font-size: 2rem;">⚠️</span>
+  if (hasOverdueAppLoans) {
+    warningsHtml = `
+      <div style="
+        background: linear-gradient(135deg, rgba(239,68,68,0.12), rgba(245,158,11,0.08));
+        border: 2px solid var(--red);
+        border-radius: 12px;
+        padding: 12px 16px;
+        margin-bottom: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px;
+      ">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 1.8rem;">🚨</span>
           <div>
-            <div style="font-weight: 800; color: var(--red); font-size: 0.9rem;">Negative Available Cash</div>
-            <div style="font-size: 0.75rem; color: var(--t2); margin-top: 4px;">
-              Available cash is ${money(cashFromDeposits)}. This means the group has paid out more than it has received in daily savings.
-              Consider collecting outstanding debts or loans to restore positive balance.
+            <div style="font-weight: 800; color: var(--red); font-size: 0.9rem;">${overdueWithDays.length} overdue application loan(s)</div>
+            <div style="font-size: 0.7rem; color: var(--t2);">
+              ${overdueWithDays.map(l => `${escapeHtml(l.memberName)} (${l.daysOverdue}d)`).join(' • ')}
             </div>
           </div>
+        </div>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          ${overdueWithDays.map(l => `
+            <button class="btn btn-sm btn-red" onclick="sendHarshReminder('${l.memberId}')" style="font-size: 0.65rem; padding: 4px 10px;">
+              📧 ${escapeHtml(l.memberName)}
+            </button>
+          `).join('')}
         </div>
       </div>
     `;
   }
 
-  if (groupProfit < 0) {
-    warningsHtml += `
-      <div class="warning-card" style="background: rgba(239,68,68,0.08); border: 2px solid var(--red); border-radius: 16px; padding: 16px; margin-bottom: 12px;">
-        <div style="display:flex; align-items:center; gap:12px;">
-          <span style="font-size: 2rem;">⚠️</span>
-          <div>
-            <div style="font-weight: 800; color: var(--red); font-size: 0.9rem;">Negative Profit Pool</div>
-            <div style="font-size: 0.75rem; color: var(--t2); margin-top: 4px;">
-              Profit pool is ${money(groupProfit)}. This means expenses, loan disbursements, or losses exceed income from welfare, fines, and interest.
-              Consider reducing expenses or increasing contributions.
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  // ----- Savings tab -----
+  // ============================================
+  // SAVINGS TAB
+  // ============================================
   if (currentAdminTab === 'savings') {
+    // Get today's deposit status
     function getTodaysDepositStatus() {
       const todayStart = new Date().setHours(0, 0, 0, 0);
       const todayEnd = todayStart + 86400000 - 1;
@@ -8377,147 +9018,195 @@ function renderAdminTab() {
     let pendingActivityHtml = '';
     if (notDeposited.length === 0) {
       pendingActivityHtml = `
-        <div class="card" style="background: rgba(16,185,129,0.1); border-color: #10b981;">
-          <div style="display:flex; align-items:center; gap:10px;">
-            <span style="font-size:1.5rem;">✅</span>
-            <div><strong>All members are up to date!</strong><br>${depositedCount}/${allCount} have transacted today.</div>
-          </div>
+        <div style="background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 1.2rem;">✅</span>
+          <span style="font-size: 0.8rem; color: var(--t2);">All ${allCount} members are up to date today</span>
         </div>
       `;
     } else {
       pendingActivityHtml = `
-        <div class="card" style="background: rgba(245,158,11,0.1); border-color: #f59e0b;">
-          <div style="margin-bottom:8px;"><strong>⚠️ Pending deposits (${notDeposited.length} members)</strong></div>
-          <div style="display:flex; flex-wrap:wrap; gap:6px;">
-            ${notDeposited.map(m => `<span class="pill-badge pill-amber" style="background:rgba(245,158,11,0.2);">⚠️ ${escapeHtml(m.name)}</span>`).join('')}
+        <div style="background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 1.2rem;">⚠️</span>
+            <span style="font-size: 0.8rem; color: var(--t2);"><strong>${notDeposited.length}</strong> pending deposits</span>
           </div>
-          <div class="micro muted" style="margin-top:6px;">These members have not deposited today. Auto‑penalty applies at midnight.</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+            ${notDeposited.map(m => `<span style="background: rgba(245,158,11,0.15); padding: 2px 8px; border-radius: 12px; font-size: 0.65rem; color: var(--gold);">${escapeHtml(m.name)}</span>`).join('')}
+          </div>
         </div>
       `;
     }
 
-    // Available Cash display
-    const availableCashHtml = `
-      <div class="card">
-        <div class="sec-h">💵 Available Cash</div>
-        <div style="display:flex; align-items:center; gap:14px;">
-          <div style="width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,var(--teal),#0891b2);display:flex;align-items:center;justify-content:center;font-size:1.6rem">💰</div>
-          <div>
-            <div style="font-family:'JetBrains Mono',monospace;font-size:1.6rem;font-weight:700;color:${cashFromDeposits < 0 ? 'var(--red)' : 'var(--teal)'}">
-              ${money(cashFromDeposits)}
-            </div>
-            <div class="micro">${cashFromDeposits < 0 ? '⚠️ NEGATIVE' : 'Available for payouts'}</div>
-          </div>
+    // Financial Summary - Compact Cards
+    const financialSummaryHtml = `
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px;">
+        <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px; text-align: center;">
+          <div style="font-size: 0.6rem; color: var(--t3); text-transform: uppercase; letter-spacing: 0.5px;">Available Cash</div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; font-weight: 700; color: ${cashFromDeposits < 0 ? 'var(--red)' : 'var(--teal)'};">${money(cashFromDeposits)}</div>
         </div>
-        ${cashFromDeposits < 0 ? '<div class="micro muted" style="color:var(--red);margin-top:8px;">⚠️ Available cash is negative. Payouts may not be possible until funds are added.</div>' : ''}
+        <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px; text-align: center;">
+          <div style="font-size: 0.6rem; color: var(--t3); text-transform: uppercase; letter-spacing: 0.5px;">Profit Pool</div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; font-weight: 700; color: ${groupProfit < 0 ? 'var(--red)' : 'var(--green)'};">${money(groupProfit)}</div>
+        </div>
+        <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px; text-align: center;">
+          <div style="font-size: 0.6rem; color: var(--t3); text-transform: uppercase; letter-spacing: 0.5px;">Pending Loans</div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; font-weight: 700; color: var(--gold);">${pendingLoans.length}</div>
+        </div>
       </div>
     `;
 
-    const profitPoolHtml = `
-      <div class="card">
-        <div class="sec-h">🏦 Profit Pool</div>
-        <div style="display:flex; align-items:center; gap:14px; margin-bottom:14px">
-          <div style="width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,var(--green),#059669);display:flex;align-items:center;justify-content:center;font-size:1.6rem">💰</div>
-          <div>
-            <div style="font-family:'JetBrains Mono',monospace;font-size:1.6rem;font-weight:700;color:${groupProfit < 0 ? 'var(--red)' : 'var(--green)'}">
-              ${money(groupProfit)}
-            </div>
-            <div class="micro">${groupProfit < 0 ? '⚠️ NEGATIVE' : 'Available for distribution'}</div>
-          </div>
-        </div>
-        <button class="btn btn-green btn-full" onclick="previewProfitDistribution()">🎉 Distribute Profit to All Members</button>
-        ${groupProfit < 0 ? '<div class="micro muted" style="color:var(--red);margin-top:8px;">⚠️ Profit pool is negative. Consider adding funds or reducing expenses.</div>' : ''}
-      </div>
-    `;
-
+    // Pending loans
     let pendingLoansHtml = '';
     if (pendingLoans.length) {
       pendingLoansHtml = `
-        <div class="card">
-          <div class="sec-h">📋 Pending Loan Requests <span class="pill-badge pill-amber">${pendingLoans.length}</span></div>
-          ${pendingLoans.map(l => {
-            const member = members.find(m => m.id === l.memberId);
-            return `
-              <div class="mc">
-                <div>
-                  <div class="mc-name">${escapeHtml(l.memberName)}</div>
-                  <div class="mc-phone">Amount: ${money(l.amount)} · Repay: ${money(l.totalRepay)} (${l.interestRate}%)</div>
-                  <div class="micro">${l.reason || 'No reason provided'}</div>
-                  ${l.loanQuestions && l.loanQuestions.length > 0 ? '<div class="micro muted">📋 Application loan (has questions)</div>' : ''}
+        <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px; margin-bottom: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span style="font-size: 0.75rem; font-weight: 700; color: var(--t2);">📋 Pending Requests</span>
+            <span class="pill-badge pill-amber">${pendingLoans.length}</span>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+            ${pendingLoans.map(l => `
+              <div style="background: rgba(255,255,255,0.04); border: 1px solid var(--br); border-radius: 8px; padding: 8px 12px; display: flex; align-items: center; gap: 8px; flex: 1; min-width: 140px;">
+                <span style="font-size: 1rem;">${l.loanQuestions && l.loanQuestions.length > 0 ? '⭐' : '📋'}</span>
+                <div style="flex: 1; min-width: 0;">
+                  <div style="font-size: 0.75rem; font-weight: 600; color: var(--t);">${escapeHtml(l.memberName)}</div>
+                  <div style="font-size: 0.6rem; color: var(--t3);">${money(l.amount)} @ ${l.interestRate}%</div>
                 </div>
-                <div style="display:flex; gap:6px;">
-                  <button class="btn btn-sm btn-green" onclick="openApproveLoanModal('${l.id}')">✅ Approve</button>
-                  <button class="btn btn-sm btn-red" onclick="rejectLoan('${l.id}')">✕ Reject</button>
+                <div style="display: flex; gap: 4px;">
+                  <button class="btn btn-sm btn-green" onclick="openApproveLoanModal('${l.id}')" style="padding: 2px 8px; font-size: 0.6rem;">✅</button>
+                  <button class="btn btn-sm btn-red" onclick="rejectLoan('${l.id}')" style="padding: 2px 8px; font-size: 0.6rem;">✕</button>
                 </div>
               </div>
-            `;
-          }).join('')}
+            `).join('')}
+          </div>
         </div>
       `;
     }
 
+    // Active Loans - Professional Cards
     let activeLoansHtml = '';
     if (entries.length) {
       activeLoansHtml = `
         <div id="activeLoansContainer" style="display: none;">
-          <div class="card">
-            <div class="sec-h">💳 Active Loans <span class="pill-badge pill-green">${entries.length}</span></div>
-            ${entries.map(([memberId, data]) => {
-              const member = members.find(m => m.id === memberId);
-              const memberName = member ? member.name : 'Deleted Member';
-              const avgRate = data.totalPrincipal ? (data.weightedInterest / data.totalPrincipal).toFixed(1) : 0;
-              const balance = getMemberLoan(data.memberPhone);
-              const paid = Math.max(0, data.totalRepay - balance);
-              const isOverdue = data.dueDate && data.dueDate < Date.now();
-              const debtBalance = getMemberDebt(data.memberPhone);
-              
-              // Check if any loan is from application
-              const hasAppLoan = data.loans.some(l => l.loanQuestions && l.loanQuestions.length > 0);
-              
-              return `
-                <div class="mc" style="border-left: 4px solid ${isOverdue ? 'var(--red)' : 'var(--green)'};">
-                  <div>
-                    <div class="mc-name" style="font-size: 1rem; margin-bottom: 4px;">${escapeHtml(memberName)}</div>
-                    <div style="display: flex; flex-wrap: wrap; gap: 12px; margin: 6px 0;">
-                      <span style="background: rgba(245,158,11,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--gold);">💰 Borrowed: ${money(data.totalPrincipal)}</span>
-                      <span style="background: rgba(6,182,212,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--teal);">📈 Interest: ${avgRate}%</span>
-                      <span style="background: rgba(251,146,60,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--amber);">💸 Repay: ${money(data.totalRepay)}</span>
+          <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <span style="font-size: 0.75rem; font-weight: 700; color: var(--t2);">💳 Active Loans</span>
+              <span class="pill-badge pill-green">${entries.length} members</span>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px;">
+              ${entries.map(([memberId, data]) => {
+                const member = data.member;
+                const totalBalance = getMemberLoan(data.memberPhone);
+                const appBalance = getMemberAppLoan(data.memberPhone);
+                const assignedBalance = getMemberAssignedLoan(data.memberPhone);
+                const debtBalance = getMemberDebt(data.memberPhone);
+                const isOverdue = data.isOverdue;
+                const daysOverdue = data.daysOverdue;
+                const avatarColor = getAvatarColor(data.memberName);
+                const initials = data.memberName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+                
+                return `
+                  <div style="
+                    background: rgba(255,255,255,0.04);
+                    border: 1px solid ${isOverdue ? 'var(--red)' : 'var(--br)'};
+                    border-radius: 12px;
+                    padding: 12px;
+                    cursor: pointer;
+                    transition: all 0.2s ease;
+                    position: relative;
+                    ${isOverdue ? 'animation: pulse 2s infinite;' : ''}
+                  "
+                  onclick="showMemberLoanDetails('${memberId}')"
+                  onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='var(--sh)';"
+                  onmouseout="this.style.transform='none'; this.style.boxShadow='none';"
+                  >
+                    ${isOverdue ? `
+                      <div style="
+                        position: absolute;
+                        top: -6px;
+                        right: -6px;
+                        background: var(--red);
+                        color: white;
+                        font-size: 0.5rem;
+                        font-weight: 800;
+                        padding: 2px 8px;
+                        border-radius: 10px;
+                        animation: pulse 1.5s infinite;
+                      ">
+                        ${daysOverdue}d overdue
+                      </div>
+                    ` : ''}
+                    
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                      <div style="
+                        width: 38px;
+                        height: 38px;
+                        border-radius: 50%;
+                        background: linear-gradient(135deg, ${avatarColor}, ${avatarColor}cc);
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: 0.85rem;
+                        font-weight: 800;
+                        color: white;
+                        flex-shrink: 0;
+                      ">
+                        ${initials || '?'}
+                      </div>
+                      <div style="flex: 1; min-width: 0;">
+                        <div style="font-size: 0.8rem; font-weight: 700; color: var(--t); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                          ${escapeHtml(data.memberName)}
+                        </div>
+                        <div style="font-size: 0.55rem; color: var(--t3);">${data.count} loan(s)</div>
+                      </div>
                     </div>
-                    <div style="display: flex; flex-wrap: wrap; gap: 12px; margin: 6px 0;">
-                      <span style="background: rgba(34,197,94,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--green);">✅ Paid: ${money(paid)}</span>
-                      <span style="background: ${balance > 0 ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)'}; padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: ${balance > 0 ? 'var(--red)' : 'var(--green)'};">⚖️ Loan Balance: ${money(balance)}</span>
-                      <span style="background: rgba(239,68,68,0.12); padding: 2px 8px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: var(--red);">🧾 Debt: ${money(debtBalance)}</span>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; font-size: 0.65rem;">
+                      <div style="color: var(--t3);">Total</div>
+                      <div style="font-weight: 600; text-align: right; color: var(--gold);">${money(data.totalRepay)}</div>
+                      <div style="color: var(--t3);">Paid</div>
+                      <div style="font-weight: 600; text-align: right; color: var(--green);">${money(Math.max(0, data.totalRepay - totalBalance))}</div>
+                      <div style="color: var(--t3);">Balance</div>
+                      <div style="font-weight: 600; text-align: right; color: ${totalBalance > 0 ? 'var(--red)' : 'var(--green)'};">${money(totalBalance)}</div>
                     </div>
-                    <div style="display: flex; flex-wrap: wrap; gap: 12px; margin: 6px 0;">
-                      <span style="background: rgba(100,116,139,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.65rem; font-weight: 600; color: var(--t3);">📅 Due: ${new Date(data.dueDate).toLocaleDateString()}</span>
-                      ${data.count > 1 ? `<span style="background: rgba(139,92,246,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.65rem; font-weight: 600; color: var(--purple);">📚 ${data.count} loans</span>` : ''}
-                      ${hasAppLoan ? `<span style="background: rgba(245,158,11,0.15); padding: 2px 8px; border-radius: 20px; font-size: 0.65rem; font-weight: 600; color: var(--gold);">⭐ Application loan</span>` : ''}
+                    
+                    <div style="display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap;">
+                      ${data.appLoanCount > 0 ? `<span style="background: rgba(245,158,11,0.12); padding: 1px 8px; border-radius: 10px; font-size: 0.5rem; font-weight: 600; color: var(--gold);">⭐ ${money(appBalance)}</span>` : ''}
+                      ${data.assignedLoanCount > 0 ? `<span style="background: rgba(6,182,212,0.12); padding: 1px 8px; border-radius: 10px; font-size: 0.5rem; font-weight: 600; color: var(--teal);">📋 ${money(assignedBalance)}</span>` : ''}
+                      ${debtBalance > 0 ? `<span style="background: rgba(239,68,68,0.12); padding: 1px 8px; border-radius: 10px; font-size: 0.5rem; font-weight: 600; color: var(--red);">🧾 ${money(debtBalance)}</span>` : ''}
                     </div>
-                    ${isOverdue ? '<div class="micro muted" style="color:var(--red);margin-top:4px;">⚠️ OVERDUE - Penalty applied</div>' : ''}
+                    
+                    <div style="text-align: center; margin-top: 8px; font-size: 0.5rem; color: var(--t3);">
+                      👆 Click for details
+                    </div>
                   </div>
-                  <span class="pill-badge ${isOverdue ? 'pill-red' : 'pill-green'}">${isOverdue ? '⚠️ Overdue' : 'Active'}</span>
-                </div>
-              `;
-            }).join('')}
+                `;
+              }).join('')}
+            </div>
           </div>
         </div>
-        <button class="btn btn-purple btn-full" onclick="toggleActiveLoans()" style="margin-top: 8px;">📋 Show/Hide Active Loans</button>
+        <button class="btn btn-purple btn-full" onclick="toggleActiveLoans()" style="margin-top: 8px; padding: 8px; font-size: 0.75rem;">
+          📋 Show Active Loans
+        </button>
       `;
     }
 
     c.innerHTML = `
       ${warningsHtml}
-      ${availableCashHtml}
-      ${profitPoolHtml}
+      ${financialSummaryHtml}
       ${pendingActivityHtml}
       ${pendingLoansHtml}
       ${activeLoansHtml}
     `;
+    return;
   }
 
-  // ----- Notice tab -----
+  // ============================================
+  // NOTICE TAB
+  // ============================================
   else if (currentAdminTab === 'notice') {
     const carouselHtml = `
+      ${warningsHtml}
       <div id="carouselNoticesContainer" style="display: ${mainCarouselNotifs.length > 0 ? 'block' : 'none'}; margin-top: 16px;">
         <div class="card">
           <div class="sec-h">🎠 Carousel Notices <span class="pill-badge pill-amber">${mainCarouselNotifs.length}/5</span></div>
@@ -8540,11 +9229,13 @@ function renderAdminTab() {
     `;
     c.innerHTML = carouselHtml;
     setTimeout(() => initCarouselDrag(), 100);
+    return;
   }
 
-  // ----- Harvest tab -----
+  // ============================================
+  // HARVEST TAB
+  // ============================================
   else if (currentAdminTab === 'harvest') {
-    // Get current loan receiver
     const rotationList = loanRotationOrder.length ? loanRotationOrder : rotation.order;
     let currentReceiver = 'None';
     if (rotationList.length > 0 && loanReceiverIndex < rotationList.length) {
@@ -8554,6 +9245,7 @@ function renderAdminTab() {
     }
 
     c.innerHTML = `
+      ${warningsHtml}
       <div class="card">
         <div class="sec-h">🌾 Harvest Actions</div>
         <button class="btn btn-teal btn-full" onclick="openAddTransaction()">➕ Add Transaction</button>
@@ -8584,19 +9276,39 @@ function renderAdminTab() {
         </div>
       </div>
     `;
+    return;
   }
 
-  // ----- Users tab -----
+  // ============================================
+  // USERS TAB
+  // ============================================
   else if (currentAdminTab === 'users') {
+    // Count pending applications
+    let pendingCount = 0;
+    if (db) {
+      db.ref('applications').orderByChild('status').equalTo('pending').once('value', snap => {
+        pendingCount = snap.val() ? Object.keys(snap.val()).length : 0;
+        const badgeWrap = document.getElementById('apps-badge-wrap');
+        const badgeSpan = document.getElementById('apps-count');
+        if (badgeWrap && badgeSpan) {
+          if (pendingCount > 0) {
+            badgeWrap.style.display = 'inline-flex';
+            badgeSpan.textContent = pendingCount;
+          } else {
+            badgeWrap.style.display = 'none';
+          }
+        }
+      });
+    }
+
     const membersListHtml = `
       <div id="allMembersContainer" style="display: none;">
         <div class="card">
           <div class="sec-h" style="display: flex; justify-content: space-between; align-items: center;">
             <span>👥 All Members <span class="pill-badge pill-green">${members.length}</span></span>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <button class="btn btn-sm btn-amber" onclick="openMultiAssignDebt()">💰 Assign Debt to Selected</button>
-              <button class="btn btn-sm btn-teal" onclick="openMultiAddTransaction()">➕ Add Transaction to Selected</button>
-              <button class="btn btn-sm btn-purple" onclick="openMultiLoanApproval()">📋 Approve Loans for Selected</button>
+              <button class="btn btn-sm btn-amber" onclick="openMultiAssignDebt()">💰 Assign Debt</button>
+              <button class="btn btn-sm btn-teal" onclick="openMultiAddTransaction()">➕ Add Transaction</button>
             </div>
           </div>
           <div id="admin-members-list"></div>
@@ -8605,39 +9317,24 @@ function renderAdminTab() {
       <button class="btn btn-purple btn-full" onclick="toggleAllMembers()" style="margin-top: 8px;">👥 Show/Hide All Members</button>
     `;
 
-    // Count pending applications
-    let pendingCount = 0;
-    db.ref('applications').orderByChild('status').equalTo('pending').once('value', snap => {
-      pendingCount = snap.val() ? Object.keys(snap.val()).length : 0;
-      const badgeWrap = document.getElementById('apps-badge-wrap');
-      const badgeSpan = document.getElementById('apps-count');
-      if (badgeWrap && badgeSpan) {
-        if (pendingCount > 0) {
-          badgeWrap.style.display = 'inline-flex';
-          badgeSpan.textContent = pendingCount;
-        } else {
-          badgeWrap.style.display = 'none';
-        }
-      }
-    });
-
     c.innerHTML = `
+      ${warningsHtml}
       <div class="card">
         <div class="sec-h">⚡ Quick Actions</div>
         <button class="btn btn-gold btn-full" onclick="openOv('ov-add-mbr')">👤 Add New Member</button>
         <button class="btn btn-teal btn-full" onclick="loadApplications()">📝 View Applications<span id="apps-badge-wrap" style="display:none;background:var(--red);color:#fff;border-radius:99px;padding:1px 7px;font-size:0.65rem;font-weight:800;margin-left:4px"><span id="apps-count">0</span></span></button>
         <button class="btn btn-purple btn-full" onclick="generateGroupReport()">📊 Generate Group Report</button>
       </div>
-      ${warningsHtml}
       ${membersListHtml}
     `;
-
     updateAdminMembersList();
+    return;
   }
 
-  // ----- Fines tab -----
+  // ============================================
+  // FINES TAB
+  // ============================================
   else if (currentAdminTab === 'fines') {
-    // Get total fines and debts summary
     let totalFines = 0;
     let totalDebts = 0;
     let totalLoans = 0;
@@ -8650,11 +9347,12 @@ function renderAdminTab() {
     }
 
     c.innerHTML = `
+      ${warningsHtml}
       <div class="card">
         <div class="sec-h">⚡ Fines & Finances</div>
         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px;">
           <div style="background: rgba(245,158,11,0.1); border-radius: 12px; padding: 12px; text-align: center;">
-            <div class="micro muted">Total Fines Collected</div>
+            <div class="micro muted">Total Fines</div>
             <div style="font-weight: 700; font-size: 1.1rem; color: var(--gold);">${money(totalFines)}</div>
           </div>
           <div style="background: rgba(239,68,68,0.1); border-radius: 12px; padding: 12px; text-align: center;">
@@ -8666,27 +9364,28 @@ function renderAdminTab() {
             <div style="font-weight: 700; font-size: 1.1rem; color: var(--teal);">${money(totalLoans)}</div>
           </div>
         </div>
-        <button class="btn btn-amber btn-full" onclick="openOv('ov-add-fine');populateMemberDropdowns()">⚡ Apply Fine to Member</button>
-        <button class="btn btn-red btn-full" onclick="openOv('ov-assign-debt');populateMemberDropdowns()">🧾 Assign Debt to Member</button>
-        <button class="btn btn-purple btn-full" onclick="openOv('ov-group-transaction')">📦 Add Group Transaction (Welfare, Expense, Deposit)</button>
-        <button class="btn btn-teal btn-full" onclick="openMultiAddTransaction()" style="margin-top: 8px;">📋 Add Transaction to Multiple Members</button>
+        <button class="btn btn-amber btn-full" onclick="openOv('ov-add-fine');populateMemberDropdowns()">⚡ Apply Fine</button>
+        <button class="btn btn-red btn-full" onclick="openOv('ov-assign-debt');populateMemberDropdowns()">🧾 Assign Debt</button>
+        <button class="btn btn-purple btn-full" onclick="openOv('ov-group-transaction')">📦 Group Transaction</button>
       </div>
-      ${warningsHtml}
     `;
+    return;
   }
 
-  // ----- Settings tab -----
+  // ============================================
+  // SETTINGS TAB
+  // ============================================
   else if (currentAdminTab === 'settings') {
     c.innerHTML = `
+      ${warningsHtml}
       <div class="card">
         <div class="sec-h">⚙️ Configuration</div>
         <button class="btn btn-gold btn-full" onclick="openOv('ov-settings');loadSettings()">⚙️ Group Settings</button>
-        <button class="btn btn-purple btn-full" onclick="openEditTermsModal()">📝 Edit Group Terms</button>
+        <button class="btn btn-purple btn-full" onclick="openEditTermsModal()">📝 Edit Terms</button>
         <button class="btn btn-amber btn-full" onclick="openOv('ov-loan-settings');loadLoanSettings()">💰 Loan Settings</button>
-        <button class="btn btn-teal btn-full" onclick="generateGroupReport()">📊 Group Report (Start Date → Now)</button>
+        <button class="btn btn-teal btn-full" onclick="generateGroupReport()">📊 Group Report</button>
         <button class="btn btn-green btn-full" onclick="openMemberStatusMessages()">📨 Send Status Messages</button>
       </div>
-      ${warningsHtml}
       <div class="danger-zone">
         <div class="danger-zone-label">⚠️ Danger Zone</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -8695,24 +9394,11 @@ function renderAdminTab() {
         </div>
       </div>
     `;
+    return;
   }
 
-  // Update the pending applications badge count (for the Users tab button)
-  if (currentAdminTab === 'users') {
-    db.ref('applications').orderByChild('status').equalTo('pending').once('value', snap => {
-      const count = snap.val() ? Object.keys(snap.val()).length : 0;
-      const badgeWrap = document.getElementById('apps-badge-wrap');
-      const badgeSpan = document.getElementById('apps-count');
-      if (badgeWrap && badgeSpan) {
-        if (count > 0) {
-          badgeWrap.style.display = 'inline-flex';
-          badgeSpan.textContent = count;
-        } else {
-          badgeWrap.style.display = 'none';
-        }
-      }
-    });
-  }
+  // Fallback
+  c.innerHTML = '<div class="empty-state">Select a tab above</div>';
 }
 
 
@@ -9763,7 +10449,7 @@ window.addGroupTransaction = async function() {
 };
 
 // ==========================================
-// ASSIGN DEBT AS LOAN - WITH RECEIPT PREVIEW
+// ASSIGN DEBT AS LOAN - WITH WARNING (NO BLOCK)
 // ==========================================
 
 window.assignDebtAsLoan = async function() {
@@ -9805,13 +10491,10 @@ window.assignDebtAsLoan = async function() {
   }
   
   const dueDate = new Date(dueDateStr).getTime();
-  console.log('✅ All validations passed');
-  
-  // Calculate total repay
   const totalRepay = Math.floor(principal * (1 + interestRate / 100));
   const interest = totalRepay - principal;
-  
-  // Check if member already has an active application loan
+
+  // ===== CHECK FOR ACTIVE APPLICATION LOAN - WARNING ONLY (NO BLOCK) =====
   const hasAppLoan = loans.some(l => 
     l.memberId === member.id && 
     l.status === 'approved' && 
@@ -9821,11 +10504,28 @@ window.assignDebtAsLoan = async function() {
   );
   
   if (hasAppLoan) {
-    toast('⚠️ Member already has an active application loan. Please wait for it to be repaid.', '#ef4444');
-    return;
+    // Show a warning but DO NOT BLOCK
+    const confirmAssign = confirm(
+      `⚠️ WARNING: ${member.name} has an active application loan!\n\n` +
+      `Assigning additional debt will create a separate loan.\n\n` +
+      `Repayment priority:\n` +
+      `1. Daily Savings\n` +
+      `2. Application Loan (⭐) - This must be repaid first\n` +
+      `3. Assigned Debt (📋) - Will be repaid after\n` +
+      `4. Debts\n\n` +
+      `The loan rotation will advance ONLY when the application loan is fully repaid.\n\n` +
+      `Do you want to continue?`
+    );
+    
+    if (!confirmAssign) {
+      toast('Debt assignment cancelled.', '#f59e0b');
+      return;
+    }
+    
+    toast('ℹ️ Proceeding with debt assignment. Member has active application loan.', '#f59e0b');
   }
-  
-  // ===== SHOW RECEIPT PREVIEW BEFORE SAVING =====
+
+  // ===== SHOW RECEIPT PREVIEW =====
   showDebtReceiptModal(
     member, 
     principal, 
@@ -9835,7 +10535,7 @@ window.assignDebtAsLoan = async function() {
     reason, 
     dueDate,
     async () => {
-      // On Confirm & Send
+      // Confirm & Send
       await executeDebtAssignment(member, principal, interestRate, interest, totalRepay, reason, dueDate);
       toast(`✅ Debt of UGX ${principal.toLocaleString()} assigned to ${member.name}`, '#10b981');
       computePots();
@@ -9843,7 +10543,7 @@ window.assignDebtAsLoan = async function() {
       closeOv('ov-assign-debt');
     },
     async () => {
-      // On Confirm & Don't Send
+      // Confirm & Don't Send
       await executeDebtAssignment(member, principal, interestRate, interest, totalRepay, reason, dueDate);
       toast(`✅ Debt of UGX ${principal.toLocaleString()} assigned to ${member.name}`, '#10b981');
       computePots();
@@ -9851,15 +10551,14 @@ window.assignDebtAsLoan = async function() {
       closeOv('ov-assign-debt');
     },
     () => {
-      // On Cancel
+      // Cancel
       toast('Debt assignment cancelled.', '#f59e0b');
       closeOv('ov-assign-debt');
     }
   );
 };
-
 // ==========================================
-// EXECUTE DEBT ASSIGNMENT - Helper Function
+// EXECUTE DEBT ASSIGNMENT
 // ==========================================
 
 async function executeDebtAssignment(member, principal, interestRate, interest, totalRepay, reason, dueDate) {
@@ -9868,8 +10567,6 @@ async function executeDebtAssignment(member, principal, interestRate, interest, 
   // Create loan record
   const loanRef = db.ref('loans').push();
   const loanId = loanRef.key;
-  
-  console.log('📝 Creating loan with ID:', loanId);
   
   const loanData = {
     id: loanId,
@@ -9887,12 +10584,12 @@ async function executeDebtAssignment(member, principal, interestRate, interest, 
     repaid: false,
     penaltyApplied: false,
     repaidAmount: 0,
-    loanQuestions: [],
+    loanQuestions: [], // No questions - this is an assigned debt loan
     weeks: 1
   };
   
   await loanRef.set(loanData);
-  console.log('✅ Loan created successfully');
+  console.log('✅ Loan created successfully with ID:', loanId);
   
   // Create disbursement transaction
   await db.ref('transactions').push({
@@ -9924,9 +10621,14 @@ async function executeDebtAssignment(member, principal, interestRate, interest, 
   const loansSnap = await db.ref('loans').once('value');
   loans = loansSnap.val() ? Object.entries(loansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
   
+  // Recalculate loan balances
+  recalculateLoanBalances();
+  
   console.log('✅ Debt assignment complete');
+  console.log(`   Member: ${member.name}`);
+  console.log(`   Amount: UGX ${principal.toLocaleString()}`);
+  console.log(`   Total Repay: UGX ${totalRepay.toLocaleString()}`);
 }
-
 // ==========================================
 // SHOW DEBT RECEIPT MODAL
 // ==========================================
@@ -9934,7 +10636,6 @@ async function executeDebtAssignment(member, principal, interestRate, interest, 
 function showDebtReceiptModal(member, principal, interestRate, interest, totalRepay, reason, dueDate, onConfirmSend, onConfirmNoSend, onCancel) {
   console.log('📋 showDebtReceiptModal called');
   
-  // Generate receipt image
   generateDebtReceiptImage(member, principal, interestRate, interest, totalRepay, reason, dueDate).then(imageData => {
     const modal = document.createElement('div');
     modal.className = 'ov on';
@@ -10066,6 +10767,15 @@ async function generateDebtReceiptImage(member, principal, interestRate, interes
   const dateLabel = date.toLocaleDateString('en-UG', { year:'numeric', month:'long', day:'numeric' });
   const dueDateLabel = new Date(dueDate).toLocaleDateString('en-UG', { year:'numeric', month:'long', day:'numeric' });
 
+  // Check if member has active application loan (for warning on receipt)
+  const hasAppLoan = loans.some(l => 
+    l.memberId === member.id && 
+    l.status === 'approved' && 
+    !l.repaid && 
+    l.loanQuestions && 
+    l.loanQuestions.length > 0
+  );
+
   const receiptHtml = `
     <div class="debt-receipt-card" style="
       max-width: 500px;
@@ -10102,6 +10812,11 @@ async function generateDebtReceiptImage(member, principal, interestRate, interes
       <div class="micro muted" style="text-align:center;">
         ⚠️ This debt is assigned as a loan. Repayment will be deducted from daily deposits.
         <br>Late payment will incur additional penalties.
+        ${hasAppLoan ? `
+          <br><br>
+          ⚠️ <strong>Note:</strong> ${member.name} has an active application loan.
+          <br>Repayment priority: Daily → Application Loan → This Debt → Other Debts
+        ` : ''}
       </div>
       <div style="text-align: center; font-size: 0.7rem; margin-top: 8px;">Authorised by Harvest Trust Finance</div>
     </div>
