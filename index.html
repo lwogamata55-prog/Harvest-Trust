@@ -1192,6 +1192,60 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
   transform: scale(1.1) translateY(-10px) !important;
 }
 /* Hide notice text on home page carousel – only show image */
+/* ========================================== */
+/* MAINTENANCE FLOATING BUTTON - ALWAYS ON TOP */
+/* ========================================== */
+
+#maintenance-float-btn {
+  display: none;
+  position: fixed;
+  bottom: 100px;
+  right: 16px;
+  z-index: 99999 !important;  /* Highest z-index */
+  animation: floatBounce 2s ease-in-out infinite;
+}
+
+#maintenance-float-btn .exit-btn {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  border: 2px solid rgba(255,255,255,0.3);
+  color: white;
+  font-size: 2rem;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(239,68,68,0.5);
+  transition: transform 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#maintenance-float-btn .exit-badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: #ef4444;
+  color: white;
+  font-size: 0.5rem;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 10px;
+  animation: pulse 1.5s infinite;
+}
+
+/* Ensure floating button is visible on all screens */
+@media (max-width: 768px) {
+  #maintenance-float-btn {
+    bottom: 80px;
+    right: 12px;
+  }
+  #maintenance-float-btn .exit-btn {
+    width: 56px;
+    height: 56px;
+    font-size: 1.6rem;
+  }
+}
 #t-home .carousel-banner .notice-title,
 #t-home .carousel-banner .notice-content {
   display: none !important;
@@ -2022,23 +2076,21 @@ setTimeout(function(){
 </button>
     </div>
   </div>
-<!-- ========================================== -->
-<!-- STEP 2: Add these elements to your HTML     -->
-<!-- Place after <div id="app"> or before </body> -->
-<!-- ========================================== -->
 
-<!-- Floating Maintenance Exit Button (Admin Only) -->
-<div id="maintenance-float-btn" style="display: none; position: fixed; bottom: 100px; right: 16px; z-index: 9999;">
+<!-- ========================================== -->
+<!-- MAINTENANCE FLOATING BUTTON - AFTER APP    -->
+<!-- ========================================== -->
+<div id="maintenance-float-btn" style="display: none; position: fixed; bottom: 100px; right: 16px; z-index: 99999;">
   <button onclick="exitMaintenanceMode()" style="
     width: 64px; 
     height: 64px; 
     border-radius: 50%; 
     background: linear-gradient(135deg, #ef4444, #dc2626); 
-    border: 2px solid rgba(255,255,255,0.2); 
+    border: 2px solid rgba(255,255,255,0.3); 
     color: white; 
     font-size: 2rem; 
     cursor: pointer; 
-    box-shadow: 0 4px 20px rgba(239,68,68,0.4);
+    box-shadow: 0 4px 20px rgba(239,68,68,0.5);
     transition: transform 0.2s;
     display: flex;
     align-items: center;
@@ -2764,6 +2816,7 @@ Thank you for your patience and understanding. 🙏
     <div class="micro muted">Please wait...</div>
   </div>
 </div>
+
 <div class="ov" id="ov-daily-summary" onclick="maybeClose(event,'ov-daily-summary')">
   <div class="bs">
     <div class="bs-title">📋 Daily Savings – Confirm Distribution</div>
@@ -4323,191 +4376,344 @@ function updatePendingDepositWarning() {
 }
 
 // ==========================================
-// GENERATE TRANSACTION RECEIPT - FIXED
+// GENERATE WEEKLY PAYOUT RECEIPT - FIXED
 // ==========================================
 
-async function generateTransactionReceipt(member, txType, amount, description, loanBalance, accountBalance, maxBorrow) {
-  console.log('📋 generateTransactionReceipt called');
-  console.log('📊 Parameters:', { member: member?.name, txType, amount, description, loanBalance, accountBalance, maxBorrow });
-  
-  // ===== FIX: Ensure all values are numbers =====
-  const safeLoanBalance = Number(loanBalance) || 0;
-  const safeAccountBalance = Number(accountBalance) || 0;
-  const safeMaxBorrow = Number(maxBorrow) || 0;
-  const safeAmount = Number(amount) || 0;
-  
-  const date = new Date();
-  const receiptId = `HTF-${date.toISOString().slice(0,10).replace(/-/g,'')}-${member?.id?.slice(-4) || '0000'}`;
-  const dateLabel = date.toLocaleDateString('en-UG', { year:'numeric', month:'long', day:'numeric' });
-  const txTypeUpper = (txType || 'transaction').toUpperCase();
+async function generateWeeklyPayoutReceiptImage(beneficiary, weeklyGross, debt, loan, netPayout) {
+  try {
+    const date = new Date();
+    const receiptId = `PAYOUT-${date.toISOString().slice(0,10).replace(/-/g,'')}-${beneficiary?.id?.slice(-4) || '0000'}`;
+    const dateLabel = date.toLocaleDateString('en-UG', { year:'numeric', month:'short', day:'numeric' });
+    const timeLabel = date.toLocaleTimeString('en-UG', { hour:'2-digit', minute:'2-digit' });
 
-  // Get active loans for this member
-  const activeLoans = loans.filter(l => 
-    l.memberPhone === member?.phone && 
-    l.status === 'approved' && 
-    !l.repaid
-  );
-  
-  const totalLoanBalance = activeLoans.reduce((sum, l) => sum + (l.totalRepay - (l.repaidAmount || 0)), 0);
-  const totalDebtBalance = memberDebts[member?.phone] || 0;
-  const totalOwed = totalLoanBalance + totalDebtBalance;
+    const receiptHtml = `
+      <div style="
+        max-width: 480px;
+        margin: 0 auto;
+        background: #ffffff;
+        border-radius: 0px;
+        padding: 30px 26px;
+        font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+        border: 2px solid #000000;
+      ">
+        <!-- Header -->
+        <div style="text-align: center; margin-bottom: 16px;">
+          <div style="font-size: 2.8rem; margin-bottom: 4px;">🌾</div>
+          <div style="font-weight: 800; font-size: 1.5rem; color: #000000; letter-spacing: -0.3px;">Harvest Trust</div>
+          <div style="font-size: 0.75rem; color: #000000; letter-spacing: 2px;">Finance</div>
+          <div style="font-size: 0.65rem; color: #000000; letter-spacing: 1px; margin-top: 6px; border-top: 2px solid #000000; padding-top: 8px; display: inline-block;">Weekly payout receipt</div>
+        </div>
 
-  const receiptHtml = `
-    <div class="tx-receipt-card" style="
-      max-width: 500px;
-      margin: 0 auto;
-      border: 2px solid #e2e8f0;
-      border-radius: 20px;
-      padding: 20px;
-      background: white;
-      font-family: 'DM Sans', sans-serif;
-    ">
-      <div style="text-align: center; margin-bottom: 12px;">
-        <div style="font-size: 1.8rem;">🌾</div>
-        <div style="font-weight: 800; font-size: 1.2rem; color: #b45309;">HARVEST TRUST FINANCE</div>
-      </div>
-      <div style="border-top: 1px solid #e2e8f0; margin: 8px 0;"></div>
-      <div style="font-size: 0.9rem;">
-        <div><strong>Receipt No.</strong> ${receiptId}</div>
-        <div><strong>Date:</strong> ${dateLabel}</div>
-        <div><strong>Member:</strong> ${escapeHtml(member?.name || 'Unknown')}</div>
-        <div><strong>Phone:</strong> ${member?.phone || 'N/A'}</div>
-      </div>
-      <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
-      <div style="font-size: 1rem;">
-        <div><strong>Transaction:</strong> ${txTypeUpper}</div>
-        <div><strong>Amount:</strong> UGX ${safeAmount.toLocaleString()}</div>
-        <div><strong>Description:</strong> ${escapeHtml(description || txType || 'Transaction')}</div>
-      </div>
-      <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
-      <div style="font-size: 0.9rem;">
-        <div><strong>Current Loan Balance:</strong> UGX ${totalLoanBalance.toLocaleString()}</div>
-        <div><strong>Current Debt Balance:</strong> UGX ${totalDebtBalance.toLocaleString()}</div>
-        <div><strong>Total Owed:</strong> UGX ${totalOwed.toLocaleString()}</div>
-        <div><strong>Account Balance:</strong> UGX ${safeAccountBalance.toLocaleString()}</div>
-        <div><strong>You can borrow up to:</strong> UGX ${safeMaxBorrow.toLocaleString()}</div>
-        <div class="micro muted" style="margin-top: 8px;">
-          ⚠️ Loans are repaid before debts. When your loan is fully cleared, the next member in rotation can borrow.
+        <div style="border-top: 2px solid #000000; margin: 0 0 12px 0;"></div>
+
+        <!-- Meta -->
+        <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: #000000; margin-bottom: 8px; font-weight: 600;">
+          <span style="font-family: monospace;">#${receiptId.slice(-8)}</span>
+          <span>${dateLabel} • ${timeLabel}</span>
+        </div>
+
+        <!-- Member -->
+        <div style="display: flex; justify-content: space-between; font-size: 1.05rem; margin-bottom: 12px; padding: 8px 0; border-bottom: 2px solid #000000;">
+          <span style="font-weight: 700; color: #000000;">${escapeHtml(beneficiary?.name || 'Unknown')}</span>
+          <span style="color: #000000; font-family: monospace; font-size: 0.95rem;">${beneficiary?.phone || 'N/A'}</span>
+        </div>
+
+        <!-- Payout -->
+        <div style="text-align: center; margin-bottom: 16px; padding: 8px 0;">
+          <div style="font-size: 0.8rem; color: #000000; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600;">Weekly payout</div>
+          <div style="font-size: 3rem; font-weight: 800; color: #000000; letter-spacing: -0.5px; margin: 4px 0;">
+            UGX ${netPayout.toLocaleString()}
+          </div>
+          <div style="font-size: 0.75rem; color: #000000; margin-top: 2px;">Net payout</div>
+        </div>
+
+        <div style="border-top: 2px solid #000000; margin: 0 0 12px 0;"></div>
+
+        <!-- Breakdown -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; font-size: 0.9rem;">
+          <div style="color: #000000; font-weight: 600;">📊 Weekly gross</div>
+          <div style="text-align: right; font-weight: 600; color: #000000;">UGX ${weeklyGross.toLocaleString()}</div>
+          
+          <div style="color: #000000; font-weight: 600;">🧾 Debt deducted</div>
+          <div style="text-align: right; font-weight: 600; color: ${debt > 0 ? '#ff0000' : '#000000'};">- UGX ${debt.toLocaleString()}</div>
+          
+          <div style="color: #000000; font-weight: 600;">⭐ Loan deducted</div>
+          <div style="text-align: right; font-weight: 600; color: ${loan > 0 ? '#ff0000' : '#000000'};">- UGX ${loan.toLocaleString()}</div>
+          
+          <div style="color: #000000; font-weight: 600; border-top: 2px solid #000000; padding-top: 8px;">💰 Net payout</div>
+          <div style="text-align: right; font-weight: 700; color: #000000; border-top: 2px solid #000000; padding-top: 8px; font-size: 1rem;">UGX ${netPayout.toLocaleString()}</div>
+        </div>
+
+        <!-- Footer -->
+        <div style="border-top: 2px solid #000000; margin: 14px 0 6px 0;"></div>
+        <div style="text-align: center; font-size: 0.65rem; color: #000000; line-height: 1.8; font-weight: 600;">
+          ⚡ All debts and loans cleared from this payout
+          <br>🌾 Thank you for saving with us
         </div>
       </div>
-      <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
-      <div style="text-align: center; font-size: 0.7rem;">Thank you for transacting with Harvest Trust Finance</div>
-    </div>
-  `;
+    `;
 
-  const tempDiv = document.createElement('div');
-  tempDiv.style.position = 'absolute';
-  tempDiv.style.top = '-9999px';
-  tempDiv.style.left = '-9999px';
-  tempDiv.innerHTML = receiptHtml;
-  document.body.appendChild(tempDiv);
+    const tempDiv = document.createElement('div');
+    tempDiv.style.position = 'absolute';
+    tempDiv.style.top = '-9999px';
+    tempDiv.style.left = '-9999px';
+    tempDiv.innerHTML = receiptHtml;
+    document.body.appendChild(tempDiv);
 
-  try {
-    const canvas = await html2canvas(tempDiv.querySelector('.tx-receipt-card'), {
-      scale: 1.5,
-      backgroundColor: '#ffffff',
-      logging: false
-    });
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    let canvas = null;
+    try {
+      canvas = await html2canvas(tempDiv.firstChild, {
+        scale: 2.5,
+        backgroundColor: '#ffffff',
+        logging: false,
+        useCORS: true,
+        allowTaint: true
+      });
+    } catch (e) {
+      console.warn('html2canvas failed:', e);
+    }
+
     document.body.removeChild(tempDiv);
-    return canvas.toDataURL('image/png');
-  } catch (err) {
-    document.body.removeChild(tempDiv);
-    console.error('Receipt image generation failed', err);
+
+    if (canvas) {
+      return canvas.toDataURL('image/png');
+    }
+
+    return generateFallbackPayoutReceipt(beneficiary, weeklyGross, debt, loan, netPayout);
+
+  } catch (error) {
+    console.error('Weekly payout receipt generation failed:', error);
     return null;
   }
 }
 
-async function generateWeeklyPayoutReceiptImage(beneficiary, weeklyGross, debt, loan, netPayout) {
-  const dateLabel = new Date().toLocaleDateString('en-UG', { year: 'numeric', month: 'long', day: 'numeric' });
-  const receiptId = `PAYOUT-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${beneficiary.id.slice(-4)}`;
-
-  // Get active loans for this member
-  const activeLoans = loans.filter(l => 
-    l.memberPhone === beneficiary.phone && 
-    l.status === 'approved' && 
-    !l.repaid
-  );
-  const totalLoanBalance = activeLoans.reduce((sum, l) => sum + (l.totalRepay - (l.repaidAmount || 0)), 0);
-  const totalDebtBalance = memberDebts[beneficiary.phone] || 0;
-
-  const receiptHtml = `
-    <div class="weekly-receipt-card" style="
-      max-width: 500px;
-      margin: 0 auto;
-      border: 2px solid #e2e8f0;
-      border-radius: 20px;
-      padding: 20px;
-      background: white;
-      font-family: 'DM Sans', sans-serif;
-    ">
-      <div style="text-align: center; margin-bottom: 12px;">
-        <div style="font-size: 1.8rem;">🌾</div>
-        <div style="font-weight: 800; font-size: 1.2rem; color: #b45309;">HARVEST TRUST FINANCE</div>
-        <div style="font-size: 0.7rem; color: #64748b;">Weekly Payout Receipt</div>
-      </div>
-      <div style="border-top: 1px solid #e2e8f0; margin: 8px 0;"></div>
-      <div style="font-size: 0.9rem;">
-        <div><strong>Receipt No.</strong> ${receiptId}</div>
-        <div><strong>Date:</strong> ${dateLabel}</div>
-        <div><strong>Beneficiary:</strong> ${escapeHtml(beneficiary.name)}</div>
-        <div><strong>Phone:</strong> ${beneficiary.phone}</div>
-      </div>
-      <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
-      <div style="font-size: 1rem;">
-        <div><strong>Full Weekly Amount:</strong> UGX ${weeklyGross.toLocaleString()}</div>
-        <div><strong>Loan Balance Deducted:</strong> - UGX ${totalLoanBalance.toLocaleString()}</div>
-        <div><strong>Debt Deducted:</strong> - UGX ${totalDebtBalance.toLocaleString()}</div>
-        <div><strong>Net Payout:</strong> UGX ${netPayout.toLocaleString()}</div>
-      </div>
-      <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
-      <div class="micro muted" style="text-align:center;">
-        This payout clears loans first, then debts for the member.
-        <br>${activeLoans.length > 0 ? `${activeLoans.length} active loan(s) cleared.` : 'No active loans.'}
-      </div>
-      <div style="text-align: center; font-size: 0.7rem; margin-top: 8px;">Authorised by Harvest Trust Finance</div>
-    </div>
-  `;
-
-  const tempDiv = document.createElement('div');
-  tempDiv.style.position = 'absolute';
-  tempDiv.style.top = '-9999px';
-  tempDiv.style.left = '-9999px';
-  tempDiv.innerHTML = receiptHtml;
-  document.body.appendChild(tempDiv);
+function generateFallbackPayoutReceipt(beneficiary, weeklyGross, debt, loan, netPayout) {
   try {
-    const canvas = await html2canvas(tempDiv.querySelector('.weekly-receipt-card'), {
-      scale: 1.5, backgroundColor: '#ffffff', logging: false
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 480;
+    canvas.height = 580;
+    
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(12, 12, canvas.width - 24, canvas.height - 24);
+    
+    let y = 45;
+    const centerX = canvas.width / 2;
+    
+    // Header
+    ctx.textAlign = 'center';
+    ctx.font = '40px DM Sans, sans-serif';
+    ctx.fillStyle = '#000000';
+    ctx.fillText('🌾', centerX, y);
+    y += 42;
+    ctx.font = 'bold 24px DM Sans, sans-serif';
+    ctx.fillText('Harvest Trust', centerX, y);
+    y += 22;
+    ctx.font = '14px DM Sans, sans-serif';
+    ctx.fillText('Finance', centerX, y);
+    
+    y += 18;
+    ctx.font = '11px DM Sans, sans-serif';
+    ctx.fillText('Weekly payout receipt', centerX, y);
+    
+    y += 20;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(30, y);
+    ctx.lineTo(canvas.width - 30, y);
+    ctx.stroke();
+    
+    y += 22;
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillStyle = '#000000';
+    ctx.fillText(`#${Date.now().toString().slice(-8)}`, 35, y);
+    ctx.textAlign = 'right';
+    ctx.font = '14px DM Sans, sans-serif';
+    ctx.fillText(new Date().toLocaleDateString() + ' • ' + new Date().toLocaleTimeString(), canvas.width - 35, y);
+    
+    y += 24;
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 18px DM Sans, sans-serif';
+    ctx.fillStyle = '#000000';
+    ctx.fillText(beneficiary?.name || 'Unknown', 35, y);
+    ctx.textAlign = 'right';
+    ctx.font = '16px monospace';
+    ctx.fillText(beneficiary?.phone || 'N/A', canvas.width - 35, y);
+    
+    y += 28;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(30, y);
+    ctx.lineTo(canvas.width - 30, y);
+    ctx.stroke();
+    
+    y += 22;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#000000';
+    ctx.font = '12px DM Sans, sans-serif';
+    ctx.fillText('WEEKLY PAYOUT', centerX, y);
+    
+    y += 38;
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 40px DM Sans, sans-serif';
+    ctx.fillText(`UGX ${netPayout.toLocaleString()}`, centerX, y);
+    
+    y += 26;
+    ctx.fillStyle = '#000000';
+    ctx.font = '12px DM Sans, sans-serif';
+    ctx.fillText('Net payout', centerX, y);
+    
+    y += 30;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(30, y);
+    ctx.lineTo(canvas.width - 30, y);
+    ctx.stroke();
+    
+    y += 22;
+    ctx.textAlign = 'left';
+    ctx.font = '15px DM Sans, sans-serif';
+    
+    const details = [
+      ['📊 Weekly gross', `UGX ${weeklyGross.toLocaleString()}`, '#000000'],
+      ['🧾 Debt deducted', `- UGX ${debt.toLocaleString()}`, debt > 0 ? '#ff0000' : '#000000'],
+      ['⭐ Loan deducted', `- UGX ${loan.toLocaleString()}`, loan > 0 ? '#ff0000' : '#000000'],
+      ['💰 Net payout', `UGX ${netPayout.toLocaleString()}`, '#000000']
+    ];
+    
+    details.forEach(([label, value, color], i) => {
+      const yPos = y + (i * 26);
+      ctx.fillStyle = '#000000';
+      ctx.textAlign = 'left';
+      ctx.font = i === 3 ? 'bold 16px DM Sans, sans-serif' : '15px DM Sans, sans-serif';
+      ctx.fillText(label, 35, yPos);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = color;
+      ctx.font = i === 3 ? 'bold 16px DM Sans, sans-serif' : '15px DM Sans, sans-serif';
+      ctx.fillText(value, canvas.width - 35, yPos);
     });
-    document.body.removeChild(tempDiv);
+    
+    y += (details.length * 26) + 22;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(30, y);
+    ctx.lineTo(canvas.width - 30, y);
+    ctx.stroke();
+    
+    y += 20;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#000000';
+    ctx.font = '11px DM Sans, sans-serif';
+    ctx.fillText('⚡ All debts and loans cleared from this payout', centerX, y);
+    
+    y += 18;
+    ctx.font = '11px DM Sans, sans-serif';
+    ctx.fillText('🌾 Thank you for saving with us', centerX, y);
+    
     return canvas.toDataURL('image/png');
-  } catch (err) {
-    document.body.removeChild(tempDiv);
-    console.error('Weekly payout receipt image generation failed', err);
+    
+  } catch (error) {
+    console.error('Fallback payout receipt failed:', error);
     return null;
   }
 }
+
 function showWeeklyPayoutReceiptModal(beneficiary, weeklyGross, debt, loan, netPayout, onConfirmShare, onConfirmNoShare, onPrint, onCancel) {
   generateWeeklyPayoutReceiptImage(beneficiary, weeklyGross, debt, loan, netPayout).then(imageData => {
     const modal = document.createElement('div');
     modal.className = 'ov on';
     modal.style.zIndex = '20020';
-    modal.innerHTML = `
-      <div class="bs" style="max-width: 600px;">
-        <div class="bs-title">📄 Weekly Payout Receipt Preview</div>
-        <div style="text-align: center; margin-bottom: 16px;">
-          ${imageData ? `<img src="${imageData}" style="max-width: 100%; border-radius: 12px; border: 1px solid #ccc;">` : '<div class="hint-box">⚠️ Receipt image not available</div>'}
+    
+    let receiptContent = '';
+    if (imageData) {
+      receiptContent = `
+        <div style="text-align: center; margin: 4px 0 8px 0;">
+          <img src="${imageData}" style="max-width: 100%; border-radius: 0px; border: 2px solid #000000;">
         </div>
-        <div style="display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;">
-          <button class="btn btn-gold" id="payout-confirm-send-pc">💻 Confirm & Copy Image (PC)</button>
-          <button class="btn btn-teal" id="payout-confirm-send-phone">📱 Confirm & Send Image (Phone)</button>
-          <button class="btn btn-green" id="payout-confirm-noshare">✅ Confirm & Don't Send</button>
-          <button class="btn btn-purple" id="payout-print">🖨️ Print</button>
-          <button class="btn btn-red" id="payout-cancel">🗑️ Cancel</button>
+      `;
+    } else {
+      receiptContent = `
+        <div style="
+          background: #ffffff; 
+          border-radius: 0px; 
+          padding: 16px; 
+          margin: 4px 0 8px 0;
+          border: 2px solid #000000;
+          font-family: 'DM Sans', sans-serif;
+          color: #000000;
+        ">
+          <div style="text-align: center; margin-bottom: 8px;">
+            <div style="font-size: 1.8rem;">🌾</div>
+            <div style="font-weight: 800; font-size: 1rem; color: #000000;">Harvest Trust</div>
+            <div style="font-size: 0.5rem; color: #000000;">Finance</div>
+            <div style="font-size: 0.45rem; color: #000000; border-top: 2px solid #000000; padding-top: 4px; display: inline-block;">Weekly payout receipt</div>
+          </div>
+          <div style="border-top: 2px solid #000000; margin: 4px 0;"></div>
+          <div style="display: flex; justify-content: space-between; font-size: 0.6rem; color: #000000;">
+            <span>#${Date.now().toString().slice(-8)}</span>
+            <span>${new Date().toLocaleDateString()} • ${new Date().toLocaleTimeString()}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin: 4px 0; border-bottom: 2px solid #000000; padding-bottom: 4px;">
+            <span style="font-weight: 700;">${escapeHtml(beneficiary?.name || 'Unknown')}</span>
+            <span style="font-family: monospace;">${beneficiary?.phone || 'N/A'}</span>
+          </div>
+          <div style="text-align: center; margin: 6px 0;">
+            <div style="font-size: 0.5rem; color: #000000;">WEEKLY PAYOUT</div>
+            <div style="font-size: 1.8rem; font-weight: 800; color: #000000;">UGX ${netPayout.toLocaleString()}</div>
+            <div style="font-size: 0.55rem; color: #000000;">Net payout</div>
+          </div>
+          <div style="border-top: 2px solid #000000; margin: 4px 0;"></div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; font-size: 0.6rem;">
+            <span style="color: #000000;">📊 Weekly gross</span>
+            <span style="text-align: right; color: #000000;">UGX ${weeklyGross.toLocaleString()}</span>
+            <span style="color: #000000;">🧾 Debt deducted</span>
+            <span style="text-align: right; color: ${debt > 0 ? '#ff0000' : '#000000'};">- UGX ${debt.toLocaleString()}</span>
+            <span style="color: #000000;">⭐ Loan deducted</span>
+            <span style="text-align: right; color: ${loan > 0 ? '#ff0000' : '#000000'};">- UGX ${loan.toLocaleString()}</span>
+            <span style="color: #000000; border-top: 2px solid #000000; padding-top: 4px;">💰 Net payout</span>
+            <span style="text-align: right; font-weight: 700; color: #000000; border-top: 2px solid #000000; padding-top: 4px;">UGX ${netPayout.toLocaleString()}</span>
+          </div>
+          <div style="border-top: 2px solid #000000; margin: 8px 0 4px 0;"></div>
+          <div style="text-align: center; font-size: 0.45rem; color: #000000;">🌾 Thank you for saving with us</div>
+        </div>
+      `;
+    }
+    
+    modal.innerHTML = `
+      <div class="bs" style="max-width: 480px; padding: 14px 16px; border-top: 2px solid #000000;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+          <span style="font-size: 1.2rem;">📄</span>
+          <span style="font-weight: 800; font-size: 0.85rem; color: #000000;">WEEKLY PAYOUT</span>
+          <span style="font-size: 0.6rem; color: #000000; font-weight: 600;">${beneficiary?.name?.split(' ')[0] || ''}</span>
+        </div>
+        
+        ${receiptContent}
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px;">
+          <button class="btn" id="payout-confirm-send-pc" style="padding: 10px; font-size: 0.7rem; background: #000000; color: #ffffff; border: none; border-radius: 0px; font-weight: 700;">💻</button>
+          <button class="btn" id="payout-confirm-send-phone" style="padding: 10px; font-size: 0.7rem; background: #000000; color: #ffffff; border: none; border-radius: 0px; font-weight: 700;">📱</button>
+          <button class="btn" id="payout-confirm-noshare" style="padding: 10px; font-size: 0.7rem; background: #000000; color: #ffffff; border: none; border-radius: 0px; font-weight: 700;">💾</button>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 4px;">
+          <button class="btn" id="payout-print" style="padding: 10px; font-size: 0.7rem; background: #000000; color: #ffffff; border: none; border-radius: 0px; font-weight: 700;">🖨️</button>
+          <button class="btn" id="payout-cancel" style="padding: 10px; font-size: 0.7rem; background: #ff0000; color: #ffffff; border: none; border-radius: 0px; font-weight: 700;">✕</button>
         </div>
       </div>
     `;
     document.body.appendChild(modal);
 
+    // Button handlers
     const confirmSendPc = modal.querySelector('#payout-confirm-send-pc');
     const confirmSendPhone = modal.querySelector('#payout-confirm-send-phone');
     const confirmNoShareBtn = modal.querySelector('#payout-confirm-noshare');
@@ -4519,48 +4725,43 @@ function showWeeklyPayoutReceiptModal(beneficiary, weeklyGross, debt, loan, netP
       setTimeout(() => modal.remove(), 300);
     };
 
-    async function copyImageToClipboard(blob, fileName) {
+    async function copyImageToClipboard(blob) {
       try {
         await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-        toast('📋 Receipt image copied to clipboard! Paste (Ctrl+V) into WhatsApp Web.', '#06b6d4');
+        toast('📋 Copied!', '#000000');
       } catch (err) {
-        toast('Failed to copy image. Try downloading instead.', '#ef4444');
+        toast('Failed', '#ff0000');
       }
     }
 
-    async function shareOrDownloadImage(blob, fileName) {
+    async function shareOrDownloadImage(blob) {
       if (navigator.share) {
         try {
-          const file = new File([blob], fileName, { type: 'image/png' });
           await navigator.share({
-            title: 'Weekly Payout Receipt',
-            text: `Payout of UGX ${netPayout.toLocaleString()} to ${beneficiary.name}`,
-            files: [file]
+            title: 'Payout Receipt',
+            text: `Payout of UGX ${netPayout.toLocaleString()} to ${beneficiary?.name}`,
+            files: [new File([blob], 'payout_receipt.png', { type: 'image/png' })]
           });
-          toast('Image shared!', '#10b981');
+          toast('📱 Sent!', '#000000');
           return;
         } catch (err) {
-          if (err.name !== 'AbortError') {
-            console.warn('Share failed, falling back to download', err);
-          } else {
-            return;
-          }
+          if (err.name === 'AbortError') return;
         }
       }
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = fileName;
+      a.download = 'payout_receipt.png';
       a.click();
       URL.revokeObjectURL(url);
-      toast('📸 Image downloaded. Open WhatsApp and attach it manually.', '#f59e0b');
+      toast('📸 Downloaded', '#000000');
     }
 
     confirmSendPc.onclick = async () => {
       closeModal();
       if (imageData) {
         const blob = await (await fetch(imageData)).blob();
-        await copyImageToClipboard(blob, `payout_${beneficiary.id}.png`);
+        await copyImageToClipboard(blob);
       }
       if (onConfirmShare) onConfirmShare();
     };
@@ -4569,7 +4770,7 @@ function showWeeklyPayoutReceiptModal(beneficiary, weeklyGross, debt, loan, netP
       closeModal();
       if (imageData) {
         const blob = await (await fetch(imageData)).blob();
-        await shareOrDownloadImage(blob, `payout_${beneficiary.id}.png`);
+        await shareOrDownloadImage(blob);
       }
       if (onConfirmShare) onConfirmShare();
     };
@@ -4577,31 +4778,25 @@ function showWeeklyPayoutReceiptModal(beneficiary, weeklyGross, debt, loan, netP
     confirmNoShareBtn.onclick = () => {
       closeModal();
       if (onConfirmNoShare) onConfirmNoShare();
-      toast('Payout completed (no receipt sent).', '#10b981');
+      toast('✅ Saved', '#000000');
     };
 
     printBtn.onclick = () => {
       closeModal();
       if (onPrint) onPrint();
       else if (imageData) {
-        const printWindow = window.open('', '_blank');
-        printWindow.document.write(`
-          <!DOCTYPE html>
-          <html>
-          <head><title>Weekly Payout Receipt</title>
-          <style>body{margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff;}img{max-width:100%;height:auto;}</style>
-          </head><body><img src="${imageData}"></body></html>
-        `);
-        printWindow.document.close();
-        printWindow.focus();
-        printWindow.print();
-      } else toast('No image to print', '#ef4444');
+        const w = window.open('', '_blank');
+        w.document.write(`<html><head><title>Payout Receipt</title><style>body{margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff;}img{max-width:100%;}</style></head><body><img src="${imageData}"></body></html>`);
+        w.document.close();
+        w.focus();
+        w.print();
+      }
     };
 
     cancelBtn.onclick = () => {
       closeModal();
       if (onCancel) onCancel();
-      toast('Payout cancelled.', '#f59e0b');
+      toast('Cancelled', '#ff0000');
     };
   });
 }
@@ -5040,22 +5235,26 @@ function updateMemberPresence() {
     updateAdminMembersList();
   });
 }
+// ==========================================
+// OPTIMIZED DATA LOADING - FASTER
+// ==========================================
+
+// Replace your existing loadAllData() with this optimized version
 function loadAllData() {
   if (!db) return;
 
-  // Settings
-  var _settingsFirstLoad = true;
-  var _membersFirstLoad = true;
+  // Load settings FIRST (fastest, smallest)
   db.ref('settings').on('value', snap => {
     if (snap.val()) settings = { ...settings, ...snap.val() };
     applySettings();
     if (currentScreen === 'admin' && adminUnlocked) renderAdminTab();
-    if (_settingsFirstLoad) { _settingsFirstLoad = false; if (!_membersFirstLoad && window._onDataLoaded) window._onDataLoaded(); }
+    // Signal that settings are loaded
+    if (window._onDataLoaded) window._onDataLoaded();
   });
 
-  // Members
+  // Load members SECOND (important for UI)
   db.ref('members').on('value', snap => {
-  members = snap.val() ? Object.entries(snap.val()).map(([id, m]) => ({ ...m, id, prepaid: m.prepaid || 0 })) : [];
+    members = snap.val() ? Object.entries(snap.val()).map(([id, m]) => ({ ...m, id, prepaid: m.prepaid || 0 })) : [];
     computePots();
     updateHomeUI();
     updateAdminMembersList();
@@ -5064,139 +5263,74 @@ function loadAllData() {
     updateLoanIndicator();
     if (isLedgerActive()) loadLedger('all');
     if (currentScreen === 'statistics') renderStatistics();
-    if (_membersFirstLoad) { _membersFirstLoad = false; if (!_settingsFirstLoad && window._onDataLoaded) window._onDataLoaded(); }
   });
 
-  // Transactions
-  db.ref('transactions').on('value', snap => {
-    transactions = snap.val() ? Object.entries(snap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
-    computePots();
-    updateHomeUI();
-    updateHomeRecent();
-    if (isLedgerActive()) loadLedger('all');
-    updateAccountBalances();
-    updateLoanIndicator();
-    if (currentScreen === 'statistics') renderStatistics();
-  });
+  // Load transactions THIRD (large data, load in background)
+  setTimeout(() => {
+    db.ref('transactions').on('value', snap => {
+      transactions = snap.val() ? Object.entries(snap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
+      computePots();
+      updateHomeUI();
+      updateHomeRecent();
+      if (isLedgerActive()) loadLedger('all');
+      updateAccountBalances();
+      updateLoanIndicator();
+      if (currentScreen === 'statistics') renderStatistics();
+    });
+  }, 100);
 
-  // Rotation
-  db.ref('rotation').on('value', snap => {
-    rotation = snap.val() || { order: [], currentIndex: 0, history: [] };
-    if (!rotation.order) rotation.order = [];
-    updateHomeUI();
-    refreshCarouselPayee();
-    if (currentScreen === 'statistics') renderStatistics();
-  });
-  // loanReceiver:
- db.ref('settings/loanRotationOrder').on('value', snap => {
-  if (snap.val()) loanRotationOrder = snap.val();
-});
-db.ref('settings/loanReceiverIndex').on('value', snap => {
-  if (snap.val() !== null) loanReceiverIndex = snap.val();
-});
-  // Pending applications (for badge)
-  db.ref('applications').orderByChild('status').equalTo('pending').on('value', snap => {
-    const count = snap.val() ? Object.keys(snap.val()).length : 0;
-    const badge = document.getElementById('apps-count');
-    if (badge) badge.textContent = count;
-    const el = document.getElementById('apps-badge-wrap');
-    if (el) el.style.display = count ? 'inline-flex' : 'none';
-  });
-  
-  // Notifications
- db.ref('notifications').once('value', snap => {notifications = snap.val() || {};
-  updateNotificationBadge();
-});
+  // Load loans FOURTH (load in background)
+  setTimeout(() => {
+    db.ref('loans').on('value', snap => {
+      loans = snap.val() ? Object.entries(snap.val()).map(([id, l]) => ({ ...l, id })) : [];
+      if (currentScreen === 'admin' && adminUnlocked && currentAdminTab === 'savings') renderAdminTab();
+      updateLoanIndicator();
+      if (currentScreen === 'statistics') renderStatistics();
+    });
+  }, 200);
 
-  // Loan settings
-  db.ref('loanSettings').on('value', snap => {
-    if (snap.val()) loanSettings = { ...loanSettings, ...snap.val() };
-  });
-  
-  // Loans
-  db.ref('loans').on('value', snap => {
-    loans = snap.val() ? Object.entries(snap.val()).map(([id, l]) => ({ ...l, id })) : [];
-    if (currentScreen === 'admin' && adminUnlocked && currentAdminTab === 'savings') renderAdminTab();
-    updateLoanIndicator();
-    if (currentScreen === 'statistics') renderStatistics();
-  });
+  // Load rotation FIFTH
+  setTimeout(() => {
+    db.ref('rotation').on('value', snap => {
+      rotation = snap.val() || { order: [], currentIndex: 0, history: [] };
+      if (!rotation.order) rotation.order = [];
+      updateHomeUI();
+      refreshCarouselPayee();
+      if (currentScreen === 'statistics') renderStatistics();
+    });
+  }, 300);
 
-  // Main carousel notices
- db.ref('mainNotices').on('value', snap => {
-  const val = snap.val() || {};
-  mainCarouselNotifs = Object.entries(val).map(([key, notice]) => ({ ...notice, key }));
-  renderMainCarousel();
-  if (currentScreen === 'admin' && adminUnlocked && currentAdminTab === 'notice') renderAdminTab();
-});
-// Listen for maintenance mode changes in real-time
-db.ref('settings/maintenanceMode').on('value', snap => {
-  const mode = snap.val();
-  settings.maintenanceMode = mode === true;
-  
-  // Update UI
-  updateMaintenanceBadge();
-  
-  // Show/hide overlay
-  if (mode && !currentUser?.isAdmin) {
-    showMaintenanceOverlay();
-  } else {
-    hideMaintenanceOverlay();
-  }
-  
-  // Update settings modal if open
-  const checkbox = document.getElementById('set-maintenance-mode');
-  const badge = document.getElementById('maintenance-status-badge');
-  if (checkbox) checkbox.checked = mode;
-  if (badge) {
-    if (mode) {
-      badge.textContent = '🔴 Maintenance';
-      badge.style.background = 'rgba(239,68,68,0.15)';
-      badge.style.color = 'var(--red)';
-    } else {
-      badge.textContent = '🟢 Live';
-      badge.style.background = 'rgba(16,185,129,0.15)';
-      badge.style.color = 'var(--green)';
-    }
-  }
-  
-  if (mode) {
-    toast('🔧 Maintenance mode enabled', '#f59e0b');
-  } else {
-    toast('✅ Maintenance mode disabled', '#10b981');
-  }
-});
+  // Load other data in background
+  setTimeout(() => {
+    db.ref('loanSettings').on('value', snap => {
+      if (snap.val()) loanSettings = { ...loanSettings, ...snap.val() };
+    });
+  }, 400);
 
-// Listen for maintenance message changes
-db.ref('settings/maintenanceMessage').on('value', snap => {
-  if (snap.val()) {
-    settings.maintenanceMessage = snap.val();
-    const textarea = document.getElementById('set-maintenance-message');
-    if (textarea) textarea.value = snap.val();
-  }
-});
-
-// After loading mainNotices, also load the saved order
-db.ref('settings/carouselOrder').on('value', snap => {
-  const order = snap.val();
-  if (order && Array.isArray(order) && order.length === mainCarouselNotifs.length) {
-    const ordered = [];
-    for (let key of order) {
-      const notice = mainCarouselNotifs.find(n => n.key === key);
-      if (notice) ordered.push(notice);
-    }
-    if (ordered.length === mainCarouselNotifs.length) {
-      mainCarouselNotifs = ordered;
+  setTimeout(() => {
+    db.ref('mainNotices').on('value', snap => {
+      const val = snap.val() || {};
+      mainCarouselNotifs = Object.entries(val).map(([key, notice]) => ({ ...notice, key }));
       renderMainCarousel();
-    }
-  }
-});
+      if (currentScreen === 'admin' && adminUnlocked && currentAdminTab === 'notice') renderAdminTab();
+    });
+  }, 500);
 
-  // Password reset requests – add if needed (not critical)
-  // but we'll add for completeness
-  db.ref('passwordResetRequests').once('value', snap => {
-    // optional, used only for admin reset requests
-    if (currentScreen === 'admin' && adminUnlocked && currentAdminTab === 'resetrequests') renderAdminTab();
-  });
+  setTimeout(() => {
+    db.ref('settings/loanRotationOrder').on('value', snap => {
+      if (snap.val()) loanRotationOrder = snap.val();
+    });
+    db.ref('settings/loanReceiverIndex').on('value', snap => {
+      if (snap.val() !== null) loanReceiverIndex = snap.val();
+    });
+  }, 600);
+
+  setTimeout(() => {
+    db.ref('notifications').once('value', snap => {
+      notifications = snap.val() || {};
+      updateNotificationBadge();
+    });
+  }, 700);
 }
 
 function updateHomeUI() {
@@ -10091,7 +10225,8 @@ function openAddTransaction() {
 }
 
 // ==========================================
-// UPDATE TRANSACTION PREVIEW
+// UPDATE TRANSACTION PREVIEW - SIMPLE FIX
+// Uses member loan balance directly
 // ==========================================
 
 window.updateTxPreview = function() {
@@ -10100,33 +10235,52 @@ window.updateTxPreview = function() {
   const amount = parseFloat(document.getElementById('tx-amount')?.value);
   const previewEl = document.getElementById('tx-preview');
   
-  if (!previewEl) {
-    console.warn('⚠️ tx-preview element not found');
-    return;
-  }
-
+  if (!previewEl) return;
   if (type !== 'deposit' || !phone || !amount || amount <= 0) {
     previewEl.style.display = 'none';
     return;
   }
 
   const member = members.find(m => m.phone === phone);
-  if (!member) {
-    previewEl.style.display = 'none';
-    return;
-  }
+  if (!member) return;
 
   computePots();
 
   let remaining = amount;
   const lines = [];
+  const summaryItems = [];
 
   const dailyAmount = settings.dailyAmount || 2000;
   const welfareAmount = settings.welfareAmount || 500;
   const requiredToday = dailyAmount + welfareAmount;
   const todayStart = new Date().setHours(0, 0, 0, 0);
 
-  // 1. Today's requirement
+  // ===== GET BALANCES =====
+  // Application Loans (⭐) - with loanQuestions
+  const appLoans = loans.filter(l => 
+    l.memberPhone === member.phone && 
+    l.status === 'approved' && 
+    !l.repaid && 
+    l.loanQuestions && 
+    l.loanQuestions.length > 0
+  );
+  
+  let appBalance = 0;
+  appLoans.forEach(l => {
+    const remainingBalance = l.totalRepay - (l.repaidAmount || 0);
+    appBalance += remainingBalance;
+  });
+
+  // ===== TOTAL MEMBER LOAN BALANCE (from computePots) =====
+  const totalLoanBalance = memberLoans[member.phone] || 0;
+
+  // ===== ASSIGNED DEBT = TOTAL LOANS - APPLICATION LOANS =====
+  const assignedBalance = totalLoanBalance - appBalance;
+
+  // Debts (🧾)
+  const debtBalance = memberDebts[member.phone] || 0;
+
+  // ===== 1. TODAY'S REQUIREMENT =====
   let paidDailyToday = 0;
   let welfarePaidToday = false;
   transactions.forEach(tx => {
@@ -10135,87 +10289,205 @@ window.updateTxPreview = function() {
       if (tx.type === 'welfare') welfarePaidToday = true;
     }
   });
+  
   const neededDaily = Math.max(0, dailyAmount - paidDailyToday);
   const neededWelfare = welfarePaidToday ? 0 : welfareAmount;
   const deficitToday = neededDaily + neededWelfare;
 
   let usedToday = 0;
+  let dailyPortion = 0;
+  let welfarePortion = 0;
+  
   if (deficitToday > 0) {
     usedToday = Math.min(remaining, deficitToday);
     remaining -= usedToday;
-    lines.push(`📆 Today: ${money(usedToday)} used for today's requirement (needed ${money(deficitToday)})`);
-    if (remaining === 0 && usedToday < deficitToday) {
-      lines.push(`⚠️ Remaining deficit for today: ${money(deficitToday - usedToday)}`);
-    }
-  } else {
-    lines.push(`✅ Today's requirement already satisfied.`);
+    dailyPortion = Math.min(usedToday, neededDaily);
+    welfarePortion = usedToday - dailyPortion;
+    
+    lines.push(`
+      <div style="display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05);">
+        <span style="font-size: 1.2rem;">📆</span>
+        <div style="flex: 1;">
+          <div style="font-weight: 600; font-size: 0.85rem; color: var(--t);">Today's Requirement</div>
+          <div style="font-size: 0.7rem; color: var(--t3);">${money(usedToday)} used (needed ${money(deficitToday)})</div>
+        </div>
+        <div style="text-align: right;">
+          <div style="font-weight: 700; color: var(--green);">${money(usedToday)}</div>
+          <div style="font-size: 0.6rem; color: var(--t3);">${dailyPortion > 0 ? `Daily ${money(dailyPortion)}` : ''}${welfarePortion > 0 ? ` + Welfare ${money(welfarePortion)}` : ''}</div>
+        </div>
+      </div>
+    `);
+    summaryItems.push({ label: 'Today\'s Requirement', amount: usedToday, color: 'var(--green)' });
   }
 
-  // 2. Combined outstanding (debt + loan)
-  const debtOwed = memberDebts[member.phone] || 0;
-  const loanOwed = memberLoans[member.phone] || 0;
-  let totalOutstanding = debtOwed + loanOwed;
-  let usedForOutstanding = 0;
-  if (totalOutstanding > 0 && remaining > 0) {
-    usedForOutstanding = Math.min(remaining, totalOutstanding);
-    remaining -= usedForOutstanding;
-    const debtPortion = Math.min(usedForOutstanding, debtOwed);
-    const loanPortion = usedForOutstanding - debtPortion;
-    lines.push(`🧹 **Outstanding cleared:** ${money(usedForOutstanding)} (debt: ${money(debtPortion)}, loan: ${money(loanPortion)})`);
-    if (remaining === 0 && usedForOutstanding < totalOutstanding) {
-      lines.push(`⚠️ Remaining outstanding: ${money(totalOutstanding - usedForOutstanding)}`);
+  // ===== 2. APPLICATION LOANS (⭐) =====
+  let usedApp = 0;
+  if (appBalance > 0 && remaining > 0) {
+    usedApp = Math.min(remaining, appBalance);
+    remaining -= usedApp;
+    const fullyRepaid = (usedApp >= appBalance);
+    
+    lines.push(`
+      <div style="display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(245,158,11,0.06); border-radius: 8px; padding: 8px 12px; margin: 4px 0; border-left: 3px solid var(--gold);">
+        <span style="font-size: 1.2rem;">⭐</span>
+        <div style="flex: 1;">
+          <div style="font-weight: 700; font-size: 0.85rem; color: var(--gold);">Application Loan</div>
+          <div style="font-size: 0.7rem; color: var(--t3);">Balance: ${money(appBalance)}</div>
+        </div>
+        <div style="text-align: right;">
+          <div style="font-weight: 700; color: ${fullyRepaid ? 'var(--green)' : 'var(--gold)'};">${money(usedApp)}</div>
+          ${fullyRepaid ? '<div style="font-size: 0.6rem; color: var(--green); font-weight: 700;">✅ FULLY REPAID!</div>' : ''}
+        </div>
+      </div>
+    `);
+    summaryItems.push({ label: '⭐ Application Loan', amount: usedApp, color: 'var(--gold)' });
+    
+    if (fullyRepaid && usedApp > 0) {
+      lines.push(`
+        <div style="display: flex; align-items: center; gap: 10px; padding: 6px 0; background: rgba(16,185,129,0.12); border-radius: 8px; padding: 8px 12px; margin: 4px 0; border: 1px solid rgba(16,185,129,0.3);">
+          <span style="font-size: 1.2rem;">🎉</span>
+          <div style="flex: 1; font-size: 0.8rem; color: var(--green); font-weight: 700;">
+            Application loan fully repaid! Rotation will advance to next member!
+          </div>
+        </div>
+      `);
     }
-  } else if (totalOutstanding > 0) {
-    lines.push(`🧹 No extra amount to clear outstanding (still owe ${money(totalOutstanding)})`);
-  } else {
-    lines.push(`✅ No outstanding debt or loans.`);
   }
 
-  const remainingOutstanding = totalOutstanding - usedForOutstanding;
-  const todayFullyCovered = (usedToday === deficitToday);
+  // ===== 3. ASSIGNED DEBT (📋) - Using totalLoanBalance - appBalance =====
+  let usedAssigned = 0;
+  if (assignedBalance > 0 && remaining > 0) {
+    usedAssigned = Math.min(remaining, assignedBalance);
+    remaining -= usedAssigned;
+    const remainingAfter = assignedBalance - usedAssigned;
+    
+    lines.push(`
+      <div style="display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); background: rgba(6,182,212,0.06); border-radius: 8px; padding: 8px 12px; margin: 4px 0; border-left: 3px solid var(--teal);">
+        <span style="font-size: 1.2rem;">📋</span>
+        <div style="flex: 1;">
+          <div style="font-weight: 700; font-size: 0.85rem; color: var(--teal);">Assigned Debt</div>
+          <div style="font-size: 0.7rem; color: var(--t3);">Balance: ${money(assignedBalance)} • Remaining: ${money(remainingAfter)}</div>
+        </div>
+        <div style="text-align: right;">
+          <div style="font-weight: 700; color: var(--teal);">${money(usedAssigned)}</div>
+        </div>
+      </div>
+    `);
+    summaryItems.push({ label: '📋 Assigned Debt', amount: usedAssigned, color: 'var(--teal)' });
+  }
 
-  // 3. Prepay future days (with immediate debt for partial day)
-  if (todayFullyCovered && remainingOutstanding === 0 && remaining > 0) {
-    let currentDay = todayStart + 86400000;
-    const maxDays = 30;
-    let daysFullyCovered = 0;
-    let remainingPartial = remaining;
+  // ===== 4. DEBTS (🧾) - if any =====
+  let usedDebt = 0;
+  if (debtBalance > 0 && remaining > 0) {
+    usedDebt = Math.min(remaining, debtBalance);
+    remaining -= usedDebt;
+    lines.push(`
+      <div style="display: flex; align-items: center; gap: 10px; padding: 6px 0; background: rgba(239,68,68,0.06); border-radius: 8px; padding: 8px 12px; margin: 4px 0; border-left: 3px solid var(--red);">
+        <span style="font-size: 1.2rem;">🧾</span>
+        <div style="flex: 1;">
+          <div style="font-weight: 700; font-size: 0.85rem; color: var(--red);">Debts</div>
+          <div style="font-size: 0.7rem; color: var(--t3);">${money(debtBalance)} remaining</div>
+        </div>
+        <div style="text-align: right;">
+          <div style="font-weight: 700; color: var(--red);">${money(usedDebt)}</div>
+        </div>
+      </div>
+    `);
+    summaryItems.push({ label: '🧾 Debts', amount: usedDebt, color: 'var(--red)' });
+  }
 
-    // Full days
-    while (remainingPartial >= requiredToday && daysFullyCovered < maxDays) {
-      remainingPartial -= requiredToday;
-      daysFullyCovered++;
-      const dateStr = new Date(currentDay).toLocaleDateString();
-      lines.push(`📅 ${dateStr}: full day (${money(requiredToday)})`);
-      currentDay += 86400000;
-    }
-
-    // Partial day
-    if (remainingPartial > 0 && daysFullyCovered < maxDays) {
-      const dateStr = new Date(currentDay).toLocaleDateString();
-      const dailyPortion = Math.min(remainingPartial, dailyAmount);
-      const welfarePortion = remainingPartial - dailyPortion;
-      lines.push(`⚡ ${dateStr}: partial – ${money(remainingPartial)} applied (${money(dailyPortion)} savings, ${money(welfarePortion)} welfare)`);
-      const deficitForDay = requiredToday - remainingPartial;
-      if (deficitForDay > 0) {
-        lines.push(`⚠️ Immediate debt of ${money(deficitForDay)} assigned for ${dateStr}. Required amount for that day becomes ${money(deficitForDay)}.`);
-      }
-    } else if (remainingPartial === 0 && daysFullyCovered > 0) {
-      lines.push(`✨ Surplus fully allocated to ${daysFullyCovered} future day(s).`);
-    } else if (remainingPartial > 0) {
-      lines.push(`⚠️ Remaining ${money(remainingPartial)} after covering ${daysFullyCovered} days (limit reached).`);
-    }
+  // ===== 5. FUTURE DAYS =====
+  if (usedToday > 0 && appBalance - usedApp <= 0 && assignedBalance - usedAssigned <= 0 && debtBalance - usedDebt <= 0 && remaining > 0) {
+    let days = Math.floor(remaining / requiredToday);
+    let leftover = remaining % requiredToday;
+    let futureText = '';
+    if (days > 0) futureText += `${days} day(s) (${money(days * requiredToday)})`;
+    if (leftover > 0) futureText += `${days > 0 ? ' + ' : ''}${money(leftover)} partial`;
+    
+    lines.push(`
+      <div style="display: flex; align-items: center; gap: 10px; padding: 6px 0; background: rgba(139,92,246,0.06); border-radius: 8px; padding: 8px 12px; margin: 4px 0; border-left: 3px solid var(--purple);">
+        <span style="font-size: 1.2rem;">📅</span>
+        <div style="flex: 1;">
+          <div style="font-weight: 700; font-size: 0.85rem; color: var(--purple);">Future Days</div>
+          <div style="font-size: 0.7rem; color: var(--t3);">${futureText}</div>
+        </div>
+        <div style="font-weight: 700; color: var(--purple);">${money(remaining)}</div>
+      </div>
+    `);
+    summaryItems.push({ label: '📅 Future Days', amount: remaining, color: 'var(--purple)' });
+    remaining = 0;
   } else if (remaining > 0) {
-    lines.push(`💡 Remaining ${money(remaining)} will be used once today's requirement is met and outstanding cleared.`);
+    lines.push(`
+      <div style="display: flex; align-items: center; gap: 10px; padding: 6px 0; background: rgba(245,158,11,0.08); border-radius: 8px; padding: 8px 12px; margin: 4px 0; border-left: 3px solid var(--gold);">
+        <span style="font-size: 1.2rem;">💡</span>
+        <div style="flex: 1; font-size: 0.8rem; color: var(--t2);">
+          <strong>Remaining ${money(remaining)}</strong>
+          <div style="font-size: 0.65rem; color: var(--t3);">Will be used once all loans and debts are cleared</div>
+        </div>
+      </div>
+    `);
   }
 
-  if (lines.length === 0) {
-    previewEl.innerHTML = `<div class="hint-box">ℹ️ No allocation – amount is zero or already covered.</div>`;
-  } else {
-    previewEl.innerHTML = `<div class="hint-box"><strong>💰 Deposit breakdown for ${escapeHtml(member.name)}:</strong><br>${lines.join('<br>')}</div>`;
-  }
+  // ===== 6. FINAL SUMMARY =====
+  let totalAllocated = 0;
+  summaryItems.forEach(item => totalAllocated += item.amount);
+  
+  let summaryHtml = `
+    <div style="margin-top: 12px; padding-top: 12px; border-top: 2px solid var(--br);">
+      <div style="font-weight: 700; font-size: 0.85rem; color: var(--t2); margin-bottom: 8px;">📊 Summary</div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
+  `;
+  
+  summaryItems.forEach(item => {
+    if (item.amount > 0) {
+      summaryHtml += `
+        <div style="display: flex; justify-content: space-between; padding: 4px 8px; background: rgba(255,255,255,0.03); border-radius: 4px; font-size: 0.75rem;">
+          <span style="color: var(--t3);">${item.label}</span>
+          <span style="font-weight: 600; color: ${item.color};">${money(item.amount)}</span>
+        </div>
+      `;
+    }
+  });
+  
+  summaryHtml += `
+        <div style="display: flex; justify-content: space-between; padding: 4px 8px; background: rgba(255,255,255,0.06); border-radius: 4px; font-weight: 700; grid-column: 1 / -1; border-top: 1px solid var(--br); padding-top: 8px;">
+          <span style="color: var(--t);">Total</span>
+          <span style="color: var(--gold);">${money(totalAllocated)} / ${money(amount)}</span>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // ===== 7. FINAL OUTPUT =====
+  previewEl.innerHTML = `
+    <div style="
+      background: linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+      border-radius: 12px;
+      padding: 14px;
+      border: 1px solid rgba(255,255,255,0.08);
+      max-height: 450px;
+      overflow-y: auto;
+    ">
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid var(--gold);">
+        <span style="font-size: 1.3rem;">💰</span>
+        <div>
+          <div style="font-weight: 800; font-size: 0.9rem; color: var(--gold);">Deposit Breakdown</div>
+          <div style="font-size: 0.7rem; color: var(--t3);">${escapeHtml(member.name)} • ${money(amount)}</div>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        ${lines.join('')}
+      </div>
+      ${summaryHtml}
+      <div style="margin-top: 10px; padding: 8px 12px; background: rgba(245,158,11,0.06); border-radius: 8px; border-left: 3px solid var(--gold); font-size: 0.65rem; color: var(--t3);">
+        ⭐ Priority: Daily → Application Loans → Assigned Debt → Debts → Future Days
+      </div>
+    </div>
+  `;
   previewEl.style.display = 'block';
 };
+
+
 // ==========================================
 // ADD TRANSACTION WITH PREVIEW
 // ==========================================
@@ -10629,34 +10901,325 @@ async function executeDebtAssignment(member, principal, interestRate, interest, 
   console.log(`   Amount: UGX ${principal.toLocaleString()}`);
   console.log(`   Total Repay: UGX ${totalRepay.toLocaleString()}`);
 }
-// ==========================================
-// SHOW DEBT RECEIPT MODAL
-// ==========================================
 
-function showDebtReceiptModal(member, principal, interestRate, interest, totalRepay, reason, dueDate, onConfirmSend, onConfirmNoSend, onCancel) {
-  console.log('📋 showDebtReceiptModal called');
+function showTransactionReceiptModal(member, txType, amount, description, onConfirmSend, onConfirmNoSend, onCancel, customLoanBalance = null, onPrint = null) {
+  const safeAmount = Number(amount) || 0;
   
-  generateDebtReceiptImage(member, principal, interestRate, interest, totalRepay, reason, dueDate).then(imageData => {
+  computePots();
+  
+  let accountBalance = memberBalances[member?.phone] || 0;
+  let debtBalance = memberDebts[member?.phone] || 0;
+  
+  const appLoans = loans.filter(l => 
+    l.memberPhone === member?.phone && 
+    l.status === 'approved' && 
+    !l.repaid && 
+    l.loanQuestions && 
+    l.loanQuestions.length > 0
+  );
+  const appBalance = appLoans.reduce((sum, l) => sum + (l.totalRepay - (l.repaidAmount || 0)), 0);
+  const totalLoanBalance = memberLoans[member?.phone] || 0;
+  const remainingBalance = totalLoanBalance - appBalance;
+  
+  let totalDeposits = 0;
+  transactions.forEach(tx => { 
+    if (tx.memberPhone === member?.phone && tx.type === 'deposit') totalDeposits += tx.amount; 
+  });
+  const maxBorrow = Math.floor(totalDeposits * (loanSettings.disciplineMultiplier || 1.5));
+
+  generateTransactionReceipt(member, txType, safeAmount, description, appBalance, accountBalance, maxBorrow).then(imageData => {
     const modal = document.createElement('div');
     modal.className = 'ov on';
     modal.style.zIndex = '20020';
-    modal.innerHTML = `
-      <div class="bs" style="max-width: 600px;">
-        <div class="bs-title">📄 Debt Assignment Receipt Preview</div>
-        <div style="text-align: center; margin-bottom: 16px;">
-          ${imageData ? `<img src="${imageData}" style="max-width: 100%; border-radius: 12px; border: 1px solid #ccc;">` : '<div class="hint-box">⚠️ Receipt image not available</div>'}
+    
+    let receiptContent = '';
+    if (imageData) {
+      receiptContent = `
+        <div style="text-align: center; margin: 6px 0 10px 0;">
+          <img src="${imageData}" style="max-width: 100%; border-radius: 4px; border: 2px solid #000000;">
         </div>
-        <div style="display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;">
-          <button class="btn btn-gold" id="debt-confirm-send-pc">💻 Confirm & Copy Image (PC)</button>
-          <button class="btn btn-teal" id="debt-confirm-send-phone">📱 Confirm & Send Image (Phone)</button>
-          <button class="btn btn-green" id="debt-confirm-nosend">✅ Confirm & Don't Send</button>
-          <button class="btn btn-purple" id="debt-print">🖨️ Print</button>
-          <button class="btn btn-red" id="debt-cancel">🗑️ Don't Save</button>
+      `;
+    } else {
+      receiptContent = `
+        <div style="
+          background: #ffffff; 
+          border-radius: 0px; 
+          padding: 20px 18px; 
+          margin: 6px 0 10px 0;
+          border: 2px solid #000000;
+          font-family: 'DM Sans', sans-serif;
+          color: #000000;
+        ">
+          <div style="text-align: center; margin-bottom: 10px;">
+            <div style="font-size: 2rem;">🌾</div>
+            <div style="font-weight: 900; font-size: 1.2rem; color: #000000;">HARVEST TRUST</div>
+            <div style="font-size: 0.6rem; color: #000000; letter-spacing: 2px;">FINANCE</div>
+            <div style="font-size: 0.5rem; color: #000000; letter-spacing: 1px; border-top: 2px solid #000000; padding-top: 4px; display: inline-block;">TRANSACTION RECEIPT</div>
+          </div>
+          
+          <div style="border-top: 2px solid #000000; margin: 4px 0 8px 0;"></div>
+          
+          <div style="display: flex; justify-content: space-between; font-size: 0.7rem; color: #000000; font-weight: 600;">
+            <span>#${Date.now().toString().slice(-8)}</span>
+            <span>${new Date().toLocaleDateString()} • ${new Date().toLocaleTimeString()}</span>
+          </div>
+          
+          <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-bottom: 8px; padding: 4px 0; border-bottom: 2px solid #000000;">
+            <span style="font-weight: 800;">${escapeHtml(member?.name || 'Unknown')}</span>
+            <span style="font-family: monospace;">${member?.phone || 'N/A'}</span>
+          </div>
+          
+          <div style="text-align: center; margin: 8px 0 10px 0;">
+            <div style="font-size: 0.6rem; color: #000000; font-weight: 700; letter-spacing: 1px;">${(txType || 'TRANSACTION').toUpperCase()}</div>
+            <div style="font-size: 2.2rem; font-weight: 900; color: ${txType === 'deposit' ? '#000000' : '#ff0000'}; margin: 2px 0;">
+              UGX ${safeAmount.toLocaleString()}
+            </div>
+            <div style="font-size: 0.65rem; color: #000000;">${escapeHtml(description || '')}</div>
+          </div>
+          
+          <div style="border-top: 2px solid #000000; margin: 4px 0 8px 0;"></div>
+          
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; font-size: 0.75rem;">
+            <span style="color: #000000; font-weight: 600;">⭐ Application</span>
+            <span style="text-align: right; font-weight: 700; color: #000000;">UGX ${appBalance.toLocaleString()}</span>
+            <span style="color: #000000; font-weight: 600;">📋 Remaining</span>
+            <span style="text-align: right; font-weight: 700; color: #000000;">UGX ${remainingBalance.toLocaleString()}</span>
+            <span style="color: #000000; font-weight: 600;">🧾 Debts</span>
+            <span style="text-align: right; font-weight: 700; color: ${debtBalance > 0 ? '#ff0000' : '#000000'};">UGX ${debtBalance.toLocaleString()}</span>
+            <span style="color: #000000; font-weight: 600; border-top: 2px solid #000000; padding-top: 6px;">💰 Available</span>
+            <span style="text-align: right; font-weight: 900; color: #000000; border-top: 2px solid #000000; padding-top: 6px;">UGX ${accountBalance.toLocaleString()}</span>
+          </div>
+          
+          <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-top: 10px; padding: 6px 12px; background: #f0f0f0; border: 2px solid #000000;">
+            <span style="color: #000000; font-weight: 700;">💳 Loan Limit</span>
+            <span style="font-weight: 900; color: #000000; font-size: 0.85rem;">UGX ${maxBorrow.toLocaleString()}</span>
+          </div>
+          
+          <div style="border-top: 2px solid #000000; margin: 10px 0 4px 0;"></div>
+          <div style="text-align: center; font-size: 0.5rem; color: #000000; font-weight: 600;">🌾 THANK YOU FOR SAVING WITH US</div>
+        </div>
+      `;
+    }
+    
+    modal.innerHTML = `
+      <div class="bs" style="max-width: 480px; padding: 14px 18px; border-top: 2px solid #000000;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+          <span style="font-size: 1.4rem;">📄</span>
+          <span style="font-weight: 800; font-size: 0.95rem; color: #000000;">TRANSACTION RECEIPT</span>
+          <span style="font-size: 0.7rem; color: #000000; font-weight: 600;">${member?.name?.split(' ')[0] || ''}</span>
+        </div>
+        
+        ${receiptContent}
+        
+        <div style="display: flex; justify-content: space-around; gap: 4px; margin: 6px 0 10px 0; padding: 8px; background: #f8f8f8; border: 2px solid #000000; border-radius: 0px;">
+          <div style="text-align: center;">
+            <div style="color: #000000; font-size: 0.5rem; font-weight: 600;">💰 AVAILABLE</div>
+            <div style="font-weight: 800; color: #000000; font-size: 0.8rem;">${money(accountBalance)}</div>
+          </div>
+          <div style="text-align: center;">
+            <div style="color: #000000; font-size: 0.5rem; font-weight: 600;">⭐ LOANS</div>
+            <div style="font-weight: 800; color: #000000; font-size: 0.8rem;">${money(appBalance)}</div>
+          </div>
+          <div style="text-align: center;">
+            <div style="color: #000000; font-size: 0.5rem; font-weight: 600;">🧾 DEBTS</div>
+            <div style="font-weight: 800; color: ${debtBalance > 0 ? '#ff0000' : '#000000'}; font-size: 0.8rem;">${money(debtBalance)}</div>
+          </div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px;">
+          <button class="btn" id="receipt-confirm-send-pc" style="padding: 10px; font-size: 0.75rem; background: #000000; color: #ffffff; border: none; border-radius: 0px; font-weight: 700;">💻</button>
+          <button class="btn" id="receipt-confirm-send-phone" style="padding: 10px; font-size: 0.75rem; background: #000000; color: #ffffff; border: none; border-radius: 0px; font-weight: 700;">📱</button>
+          <button class="btn" id="receipt-confirm-nosend" style="padding: 10px; font-size: 0.75rem; background: #000000; color: #ffffff; border: none; border-radius: 0px; font-weight: 700;">💾</button>
+          <button class="btn" id="receipt-print" style="padding: 10px; font-size: 0.75rem; background: #000000; color: #ffffff; border: none; border-radius: 0px; font-weight: 700;">🖨️</button>
+        </div>
+        <button class="btn" id="receipt-cancel" style="width: 100%; padding: 10px; font-size: 0.75rem; margin-top: 6px; background: #ff0000; color: #ffffff; border: none; border-radius: 0px; font-weight: 700;">✕ CANCEL</button>
+        
+        <div style="text-align: center; margin-top: 8px; font-size: 0.5rem; color: #000000; font-weight: 600;">
+          DAILY → ⭐ LOANS → 📋 BALANCE → 🧾 DEBTS
         </div>
       </div>
     `;
     document.body.appendChild(modal);
 
+    // Button handlers
+    const confirmSendPc = modal.querySelector('#receipt-confirm-send-pc');
+    const confirmSendPhone = modal.querySelector('#receipt-confirm-send-phone');
+    const confirmNoSendBtn = modal.querySelector('#receipt-confirm-nosend');
+    const printBtn = modal.querySelector('#receipt-print');
+    const cancelBtn = modal.querySelector('#receipt-cancel');
+
+    const closeModal = () => {
+      modal.classList.remove('on');
+      setTimeout(() => modal.remove(), 300);
+    };
+
+    async function copyImageToClipboard(blob) {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+        toast('📋 Copied!', '#000000');
+      } catch (err) {
+        toast('Failed', '#ff0000');
+      }
+    }
+
+    async function shareOrDownloadImage(blob) {
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            title: 'Receipt',
+            text: `${txType.toUpperCase()} ${money(safeAmount)}`,
+            files: [new File([blob], 'receipt.png', { type: 'image/png' })]
+          });
+          toast('📱 Sent!', '#000000');
+          return;
+        } catch (err) {
+          if (err.name === 'AbortError') return;
+        }
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'receipt.png';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('📸 Downloaded', '#000000');
+    }
+
+    confirmSendPc.onclick = async () => {
+      closeModal();
+      if (imageData) {
+        const blob = await (await fetch(imageData)).blob();
+        await copyImageToClipboard(blob);
+      }
+      if (onConfirmSend) onConfirmSend();
+    };
+
+    confirmSendPhone.onclick = async () => {
+      closeModal();
+      if (imageData) {
+        const blob = await (await fetch(imageData)).blob();
+        await shareOrDownloadImage(blob);
+      }
+      if (onConfirmSend) onConfirmSend();
+    };
+
+    confirmNoSendBtn.onclick = () => {
+      closeModal();
+      if (onConfirmNoSend) onConfirmNoSend();
+      toast('✅ Saved', '#000000');
+    };
+
+    printBtn.onclick = () => {
+      closeModal();
+      if (onPrint) onPrint();
+      else if (imageData) {
+        const w = window.open('', '_blank');
+        w.document.write(`<html><head><title>Receipt</title><style>body{margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff;}img{max-width:100%;}</style></head><body><img src="${imageData}"></body></html>`);
+        w.document.close();
+        w.focus();
+        w.print();
+      }
+    };
+
+    cancelBtn.onclick = () => {
+      closeModal();
+      if (onCancel) onCancel();
+      toast('Cancelled', '#ff0000');
+    };
+  });
+}
+// ==========================================
+// SHOW DEBT RECEIPT MODAL
+// ==========================================
+
+function showDebtReceiptModal(member, principal, interestRate, interest, totalRepay, reason, dueDate, onConfirmSend, onConfirmNoSend, onCancel) {
+  generateDebtReceiptImage(member, principal, interestRate, interest, totalRepay, reason, dueDate).then(imageData => {
+    const modal = document.createElement('div');
+    modal.className = 'ov on';
+    modal.style.zIndex = '20020';
+    
+    let receiptContent = '';
+    if (imageData) {
+      receiptContent = `
+        <div style="text-align: center; margin: 4px 0 8px 0;">
+          <img src="${imageData}" style="max-width: 100%; border-radius: 0px; border: 2px solid #000000;">
+        </div>
+      `;
+    } else {
+      // Text fallback
+      receiptContent = `
+        <div style="
+          background: #ffffff; 
+          border-radius: 0px; 
+          padding: 16px; 
+          margin: 4px 0 8px 0;
+          border: 2px solid #000000;
+          font-family: 'DM Sans', sans-serif;
+          color: #000000;
+        ">
+          <div style="text-align: center; margin-bottom: 8px;">
+            <div style="font-size: 1.8rem;">🌾</div>
+            <div style="font-weight: 800; font-size: 1rem; color: #000000;">Harvest Trust</div>
+            <div style="font-size: 0.5rem; color: #000000;">Finance</div>
+            <div style="font-size: 0.45rem; color: #000000; border-top: 2px solid #000000; padding-top: 4px; display: inline-block;">Debt assignment receipt</div>
+          </div>
+          <div style="border-top: 2px solid #000000; margin: 4px 0;"></div>
+          <div style="display: flex; justify-content: space-between; font-size: 0.6rem; color: #000000;">
+            <span>#${Date.now().toString().slice(-8)}</span>
+            <span>${new Date().toLocaleDateString()} • ${new Date().toLocaleTimeString()}</span>
+          </div>
+          <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin: 4px 0; border-bottom: 2px solid #000000; padding-bottom: 4px;">
+            <span style="font-weight: 700;">${escapeHtml(member?.name || 'Unknown')}</span>
+            <span style="font-family: monospace;">${member?.phone || 'N/A'}</span>
+          </div>
+          <div style="text-align: center; margin: 6px 0;">
+            <div style="font-size: 0.5rem; color: #000000;">DEBT ASSIGNMENT</div>
+            <div style="font-size: 1.8rem; font-weight: 800; color: #ff0000;">UGX ${principal.toLocaleString()}</div>
+            <div style="font-size: 0.55rem; color: #000000;">${escapeHtml(reason || 'Assigned debt')}</div>
+          </div>
+          <div style="border-top: 2px solid #000000; margin: 4px 0;"></div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; font-size: 0.6rem;">
+            <span style="color: #000000;">📊 Principal</span>
+            <span style="text-align: right; color: #000000;">UGX ${principal.toLocaleString()}</span>
+            <span style="color: #000000;">📈 Interest rate</span>
+            <span style="text-align: right; color: #000000;">${interestRate}%</span>
+            <span style="color: #000000;">📈 Interest amount</span>
+            <span style="text-align: right; color: #000000;">UGX ${interest.toLocaleString()}</span>
+            <span style="color: #000000;">💰 Total to repay</span>
+            <span style="text-align: right; font-weight: 700; color: #ff0000;">UGX ${totalRepay.toLocaleString()}</span>
+            <span style="color: #000000;">📅 Due date</span>
+            <span style="text-align: right; color: #000000;">${new Date(dueDate).toLocaleDateString()}</span>
+          </div>
+          <div style="border-top: 2px solid #000000; margin: 8px 0 4px 0;"></div>
+          <div style="text-align: center; font-size: 0.45rem; color: #000000;">🌾 Thank you for saving with us</div>
+        </div>
+      `;
+    }
+    
+    modal.innerHTML = `
+      <div class="bs" style="max-width: 460px; padding: 14px 16px; border-top: 2px solid #000000;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+          <span style="font-size: 1.2rem;">📄</span>
+          <span style="font-weight: 800; font-size: 0.85rem; color: #000000;">DEBT ASSIGNMENT</span>
+          <span style="font-size: 0.6rem; color: #000000; font-weight: 600;">${member?.name?.split(' ')[0] || ''}</span>
+        </div>
+        
+        ${receiptContent}
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px;">
+          <button class="btn" id="debt-confirm-send-pc" style="padding: 10px; font-size: 0.7rem; background: #000000; color: #ffffff; border: none; border-radius: 0px; font-weight: 700;">💻</button>
+          <button class="btn" id="debt-confirm-send-phone" style="padding: 10px; font-size: 0.7rem; background: #000000; color: #ffffff; border: none; border-radius: 0px; font-weight: 700;">📱</button>
+          <button class="btn" id="debt-confirm-nosend" style="padding: 10px; font-size: 0.7rem; background: #000000; color: #ffffff; border: none; border-radius: 0px; font-weight: 700;">💾</button>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 4px;">
+          <button class="btn" id="debt-print" style="padding: 10px; font-size: 0.7rem; background: #000000; color: #ffffff; border: none; border-radius: 0px; font-weight: 700;">🖨️</button>
+          <button class="btn" id="debt-cancel" style="padding: 10px; font-size: 0.7rem; background: #ff0000; color: #ffffff; border: none; border-radius: 0px; font-weight: 700;">✕</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    // Button handlers
     const confirmSendPc = modal.querySelector('#debt-confirm-send-pc');
     const confirmSendPhone = modal.querySelector('#debt-confirm-send-phone');
     const confirmNoSendBtn = modal.querySelector('#debt-confirm-nosend');
@@ -10668,49 +11231,43 @@ function showDebtReceiptModal(member, principal, interestRate, interest, totalRe
       setTimeout(() => modal.remove(), 300);
     };
 
-    async function copyImageToClipboard(blob, fileName) {
+    async function copyImageToClipboard(blob) {
       try {
         await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-        toast('📋 Receipt image copied to clipboard! Paste (Ctrl+V) into WhatsApp Web.', '#06b6d4');
+        toast('📋 Copied!', '#000000');
       } catch (err) {
-        console.error(err);
-        toast('Failed to copy image. Try downloading instead.', '#ef4444');
+        toast('Failed', '#ff0000');
       }
     }
 
-    async function shareOrDownloadImage(blob, fileName) {
+    async function shareOrDownloadImage(blob) {
       if (navigator.share) {
         try {
-          const file = new File([blob], fileName, { type: 'image/png' });
           await navigator.share({
-            title: 'Debt Assignment Receipt',
-            text: `Debt of UGX ${principal.toLocaleString()} assigned to ${member.name}`,
-            files: [file]
+            title: 'Debt Assignment',
+            text: `Debt of UGX ${principal.toLocaleString()} assigned to ${member?.name}`,
+            files: [new File([blob], 'debt_receipt.png', { type: 'image/png' })]
           });
-          toast('Image shared!', '#10b981');
+          toast('📱 Sent!', '#000000');
           return;
         } catch (err) {
-          if (err.name !== 'AbortError') {
-            console.warn('Share failed, falling back to download', err);
-          } else {
-            return;
-          }
+          if (err.name === 'AbortError') return;
         }
       }
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = fileName;
+      a.download = 'debt_receipt.png';
       a.click();
       URL.revokeObjectURL(url);
-      toast('📸 Image downloaded. Open WhatsApp and attach it manually.', '#f59e0b');
+      toast('📸 Downloaded', '#000000');
     }
 
     confirmSendPc.onclick = async () => {
       closeModal();
       if (imageData) {
         const blob = await (await fetch(imageData)).blob();
-        await copyImageToClipboard(blob, `debt_${member.id}.png`);
+        await copyImageToClipboard(blob);
       }
       if (onConfirmSend) onConfirmSend();
     };
@@ -10719,7 +11276,7 @@ function showDebtReceiptModal(member, principal, interestRate, interest, totalRe
       closeModal();
       if (imageData) {
         const blob = await (await fetch(imageData)).blob();
-        await shareOrDownloadImage(blob, `debt_${member.id}.png`);
+        await shareOrDownloadImage(blob);
       }
       if (onConfirmSend) onConfirmSend();
     };
@@ -10727,122 +11284,285 @@ function showDebtReceiptModal(member, principal, interestRate, interest, totalRe
     confirmNoSendBtn.onclick = () => {
       closeModal();
       if (onConfirmNoSend) onConfirmNoSend();
-      toast('Debt assignment saved (no receipt sent).', '#10b981');
+      toast('✅ Saved', '#000000');
     };
 
     printBtn.onclick = () => {
       closeModal();
       if (imageData) {
-        const printWindow = window.open('', '_blank');
-        printWindow.document.write(`
-          <!DOCTYPE html>
-          <html>
-          <head><title>Debt Assignment Receipt</title>
-          <style>body{margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff;}img{max-width:100%;height:auto;}</style>
-          </head><body><img src="${imageData}"></body></html>
-        `);
-        printWindow.document.close();
-        printWindow.focus();
-        printWindow.print();
-      } else toast('No image to print', '#ef4444');
+        const w = window.open('', '_blank');
+        w.document.write(`<html><head><title>Debt Receipt</title><style>body{margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff;}img{max-width:100%;}</style></head><body><img src="${imageData}"></body></html>`);
+        w.document.close();
+        w.focus();
+        w.print();
+      }
     };
 
     cancelBtn.onclick = () => {
       closeModal();
       if (onCancel) onCancel();
-      toast('Debt assignment cancelled.', '#f59e0b');
+      toast('Cancelled', '#ff0000');
     };
   });
 }
-
 // ==========================================
-// GENERATE DEBT RECEIPT IMAGE
+// GENERATE DEBT RECEIPT - PURE BLACK & RED
 // ==========================================
 
 async function generateDebtReceiptImage(member, principal, interestRate, interest, totalRepay, reason, dueDate) {
-  console.log('📋 generateDebtReceiptImage called');
-  
-  const date = new Date();
-  const receiptId = `DEBT-${date.toISOString().slice(0,10).replace(/-/g,'')}-${member.id.slice(-4)}`;
-  const dateLabel = date.toLocaleDateString('en-UG', { year:'numeric', month:'long', day:'numeric' });
-  const dueDateLabel = new Date(dueDate).toLocaleDateString('en-UG', { year:'numeric', month:'long', day:'numeric' });
-
-  // Check if member has active application loan (for warning on receipt)
-  const hasAppLoan = loans.some(l => 
-    l.memberId === member.id && 
-    l.status === 'approved' && 
-    !l.repaid && 
-    l.loanQuestions && 
-    l.loanQuestions.length > 0
-  );
-
-  const receiptHtml = `
-    <div class="debt-receipt-card" style="
-      max-width: 500px;
-      margin: 0 auto;
-      border: 2px solid #e2e8f0;
-      border-radius: 20px;
-      padding: 20px;
-      background: white;
-      font-family: 'DM Sans', sans-serif;
-    ">
-      <div style="text-align: center; margin-bottom: 12px;">
-        <div style="font-size: 1.8rem;">🌾</div>
-        <div style="font-weight: 800; font-size: 1.2rem; color: #b45309;">HARVEST TRUST FINANCE</div>
-        <div style="font-size: 0.7rem; color: #64748b;">Debt Assignment Receipt</div>
-      </div>
-      <div style="border-top: 1px solid #e2e8f0; margin: 8px 0;"></div>
-      <div style="font-size: 0.9rem;">
-        <div><strong>Receipt No.</strong> ${receiptId}</div>
-        <div><strong>Date:</strong> ${dateLabel}</div>
-        <div><strong>Member:</strong> ${escapeHtml(member.name)}</div>
-        <div><strong>Phone:</strong> ${member.phone}</div>
-      </div>
-      <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
-      <div style="font-size: 1rem;">
-        <div><strong>Assignment Type:</strong> Debt (Loan)</div>
-        <div><strong>Principal Amount:</strong> UGX ${principal.toLocaleString()}</div>
-        <div><strong>Interest Rate:</strong> ${interestRate}%</div>
-        <div><strong>Interest Amount:</strong> UGX ${interest.toLocaleString()}</div>
-        <div><strong>Total to Repay:</strong> UGX ${totalRepay.toLocaleString()}</div>
-        <div><strong>Due Date:</strong> ${dueDateLabel}</div>
-        <div><strong>Reason:</strong> ${escapeHtml(reason)}</div>
-      </div>
-      <div style="border-top: 1px solid #e2e8f0; margin: 12px 0;"></div>
-      <div class="micro muted" style="text-align:center;">
-        ⚠️ This debt is assigned as a loan. Repayment will be deducted from daily deposits.
-        <br>Late payment will incur additional penalties.
-        ${hasAppLoan ? `
-          <br><br>
-          ⚠️ <strong>Note:</strong> ${member.name} has an active application loan.
-          <br>Repayment priority: Daily → Application Loan → This Debt → Other Debts
-        ` : ''}
-      </div>
-      <div style="text-align: center; font-size: 0.7rem; margin-top: 8px;">Authorised by Harvest Trust Finance</div>
-    </div>
-  `;
-
-  const tempDiv = document.createElement('div');
-  tempDiv.style.position = 'absolute';
-  tempDiv.style.top = '-9999px';
-  tempDiv.style.left = '-9999px';
-  tempDiv.innerHTML = receiptHtml;
-  document.body.appendChild(tempDiv);
-
   try {
-    const canvas = await html2canvas(tempDiv.querySelector('.debt-receipt-card'), {
-      scale: 1.5,
-      backgroundColor: '#ffffff',
-      logging: false
-    });
+    const date = new Date();
+    const receiptId = `DEBT-${date.toISOString().slice(0,10).replace(/-/g,'')}-${member?.id?.slice(-4) || '0000'}`;
+    const dateLabel = date.toLocaleDateString('en-UG', { year:'numeric', month:'short', day:'numeric' });
+    const timeLabel = date.toLocaleTimeString('en-UG', { hour:'2-digit', minute:'2-digit' });
+    const dueDateLabel = new Date(dueDate).toLocaleDateString('en-UG', { year:'numeric', month:'short', day:'numeric' });
+
+    const receiptHtml = `
+      <div style="
+        max-width: 480px;
+        margin: 0 auto;
+        background: #ffffff;
+        border-radius: 0px;
+        padding: 30px 26px;
+        font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+        border: 2px solid #000000;
+      ">
+        <!-- Header -->
+        <div style="text-align: center; margin-bottom: 16px;">
+          <div style="font-size: 2.8rem; margin-bottom: 4px;">🌾</div>
+          <div style="font-weight: 800; font-size: 1.5rem; color: #000000; letter-spacing: -0.3px;">Harvest Trust</div>
+          <div style="font-size: 0.75rem; color: #000000; letter-spacing: 2px;">Finance</div>
+          <div style="font-size: 0.65rem; color: #000000; letter-spacing: 1px; margin-top: 6px; border-top: 2px solid #000000; padding-top: 8px; display: inline-block;">Debt assignment receipt</div>
+        </div>
+
+        <div style="border-top: 2px solid #000000; margin: 0 0 12px 0;"></div>
+
+        <!-- Meta -->
+        <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: #000000; margin-bottom: 8px; font-weight: 600;">
+          <span style="font-family: monospace;">#${receiptId.slice(-8)}</span>
+          <span>${dateLabel} • ${timeLabel}</span>
+        </div>
+
+        <!-- Member -->
+        <div style="display: flex; justify-content: space-between; font-size: 1.05rem; margin-bottom: 12px; padding: 8px 0; border-bottom: 2px solid #000000;">
+          <span style="font-weight: 700; color: #000000;">${escapeHtml(member?.name || 'Unknown')}</span>
+          <span style="color: #000000; font-family: monospace; font-size: 0.95rem;">${member?.phone || 'N/A'}</span>
+        </div>
+
+        <!-- Debt Details -->
+        <div style="text-align: center; margin-bottom: 16px; padding: 8px 0;">
+          <div style="font-size: 0.8rem; color: #000000; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600;">Debt assignment</div>
+          <div style="font-size: 3rem; font-weight: 800; color: #ff0000; letter-spacing: -0.5px; margin: 4px 0;">
+            UGX ${principal.toLocaleString()}
+          </div>
+          <div style="font-size: 0.75rem; color: #000000; margin-top: 2px;">${escapeHtml(reason || 'Assigned debt')}</div>
+        </div>
+
+        <div style="border-top: 2px solid #000000; margin: 0 0 12px 0;"></div>
+
+        <!-- Breakdown -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; font-size: 0.9rem;">
+          <div style="color: #000000; font-weight: 600;">📊 Principal</div>
+          <div style="text-align: right; font-weight: 600; color: #000000;">UGX ${principal.toLocaleString()}</div>
+          
+          <div style="color: #000000; font-weight: 600;">📈 Interest rate</div>
+          <div style="text-align: right; font-weight: 600; color: #000000;">${interestRate}%</div>
+          
+          <div style="color: #000000; font-weight: 600;">📈 Interest amount</div>
+          <div style="text-align: right; font-weight: 600; color: #000000;">UGX ${interest.toLocaleString()}</div>
+          
+          <div style="color: #000000; font-weight: 600;">💰 Total to repay</div>
+          <div style="text-align: right; font-weight: 700; color: #ff0000;">UGX ${totalRepay.toLocaleString()}</div>
+          
+          <div style="color: #000000; font-weight: 600;">📅 Due date</div>
+          <div style="text-align: right; font-weight: 600; color: #000000;">${dueDateLabel}</div>
+        </div>
+
+        <!-- Footer -->
+        <div style="border-top: 2px solid #000000; margin: 14px 0 6px 0;"></div>
+        <div style="text-align: center; font-size: 0.65rem; color: #000000; line-height: 1.8; font-weight: 600;">
+          ⚡ This debt will be repaid via daily savings
+          <br>🌾 Thank you for saving with us
+        </div>
+      </div>
+    `;
+
+    const tempDiv = document.createElement('div');
+    tempDiv.style.position = 'absolute';
+    tempDiv.style.top = '-9999px';
+    tempDiv.style.left = '-9999px';
+    tempDiv.innerHTML = receiptHtml;
+    document.body.appendChild(tempDiv);
+
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    let canvas = null;
+    try {
+      canvas = await html2canvas(tempDiv.firstChild, {
+        scale: 2.5,
+        backgroundColor: '#ffffff',
+        logging: false,
+        useCORS: true,
+        allowTaint: true
+      });
+    } catch (e) {
+      console.warn('html2canvas failed:', e);
+    }
+
     document.body.removeChild(tempDiv);
-    return canvas.toDataURL('image/png');
-  } catch (err) {
-    document.body.removeChild(tempDiv);
-    console.error('Debt receipt image generation failed', err);
+
+    if (canvas) {
+      return canvas.toDataURL('image/png');
+    }
+
+    return generateFallbackDebtReceipt(member, principal, interestRate, interest, totalRepay, reason, dueDate);
+
+  } catch (error) {
+    console.error('Debt receipt generation failed:', error);
     return null;
   }
 }
+function generateFallbackDebtReceipt(member, principal, interestRate, interest, totalRepay, reason, dueDate) {
+  try {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 480;
+    canvas.height = 560;
+    
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(12, 12, canvas.width - 24, canvas.height - 24);
+    
+    let y = 45;
+    const centerX = canvas.width / 2;
+    
+    // Header
+    ctx.textAlign = 'center';
+    ctx.font = '40px DM Sans, sans-serif';
+    ctx.fillStyle = '#000000';
+    ctx.fillText('🌾', centerX, y);
+    y += 42;
+    ctx.font = 'bold 24px DM Sans, sans-serif';
+    ctx.fillText('Harvest Trust', centerX, y);
+    y += 22;
+    ctx.font = '14px DM Sans, sans-serif';
+    ctx.fillText('Finance', centerX, y);
+    
+    y += 18;
+    ctx.font = '11px DM Sans, sans-serif';
+    ctx.fillText('Debt assignment receipt', centerX, y);
+    
+    y += 20;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(30, y);
+    ctx.lineTo(canvas.width - 30, y);
+    ctx.stroke();
+    
+    y += 22;
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillStyle = '#000000';
+    ctx.fillText(`#${Date.now().toString().slice(-8)}`, 35, y);
+    ctx.textAlign = 'right';
+    ctx.font = '14px DM Sans, sans-serif';
+    ctx.fillText(new Date().toLocaleDateString() + ' • ' + new Date().toLocaleTimeString(), canvas.width - 35, y);
+    
+    y += 24;
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 18px DM Sans, sans-serif';
+    ctx.fillStyle = '#000000';
+    ctx.fillText(member?.name || 'Unknown', 35, y);
+    ctx.textAlign = 'right';
+    ctx.font = '16px monospace';
+    ctx.fillText(member?.phone || 'N/A', canvas.width - 35, y);
+    
+    y += 28;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(30, y);
+    ctx.lineTo(canvas.width - 30, y);
+    ctx.stroke();
+    
+    y += 22;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#000000';
+    ctx.font = '12px DM Sans, sans-serif';
+    ctx.fillText('DEBT ASSIGNMENT', centerX, y);
+    
+    y += 38;
+    ctx.fillStyle = '#ff0000';
+    ctx.font = 'bold 40px DM Sans, sans-serif';
+    ctx.fillText(`UGX ${principal.toLocaleString()}`, centerX, y);
+    
+    y += 26;
+    ctx.fillStyle = '#000000';
+    ctx.font = '12px DM Sans, sans-serif';
+    ctx.fillText(reason || 'Assigned debt', centerX, y);
+    
+    y += 30;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(30, y);
+    ctx.lineTo(canvas.width - 30, y);
+    ctx.stroke();
+    
+    y += 22;
+    ctx.textAlign = 'left';
+    ctx.font = '15px DM Sans, sans-serif';
+    
+    const details = [
+      ['📊 Principal', `UGX ${principal.toLocaleString()}`, '#000000'],
+      ['📈 Interest rate', `${interestRate}%`, '#000000'],
+      ['📈 Interest amount', `UGX ${interest.toLocaleString()}`, '#000000'],
+      ['💰 Total to repay', `UGX ${totalRepay.toLocaleString()}`, '#ff0000'],
+      ['📅 Due date', dueDate ? new Date(dueDate).toLocaleDateString() : 'N/A', '#000000']
+    ];
+    
+    details.forEach(([label, value, color], i) => {
+      const yPos = y + (i * 26);
+      ctx.fillStyle = '#000000';
+      ctx.textAlign = 'left';
+      ctx.font = '15px DM Sans, sans-serif';
+      ctx.fillText(label, 35, yPos);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = color;
+      ctx.font = i === 3 ? 'bold 16px DM Sans, sans-serif' : '15px DM Sans, sans-serif';
+      ctx.fillText(value, canvas.width - 35, yPos);
+    });
+    
+    y += (details.length * 26) + 22;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(30, y);
+    ctx.lineTo(canvas.width - 30, y);
+    ctx.stroke();
+    
+    y += 20;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#000000';
+    ctx.font = '11px DM Sans, sans-serif';
+    ctx.fillText('⚡ This debt will be repaid via daily savings', centerX, y);
+    
+    y += 18;
+    ctx.font = '11px DM Sans, sans-serif';
+    ctx.fillText('🌾 Thank you for saving with us', centerX, y);
+    
+    return canvas.toDataURL('image/png');
+    
+  } catch (error) {
+    console.error('Fallback debt receipt failed:', error);
+    return null;
+  }
+}
+
 window.previewProfitDistribution = function() {
   if (groupProfit <= 0) {
     toast('No profit to distribute', '#ef4444');
@@ -14553,148 +15273,299 @@ window.deleteNotifPopup = async function(id) {
   }
 };
 // ==========================================
-// SHOW TRANSACTION RECEIPT MODAL - FIXED
+// GENERATE TRANSACTION RECEIPT - LARGE FONTS
 // ==========================================
 
-function showTransactionReceiptModal(member, txType, amount, description, onConfirmSend, onConfirmNoSend, onCancel, customLoanBalance = null, onPrint = null) {
-  console.log('📋 showTransactionReceiptModal called');
-  
-  // ===== FIX: Ensure values are numbers =====
-  const safeAmount = Number(amount) || 0;
-  
-  computePots();
-  
-  // ===== FIX: Safely get balances =====
-  let loanBalance = (customLoanBalance !== null) ? Number(customLoanBalance) : (memberLoans[member?.phone] || 0);
-  let accountBalance = memberBalances[member?.phone] || 0;
-  
-  // ===== FIX: Calculate max borrow =====
-  let totalDeposits = 0;
-  transactions.forEach(tx => { 
-    if (tx.memberPhone === member?.phone && tx.type === 'deposit') totalDeposits += tx.amount; 
-  });
-  const maxBorrow = Math.floor(totalDeposits * (loanSettings.disciplineMultiplier || 1.5));
+async function generateTransactionReceipt(member, txType, amount, description, loanBalance, accountBalance, maxBorrow) {
+  try {
+    const safeAmount = Number(amount) || 0;
+    const safeAccountBalance = Number(accountBalance) || 0;
+    const safeMaxBorrow = Number(maxBorrow) || 0;
+    
+    const date = new Date();
+    const receiptId = `HTF-${date.toISOString().slice(0,10).replace(/-/g,'')}-${member?.id?.slice(-4) || '0000'}`;
+    const dateLabel = date.toLocaleDateString('en-UG', { year:'numeric', month:'short', day:'numeric' });
+    const timeLabel = date.toLocaleTimeString('en-UG', { hour:'2-digit', minute:'2-digit' });
+    const txTypeUpper = (txType || 'transaction').toUpperCase();
 
-  console.log('📊 Safe values:', { loanBalance, accountBalance, maxBorrow, totalDeposits });
+    const appLoans = loans.filter(l => 
+      l.memberPhone === member?.phone && 
+      l.status === 'approved' && 
+      !l.repaid && 
+      l.loanQuestions && 
+      l.loanQuestions.length > 0
+    );
+    const appBalance = appLoans.reduce((sum, l) => sum + (l.totalRepay - (l.repaidAmount || 0)), 0);
+    const totalLoanBalance = memberLoans[member?.phone] || 0;
+    const remainingBalance = totalLoanBalance - appBalance;
+    const debtBalance = memberDebts[member?.phone] || 0;
 
-  generateTransactionReceipt(member, txType, safeAmount, description, loanBalance, accountBalance, maxBorrow).then(imageData => {
-    const modal = document.createElement('div');
-    modal.className = 'ov on';
-    modal.style.zIndex = '20020';
-    modal.innerHTML = `
-      <div class="bs" style="max-width: 600px;">
-        <div class="bs-title">📄 Transaction Receipt Preview</div>
+    const receiptHtml = `
+      <div style="
+        max-width: 480px;
+        margin: 0 auto;
+        background: #ffffff;
+        border-radius: 0px;
+        padding: 30px 26px;
+        font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+        border: 2px solid #000000;
+      ">
+        <!-- Header -->
         <div style="text-align: center; margin-bottom: 16px;">
-          ${imageData ? `<img src="${imageData}" style="max-width: 100%; border-radius: 12px; border: 1px solid #ccc;">` : '<div class="hint-box">⚠️ Receipt image not available</div>'}
+          <div style="font-size: 2.8rem; margin-bottom: 4px;">🌾</div>
+          <div style="font-weight: 800; font-size: 1.5rem; color: #000000; letter-spacing: -0.3px;">Harvest Trust</div>
+          <div style="font-size: 0.75rem; color: #000000; letter-spacing: 2px;">Finance</div>
+          <div style="font-size: 0.65rem; color: #000000; letter-spacing: 1px; margin-top: 6px; border-top: 2px solid #000000; padding-top: 8px; display: inline-block;">Transaction receipt</div>
         </div>
-        <div style="display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;">
-          <button class="btn btn-gold" id="receipt-confirm-send-pc">💻 Confirm & Copy Image (PC)</button>
-          <button class="btn btn-teal" id="receipt-confirm-send-phone">📱 Confirm & Send Image (Phone)</button>
-          <button class="btn btn-green" id="receipt-confirm-nosend">✅ Confirm & Don't Send</button>
-          <button class="btn btn-purple" id="receipt-print">🖨️ Print</button>
-          <button class="btn btn-red" id="receipt-cancel">🗑️ Don't Save</button>
+
+        <div style="border-top: 2px solid #000000; margin: 0 0 12px 0;"></div>
+
+        <!-- Meta -->
+        <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: #000000; margin-bottom: 8px; font-weight: 600;">
+          <span style="font-family: monospace;">#${receiptId.slice(-8)}</span>
+          <span>${dateLabel} • ${timeLabel}</span>
+        </div>
+
+        <!-- Member -->
+        <div style="display: flex; justify-content: space-between; font-size: 1.05rem; margin-bottom: 12px; padding: 8px 0; border-bottom: 2px solid #000000;">
+          <span style="font-weight: 700; color: #000000;">${escapeHtml(member?.name || 'Unknown')}</span>
+          <span style="color: #000000; font-family: monospace; font-size: 0.95rem;">${member?.phone || 'N/A'}</span>
+        </div>
+
+        <!-- Transaction -->
+        <div style="text-align: center; margin-bottom: 16px; padding: 8px 0;">
+          <div style="font-size: 0.8rem; color: #000000; text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600;">${txTypeUpper}</div>
+          <div style="font-size: 3rem; font-weight: 800; color: ${txType === 'deposit' ? '#000000' : '#ff0000'}; letter-spacing: -0.5px; margin: 4px 0;">
+            UGX ${safeAmount.toLocaleString()}
+          </div>
+          <div style="font-size: 0.75rem; color: #000000; margin-top: 2px;">${escapeHtml(description || txType || '')}</div>
+        </div>
+
+        <div style="border-top: 2px solid #000000; margin: 0 0 12px 0;"></div>
+
+        <!-- Balances -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; font-size: 0.9rem;">
+          <div style="color: #000000; font-weight: 600;">⭐ Application loan</div>
+          <div style="text-align: right; font-weight: 600; color: #000000;">UGX ${appBalance.toLocaleString()}</div>
+          
+          <div style="color: #000000; font-weight: 600;">📋 Remaining balance</div>
+          <div style="text-align: right; font-weight: 600; color: #000000;">UGX ${remainingBalance.toLocaleString()}</div>
+          
+          <div style="color: #000000; font-weight: 600;">🧾 Debt balance</div>
+          <div style="text-align: right; font-weight: 600; color: ${debtBalance > 0 ? '#ff0000' : '#000000'};">UGX ${debtBalance.toLocaleString()}</div>
+          
+          <div style="color: #000000; font-weight: 600; border-top: 2px solid #000000; padding-top: 8px;">💰 Available</div>
+          <div style="text-align: right; font-weight: 700; color: #000000; border-top: 2px solid #000000; padding-top: 8px; font-size: 1rem;">UGX ${safeAccountBalance.toLocaleString()}</div>
+        </div>
+
+        <!-- Loan Limit -->
+        <div style="display: flex; justify-content: space-between; font-size: 0.9rem; margin-top: 12px; padding: 10px 14px; background: #f0f0f0; border: 2px solid #000000;">
+          <span style="color: #000000; font-weight: 600;">💳 Loan limit</span>
+          <span style="font-weight: 700; color: #000000; font-size: 1rem;">UGX ${safeMaxBorrow.toLocaleString()}</span>
+        </div>
+
+        <!-- Footer -->
+        <div style="border-top: 2px solid #000000; margin: 14px 0 6px 0;"></div>
+        <div style="text-align: center; font-size: 0.65rem; color: #000000; line-height: 1.8; font-weight: 600;">
+          Daily → ⭐ Loans → 📋 Balance → 🧾 Debts
+          <br>🌾 Thank you for saving with us
         </div>
       </div>
     `;
-    document.body.appendChild(modal);
 
-    const confirmSendPc = modal.querySelector('#receipt-confirm-send-pc');
-    const confirmSendPhone = modal.querySelector('#receipt-confirm-send-phone');
-    const confirmNoSendBtn = modal.querySelector('#receipt-confirm-nosend');
-    const printBtn = modal.querySelector('#receipt-print');
-    const cancelBtn = modal.querySelector('#receipt-cancel');
+    const tempDiv = document.createElement('div');
+    tempDiv.style.position = 'absolute';
+    tempDiv.style.top = '-9999px';
+    tempDiv.style.left = '-9999px';
+    tempDiv.innerHTML = receiptHtml;
+    document.body.appendChild(tempDiv);
 
-    const closeModal = () => {
-      modal.classList.remove('on');
-      setTimeout(() => modal.remove(), 300);
-    };
+    await new Promise(resolve => setTimeout(resolve, 150));
 
-    async function copyImageToClipboard(blob, fileName) {
-      try {
-        await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-        toast('📋 Receipt image copied to clipboard! Paste (Ctrl+V) into WhatsApp Web.', '#06b6d4');
-      } catch (err) {
-        console.error(err);
-        toast('Failed to copy image. Try downloading instead.', '#ef4444');
-      }
+    let canvas = null;
+    try {
+      canvas = await html2canvas(tempDiv.firstChild, {
+        scale: 2.5,
+        backgroundColor: '#ffffff',
+        logging: false,
+        useCORS: true,
+        allowTaint: true
+      });
+    } catch (e) {
+      console.warn('html2canvas failed:', e);
     }
 
-    async function shareOrDownloadImage(blob, fileName) {
-      if (navigator.share) {
-        try {
-          const file = new File([blob], fileName, { type: 'image/png' });
-          await navigator.share({
-            title: 'Transaction Receipt',
-            text: `${txType.toUpperCase()} of UGX ${safeAmount.toLocaleString()} for ${member?.name || 'Member'}`,
-            files: [file]
-          });
-          toast('Image shared!', '#10b981');
-          return;
-        } catch (err) {
-          if (err.name !== 'AbortError') {
-            console.warn('Share failed, falling back to download', err);
-          } else {
-            return;
-          }
-        }
-      }
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast('📸 Image downloaded. Open WhatsApp and attach it manually.', '#f59e0b');
+    document.body.removeChild(tempDiv);
+
+    if (canvas) {
+      return canvas.toDataURL('image/png');
     }
 
-    confirmSendPc.onclick = async () => {
-      closeModal();
-      if (imageData) {
-        const blob = await (await fetch(imageData)).blob();
-        await copyImageToClipboard(blob, `receipt_${member?.id || 'unknown'}.png`);
-      }
-      if (onConfirmSend) onConfirmSend();
-    };
+    return generateFallbackReceipt(member, txType, safeAmount, description, appBalance, remainingBalance, debtBalance, safeAccountBalance, safeMaxBorrow);
 
-    confirmSendPhone.onclick = async () => {
-      closeModal();
-      if (imageData) {
-        const blob = await (await fetch(imageData)).blob();
-        await shareOrDownloadImage(blob, `receipt_${member?.id || 'unknown'}.png`);
-      }
-      if (onConfirmSend) onConfirmSend();
-    };
+  } catch (error) {
+    console.error('Receipt generation failed:', error);
+    return null;
+  }
+}
 
-    confirmNoSendBtn.onclick = () => {
-      closeModal();
-      if (onConfirmNoSend) onConfirmNoSend();
-      toast('Transaction saved (no receipt sent).', '#10b981');
-    };
+// ==========================================
+// FALLBACK RECEIPT - LARGER FONTS
+// ==========================================
 
-    printBtn.onclick = () => {
-      closeModal();
-      if (onPrint) onPrint();
-      else if (imageData) {
-        const printWindow = window.open('', '_blank');
-        printWindow.document.write(`
-          <!DOCTYPE html>
-          <html>
-          <head><title>Transaction Receipt</title>
-          <style>body{margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff;}img{max-width:100%;height:auto;}</style>
-          </head><body><img src="${imageData}"></body></html>
-        `);
-        printWindow.document.close();
-        printWindow.focus();
-        printWindow.print();
-      } else toast('No image to print', '#ef4444');
-    };
-
-    cancelBtn.onclick = () => {
-      closeModal();
-      if (onCancel) onCancel();
-      toast('Transaction cancelled.', '#f59e0b');
-    };
-  });
+function generateFallbackReceipt(member, txType, amount, description, appBalance, remainingBalance, debtBalance, accountBalance, maxBorrow) {
+  try {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 480;
+    canvas.height = 620;
+    
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(12, 12, canvas.width - 24, canvas.height - 24);
+    
+    let y = 45;
+    const centerX = canvas.width / 2;
+    
+    // Logo
+    ctx.textAlign = 'center';
+    ctx.font = '40px DM Sans, sans-serif';
+    ctx.fillStyle = '#000000';
+    ctx.fillText('🌾', centerX, y);
+    y += 42;
+    ctx.font = 'bold 24px DM Sans, sans-serif';
+    ctx.fillText('Harvest Trust', centerX, y);
+    y += 22;
+    ctx.font = '14px DM Sans, sans-serif';
+    ctx.fillText('Finance', centerX, y);
+    
+    y += 18;
+    ctx.font = '11px DM Sans, sans-serif';
+    ctx.fillText('Transaction receipt', centerX, y);
+    
+    y += 20;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(30, y);
+    ctx.lineTo(canvas.width - 30, y);
+    ctx.stroke();
+    
+    y += 22;
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillStyle = '#000000';
+    ctx.fillText(`#${Date.now().toString().slice(-8)}`, 35, y);
+    ctx.textAlign = 'right';
+    ctx.font = '14px DM Sans, sans-serif';
+    ctx.fillText(new Date().toLocaleDateString() + ' • ' + new Date().toLocaleTimeString(), canvas.width - 35, y);
+    
+    y += 24;
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 18px DM Sans, sans-serif';
+    ctx.fillStyle = '#000000';
+    ctx.fillText(member?.name || 'Unknown', 35, y);
+    ctx.textAlign = 'right';
+    ctx.font = '16px monospace';
+    ctx.fillText(member?.phone || 'N/A', canvas.width - 35, y);
+    
+    y += 28;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(30, y);
+    ctx.lineTo(canvas.width - 30, y);
+    ctx.stroke();
+    
+    y += 22;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#000000';
+    ctx.font = '12px DM Sans, sans-serif';
+    ctx.fillText((txType || 'transaction').toUpperCase(), centerX, y);
+    
+    y += 38;
+    ctx.fillStyle = txType === 'deposit' ? '#000000' : '#ff0000';
+    ctx.font = 'bold 40px DM Sans, sans-serif';
+    ctx.fillText(`UGX ${amount.toLocaleString()}`, centerX, y);
+    
+    y += 26;
+    ctx.fillStyle = '#000000';
+    ctx.font = '12px DM Sans, sans-serif';
+    ctx.fillText(description || '', centerX, y);
+    
+    y += 30;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(30, y);
+    ctx.lineTo(canvas.width - 30, y);
+    ctx.stroke();
+    
+    y += 22;
+    ctx.textAlign = 'left';
+    ctx.font = '15px DM Sans, sans-serif';
+    
+    const balances = [
+      ['⭐ Application loan', appBalance],
+      ['📋 Remaining balance', remainingBalance],
+      ['🧾 Debt balance', debtBalance],
+      ['💰 Available', accountBalance]
+    ];
+    
+    balances.forEach(([label, value], i) => {
+      const yPos = y + (i * 26);
+      ctx.fillStyle = '#000000';
+      ctx.textAlign = 'left';
+      ctx.font = 'bold 15px DM Sans, sans-serif';
+      ctx.fillText(label, 35, yPos);
+      ctx.textAlign = 'right';
+      ctx.font = 'bold 15px DM Sans, sans-serif';
+      ctx.fillStyle = (label.includes('Debt') && value > 0) ? '#ff0000' : '#000000';
+      ctx.fillText(`UGX ${value.toLocaleString()}`, canvas.width - 35, yPos);
+    });
+    
+    y += (balances.length * 26) + 16;
+    ctx.fillStyle = '#f0f0f0';
+    ctx.fillRect(30, y - 6, canvas.width - 60, 36);
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(30, y - 6, canvas.width - 60, 36);
+    
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 16px DM Sans, sans-serif';
+    ctx.fillText('💳 Loan limit', 45, y + 19);
+    ctx.textAlign = 'right';
+    ctx.font = 'bold 17px DM Sans, sans-serif';
+    ctx.fillText(`UGX ${maxBorrow.toLocaleString()}`, canvas.width - 45, y + 19);
+    
+    y += 44;
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(30, y);
+    ctx.lineTo(canvas.width - 30, y);
+    ctx.stroke();
+    
+    y += 20;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#000000';
+    ctx.font = '12px DM Sans, sans-serif';
+    ctx.fillText('Daily → ⭐ Loans → 📋 Balance → 🧾 Debts', centerX, y);
+    
+    y += 18;
+    ctx.font = '12px DM Sans, sans-serif';
+    ctx.fillText('🌾 Thank you for saving with us', centerX, y);
+    
+    return canvas.toDataURL('image/png');
+    
+  } catch (error) {
+    console.error('Fallback receipt failed:', error);
+    return null;
+  }
 }
 // ==========================================
 // ATTACH DEPOSIT PREVIEW HANDLER
@@ -14715,7 +15586,7 @@ function attachDepositPreviewHandler() {
     amountInput?.removeEventListener('input', window.updateTxPreview);
     memberSelect?.removeEventListener('change', window.updateTxPreview);
   }
-
+  
   typeSelect?.addEventListener('change', window.updateTxPreview);
   amountInput?.addEventListener('input', window.updateTxPreview);
   memberSelect?.addEventListener('change', window.updateTxPreview);
@@ -14774,7 +15645,11 @@ function showMaintenanceOverlay() {
     console.error('Maintenance overlay element not found');
     return;
   }
-  
+  // ===== ENSURE FLOATING BUTTON IS VISIBLE =====
+  const floatBtn = document.getElementById('maintenance-float-btn');
+  if (floatBtn) {
+    floatBtn.style.display = 'block';
+  }
   // Update the message
   const messageEl = document.getElementById('maintenance-overlay-message');
   if (messageEl) {
@@ -14993,25 +15868,43 @@ function updateMaintenanceStatusUI() {
 /**
  * Update maintenance UI elements
  */
+// ==========================================
+// MAINTENANCE FLOATING ICON - STAYS ON
+// ==========================================
+
+// Replace your updateMaintenanceUI() with this:
 function updateMaintenanceUI() {
   const isActive = settings.maintenanceMode === true;
   const isAdmin = currentUser?.isAdmin === true;
-  
-  // Floating exit button (admin only)
+
+  // ===== FLOATING EXIT BUTTON - ALWAYS VISIBLE WHEN MAINTENANCE IS ACTIVE =====
+  // Even if admin logs out, the button stays visible on the login screen
   const floatBtn = document.getElementById('maintenance-float-btn');
   if (floatBtn) {
-    floatBtn.style.display = (isActive && isAdmin) ? 'block' : 'none';
+    // Show if maintenance is active (regardless of admin status)
+    // This ensures it stays visible on login screen too
+    floatBtn.style.display = isActive ? 'block' : 'none';
   }
-  
-  // Admin banner
+
+  // ===== ADMIN BANNER - Only for admin =====
   const banner = document.getElementById('admin-maintenance-banner');
   if (banner) {
     banner.style.display = (isActive && isAdmin) ? 'flex' : 'none';
   }
-  
-  // Header badge
+
+  // ===== HEADER BADGE - Only for admin =====
   updateMaintenanceBadge(isActive && isAdmin);
+
+  // ===== OVERLAY - Only for non-admin users =====
+  if (isActive && !isAdmin) {
+    showMaintenanceOverlay();
+  } else {
+    hideMaintenanceOverlay();
+  }
 }
+
+// Also update the floating button to be visible on login screen
+// Add this CSS to ensure it's always on top
 
 /**
  * Update maintenance badge in header
