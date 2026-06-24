@@ -11,6 +11,406 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
+/* ========================================== */
+/* COMPLETE APP REDESIGN - MODERN & BEAUTIFUL */
+/* ========================================== */
+
+/* ── Root Variables ── */
+:root {
+  --bg: #060e1a;
+  --bg2: #0a1628;
+  --bg3: #0f1e36;
+  --card: rgba(255,255,255,0.04);
+  --card-hover: rgba(255,255,255,0.08);
+  --gold: #f59e0b;
+  --gold2: #d97706;
+  --gold3: rgba(245,158,11,0.18);
+  --teal: #06b6d4;
+  --teal2: rgba(6,182,212,0.14);
+  --green: #10b981;
+  --green2: rgba(16,185,129,0.14);
+  --red: #ef4444;
+  --red2: rgba(239,68,68,0.14);
+  --purple: #8b5cf6;
+  --purple2: rgba(139,92,246,0.14);
+  --t: #f0f6ff;
+  --t2: #b0c4de;
+  --t3: #5a7a9a;
+  --br: rgba(255,255,255,0.08);
+  --sh: 0 4px 28px rgba(0,0,0,0.45);
+  --sh2: 0 16px 48px rgba(0,0,0,0.65);
+  --radius: 16px;
+  --radius-sm: 10px;
+  --transition: 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ── Global Smooth Transitions ── */
+* {
+  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s var(--ease-spring);
+}
+
+/* ── Page Transitions ── */
+.tab {
+  transition: opacity 0.5s var(--ease-spring), transform 0.5s var(--ease-spring);
+}
+.tab.on {
+  animation: pageSlideIn 0.5s var(--ease-spring) both;
+}
+
+@keyframes pageSlideIn {
+  from { opacity: 0; transform: translateY(24px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── Card Styles ── */
+.card {
+  background: rgba(255,255,255,0.04);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 10px;
+  transition: all var(--transition);
+}
+.card:hover {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.12);
+  transform: translateY(-2px);
+  box-shadow: var(--sh);
+}
+
+/* ── Stats Tiles ── */
+.ss-tile {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: var(--radius);
+  padding: 14px 8px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  transition: all var(--transition);
+  animation: tilePop 0.5s var(--ease-spring) both;
+  cursor: default;
+}
+.ss-tile:hover {
+  background: rgba(255,255,255,0.07);
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: var(--sh);
+}
+.ss-tile:nth-child(1) { animation-delay: 0.05s; }
+.ss-tile:nth-child(2) { animation-delay: 0.10s; }
+.ss-tile:nth-child(3) { animation-delay: 0.15s; }
+
+@keyframes tilePop {
+  from { opacity: 0; transform: scale(0.92) translateY(16px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ── Transaction Items ── */
+.txc {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.03);
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255,255,255,0.05);
+  transition: all var(--transition);
+  animation: txSlideIn 0.4s var(--ease-spring) both;
+}
+.txc:hover {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.1);
+  transform: translateX(4px);
+}
+
+@keyframes txSlideIn {
+  from { opacity: 0; transform: translateX(-16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* ── Member Cards ── */
+.mc {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.03);
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255,255,255,0.05);
+  transition: all var(--transition);
+}
+.mc:hover {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.1);
+  transform: translateY(-2px);
+  box-shadow: var(--sh);
+}
+
+/* ── Nav Items ── */
+.ni {
+  transition: all var(--transition);
+  position: relative;
+}
+.ni.on {
+  color: var(--gold);
+}
+.ni.on .ico {
+  transform: scale(1.2) translateY(-2px);
+  filter: drop-shadow(0 2px 12px rgba(245,158,11,0.4));
+}
+.ni .ico {
+  transition: all var(--transition);
+}
+
+/* ── Admin Grid ── */
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 12px;
+}
+.admin-grid-item {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: var(--radius);
+  padding: 16px 8px;
+  text-align: center;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.admin-grid-item:hover {
+  background: rgba(255,255,255,0.08);
+  border-color: var(--gold);
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: var(--sh);
+}
+.admin-grid-item:active {
+  transform: scale(0.95);
+}
+
+/* ── Buttons ── */
+.btn {
+  transition: all var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+.btn:hover {
+  transform: translateY(-2px);
+}
+.btn:active {
+  transform: scale(0.95);
+}
+.btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, rgba(255,255,255,0.2) 0%, transparent 70%);
+  opacity: 0;
+  transform: scale(0.5);
+  transition: opacity 0.3s, transform 0.4s;
+  pointer-events: none;
+}
+.btn:active::after {
+  opacity: 1;
+  transform: scale(2.5);
+  transition: none;
+}
+
+/* ── Checkbox Styling ── */
+.tx-select {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255,255,255,0.2);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all var(--transition);
+  position: relative;
+  flex-shrink: 0;
+}
+.tx-select:checked {
+  background: var(--gold);
+  border-color: var(--gold);
+}
+.tx-select:checked::after {
+  content: '✓';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+.tx-select:hover {
+  border-color: var(--gold);
+}
+
+/* ── Bulk Delete Button ── */
+#bulk-delete-btn {
+  animation: popIn 0.3s var(--ease-spring) both;
+}
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* ── Authentication Card ── */
+.auth-card {
+  animation: authSlideIn 0.6s var(--ease-spring) both;
+}
+@keyframes authSlideIn {
+  from { opacity: 0; transform: translateY(30px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── Floating Exit Button ── */
+#maintenance-float-btn {
+  animation: floatPulse 2s ease-in-out infinite;
+}
+@keyframes floatPulse {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+/* ── Pulse Glow ── */
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0.2); }
+  50% { box-shadow: 0 0 20px 4px rgba(245,158,11,0.1); }
+}
+.weekly-receiver-card {
+  animation: pulseGlow 3s ease-in-out infinite;
+}
+
+/* ── Loading Shimmer ── */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.05) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
+}
+
+/* ── Progress Bar Animation ── */
+#payout-progress-fill {
+  background-size: 200% 100% !important;
+  animation: progressShimmer 2s linear infinite;
+}
+@keyframes progressShimmer {
+  0% { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+
+/* ── Responsive ── */
+@media (max-width: 480px) {
+  .admin-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .admin-grid-item {
+    padding: 12px 4px;
+  }
+  .admin-grid-item div:first-child {
+    font-size: 1.4rem;
+  }
+  .admin-grid-item div:last-child {
+    font-size: 0.6rem;
+  }
+  .ss-tile {
+    padding: 10px 4px;
+  }
+  .ss-val {
+    font-size: 0.7rem;
+  }
+  .txc {
+    padding: 8px 10px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .txc-info {
+    flex: 1;
+    min-width: 80px;
+  }
+  #bulk-delete-btn {
+    font-size: 0.6rem !important;
+    padding: 4px 10px !important;
+  }
+}
+
+/* ── Scrollbar Styling ── */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(255,255,255,0.02);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--gold3);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--gold);
+}
+
+/* ── Toast Animation ── */
+.toast {
+  animation: toastSlideIn 0.4s var(--ease-spring) both;
+}
+@keyframes toastSlideIn {
+  from { opacity: 0; transform: translateX(80px) scale(0.9); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+.toast.out {
+  animation: toastSlideOut 0.3s ease forwards;
+}
+@keyframes toastSlideOut {
+  to { opacity: 0; transform: translateX(80px) scale(0.9); }
+}
+
+/* ── Modal Slide Up ── */
+.ov .bs {
+  animation: bsSlideUp 0.4s var(--ease-spring) both;
+}
+@keyframes bsSlideUp {
+  from { opacity: 0; transform: translateY(40px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── Gradient Text ── */
+.gradient-text {
+  background: linear-gradient(135deg, var(--gold), var(--teal), var(--purple));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ── Section Header Glow ── */
+.sec-h {
+  position: relative;
+  display: inline-block;
+}
+.sec-h::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, var(--gold), var(--teal));
+  transform: scaleX(0);
+  transform-origin: left;
+  animation: underlineGrow 0.5s var(--ease-spring) forwards;
+}
+@keyframes underlineGrow {
+  to { transform: scaleX(1); }
+}
+
 :root{
   --bg:#060e1a;--bg2:#0a1628;--bg3:#0f1e36;--bg4:#060b14;
   --surf:rgba(255,255,255,0.05);--surf2:rgba(255,255,255,0.03);
@@ -269,6 +669,211 @@ body {
   50% { opacity: 0.6; }
 }
 #content{flex:1;overflow:hidden;position:relative}
+/* ========================================== */
+/* MODERN APP REDESIGN - COMPLETE             */
+/* ========================================== */
+
+/* ── Smooth Page Transitions ── */
+.tab {
+  transition: opacity 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+              transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.tab.on {
+  animation: fadeSlideIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(20px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── Card Hover Effects ── */
+.card, .ss-tile, .txc, .mc, .rot-drag-item, .admin-grid-item {
+  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.card:hover, .ss-tile:hover, .txc:hover, .mc:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+}
+.admin-grid-item:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+}
+
+/* ── Glassmorphism Effects ── */
+.card, .auth-card, .pending-card, .lock-wrap {
+  backdrop-filter: blur(16px);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+/* ── Gradient Accents ── */
+.gradient-text {
+  background: linear-gradient(135deg, var(--gold), var(--teal), var(--purple));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.gradient-border {
+  position: relative;
+}
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: linear-gradient(135deg, var(--gold), var(--teal), var(--purple));
+  z-index: -1;
+  opacity: 0.3;
+}
+
+/* ── Micro-interactions ── */
+.btn {
+  position: relative;
+  overflow: hidden;
+}
+.btn::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, rgba(255,255,255,0.2) 0%, transparent 70%);
+  opacity: 0;
+  transform: scale(0.5);
+  transition: opacity 0.3s, transform 0.4s;
+}
+.btn:active::after {
+  opacity: 1;
+  transform: scale(2.5);
+  transition: none;
+}
+
+/* ── Pulse Animation for Important Elements ── */
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0.2); }
+  50% { box-shadow: 0 0 20px 4px rgba(245,158,11,0.1); }
+}
+.weekly-receiver-card {
+  animation: pulseGlow 3s ease-in-out infinite;
+}
+
+/* ── Transaction Row Slide-in ── */
+.txc {
+  animation: txSlideIn 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes txSlideIn {
+  from { opacity: 0; transform: translateX(-16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.txc:nth-child(1) { animation-delay: 0.00s; }
+.txc:nth-child(2) { animation-delay: 0.04s; }
+.txc:nth-child(3) { animation-delay: 0.08s; }
+.txc:nth-child(4) { animation-delay: 0.12s; }
+.txc:nth-child(5) { animation-delay: 0.16s; }
+
+/* ── Stats Tile Entrance ── */
+.ss-tile {
+  animation: tilePop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes tilePop {
+  from { opacity: 0; transform: scale(0.9) translateY(12px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.ss-tile:nth-child(1) { animation-delay: 0.05s; }
+.ss-tile:nth-child(2) { animation-delay: 0.10s; }
+.ss-tile:nth-child(3) { animation-delay: 0.15s; }
+
+/* ── Nav Indicator Glow ── */
+.ni.on .ico {
+  filter: drop-shadow(0 0 12px rgba(245,158,11,0.4));
+}
+
+/* ── Admin Grid Items ── */
+.admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  padding: 8px;
+}
+.admin-grid-item {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 16px 8px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.admin-grid-item:hover {
+  background: rgba(245,158,11,0.08);
+  border-color: var(--gold);
+}
+
+/* ── Checkbox Styling ── */
+.tx-select {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255,255,255,0.2);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+.tx-select:checked {
+  background: var(--gold);
+  border-color: var(--gold);
+}
+.tx-select:checked::after {
+  content: '✓';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* ── Bulk Delete Button Animation ── */
+#bulk-delete-btn {
+  animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* ── Floating Action Glow ── */
+#maintenance-float-btn {
+  animation: floatPulse 2s ease-in-out infinite;
+}
+@keyframes floatPulse {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+/* ── Responsive Adjustments ── */
+@media (max-width: 480px) {
+  .admin-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .admin-grid-item {
+    padding: 12px 4px;
+  }
+  .admin-grid-item div:first-child {
+    font-size: 1.5rem;
+  }
+  .admin-grid-item div:last-child {
+    font-size: 0.65rem;
+  }
+  #bulk-delete-btn {
+    font-size: 0.6rem !important;
+    padding: 4px 10px !important;
+  }
+}
+/*////////this ends here////////////////////*/
 .tab{position:absolute;inset:0;overflow-y:auto;padding:16px 14px calc(var(--nav) + 56px);opacity:0;pointer-events:none;transform:translateY(22px) scale(0.99);transition:opacity 0.35s var(--ease-smooth),transform 0.35s var(--ease-spring)}.tab.on{opacity:1;pointer-events:all;transform:translateY(0) scale(1)}
 #nav{position:absolute;bottom:0;left:0;right:0;height:var(--nav);display:flex;background:rgba(6,14,26,0.92);backdrop-filter:blur(32px);border-top:1px solid rgba(255,255,255,0.06);padding-bottom:env(safe-area-inset-bottom);z-index:20;box-shadow:0 -4px 24px rgba(0,0,0,0.5)}
 .ni{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:none;color:var(--t3);font-size:0.48rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;cursor:pointer;border:none;transition:all 0.25s var(--ease-spring);padding-top:6px;position:relative;overflow:hidden}.ni:active{transform:scale(0.9)}.ni.on{color:var(--gold)}.ni .ico{font-size:1.2rem;transition:transform 0.3s var(--ease-spring),filter 0.3s}.ni.on .ico{transform:scale(1.22) translateY(-2px);filter:drop-shadow(0 2px 6px rgba(245,158,11,0.5))}.ni-bar{position:absolute;bottom:4px;left:50%;transform:translateX(-50%) scaleX(0);width:24px;height:3px;border-radius:99px;background:linear-gradient(90deg,var(--gold),var(--teal));transition:transform 0.3s var(--ease-spring)}.ni.on .ni-bar{transform:translateX(-50%) scaleX(1)}
@@ -2172,9 +2777,11 @@ setTimeout(function(){
       <!-- Payout rotation section removed -->
     </div>
 
+<!-- ========================================== -->
+<!-- STATISTICS TAB - WITH BULK LEDGER          -->
+<!-- ========================================== -->
 
-
-    <div id="t-statistics" class="tab">
+<div id="t-statistics" class="tab">
   <div class="sec-h">📊 Dashboard</div>
 
   <!-- Sub‑tabs navigation -->
@@ -2191,7 +2798,8 @@ setTimeout(function(){
       <div id="compact-leaderboard" class="ranking-leaderboard" style="max-height: 460px; overflow-y: auto;"></div>
     </div>
   </div>
-  <!-- Rewards & Bonuses -->
+
+  <!-- Rewards -->
   <div id="stats-rewards" class="stats-tab-content" style="display: none;">
     <div class="card">
       <div class="sec-h">🎁 Rewards & Extra Pool</div>
@@ -2205,28 +2813,40 @@ setTimeout(function(){
     </div>
   </div>
 
-  <!-- Ledger (moved from top-level nav) -->
-  <div id="stats-ledger" class="stats-tab-content" style="display: none;">
-    <div class="sec-h">📒 Full Ledger</div>
-    <div class="ledger-search">
-      <div class="row" style="display:flex;gap:8px;margin-bottom:12px;">
-        <input type="text" id="ledger-search" class="inp" style="flex:1;" placeholder="Search by name, description or amount">
-        <button class="btn btn-sm btn-gold" onclick="applyLedgerFilters()">Search</button>
-        <button class="btn btn-sm btn-sec" onclick="clearLedgerFilters()">Clear</button>
-      </div>
+<!-- ========================================== -->
+<!-- LEDGER TAB - PER-TRANSACTION CHECKBOXES    -->
+<!-- ========================================== -->
+
+<div id="stats-ledger" class="stats-tab-content" style="display: none;">
+  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
+    <div class="sec-h" style="margin: 0;">📒 Full Ledger</div>
+    <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+      <span id="selected-count" style="font-size: 0.65rem; color: var(--t3); display: none; background: rgba(255,255,255,0.05); padding: 2px 10px; border-radius: 20px;">0 selected</span>
+      <button class="btn btn-sm btn-red" id="bulk-delete-btn" onclick="confirmBulkDelete()" style="display: none; padding: 4px 12px; font-size: 0.65rem;">🗑️ Delete Selected</button>
     </div>
-    <div class="lfilter">
-      <button class="lf-btn active" onclick="setLF('all',this)">All</button>
-      <button class="lf-btn" onclick="setLF('deposit',this)">Deposits</button>
-      <button class="lf-btn" onclick="setLF('withdraw',this)">Withdrawals</button>
-      <button class="lf-btn" onclick="setLF('fine',this)">Fines</button>
-      <button class="lf-btn" onclick="setLF('debt',this)">Debts</button>
-      <button class="lf-btn" onclick="setLF('welfare',this)">Welfare</button>
-      <button class="lf-btn" onclick="setLF('expense',this)">Expenses</button>
-      <button class="lf-btn" onclick="setLF('payout',this)">Payouts</button>
-    </div>
-    <div id="ledger-list"></div>
   </div>
+
+  <div class="ledger-search">
+    <div class="row" style="display:flex;gap:6px;margin-bottom:10px;">
+      <input type="text" id="ledger-search" class="inp" style="flex:1; padding: 8px 12px; font-size: 0.75rem;" placeholder="Search by name, description or amount">
+      <button class="btn btn-sm btn-gold" onclick="applyLedgerFilters()" style="padding: 6px 12px; font-size: 0.65rem;">🔍</button>
+      <button class="btn btn-sm btn-sec" onclick="clearLedgerFilters()" style="padding: 6px 12px; font-size: 0.65rem;">✕</button>
+    </div>
+  </div>
+
+  <div class="lfilter" style="display: flex; gap: 4px; overflow-x: auto; padding-bottom: 6px; margin-bottom: 10px;">
+    <button class="lf-btn active" onclick="setLF('all',this)" style="padding: 4px 10px; font-size: 0.6rem; white-space: nowrap;">All</button>
+    <button class="lf-btn" onclick="setLF('deposit',this)" style="padding: 4px 10px; font-size: 0.6rem; white-space: nowrap;">Deposits</button>
+    <button class="lf-btn" onclick="setLF('withdraw',this)" style="padding: 4px 10px; font-size: 0.6rem; white-space: nowrap;">Withdrawals</button>
+    <button class="lf-btn" onclick="setLF('fine',this)" style="padding: 4px 10px; font-size: 0.6rem; white-space: nowrap;">Fines</button>
+    <button class="lf-btn" onclick="setLF('debt',this)" style="padding: 4px 10px; font-size: 0.6rem; white-space: nowrap;">Debts</button>
+    <button class="lf-btn" onclick="setLF('welfare',this)" style="padding: 4px 10px; font-size: 0.6rem; white-space: nowrap;">Welfare</button>
+    <button class="lf-btn" onclick="setLF('expense',this)" style="padding: 4px 10px; font-size: 0.6rem; white-space: nowrap;">Expenses</button>
+    <button class="lf-btn" onclick="setLF('payout',this)" style="padding: 4px 10px; font-size: 0.6rem; white-space: nowrap;">Payouts</button>
+  </div>
+
+  <div id="ledger-list" style="margin-top: 8px;"></div>
+</div>
 
 </div>
     <div id="t-account" class="tab">
@@ -6017,7 +6637,11 @@ function renderTxRow(tx,i){
   const editBtn=adminUnlocked&&tx.type!=='payout'?'<button class="btn btn-sm btn-sec" style="margin-left:8px;padding:5px 8px;" onclick="openEditTx(\''+tx.id+'\')">✏️</button>':'';
   return '<div class="txc" style="animation-delay:'+(i*0.04)+'s"><div class="txc-icon">'+ico+'</div><div class="txc-info"><div class="txc-name">'+m.name+'</div><div class="txc-desc">'+(tx.description||tx.type)+'</div></div><div style="display:flex;align-items:center"><div><div class="txc-amount '+(isPos?'pos':'neg')+'">UGX '+(+tx.amount).toLocaleString()+'</div><div class="txc-date">'+d+'</div></div>'+editBtn+'</div></div>';
 }
-// Global variables
+// ==========================================
+// LEDGER GLOBAL VARIABLES
+// ==========================================
+
+let selectedTransactions = new Set();  // ← THIS MUST BE DEFINED
 let ledgerFilter = 'all';
 let ledgerSearchText = "";
 
@@ -6041,16 +6665,17 @@ function cleanRotationOrder() {
   }
 }
 
-// Replace your existing loadLedger function
+// ==========================================
+// LOAD LEDGER - WITH CHECKBOXES FOR ADMIN
+// ==========================================
+
 function loadLedger(typeFilter) {
   let filtered = transactions.slice();
   
-  // Apply type filter
   if (typeFilter !== 'all') {
     filtered = filtered.filter(tx => tx.type === typeFilter);
   }
   
-  // Apply search text filter
   if (ledgerSearchText) {
     filtered = filtered.filter(tx => {
       const member = members.find(m => m.phone === tx.memberPhone) || { name: tx.memberName || '' };
@@ -6063,27 +6688,165 @@ function loadLedger(typeFilter) {
     });
   }
   
-  // Sort by date descending (most recent first)
   filtered.sort((a, b) => (b.date || 0) - (a.date || 0));
   
-  const container = document.getElementById("ledger-list");
+  const container = document.getElementById('ledger-list');
   if (!filtered.length) {
-    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📒</div><div class="empty-state-text">No transactions match.</div></div>';
+    container.innerHTML = `
+      <div style="padding: 40px 20px; text-align: center; opacity: 0.5;">
+        <div style="font-size: 3rem;">📒</div>
+        <div style="color: var(--t3); font-size: 0.8rem; margin-top: 8px;">No transactions match your filters.</div>
+      </div>
+    `;
     return;
   }
   
-  // Show first 100 transactions
-  const toRender = filtered.slice(0, 100);
-  container.innerHTML = toRender.map((tx, i) => renderTxRow(tx, i)).join('');
+  // ===== CHECK IF ADMIN IS UNLOCKED =====
+  const isAdmin = currentUser?.isAdmin === true && adminUnlocked === true;
+  
+  container.innerHTML = `
+    <div style="display: flex; flex-direction: column; gap: 4px;">
+      ${filtered.map((tx, i) => {
+        const member = members.find(m => m.phone === tx.memberPhone) || { name: tx.memberName || '?' };
+        const ico = TX_ICONS[tx.type] || '💫';
+        const d = tx.date ? new Date(tx.date).toLocaleDateString() : '';
+        const isPos = (tx.type === 'deposit' || tx.type === 'payout' || tx.type === 'profit_dist' || tx.type === 'loan_repayment');
+        const isSelected = selectedTransactions.has(tx.id);
+        const editBtn = isAdmin && tx.type !== 'payout' ? 
+          `<button class="btn btn-sm btn-sec" style="padding: 2px 8px; font-size: 0.55rem;" onclick="openEditTx('${tx.id}')">✏️</button>` : '';
+        
+        // ===== SHOW CHECKBOX ONLY FOR ADMIN =====
+        const checkboxHtml = isAdmin ? `
+          <div style="flex-shrink: 0;">
+            <input type="checkbox" class="tx-select" data-tx-id="${tx.id}" ${isSelected ? 'checked' : ''} onchange="toggleTransaction('${tx.id}')" style="width: 16px; height: 16px; accent-color: var(--gold); cursor: pointer;">
+          </div>
+        ` : '';
+        
+        return `
+          <div class="txc" style="animation-delay:${(i * 0.03)}s; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: rgba(255,255,255,0.03); border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+            ${checkboxHtml}
+            <div style="width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; background: rgba(255,255,255,0.05); flex-shrink: 0;">${ico}</div>
+            <div style="flex: 1; min-width: 0;">
+              <div style="font-weight: 600; font-size: 0.75rem; color: var(--t); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${member.name}</div>
+              <div style="font-size: 0.6rem; color: var(--t3);">${tx.description || tx.type}</div>
+            </div>
+            <div style="display:flex; align-items:center; gap: 6px;">
+              <div style="text-align: right;">
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; font-weight: 700; color: ${isPos ? 'var(--green)' : 'var(--red)'};">UGX ${(+tx.amount).toLocaleString()}</div>
+                <div style="font-size: 0.5rem; color: var(--t3);">${d}</div>
+              </div>
+              ${editBtn}
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+  
+  // ===== SHOW BULK DELETE UI ONLY FOR ADMIN =====
+  if (isAdmin) {
+    updateBulkDeleteUI();
+  } else {
+    document.getElementById('selected-count').style.display = 'none';
+    document.getElementById('bulk-delete-btn').style.display = 'none';
+  }
 }
 
-// Update setLF to set ledgerFilter and reload
-window.setLF = function(f, btn) {
-  document.querySelectorAll('.lf-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  ledgerFilter = f;
-  loadLedger(ledgerFilter);
-};
+// ==========================================
+// PER-TRANSACTION TOGGLE
+// ==========================================
+
+function toggleTransaction(txId) {
+  // Toggle this specific transaction
+  if (selectedTransactions.has(txId)) {
+    selectedTransactions.delete(txId);
+  } else {
+    selectedTransactions.add(txId);
+  }
+  updateBulkDeleteUI();
+  
+  // Update checkbox state
+  const checkbox = document.querySelector(`.tx-select[data-tx-id="${txId}"]`);
+  if (checkbox) {
+    checkbox.checked = selectedTransactions.has(txId);
+  }
+}
+
+// ==========================================
+// UPDATE UI - Shows selected count
+// ==========================================
+
+function updateBulkDeleteUI() {
+  const isAdmin = currentUser?.isAdmin === true && adminUnlocked === true;
+  if (!isAdmin) {
+    document.getElementById('selected-count').style.display = 'none';
+    document.getElementById('bulk-delete-btn').style.display = 'none';
+    return;
+  }
+  
+  const count = selectedTransactions.size;
+  const countEl = document.getElementById('selected-count');
+  const deleteBtn = document.getElementById('bulk-delete-btn');
+  
+  if (count > 0) {
+    countEl.style.display = 'inline';
+    countEl.textContent = `${count} selected`;
+    deleteBtn.style.display = 'inline-flex';
+  } else {
+    countEl.style.display = 'none';
+    deleteBtn.style.display = 'none';
+  }
+}
+// ==========================================
+// CONFIRM AND DELETE SELECTED
+// ==========================================
+
+function confirmBulkDelete() {
+  const count = selectedTransactions.size;
+  if (count === 0) {
+    toast('No transactions selected', '#f59e0b');
+    return;
+  }
+  
+  // Show preview of selected transactions
+  const txIds = Array.from(selectedTransactions);
+  const preview = txIds.slice(0, 10).map(id => {
+    const tx = transactions.find(t => t.id === id);
+    const member = members.find(m => m.phone === tx?.memberPhone) || { name: 'Unknown' };
+    return `• ${member.name} - ${tx?.type || 'tx'} (UGX ${tx?.amount?.toLocaleString() || 0})`;
+  }).join('\n');
+  
+  const more = txIds.length > 10 ? `\n... and ${txIds.length - 10} more` : '';
+  
+  if (confirm(`⚠️ Delete ${count} transaction(s)?\n\n${preview}${more}\n\nThis cannot be undone.`)) {
+    requirePasswordConfirmation(async () => {
+      let success = 0;
+      let failed = 0;
+      
+      for (const txId of txIds) {
+        try {
+          await db.ref('transactions/' + txId).remove();
+          success++;
+        } catch (err) {
+          console.error('Failed to delete:', txId, err);
+          failed++;
+        }
+      }
+      
+      selectedTransactions.clear();
+      updateBulkDeleteUI();
+      
+      toast(`🗑️ Deleted ${success} transaction(s)${failed > 0 ? `, ${failed} failed` : ''}`, success > 0 ? '#10b981' : '#ef4444');
+      
+      // Refresh data
+      const txSnap = await db.ref('transactions').once('value');
+      transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
+      computePots();
+      refreshUI();
+      loadLedger(ledgerFilter || 'all');
+    }, 'Delete Multiple Transactions');
+  }
+}
 function updateHomeRecent() {
   const el = document.getElementById('home-recent');
   if (!el) return; // exit if element doesn't exist
