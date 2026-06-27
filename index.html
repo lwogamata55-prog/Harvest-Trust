@@ -12233,62 +12233,107 @@ function generateSimpleReceiptFallback(member, txType, amount, description, acco
   }
 }
 
-// ==========================================
-// SHOW DEBT RECEIPT MODAL
-// ==========================================
 function showDebtReceiptModal(member, principal, interestRate, interest, totalRepay, reason, dueDate, onConfirmSend, onConfirmNoSend, onCancel) {
-  // Build the receipt container HTML
-  const receiptHtml = `
-    <div id="receipt-container" style="background:#fff;padding:20px 24px 12px;font-family:-apple-system,BlinkMacSystemFont,'Inter','DM Sans',sans-serif;text-align:center;overflow-y:auto;flex:1;min-height:0;">
-      <div style="width:52px;height:52px;border-radius:50%;background:#ef4444;display:flex;align-items:center;justify-content:center;margin:0 auto 12px auto;">
-        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-      </div>
-      <div style="font-size:1rem;font-weight:700;color:#111827;margin-bottom:3px;">Debt Assigned!</div>
-      <div style="font-size:0.75rem;color:#9ca3af;margin-bottom:14px;">Debt assignment was successful.</div>
-      <div style="border-top:1px solid #f3f4f6;"></div>
-      <div style="text-align:left;margin-top:4px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f3f4f6;">
-          <span style="font-size:0.78rem;color:#9ca3af;">Member</span>
-          <span style="font-size:0.82rem;font-weight:600;color:#111827;">${escapeHtml(member?.name || 'Unknown')}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f3f4f6;">
-          <span style="font-size:0.78rem;color:#9ca3af;">Principal</span>
-          <span style="font-size:1rem;font-weight:700;color:#ef4444;">UGX ${principal.toLocaleString()}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f3f4f6;">
-          <span style="font-size:0.78rem;color:#9ca3af;">Interest Rate</span>
-          <span style="font-size:0.82rem;font-weight:600;color:#111827;">${interestRate}%</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f3f4f6;">
-          <span style="font-size:0.78rem;color:#9ca3af;">Interest Amount</span>
-          <span style="font-size:0.82rem;font-weight:600;color:#111827;">UGX ${interest.toLocaleString()}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f3f4f6;">
-          <span style="font-size:0.78rem;color:#9ca3af;">Total to Repay</span>
-          <span style="font-size:0.9rem;font-weight:700;color:#ef4444;">UGX ${totalRepay.toLocaleString()}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f3f4f6;">
-          <span style="font-size:0.78rem;color:#9ca3af;">Reason</span>
-          <span style="font-size:0.82rem;font-weight:600;color:#111827;">${escapeHtml(reason || 'N/A')}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;">
-          <span style="font-size:0.78rem;color:#9ca3af;">Due Date</span>
-          <span style="font-size:0.82rem;font-weight:600;color:#111827;">${new Date(dueDate).toLocaleDateString()}</span>
-        </div>
-      </div>
-      <div style="margin-top:10px;padding-top:10px;border-top:1px solid #f3f4f6;text-align:center;">
-        <div style="font-size:0.7rem;color:#9ca3af;font-weight:500;">${settings?.groupName || 'Harvest Trust Finance'}</div>
-        <div style="font-size:0.62rem;color:#d1d5db;">Official Receipt</div>
-      </div>
-    </div>
-  `;
+  
+  // ===== CALCULATE EXISTING BALANCES =====
+  const existingDebt = memberDebts[member?.phone] || 0;
+  const existingLoan = memberLoans[member?.phone] || 0;
+  const existingTotal = existingDebt + existingLoan;
+  const overallNewTotal = existingTotal + totalRepay;
 
+  // ===== BUILD THE RECEIPT HTML (used for BOTH modal AND image) =====
+  function buildReceiptHTML() {
+    const date = new Date();
+    const receiptId = `Qwerty${Date.now().toString().slice(-6)}`;
+    const dateLabel = date.toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' });
+    const timeLabel = date.toLocaleTimeString('en-UG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const dueDateLabel = new Date(dueDate).toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' });
+
+    return `
+      <div id="receipt-content" style="
+        max-width: 340px;
+        margin: 0 auto;
+        background: #ffffff;
+        border-radius: 24px;
+        padding: 36px 28px 28px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'DM Sans', sans-serif;
+        box-shadow: 0 8px 40px rgba(90,60,200,0.10);
+        text-align: center;
+      ">
+        <div style="width:64px;height:64px;border-radius:50%;background:#f59e0b;display:flex;align-items:center;justify-content:center;margin:0 auto 18px auto;">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/>
+          </svg>
+        </div>
+        <div style="font-size:1.1rem;font-weight:700;color:#111827;margin-bottom:4px;">Debt Assigned</div>
+        <div style="font-size:0.78rem;color:#9ca3af;margin-bottom:24px;">Debt assignment was successful.</div>
+        <div style="border-top:1px solid #f3f4f6;margin-bottom:20px;"></div>
+        <div style="text-align:left;">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f3f4f6;">
+            <span style="font-size:0.78rem;color:#9ca3af;">Member</span>
+            <span style="font-size:0.82rem;font-weight:600;color:#111827;">${escapeHtml(member?.name || 'Unknown')}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f3f4f6;">
+            <span style="font-size:0.78rem;color:#9ca3af;">Phone</span>
+            <span style="font-size:0.82rem;font-weight:600;color:#111827;">${member?.phone || 'N/A'}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f3f4f6;">
+            <span style="font-size:0.78rem;color:#9ca3af;">Receipt ID</span>
+            <span style="font-size:0.7rem;font-weight:500;color:#6b7280;font-family:monospace;">${receiptId}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f3f4f6;">
+            <span style="font-size:0.78rem;color:#9ca3af;">Principal</span>
+            <span style="font-size:1rem;font-weight:700;color:#ef4444;">UGX ${principal.toLocaleString()}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f3f4f6;">
+            <span style="font-size:0.78rem;color:#9ca3af;">Interest Rate</span>
+            <span style="font-size:0.82rem;font-weight:600;color:#111827;">${interestRate}%</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f3f4f6;">
+            <span style="font-size:0.78rem;color:#9ca3af;">Interest Amount</span>
+            <span style="font-size:0.82rem;font-weight:600;color:#111827;">UGX ${interest.toLocaleString()}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f3f4f6;">
+            <span style="font-size:0.78rem;color:#9ca3af;">New Debt (Principal + Interest)</span>
+            <span style="font-size:0.9rem;font-weight:700;color:#ef4444;">UGX ${totalRepay.toLocaleString()}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f3f4f6;">
+            <span style="font-size:0.78rem;color:#9ca3af;">Existing Total Balance</span>
+            <span style="font-size:0.82rem;font-weight:600;color:#111827;">UGX ${existingTotal.toLocaleString()}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f3f4f6;">
+            <span style="font-size:0.78rem;color:#9ca3af;">Reason</span>
+            <span style="font-size:0.82rem;font-weight:600;color:#111827;">${escapeHtml(reason || 'N/A')}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f3f4f6;">
+            <span style="font-size:0.78rem;color:#9ca3af;">Due Date</span>
+            <span style="font-size:0.82rem;font-weight:600;color:#111827;">${dueDateLabel}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:2px solid #6d28d9;margin-top:4px;">
+            <span style="font-size:0.82rem;font-weight:700;color:#6d28d9;">💰 New Overall Balance</span>
+            <span style="font-size:1rem;font-weight:800;color:#6d28d9;">UGX ${overallNewTotal.toLocaleString()}</span>
+          </div>
+        </div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid #f3f4f6;text-align:center;">
+          <div style="font-size:0.7rem;color:#9ca3af;font-weight:500;">${settings?.groupName || 'Harvest Trust Finance'}</div>
+          <div style="font-size:0.62rem;color:#d1d5db;">Official Receipt</div>
+        </div>
+      </div>
+    `;
+  }
+
+  // ===== RENDER THE MODAL =====
+  const receiptHTML = buildReceiptHTML();
+  
   const modal = document.createElement('div');
   modal.className = 'ov on';
   modal.style.zIndex = '20020';
+  
   modal.innerHTML = `
     <div class="bs" style="max-width:420px;padding:0;overflow:hidden;border-radius:24px 24px 0 0;display:flex;flex-direction:column;max-height:90vh;">
-      ${receiptHtml}
+      <div style="background:#fff;padding:20px 24px 12px;overflow-y:auto;flex:1;min-height:0;">
+        ${receiptHTML}
+      </div>
       <div style="background:#fff;padding:12px 20px 20px;display:flex;flex-direction:column;gap:8px;flex-shrink:0;border-top:1px solid #f3f4f6;">
         <button id="debt-confirm-send-pc" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">💻 Copy Image (PC)</button>
         <button id="debt-confirm-send-phone" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">📱 Send Image (Phone)</button>
@@ -12300,28 +12345,7 @@ function showDebtReceiptModal(member, principal, interestRate, interest, totalRe
   `;
   document.body.appendChild(modal);
 
-  // Helper to capture receipt container
-  async function captureReceiptImage() {
-    const container = modal.querySelector('#receipt-container');
-    if (!container) return null;
-    try {
-      const canvas = await html2canvas(container, {
-        scale: 2.5,
-        backgroundColor: '#ffffff',
-        logging: false,
-        useCORS: true,
-        allowTaint: true,
-        width: container.scrollWidth,
-        height: container.scrollHeight
-      });
-      return canvas.toDataURL('image/png');
-    } catch (err) {
-      console.error('html2canvas failed:', err);
-      return null;
-    }
-  }
-
-  // Button handlers (same pattern as transaction modal)
+  // ===== BUTTON HANDLERS =====
   const confirmSendPc = modal.querySelector('#debt-confirm-send-pc');
   const confirmSendPhone = modal.querySelector('#debt-confirm-send-phone');
   const confirmNoSendBtn = modal.querySelector('#debt-confirm-nosend');
@@ -12333,76 +12357,90 @@ function showDebtReceiptModal(member, principal, interestRate, interest, totalRe
     setTimeout(() => modal.remove(), 300);
   };
 
-  confirmSendPc.onclick = async () => {
-    const imageData = await captureReceiptImage();
-    if (!imageData) { toast('Failed to generate image', '#ef4444'); return; }
+  // ===== SHARED: Render the receipt HTML to canvas =====
+  async function renderReceiptToImage() {
+    const receiptElement = modal.querySelector('#receipt-content');
+    if (!receiptElement) { toast('Receipt not found', '#ef4444'); return null; }
+    const clone = receiptElement.cloneNode(true);
+    clone.style.position = 'absolute';
+    clone.style.top = '-9999px';
+    clone.style.left = '-9999px';
+    clone.style.boxShadow = 'none';
+    clone.style.transform = 'none';
+    document.body.appendChild(clone);
+    await new Promise(r => setTimeout(r, 100));
     try {
-      const blob = await (await fetch(imageData)).blob();
-      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-      toast('📋 Copied!', '#000000');
+      const canvas = await html2canvas(clone, { scale: 2.5, backgroundColor: '#ffffff', logging: false, useCORS: true, allowTaint: true });
+      document.body.removeChild(clone);
+      return canvas.toDataURL('image/png');
     } catch (err) {
-      const a = document.createElement('a');
-      a.download = 'debt_receipt.png';
-      a.href = imageData;
-      a.click();
-      toast('📸 Downloaded', '#f59e0b');
+      document.body.removeChild(clone);
+      console.error('html2canvas failed:', err);
+      return null;
     }
-    closeModal();
-    if (onConfirmSend) onConfirmSend();
-  };
+  }
 
-  confirmSendPhone.onclick = async () => {
-    const imageData = await captureReceiptImage();
-    if (!imageData) { toast('Failed to generate image', '#ef4444'); return; }
+  async function copyImage() {
+    const data = await renderReceiptToImage();
+    if (!data) { toast('Failed to generate image', '#ef4444'); return; }
     try {
-      const blob = await (await fetch(imageData)).blob();
-      if (navigator.share) {
+      const blob = await (await fetch(data)).blob();
+      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+      toast('📋 Receipt image copied!', '#06b6d4');
+    } catch (err) {
+      const blob = await (await fetch(data)).blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'debt_receipt.png';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('📸 Image downloaded.', '#f59e0b');
+    }
+  }
+
+  async function shareImage() {
+    const data = await renderReceiptToImage();
+    if (!data) { toast('Failed to generate image', '#ef4444'); return; }
+    const blob = await (await fetch(data)).blob();
+    if (navigator.share) {
+      try {
         const file = new File([blob], 'debt_receipt.png', { type: 'image/png' });
         await navigator.share({
           title: 'Debt Assignment',
-          text: `Debt of UGX ${principal.toLocaleString()} assigned to ${member?.name}`,
+          text: `Debt of UGX ${totalRepay.toLocaleString()} assigned to ${member?.name}`,
           files: [file]
         });
-        toast('📱 Sent!', '#000000');
-      } else {
-        const a = document.createElement('a');
-        a.download = 'debt_receipt.png';
-        a.href = imageData;
-        a.click();
-        toast('📸 Downloaded', '#f59e0b');
+        toast('📱 Image shared!', '#10b981');
+        return;
+      } catch (err) {
+        if (err.name === 'AbortError') { toast('Sharing cancelled', '#f59e0b'); return; }
       }
-    } catch (err) {
-      if (err.name !== 'AbortError') toast('Share failed', '#ef4444');
     }
-    closeModal();
-    if (onConfirmSend) onConfirmSend();
-  };
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'debt_receipt.png';
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('📸 Image downloaded.', '#f59e0b');
+  }
 
-  confirmNoSendBtn.onclick = () => {
-    closeModal();
-    if (onConfirmNoSend) onConfirmNoSend();
-    toast('✅ Saved', '#000000');
-  };
+  async function printReceipt() {
+    const data = await renderReceiptToImage();
+    if (!data) { toast('Failed to generate image', '#ef4444'); return; }
+    const w = window.open('', '_blank');
+    w.document.write(`<!DOCTYPE html><html><head><title>Debt Receipt</title><style>body{margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff;}img{max-width:100%;height:auto;}</style></head><body><img src="${data}"></body></html>`);
+    w.document.close();
+    w.focus();
+    w.print();
+  }
 
-  printBtn.onclick = async () => {
-    const imageData = await captureReceiptImage();
-    if (imageData) {
-      const w = window.open('', '_blank');
-      w.document.write(`<html><head><title>Debt Receipt</title><style>body{margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff;}img{max-width:100%;}</style></head><body><img src="${imageData}"></body></html>`);
-      w.document.close();
-      w.focus();
-      w.print();
-    } else {
-      toast('Failed to generate image', '#ef4444');
-    }
-    closeModal();
-  };
-
-  cancelBtn.onclick = () => {
-    closeModal();
-    if (onCancel) onCancel();
-    toast('Cancelled', '#ff0000');
-  };
+  confirmSendPc.onclick = async () => { await copyImage(); closeModal(); if (onConfirmSend) onConfirmSend(); };
+  confirmSendPhone.onclick = async () => { await shareImage(); closeModal(); if (onConfirmSend) onConfirmSend(); };
+  confirmNoSendBtn.onclick = () => { closeModal(); if (onConfirmNoSend) onConfirmNoSend(); toast('✅ Saved', '#10b981'); };
+  printBtn.onclick = async () => { await printReceipt(); closeModal(); };
+  cancelBtn.onclick = () => { closeModal(); if (onCancel) onCancel(); toast('Cancelled', '#ff0000'); };
 }
 // ==========================================
 // DEBT ASSIGNMENT RECEIPT - PHONE STYLE
