@@ -2860,13 +2860,14 @@ setTimeout(function(){
           </div>
         </div>
 <!-- In your account tab, add this prepaid balance tile -->
+<!-- In the account tab -->
 <div class="balance-strip" id="account-balance-strip">
   <div class="balance-tile">
     <div class="balance-label">💰 My Balance</div>
     <div class="balance-val" id="account-balance">UGX 0</div>
   </div>
   <div class="balance-tile">
-    <div class="balance-label">🧾 My Debt</div>
+    <div class="balance-label">💳 Loan Balance</div>   <!-- Changed from "My Debt" -->
     <div class="balance-val" id="account-debt" style="color:var(--red)">UGX 0</div>
   </div>
   <!-- ===== PREPAID BALANCE - ADD THIS ===== -->
@@ -6001,42 +6002,31 @@ if (!document.getElementById('contact-card')) {
 function updateAccountBalances() {
   if (!currentUser || currentUser.isAdmin) return;
   
-  const rawPhone = currentUser.phone;
-  let balance = 0;
-  let totalDebt = 0;
-  let prepaidBalance = 0;
-  
-  // Get balances
-  if (memberBalances[rawPhone] !== undefined) balance = memberBalances[rawPhone];
-  if (memberDebts[rawPhone] !== undefined) totalDebt += memberDebts[rawPhone];
-  if (memberLoans[rawPhone] !== undefined) totalDebt += memberLoans[rawPhone];
-  if (memberPrepaid && memberPrepaid[rawPhone] !== undefined) prepaidBalance = memberPrepaid[rawPhone];
-  
-  // Normalize phone if needed
-  const normPhone = normalizePhone(rawPhone);
-  if (normPhone && normPhone !== rawPhone) {
-    if (memberBalances[normPhone] !== undefined) balance = memberBalances[normPhone];
-    if (memberDebts[normPhone] !== undefined) totalDebt += memberDebts[normPhone];
-    if (memberLoans[normPhone] !== undefined) totalDebt += memberLoans[normPhone];
-    if (memberPrepaid && memberPrepaid[normPhone] !== undefined) prepaidBalance = memberPrepaid[normPhone];
-  }
-  
-  // Update UI
+  const phone = currentUser.phone;
+  let balance = memberBalances[phone] || 0;
+  let loanBalance = memberLoans[phone] || 0;      // ✅ This includes all loans (application + assigned)
+  let prepaidBalance = memberPrepaid[phone] || 0;
+
   const balanceEl = document.getElementById('account-balance');
   const debtEl = document.getElementById('account-debt');
   const prepaidEl = document.getElementById('account-prepaid');
-  
+
   if (balanceEl) {
     balanceEl.innerText = 'UGX ' + balance.toLocaleString();
     balanceEl.style.color = balance < 0 ? 'var(--red)' : '';
   }
-  
+
   if (debtEl) {
-    debtEl.innerText = 'UGX ' + totalDebt.toLocaleString();
-    debtEl.style.color = totalDebt > 0 ? 'var(--red)' : '';
+    // Change label to "Loan Balance"
+    const tile = debtEl.closest('.balance-tile');
+    if (tile) {
+      const label = tile.querySelector('.balance-label');
+      if (label) label.innerText = '💳 Loan Balance';
+    }
+    debtEl.innerText = 'UGX ' + loanBalance.toLocaleString();
+    debtEl.style.color = loanBalance > 0 ? 'var(--red)' : '';
   }
-  
-  // Show prepaid balance in BLUE
+
   if (prepaidEl) {
     if (prepaidBalance > 0) {
       prepaidEl.style.display = 'block';
@@ -6052,7 +6042,6 @@ function updateAccountBalances() {
     }
   }
 }
-
 // Update account UI with prepaid balance
 function updateAccountUI() {
   if (!currentUser) return;
@@ -6076,6 +6065,14 @@ function updateAccountUI() {
   const strip = document.getElementById('account-balance-strip');
   if (strip) strip.style.display = currentUser.isAdmin ? 'none' : 'grid';
   
+  // Update the label for the debt tile (second tile)
+  const debtTile = document.querySelector('#account-balance-strip .balance-tile:nth-child(2)');
+  if (debtTile) {
+    const label = debtTile.querySelector('.balance-label');
+    if (label) label.innerText = '💳 Loan Balance';
+  }
+  
+  
   const rb = document.getElementById('referral-box');
   if (rb && !currentUser.isAdmin) {
     rb.style.display = 'block';
@@ -6086,12 +6083,11 @@ function updateAccountUI() {
   const ph = document.getElementById('account-pin-hint');
   if (ph) ph.innerText = currentUser.isAdmin ? '' : 'Change PIN';
   
-  updateAccountBalances();
+  updateAccountBalances();      // now shows loan balance
   displayLoanRepaymentSchedule();
   updateNotificationBadge();
   updateLoanIndicator();
 }
-
 function displayLoanRepaymentSchedule() {
   if (!currentUser || currentUser.isAdmin) return;
   const activeLoan = loans.find(l => l.memberId === currentUser.id && l.status === 'approved' && !l.repaid);
@@ -8180,8 +8176,8 @@ async function generateStatusMessages(memberId) {
   if (!member) return;
 
   computePots();
-  const debts = memberDebts[member.phone] || 0;
-  const loans = memberLoans[member.phone] || 0;
+  const loanBalance = memberLoans[member.phone] || 0;   // ✅ Only loan, no debt
+
   let totalDeposits = 0;
   let daysWithDeposit = new Set();
   transactions.forEach(tx => {
@@ -8206,63 +8202,56 @@ async function generateStatusMessages(memberId) {
     checkDay += 86400000;
   }
 
-  // Message templates (title and text)
   const templates = [];
 
- // 1. Remind about debt/loan
-if (debts > 0 || loans > 0) {
-  templates.push({
-    title: "⚠️ Remind: Clear Debt/Loan",
-    text: `Dear ${member.name},\n\nYou currently have ${debts > 0 ? `an outstanding debt of UGX ${debts.toLocaleString()}` : ''}${debts > 0 && loans > 0 ? ' and ' : ''}${loans > 0 ? `a loan balance of UGX ${loans.toLocaleString()}` : ''}. Please clear it as soon as possible to avoid additional penalties.\n\n🌾 Harvest Trust Finance\n\nLwogamata, 
-    Admin`
-  });
-}
+  // 1. Remind about loan balance
+  if (loanBalance > 0) {
+    templates.push({
+      title: "⚠️ Remind: Loan Balance",
+      text: `Dear ${member.name},\n\nYou currently have an outstanding loan balance of UGX ${loanBalance.toLocaleString()}. Please clear it as soon as possible to avoid additional penalties.\n\n🌾 Harvest Trust Finance\n\nLwogamata, Admin`
+    });
+  }
 
-// 2. Advise about borrowing
-templates.push({
-  title: "💰 Advise: Loan Eligibility",
-  text: `Dear ${member.name},\n\nBased on your total savings of ${money(totalDeposits)}, you are eligible to request a loan of up to ${money(maxLoan)}. Interest rates are fair. Click "Request Loan" in your account tab when you need support.\n\n🌾 Harvest Trust Finance\n\nLwogamata, 
-  Admin`
-});
 
-// 3. Encourage consistency
-if (consistencyDays >= 10) {
+  // 2. Advise about borrowing
   templates.push({
-    title: "🏆 Encourage: Great Consistency",
-    text: `Dear ${member.name},\n\nYou have made deposits on ${consistencyDays} days! Your discipline is building a strong financial future. Keep it up!\n\n🌾 Harvest Trust Finance\n\n— Lwogamata,
-    Admin`
+    title: "💰 Advise: Loan Eligibility",
+    text: `Dear ${member.name},\n\nBased on your total savings of ${money(totalDeposits)}, you are eligible to request a loan of up to ${money(maxLoan)}. Interest rates are fair. Click "Request Loan" in your account tab when you need support.\n\n🌾 Harvest Trust Finance\n\nLwogamata, Admin`
   });
-} else {
-  templates.push({
-    title: "🌱 Encourage: Start Saving",
-    text: `Dear ${member.name},\n\nEvery great journey begins with a single step. Start saving daily – even a small amount adds up over time. We believe in you!\n\n🌾 Harvest Trust Finance\n\nLwogamata,
-    Admin`
-  });
-}
 
-// 4. Prepay advice
-if (futureCoveredDays > 0) {
-  templates.push({
-    title: "📅 Prepay: You're Ahead!",
-    text: `Dear ${member.name},\n\nYou have already covered your daily savings for the next ${futureCoveredDays} day(s). Great planning! You can add more to increase your borrowing limit.\n\n🌾 Harvest Trust Finance\n\nLwogamata,
-    Admin`
-  });
-} else {
-  templates.push({
-    title: "📅 Prepay: Plan Ahead",
-    text: `Dear ${member.name},\n\nDid you know you can prepay your daily savings for future days? Ask the admin to help you set up prepayment – it keeps you ahead and increases your total deposits.\n\n🌾 Harvest Trust Finance\n\nLwogamata,
-    Admin`
-  });
-}
+  // 3. Encourage consistency (unchanged)
+  if (consistencyDays >= 10) {
+    templates.push({
+      title: "🏆 Encourage: Great Consistency",
+      text: `Dear ${member.name},\n\nYou have made deposits on ${consistencyDays} days! Your discipline is building a strong financial future. Keep it up!\n\n🌾 Harvest Trust Finance\n\n— Lwogamata, Admin`
+    });
+  } else {
+    templates.push({
+      title: "🌱 Encourage: Start Saving",
+      text: `Dear ${member.name},\n\nEvery great journey begins with a single step. Start saving daily – even a small amount adds up over time. We believe in you!\n\n🌾 Harvest Trust Finance\n\nLwogamata, Admin`
+    });
+  }
 
-// 5. General group benefits
-templates.push({
-  title: "🎉 Group Benefits",
-  text: `Dear ${member.name},\n\nAs a member of Harvest Trust Finance, you benefit from weekly payouts, low‑interest loans, welfare support, and annual profit sharing. Stay active and enjoy these opportunities!\n\n🌾 Harvest Trust Finance\n\nLwogamata,
-  Admin`
-});
+  // 4. Prepay advice (unchanged)
+  if (futureCoveredDays > 0) {
+    templates.push({
+      title: "📅 Prepay: You're Ahead!",
+      text: `Dear ${member.name},\n\nYou have already covered your daily savings for the next ${futureCoveredDays} day(s). Great planning! You can add more to increase your borrowing limit.\n\n🌾 Harvest Trust Finance\n\nLwogamata, Admin`
+    });
+  } else {
+    templates.push({
+      title: "📅 Prepay: Plan Ahead",
+      text: `Dear ${member.name},\n\nDid you know you can prepay your daily savings for future days? Ask the admin to help you set up prepayment – it keeps you ahead and increases your total deposits.\n\n🌾 Harvest Trust Finance\n\nLwogamata, Admin`
+    });
+  }
 
-  // Render as buttons
+  // 5. General group benefits (unchanged)
+  templates.push({
+    title: "🎉 Group Benefits",
+    text: `Dear ${member.name},\n\nAs a member of Harvest Trust Finance, you benefit from weekly payouts, low‑interest loans, welfare support, and annual profit sharing. Stay active and enjoy these opportunities!\n\n🌾 Harvest Trust Finance\n\nLwogamata, Admin`
+  });
+
+  // Render as buttons (unchanged)
   const container = document.getElementById('status-messages-container');
   if (!container) return;
   let html = `<div style="margin-bottom: 8px;"><strong>Select a message type for ${escapeHtml(member.name)}:</strong></div>`;
@@ -8274,7 +8263,7 @@ templates.push({
   html += '<div id="status-message-preview" style="background: rgba(0,0,0,0.05); border-radius: 12px; padding: 12px; display: none;"></div>';
   container.innerHTML = html;
 
-  // Add event listeners to buttons
+  // Event listeners (unchanged)
   const btns = container.querySelectorAll('button[data-msg-index]');
   btns.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -11810,7 +11799,7 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
   const totalLoanBalance = memberLoans[member?.phone] || 0;
   const prepaidBalance = memberPrepaid[member?.phone] || 0;
   
-  // ===== PROJECTED REMAINING LOAN =====
+  // ===== PROJECTED REMAINING LOAN (after this deposit) =====
   let projectedRemainingLoan = totalLoanBalance;
   if (txType === 'deposit' && member && safeAmount > 0) {
     let remaining = safeAmount;
@@ -11845,6 +11834,7 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
       remaining -= usedApp;
     }
 
+    // The rest of the loan (assigned debt) is implicitly repaid
     const assignedBal = memberAssignedLoans[member.phone] || 0;
     let usedAssigned = 0;
     if (assignedBal > 0 && remaining > 0) {
@@ -11855,7 +11845,6 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
     const loanRepaymentTotal = usedApp + usedAssigned;
     projectedRemainingLoan = Math.max(0, totalLoanBalance - loanRepaymentTotal);
   }
-
   // ===== BUILD RECEIPT HTML =====
   function buildReceiptHTML() {
     const date = new Date();
@@ -11960,6 +11949,7 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
       </div>
     `;
   }
+
 
   const receiptHTML = buildReceiptHTML();
   
@@ -12209,11 +12199,9 @@ function generateSimpleReceiptFallback(member, txType, amount, description, acco
 
 function showDebtReceiptModal(member, principal, interestRate, interest, totalRepay, reason, dueDate, onConfirmSend, onConfirmNoSend, onCancel) {
   
-  // ===== CALCULATE EXISTING BALANCES =====
-  const existingDebt = memberDebts[member?.phone] || 0;
-  const existingLoan = memberLoans[member?.phone] || 0;
-  const existingTotal = existingDebt + existingLoan;
-  const overallNewTotal = existingTotal + totalRepay;
+  // ===== CALCULATE BALANCES (loan only) =====
+  const existingLoan = memberLoans[member?.phone] || 0;   // ✅ This includes all loans (application + assigned)
+  const overallNewLoanBalance = existingLoan + totalRepay; // New total loan balance after this assignment
 
   function buildReceiptHTML() {
     const date = new Date();
@@ -12271,8 +12259,8 @@ function showDebtReceiptModal(member, principal, interestRate, interest, totalRe
             <span style="font-size:0.9rem;font-weight:700;color:#ef4444;">UGX ${totalRepay.toLocaleString()}</span>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f3f4f6;">
-            <span style="font-size:0.78rem;color:#9ca3af;">Existing Total Balance</span>
-            <span style="font-size:0.82rem;font-weight:600;color:#111827;">UGX ${existingTotal.toLocaleString()}</span>
+            <span style="font-size:0.78rem;color:#9ca3af;">Existing Loan Balance</span>
+            <span style="font-size:0.82rem;font-weight:600;color:#111827;">UGX ${existingLoan.toLocaleString()}</span>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f3f4f6;">
             <span style="font-size:0.78rem;color:#9ca3af;">Reason</span>
@@ -12283,8 +12271,8 @@ function showDebtReceiptModal(member, principal, interestRate, interest, totalRe
             <span style="font-size:0.82rem;font-weight:600;color:#111827;">${dueDateLabel}</span>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:2px solid #6d28d9;margin-top:4px;">
-            <span style="font-size:0.82rem;font-weight:700;color:#6d28d9;">💰 New Overall Balance</span>
-            <span style="font-size:1rem;font-weight:800;color:#6d28d9;">UGX ${overallNewTotal.toLocaleString()}</span>
+            <span style="font-size:0.82rem;font-weight:700;color:#6d28d9;">💰 New Overall Loan Balance</span>
+            <span style="font-size:1rem;font-weight:800;color:#6d28d9;">UGX ${overallNewLoanBalance.toLocaleString()}</span>
           </div>
         </div>
         <div style="margin-top:10px;padding-top:10px;border-top:1px solid #f3f4f6;text-align:center;">
