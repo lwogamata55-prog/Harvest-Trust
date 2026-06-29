@@ -7390,7 +7390,6 @@ window.submitFinalSignup = function() {
 // ==========================================
 // SHOW MEMBER LOAN DETAILS
 // ==========================================
-
 window.showMemberLoanDetails = function(memberId) {
   const member = members.find(m => m.id === memberId);
   if (!member) {
@@ -7405,7 +7404,6 @@ window.showMemberLoanDetails = function(memberId) {
   const rejectedLoans = allMemberLoans.filter(l => l.status === 'rejected');
 
   const appBalance = memberApplicationLoans[member.phone] || 0;
-  const assignedBalance = memberAssignedLoans[member.phone] || 0;
   const totalLoanBalance = memberLoans[member.phone] || 0;
 
   const content = document.getElementById('member-loan-details-content');
@@ -7439,21 +7437,157 @@ window.showMemberLoanDetails = function(memberId) {
         <div style="font-size: 1rem; font-weight: 700; color: ${totalLoanBalance > 0 ? 'var(--red)' : 'var(--green)'};">${money(totalLoanBalance)}</div>
       </div>
       <div style="background: rgba(255,255,255,0.04); border-radius: 8px; padding: 10px; text-align: center;">
-        <div style="font-size: 0.6rem; color: var(--t3);">Total Loans</div>
-        <div style="font-size: 1rem; font-weight: 700; color: var(--teal);">${allMemberLoans.length}</div>
+        <div style="font-size: 0.6rem; color: var(--t3);">Active Loans</div>
+        <div style="font-size: 1rem; font-weight: 700; color: var(--teal);">${approvedLoans.length}</div>
       </div>
     </div>
     
-    <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;">
-      ${appBalance > 0 ? `<span style="background: rgba(245,158,11,0.12); padding: 4px 12px; border-radius: 20px; font-size: 0.7rem; font-weight: 600; color: var(--gold);">⭐ Application: ${money(appBalance)}</span>` : ''}
-      ${assignedBalance > 0 ? `<span style="background: rgba(6,182,212,0.12); padding: 4px 12px; border-radius: 20px; font-size: 0.7rem; font-weight: 600; color: var(--teal);">📋 Assigned: ${money(assignedBalance)}</span>` : ''}
-    </div>
+    <!-- Show Application Loan balance if > 0 -->
+    ${appBalance > 0 ? `
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px;">
+        <span style="background: rgba(245,158,11,0.12); padding: 4px 12px; border-radius: 20px; font-size: 0.7rem; font-weight: 600; color: var(--gold);">⭐ Application: ${money(appBalance)}</span>
+      </div>
+    ` : ''}
   `;
 
-  // Pending, Active, Repaid, Rejected sections (unchanged – they show the loan lists)
-  // ... (keep the existing code for loan lists)
+  // ===== PENDING LOANS =====
+  if (pendingLoans.length > 0) {
+    html += `
+      <div style="margin-bottom: 12px; background: rgba(245,158,11,0.06); border-radius: 8px; padding: 10px; border: 1px solid rgba(245,158,11,0.2);">
+        <div style="font-size: 0.7rem; font-weight: 700; color: var(--gold); margin-bottom: 6px;">⏳ Pending Loans (${pendingLoans.length})</div>
+        ${pendingLoans.map(loan => `
+          <div style="background: rgba(255,255,255,0.05); border-radius: 6px; padding: 8px 10px; margin-bottom: 4px; border-left: 3px solid var(--gold);">
+            <div style="display: flex; justify-content: space-between; font-size: 0.75rem;">
+              <span><strong>${money(loan.amount)}</strong> @ ${loan.interestRate}%</span>
+              <span style="color: var(--gold);">⏳ Pending Approval</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.65rem; color: var(--t3);">
+              <span>Requested: ${new Date(loan.requestedAt).toLocaleDateString()}</span>
+              <span>${loan.reason || ''}</span>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
 
-  // Actions
+  // ===== ACTIVE/APPROVED LOANS =====
+  if (approvedLoans.length > 0) {
+    const appLoans = approvedLoans.filter(l => l.loanQuestions && l.loanQuestions.length > 0);
+    const assignedLoans = approvedLoans.filter(l => !l.loanQuestions || l.loanQuestions.length === 0);
+    
+    // Application Loans (⭐)
+    if (appLoans.length > 0) {
+      html += `
+        <div style="margin-bottom: 12px;">
+          <div style="font-size: 0.7rem; font-weight: 700; color: var(--gold); margin-bottom: 6px;">⭐ Application Loans (${appLoans.length})</div>
+          ${appLoans.map(loan => {
+            const remaining = loan.totalRepay - (loan.repaidAmount || 0);
+            const repaid = loan.totalRepay - remaining;
+            const percent = loan.totalRepay > 0 ? Math.round((repaid / loan.totalRepay) * 100) : 0;
+            const isOverdue = loan.dueDate && loan.dueDate < Date.now();
+            const daysOverdue = isOverdue ? Math.floor((Date.now() - loan.dueDate) / (1000 * 60 * 60 * 24)) : 0;
+            
+            return `
+              <div style="background: rgba(245,158,11,0.06); border-left: 3px solid ${isOverdue ? 'var(--red)' : 'var(--gold)'}; border-radius: 6px; padding: 8px 10px; margin-bottom: 6px;">
+                <div style="display: flex; justify-content: space-between; font-size: 0.75rem;">
+                  <span><strong>${money(loan.amount)}</strong> @ ${loan.interestRate}%</span>
+                  <span style="color: ${percent >= 100 ? 'var(--green)' : 'var(--gold)'};">${percent}% repaid</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.65rem; color: var(--t3);">
+                  <span>Remaining: ${money(remaining)}</span>
+                  <span>Due: ${new Date(loan.dueDate).toLocaleDateString()}</span>
+                </div>
+                ${isOverdue ? `<div style="font-size: 0.6rem; color: var(--red); font-weight: 700;">🚨 ${daysOverdue} days overdue!</div>` : ''}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+    
+    // Assigned Loans (no icon)
+    if (assignedLoans.length > 0) {
+      html += `
+        <div style="margin-bottom: 12px;">
+          <div style="font-size: 0.7rem; font-weight: 700; color: var(--teal); margin-bottom: 6px;">Assigned Loans (${assignedLoans.length})</div>
+          ${assignedLoans.map(loan => {
+            const remaining = loan.totalRepay - (loan.repaidAmount || 0);
+            const repaid = loan.totalRepay - remaining;
+            const percent = loan.totalRepay > 0 ? Math.round((repaid / loan.totalRepay) * 100) : 0;
+            
+            return `
+              <div style="background: rgba(6,182,212,0.06); border-left: 3px solid var(--teal); border-radius: 6px; padding: 8px 10px; margin-bottom: 6px;">
+                <div style="display: flex; justify-content: space-between; font-size: 0.75rem;">
+                  <span><strong>${money(loan.amount)}</strong> @ ${loan.interestRate}%</span>
+                  <span style="color: ${percent >= 100 ? 'var(--green)' : 'var(--teal)'};">${percent}% repaid</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 0.65rem; color: var(--t3);">
+                  <span>Remaining: ${money(remaining)}</span>
+                  <span>Due: ${new Date(loan.dueDate).toLocaleDateString()}</span>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+  }
+
+  // ===== REPAID LOANS =====
+  if (repaidLoans.length > 0) {
+    html += `
+      <div style="margin-bottom: 12px; background: rgba(16,185,129,0.06); border-radius: 8px; padding: 10px; border: 1px solid rgba(16,185,129,0.15);">
+        <div style="font-size: 0.7rem; font-weight: 700; color: var(--green); margin-bottom: 6px;">✅ Repaid Loans (${repaidLoans.length})</div>
+        ${repaidLoans.map(loan => `
+          <div style="background: rgba(255,255,255,0.05); border-radius: 6px; padding: 8px 10px; margin-bottom: 4px; border-left: 3px solid var(--green);">
+            <div style="display: flex; justify-content: space-between; font-size: 0.75rem;">
+              <span><strong>${money(loan.amount)}</strong> @ ${loan.interestRate}%</span>
+              <span style="color: var(--green);">✅ Fully Repaid</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.65rem; color: var(--t3);">
+              <span>Repaid: ${new Date(loan.repaidAt).toLocaleDateString()}</span>
+              <span>${loan.reason || ''}</span>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  // ===== REJECTED LOANS =====
+  if (rejectedLoans.length > 0) {
+    html += `
+      <div style="margin-bottom: 12px; background: rgba(239,68,68,0.06); border-radius: 8px; padding: 10px; border: 1px solid rgba(239,68,68,0.15);">
+        <div style="font-size: 0.7rem; font-weight: 700; color: var(--red); margin-bottom: 6px;">❌ Rejected Loans (${rejectedLoans.length})</div>
+        ${rejectedLoans.map(loan => `
+          <div style="background: rgba(255,255,255,0.05); border-radius: 6px; padding: 8px 10px; margin-bottom: 4px; border-left: 3px solid var(--red);">
+            <div style="display: flex; justify-content: space-between; font-size: 0.75rem;">
+              <span><strong>${money(loan.amount)}</strong> @ ${loan.interestRate}%</span>
+              <span style="color: var(--red);">❌ Rejected</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.65rem; color: var(--t3);">
+              <span>Requested: ${new Date(loan.requestedAt).toLocaleDateString()}</span>
+              <span>${loan.reason || ''}</span>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  // ===== NO LOANS =====
+  if (allMemberLoans.length === 0) {
+    html += `
+      <div style="text-align: center; padding: 20px; color: var(--t3);">
+        <div style="font-size: 2rem; margin-bottom: 8px;">📭</div>
+        <div>No loans found for this member.</div>
+        <div class="micro muted">They haven't requested any loans yet.</div>
+      </div>
+    `;
+  }
+
+  // ===== ACTIONS =====
   html += `
     <div style="border-top: 1px solid var(--br); padding-top: 12px; margin-top: 4px;">
       <div style="display: flex; gap: 8px; flex-wrap: wrap;">
@@ -7475,7 +7609,6 @@ window.showMemberLoanDetails = function(memberId) {
   content.innerHTML = html;
   openOv('ov-member-loan-details');
 };
-
 window.showMemberReceipt = function(memberId, dateStr = null) {
   const member = members.find(m => m.id === memberId);
   if (!member) return;
@@ -10044,113 +10177,106 @@ function getMemberPrepaid(phone) {
 
     // Active Loans - Professional Cards
     let activeLoansHtml = '';
-    if (entries.length) {
-      activeLoansHtml = `
-        <div id="activeLoansContainer" style="display: none;">
-          <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-              <span style="font-size: 0.75rem; font-weight: 700; color: var(--t2);">💳 Active Loans</span>
-              <span class="pill-badge pill-green">${entries.length} members</span>
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px;">
-              ${entries.map(([memberId, data]) => {
-                const member = data.member;
-                
-// ===== GET BALANCES SAFELY =====
-const totalBalance = getMemberLoan(data.memberPhone) || 0;
-const appBalance = getMemberAppLoan(data.memberPhone) || 0;
-const assignedBalance = getMemberAssignedLoan(data.memberPhone) || 0;
-const debtBalance = getMemberDebt(data.memberPhone) || 0;
-                const isOverdue = data.isOverdue;
-                const daysOverdue = data.daysOverdue;
-                const avatarColor = getAvatarColor(data.memberName);
-                const initials = data.memberName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-                
-                return `
-                  <div style="
-                    background: rgba(255,255,255,0.04);
-                    border: 1px solid ${isOverdue ? 'var(--red)' : 'var(--br)'};
-                    border-radius: 12px;
-                    padding: 12px;
-                    cursor: pointer;
-                    transition: all 0.2s ease;
-                    position: relative;
-                    ${isOverdue ? 'animation: pulse 2s infinite;' : ''}
-                  "
-                  onclick="showMemberLoanDetails('${memberId}')"
-                  onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='var(--sh)';"
-                  onmouseout="this.style.transform='none'; this.style.boxShadow='none';"
-                  >
-                    ${isOverdue ? `
-                      <div style="
-                        position: absolute;
-                        top: -6px;
-                        right: -6px;
-                        background: var(--red);
-                        color: white;
-                        font-size: 0.5rem;
-                        font-weight: 800;
-                        padding: 2px 8px;
-                        border-radius: 10px;
-                        animation: pulse 1.5s infinite;
-                      ">
-                        ${daysOverdue}d overdue
-                      </div>
-                    ` : ''}
-                    
-                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                      <div style="
-                        width: 38px;
-                        height: 38px;
-                        border-radius: 50%;
-                        background: linear-gradient(135deg, ${avatarColor}, ${avatarColor}cc);
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        font-size: 0.85rem;
-                        font-weight: 800;
-                        color: white;
-                        flex-shrink: 0;
-                      ">
-                        ${initials || '?'}
-                      </div>
-                      <div style="flex: 1; min-width: 0;">
-                        <div style="font-size: 0.8rem; font-weight: 700; color: var(--t); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                          ${escapeHtml(data.memberName)}
-                        </div>
-                        <div style="font-size: 0.55rem; color: var(--t3);">${data.count} loan(s)</div>
-                      </div>
-                    </div>
-                    
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; font-size: 0.65rem;">
-                      <div style="color: var(--t3);">Total</div>
-                      <div style="font-weight: 600; text-align: right; color: var(--gold);">${money(data.totalRepay)}</div>
-                      <div style="color: var(--t3);">Paid</div>
-                      <div style="font-weight: 600; text-align: right; color: var(--green);">${money(Math.max(0, data.totalRepay - totalBalance))}</div>
-                      <div style="color: var(--t3);">Balance</div>
-                      <div style="font-weight: 600; text-align: right; color: ${totalBalance > 0 ? 'var(--red)' : 'var(--green)'};">${money(totalBalance)}</div>
-                    </div>
-                    
-                    <div style="display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap;">
-                      ${data.appLoanCount > 0 ? `<span style="background: rgba(245,158,11,0.12); padding: 1px 8px; border-radius: 10px; font-size: 0.5rem; font-weight: 600; color: var(--gold);">⭐ ${money(appBalance)}</span>` : ''}
-                      ${data.assignedLoanCount > 0 ? `<span style="background: rgba(6,182,212,0.12); padding: 1px 8px; border-radius: 10px; font-size: 0.5rem; font-weight: 600; color: var(--teal);">📋 ${money(assignedBalance)}</span>` : ''}
-                      ${debtBalance > 0 ? `<span style="background: rgba(239,68,68,0.12); padding: 1px 8px; border-radius: 10px; font-size: 0.5rem; font-weight: 600; color: var(--red);">🧾 ${money(debtBalance)}</span>` : ''}
-                    </div>
-                    
-                    <div style="text-align: center; margin-top: 8px; font-size: 0.5rem; color: var(--t3);">
-                      👆 Click for details
-                    </div>
-                  </div>
-                `;
-              }).join('')}
-            </div>
-          </div>
+    // ===== ACTIVE LOANS – SIMPLIFIED (no badges) =====
+if (entries.length) {
+  activeLoansHtml = `
+    <div id="activeLoansContainer" style="display: none;">
+      <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <span style="font-size: 0.75rem; font-weight: 700; color: var(--t2);">💳 Active Loans</span>
+          <span class="pill-badge pill-green">${entries.length} members</span>
         </div>
-        <button class="btn btn-purple btn-full" onclick="toggleActiveLoans()" style="margin-top: 8px; padding: 8px; font-size: 0.75rem;">
-          📋 Show Active Loans
-        </button>
-      `;
-    }
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px;">
+          ${entries.map(([memberId, data]) => {
+            const member = data.member;
+            const totalBalance = getMemberLoan(data.memberPhone) || 0;
+            const paid = Math.max(0, data.totalRepay - totalBalance);
+            const isOverdue = data.isOverdue;
+            const daysOverdue = data.daysOverdue;
+            const avatarColor = getAvatarColor(data.memberName);
+            const initials = data.memberName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+            
+            return `
+              <div style="
+                background: rgba(255,255,255,0.04);
+                border: 1px solid ${isOverdue ? 'var(--red)' : 'var(--br)'};
+                border-radius: 12px;
+                padding: 12px;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                position: relative;
+                ${isOverdue ? 'animation: pulse 2s infinite;' : ''}
+              "
+              onclick="showMemberLoanDetails('${memberId}')"
+              onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='var(--sh)';"
+              onmouseout="this.style.transform='none'; this.style.boxShadow='none';"
+              >
+                ${isOverdue ? `
+                  <div style="
+                    position: absolute;
+                    top: -6px;
+                    right: -6px;
+                    background: var(--red);
+                    color: white;
+                    font-size: 0.5rem;
+                    font-weight: 800;
+                    padding: 2px 8px;
+                    border-radius: 10px;
+                    animation: pulse 1.5s infinite;
+                  ">
+                    ${daysOverdue}d overdue
+                  </div>
+                ` : ''}
+                
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                  <div style="
+                    width: 38px;
+                    height: 38px;
+                    border-radius: 50%;
+                    background: linear-gradient(135deg, ${avatarColor}, ${avatarColor}cc);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 0.85rem;
+                    font-weight: 800;
+                    color: white;
+                    flex-shrink: 0;
+                  ">
+                    ${initials || '?'}
+                  </div>
+                  <div style="flex: 1; min-width: 0;">
+                    <div style="font-size: 0.8rem; font-weight: 700; color: var(--t); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                      ${escapeHtml(data.memberName)}
+                    </div>
+                    <div style="font-size: 0.55rem; color: var(--t3);">${data.count} loan(s)</div>
+                  </div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; font-size: 0.65rem;">
+                  <div style="color: var(--t3);">Total</div>
+                  <div style="font-weight: 600; text-align: right; color: var(--gold);">${money(data.totalRepay)}</div>
+                  <div style="color: var(--t3);">Paid</div>
+                  <div style="font-weight: 600; text-align: right; color: var(--green);">${money(paid)}</div>
+                  <div style="color: var(--t3);">Balance</div>
+                  <div style="font-weight: 600; text-align: right; color: ${totalBalance > 0 ? 'var(--red)' : 'var(--green)'};">${money(totalBalance)}</div>
+                </div>
+                
+                <!-- No 📋 or 🧾 badges anymore -->
+                
+                <div style="text-align: center; margin-top: 8px; font-size: 0.5rem; color: var(--t3);">
+                  👆 Click for details
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+    <button class="btn btn-purple btn-full" onclick="toggleActiveLoans()" style="margin-top: 8px; padding: 8px; font-size: 0.75rem;">
+      📋 Show Active Loans
+    </button>
+  `;
+}
 
     c.innerHTML = `
       ${warningsHtml}
@@ -12603,7 +12729,111 @@ function generateDebtFallbackPhone(member, principal, interestRate, interest, to
     return null;
   }
 }
+// ==========================================
+// RECEIPT HELPERS – Render & Share
+// ==========================================
 
+/**
+ * Renders a DOM element to a PNG image using html2canvas.
+ * @param {HTMLElement} element - The DOM element to capture.
+ * @returns {Promise<string|null>} - The image data URL, or null on failure.
+ */
+async function renderElementToImage(element) {
+  if (!element) {
+    toast('Receipt element not found', '#ef4444');
+    return null;
+  }
+  // Clone to avoid affecting the live DOM
+  const clone = element.cloneNode(true);
+  clone.style.position = 'absolute';
+  clone.style.top = '-9999px';
+  clone.style.left = '-9999px';
+  clone.style.boxShadow = 'none';
+  clone.style.transform = 'none';
+  clone.style.width = element.offsetWidth + 'px';
+  document.body.appendChild(clone);
+  
+  // Allow the clone to render
+  await new Promise(r => setTimeout(r, 150));
+  
+  try {
+    const canvas = await html2canvas(clone, {
+      scale: 2.5,
+      backgroundColor: '#ffffff',
+      logging: false,
+      useCORS: true,
+      allowTaint: true
+    });
+    document.body.removeChild(clone);
+    return canvas.toDataURL('image/png');
+  } catch (err) {
+    document.body.removeChild(clone);
+    console.error('html2canvas failed:', err);
+    return null;
+  }
+}
+
+/**
+ * Shares an image using the Web Share API, with a fallback to download.
+ * @param {HTMLElement} receiptElement - The DOM element containing the receipt.
+ * @param {string} title - Title for the share.
+ * @param {string} text - Text to accompany the share.
+ * @param {string} fileName - File name for the image.
+ * @returns {Promise<boolean>} - True if shared successfully, false if downloaded.
+ */
+async function shareReceiptImage(receiptElement, title, text, fileName) {
+  const data = await renderElementToImage(receiptElement);
+  if (!data) {
+    toast('Failed to generate image', '#ef4444');
+    return false;
+  }
+  
+  try {
+    const blob = await (await fetch(data)).blob();
+    const file = new File([blob], fileName || 'receipt.png', { type: 'image/png' });
+    
+    // Use Web Share API if available and supports files
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        title: title || 'Receipt',
+        text: text || '',
+        files: [file]
+      });
+      toast('📱 Shared successfully!', '#10b981');
+      return true;
+    } else {
+      // Fallback: download the image
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName || 'receipt.png';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      toast('📸 Image downloaded. Open your gallery to share manually.', '#f59e0b');
+      return false;
+    }
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      toast('Sharing cancelled', '#f59e0b');
+      return false;
+    }
+    console.error('Share failed:', err);
+    // Fallback: download
+    const blob = await (await fetch(data)).blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName || 'receipt.png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    toast('📸 Image downloaded. Share manually.', '#f59e0b');
+    return false;
+  }
+}
 // ==========================================
 // SHARED RENDER HELPER
 // ==========================================
