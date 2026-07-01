@@ -11524,6 +11524,24 @@ window.addTransactionWithPreview = async function() {
     return;
   }
 
+  // Helper to refresh all data after a deposit
+  async function refreshAfterDeposit() {
+    // 1. Force-refresh loans from Firebase
+    const loansSnap = await db.ref('loans').once('value');
+    loans = loansSnap.val() ? Object.entries(loansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
+    // 2. Force-refresh transactions (so that the new loan repayments are included)
+    const txSnap = await db.ref('transactions').once('value');
+    transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
+    // 3. Recompute everything
+    computePots();
+    // 4. Update all UI
+    refreshUI();
+    // 5. If the ledger is open, reload it
+    if (isLedgerActive()) loadLedger(window.currentLedgerFilter || 'all');
+    // 6. If the admin savings tab is open, re-render it
+    if (currentAdminTab === 'savings' && adminUnlocked) renderAdminTab();
+  }
+
   if (type === 'deposit') {
     showTransactionReceiptModal(member, 'deposit', amount, desc || 'Deposit',
       // Confirm & Send
@@ -11531,12 +11549,7 @@ window.addTransactionWithPreview = async function() {
         const depositTxs = await processDepositWithFutureDays(member, amount, Date.now(), desc || 'Manual deposit');
         const writes = depositTxs.map(tx => db.ref('transactions').push(tx));
         await Promise.all(writes);
-        // 🔥 Force refresh loans from Firebase
-        const loansSnap = await db.ref('loans').once('value');
-        loans = loansSnap.val() ? Object.entries(loansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
-        // Recompute all pots from scratch
-        computePots();
-        refreshUI();
+        await refreshAfterDeposit();
         closeOv('ov-add-tx');
         toast(`Deposit saved! ${money(amount)} applied.`, '#10b981');
       },
@@ -11545,10 +11558,7 @@ window.addTransactionWithPreview = async function() {
         const depositTxs = await processDepositWithFutureDays(member, amount, Date.now(), desc || 'Manual deposit');
         const writes = depositTxs.map(tx => db.ref('transactions').push(tx));
         await Promise.all(writes);
-        const loansSnap = await db.ref('loans').once('value');
-        loans = loansSnap.val() ? Object.entries(loansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
-        computePots();
-        refreshUI();
+        await refreshAfterDeposit();
         closeOv('ov-add-tx');
         toast(`Deposit saved! ${money(amount)} applied.`, '#10b981');
       },
@@ -11559,7 +11569,7 @@ window.addTransactionWithPreview = async function() {
       }
     );
   } else {
-    // Non‑deposit transaction (withdrawal, fine, welfare, expense)
+    // Non-deposit transaction (withdrawal, fine, welfare, expense)
     showTransactionReceiptModal(member, type, amount, desc || type,
       async () => {
         await db.ref('transactions').push({
@@ -15080,7 +15090,6 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
   const neededWelfare = welfarePaidToday ? 0 : welfareAmount;
   const deficitToday = neededDaily + neededWelfare;
 
-  // First, use prepaid balance to cover today's deficit
   const prepaidBalance = memberPrepaid[member.phone] || 0;
   let usedPrepaidToday = 0;
   let prepaidRemaining = prepaidBalance;
@@ -15089,19 +15098,18 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
     prepaidRemaining -= usedPrepaidToday;
     if (usedPrepaidToday > 0) {
       writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'prepaid_used', amount: usedPrepaidToday,
+        memberPhone: member.phone,
+        memberName: member.name,
+        type: 'prepaid_used',
+        amount: usedPrepaidToday,
         description: `Prepaid used for today's requirement (${money(usedPrepaidToday)})`,
         date: now + 500
       });
-      // Update prepaid balance in Firebase (will be done later)
     }
   }
 
-  // Remaining deficit after prepaid
   const remainingDeficit = deficitToday - usedPrepaidToday;
-  let usedToday = 0;
-  let dailyPortion = 0, welfarePortion = 0;
+  let usedToday = 0, dailyPortion = 0, welfarePortion = 0;
   if (remainingDeficit > 0 && remaining > 0) {
     usedToday = Math.min(remaining, remainingDeficit);
     remaining -= usedToday;
@@ -15109,8 +15117,10 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
     welfarePortion = usedToday - dailyPortion;
     if (dailyPortion > 0) {
       writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'deposit', amount: dailyPortion,
+        memberPhone: member.phone,
+        memberName: member.name,
+        type: 'deposit',
+        amount: dailyPortion,
         isDailySavings: true,
         description: `Daily savings for ${new Date(todayStart).toLocaleDateString()}`,
         date: todayStart + 1500
@@ -15118,8 +15128,10 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
     }
     if (welfarePortion > 0) {
       writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'welfare', amount: welfarePortion,
+        memberPhone: member.phone,
+        memberName: member.name,
+        type: 'welfare',
+        amount: welfarePortion,
         description: `Welfare for ${new Date(todayStart).toLocaleDateString()}`,
         date: todayStart + 500,
         autoDeduction: true
@@ -15127,10 +15139,13 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
     }
   }
 
-  // Update prepaid balance in member object (will be saved later)
   const newPrepaid = prepaidRemaining;
 
   // ---------- 2. REPAY APPLICATION LOANS (⭐) ----------
+  // We must get the latest loans from Firebase inside this function,
+  // but since we call it from the callback, we should use the global `loans`
+  // which we will refresh after the deposit. However, to be safe, we'll
+  // use the global `loans` which is current at the start of the deposit.
   const appLoans = loans.filter(l =>
     l.memberPhone === member.phone &&
     l.status === 'approved' &&
@@ -15148,13 +15163,15 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
     if (repaymentAmount > 0) {
       const newRepaidAmount = (loan.repaidAmount || 0) + repaymentAmount;
       writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'loan_repayment', amount: repaymentAmount,
-        description: `Repayment for application loan ${loan.id}`,
+        memberPhone: member.phone,
+        memberName: member.name,
+        type: 'loan_repayment',
+        amount: repaymentAmount,
+        description: `Loan repayment (application)`,   // ✅ Clean description
         date: now + 2,
-        loanId: loan.id
+        loanId: loan.id   // Store the loan ID but do not include it in description
       });
-      // Update loan repaidAmount in Firebase immediately
+      // Update the loan in Firebase immediately
       await db.ref('loans/' + loan.id).update({ repaidAmount: newRepaidAmount });
       if (newRepaidAmount >= loan.totalRepay) {
         await db.ref('loans/' + loan.id).update({ repaid: true, repaidAt: Date.now() });
@@ -15183,11 +15200,13 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
     if (repaymentAmount > 0) {
       const newRepaidAmount = (loan.repaidAmount || 0) + repaymentAmount;
       writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'loan_repayment', amount: repaymentAmount,
-        description: `Repayment for assigned loan ${loan.id}`,
+        memberPhone: member.phone,
+        memberName: member.name,
+        type: 'loan_repayment',
+        amount: repaymentAmount,
+        description: `Loan repayment`,   // ✅ Clean description
         date: now + 3,
-        loanId: loan.id
+        loanId: loan.id   // Store ID but not in description
       });
       await db.ref('loans/' + loan.id).update({ repaidAmount: newRepaidAmount });
       if (newRepaidAmount >= loan.totalRepay) {
@@ -15203,9 +15222,11 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
     remaining -= usedForDebt;
     if (usedForDebt > 0) {
       writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'debt_cleared', amount: usedForDebt,
-        description: `Cleared debt of ${money(usedForDebt)}`,
+        memberPhone: member.phone,
+        memberName: member.name,
+        type: 'debt_cleared',
+        amount: usedForDebt,
+        description: `Debt cleared`,   // ✅ Clean description
         date: now + 4
       });
     }
@@ -15221,18 +15242,21 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
     let daysProcessed = 0;
     let remainingPrepay = remaining;
 
-    // Full days first
     while (remainingPrepay >= requiredToday && daysProcessed < maxDays) {
       writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'deposit', amount: dailyAmount,
+        memberPhone: member.phone,
+        memberName: member.name,
+        type: 'deposit',
+        amount: dailyAmount,
         isPrepaid: true,
         description: `Prepaid daily savings for ${new Date(currentDay).toLocaleDateString()}`,
         date: currentDay + 1500
       });
       writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'welfare', amount: welfareAmount,
+        memberPhone: member.phone,
+        memberName: member.name,
+        type: 'welfare',
+        amount: welfareAmount,
         isPrepaid: true,
         description: `Prepaid welfare for ${new Date(currentDay).toLocaleDateString()}`,
         date: currentDay + 500,
@@ -15243,14 +15267,15 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
       daysProcessed++;
     }
 
-    // Partial day (if any left)
     if (remainingPrepay > 0 && daysProcessed < maxDays) {
       const dailyPortionPartial = Math.min(remainingPrepay, dailyAmount);
       const welfarePortionPartial = remainingPrepay - dailyPortionPartial;
       if (dailyPortionPartial > 0) {
         writes.push({
-          memberPhone: member.phone, memberName: member.name,
-          type: 'deposit', amount: dailyPortionPartial,
+          memberPhone: member.phone,
+          memberName: member.name,
+          type: 'deposit',
+          amount: dailyPortionPartial,
           isPrepaid: true,
           description: `Prepaid daily savings for ${new Date(currentDay).toLocaleDateString()} (partial)`,
           date: currentDay + 1500
@@ -15258,47 +15283,49 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
       }
       if (welfarePortionPartial > 0) {
         writes.push({
-          memberPhone: member.phone, memberName: member.name,
-          type: 'welfare', amount: welfarePortionPartial,
+          memberPhone: member.phone,
+          memberName: member.name,
+          type: 'welfare',
+          amount: welfarePortionPartial,
           isPrepaid: true,
           description: `Prepaid welfare for ${new Date(currentDay).toLocaleDateString()} (partial)`,
           date: currentDay + 500,
           autoDeduction: true
         });
       }
-      // The rest becomes prepaid balance (if any)
       const remainingForDay = requiredToday - remainingPrepay;
       if (remainingForDay > 0) {
         const newPrepaidBalance = (memberPrepaid[member.phone] || 0) + remainingForDay;
         memberPrepaid[member.phone] = newPrepaidBalance;
         writes.push({
-          memberPhone: member.phone, memberName: member.name,
+          memberPhone: member.phone,
+          memberName: member.name,
           type: 'prepaid_balance',
           amount: remainingForDay,
           description: `Prepaid balance for ${new Date(currentDay).toLocaleDateString()} (${money(remainingForDay)} remaining)`,
           date: currentDay + 1000
         });
-        // Update member prepaid in Firebase
         await db.ref('members/' + member.id + '/prepaid').set(newPrepaidBalance);
       }
     }
   } else if (remaining > 0) {
-    // If there are still loans/debts, any leftover is just extra deposit (should not happen)
     writes.push({
-      memberPhone: member.phone, memberName: member.name,
-      type: 'deposit', amount: remaining,
+      memberPhone: member.phone,
+      memberName: member.name,
+      type: 'deposit',
+      amount: remaining,
       description: 'Extra deposit (applied to balance)',
       date: now + 2000
     });
   }
 
-  // Update prepaid balance if changed
   if (newPrepaid !== undefined && newPrepaid !== prepaidBalance) {
     await db.ref('members/' + member.id + '/prepaid').set(newPrepaid);
   }
 
   return writes;
 }
+
 
 
 async function calculateProjectedLoanBalanceAfterDeposit(member, depositAmount) {
