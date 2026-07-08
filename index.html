@@ -1520,9 +1520,6 @@ select.inp option{background:#0a1628;color:var(--t)}
 .pill-amber{background:rgba(245,158,11,0.15);color:var(--amber);border:1px solid rgba(245,158,11,0.25)}
 .pill-red{background:rgba(239,68,68,0.15);color:var(--red);border:1px solid rgba(239,68,68,0.25)}
 
-  70% { opacity: 1; transform: translateY(6px) rotate(2deg); }
-  100% { opacity: 1; transform: translateY(0) rotate(0); }
-}
 /* Admin grid cards – modern, animated, attractive */
 .admin-grid {
   display: grid;
@@ -2185,26 +2182,81 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
   filter: drop-shadow(0 0 16px var(--teal2));
   letter-spacing: 3px;
 }
-#blank-screen .fall-letter {
-  opacity: 0;
-  transform: translateY(-100vh);
-  animation: bsElasticFall 0.72s cubic-bezier(0.34,1.3,0.64,1) forwards;
-}
+#blank-screen .fall-letter,
 #blank-screen .grow-letter {
-  transform: scale(0);
   opacity: 0;
-  animation: bsGrow 0.5s cubic-bezier(0.34,1.56,0.64,1) forwards;
+  transform: translate(var(--sx,0px),var(--sy,-60px)) scale(0.25) rotate(var(--rot,0deg));
+  animation: bsPlantScatter 0.68s cubic-bezier(0.22,1.15,0.4,1) forwards;
 }
-@keyframes bsElasticFall {
-  0%   { opacity: 0; transform: translateY(-100vh) rotate(-12deg); }
-  50%  { opacity: 1; transform: translateY(15px) rotate(2.5deg); }
-  70%  { transform: translateY(-5px) rotate(-1deg); }
-  100% { opacity: 1; transform: translateY(0) rotate(0); }
+@keyframes bsPlantScatter {
+  0%   { opacity: 0; transform: translate(var(--sx,0px),var(--sy,-60px)) scale(0.25) rotate(var(--rot,0deg)); filter: blur(2px); }
+  55%  { opacity: 1; transform: translate(calc(var(--sx,0px) * 0.12),calc(var(--sy,-60px) * 0.12)) scale(1.18) rotate(calc(var(--rot,0deg) * 0.15)); filter: blur(0); }
+  100% { opacity: 1; transform: translate(0,0) scale(1) rotate(0deg); }
 }
-@keyframes bsGrow {
-  0%   { transform: scale(0) rotate(-8deg); opacity: 0; }
-  55%  { transform: scale(1.18) rotate(2deg); opacity: 1; }
-  100% { transform: scale(1) rotate(0); opacity: 1; }
+/* ── Plant that grows and scatters into the wordmark ── */
+#bs-plant-wrap {
+  position: relative;
+  height: 96px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  margin: 0 auto 4px;
+}
+#bs-plant-stem {
+  width: 5px;
+  height: 0;
+  background: linear-gradient(180deg, #34d399, #10b981);
+  border-radius: 6px;
+  transform-origin: bottom center;
+  animation: bsStemGrow 0.85s cubic-bezier(0.34,1.2,0.64,1) forwards;
+  box-shadow: 0 0 14px rgba(52,211,153,0.55);
+}
+#bs-plant-leaf-l, #bs-plant-leaf-r {
+  position: absolute;
+  bottom: 26px;
+  width: 22px;
+  height: 12px;
+  background: linear-gradient(135deg, #34d399, #10b981);
+  border-radius: 0 100% 0 100%;
+  opacity: 0;
+  transform: scale(0) rotate(20deg);
+  animation: bsLeafPop 0.45s 0.55s cubic-bezier(0.34,1.56,0.64,1) forwards;
+}
+#bs-plant-leaf-l { left: calc(50% - 24px); }
+#bs-plant-leaf-r { right: calc(50% - 24px); border-radius: 100% 0 100% 0; transform: scale(0) rotate(-20deg) scaleX(-1); }
+#bs-plant-top {
+  font-size: 2.2rem;
+  opacity: 0;
+  transform: scale(0.3) translateY(10px);
+  animation: bsTopPop 0.5s 0.72s cubic-bezier(0.34,1.56,0.64,1) forwards;
+  filter: drop-shadow(0 0 14px rgba(52,211,153,0.55));
+}
+@keyframes bsStemGrow { 0% { height: 0; } 100% { height: 64px; } }
+@keyframes bsLeafPop {
+  0%   { opacity: 0; transform: scale(0) rotate(20deg); }
+  100% { opacity: 1; transform: scale(1) rotate(20deg); }
+}
+@keyframes bsTopPop {
+  0%   { opacity: 0; transform: scale(0.3) translateY(10px); }
+  60%  { opacity: 1; transform: scale(1.3) translateY(-6px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+#bs-plant-wrap.bs-scatter #bs-plant-top {
+  animation: bsBurst 0.4s ease forwards;
+}
+#bs-plant-wrap.bs-scatter #bs-plant-stem,
+#bs-plant-wrap.bs-scatter #bs-plant-leaf-l,
+#bs-plant-wrap.bs-scatter #bs-plant-leaf-r {
+  animation: bsFadeShrink 0.4s ease forwards;
+}
+@keyframes bsBurst {
+  0%   { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(2.4); filter: blur(6px); }
+}
+@keyframes bsFadeShrink {
+  0%   { opacity: 1; }
+  100% { opacity: 0; }
 }
 /* other splash elements (tagline, years badge, loading row) – reuse app colours */
 #bs-tagline {
@@ -2430,6 +2482,12 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
     <div class="bs-ring-3"></div>
   </div>
   <div class="bs-shimmer"></div>
+  <div id="bs-plant-wrap">
+    <div id="bs-plant-leaf-l"></div>
+    <div id="bs-plant-leaf-r"></div>
+    <div id="bs-plant-stem"></div>
+    <div id="bs-plant-top">🌱</div>
+  </div>
   <div id="falling-container">
     <div class="word-row">
       <span id="letter-h" class="fall-letter">H</span>
@@ -2474,15 +2532,39 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
         inance=document.getElementById('letters-inance');
     if(!h||!t||!f){window.completeSplashAndShowLogin&&window.completeSplashAndShowLogin();return;}
     var lH=['a','r','v','e','s','t'],lT=['r','u','s','t'],lF=['i','n','a','n','c','e'];
-    function fall(c,ls,d,s){setTimeout(function(){ls.forEach(function(l,i){setTimeout(function(){var sp=document.createElement('span');sp.className='fall-letter';sp.textContent=l;c.appendChild(sp);},i*s);});},d);}
-    function grow(c,ls,d,s){setTimeout(function(){ls.forEach(function(l,i){setTimeout(function(){var sp=document.createElement('span');sp.className='grow-letter';sp.textContent=l;c.appendChild(sp);},i*s);});},d);}
+    /* Scatter offset helper: every letter starts near the plant and flies
+       outward in a fan pattern, landing in its natural spot in the word. */
+    var scatterSeed=0;
+    function pseudoRand(){scatterSeed=(scatterSeed*9301+49297)%233280;return scatterSeed/233280;}
+    function scatterLetter(el,idx,total){
+      var spread=(total>1)?(idx/(total-1)):0.5;
+      var angle=(-65+130*spread)*(Math.PI/180);
+      var dist=90+pseudoRand()*55;
+      var sx=Math.sin(angle)*dist;
+      var sy=-Math.abs(Math.cos(angle))*dist-28;
+      var rot=(pseudoRand()*70)-35;
+      el.style.setProperty('--sx',sx.toFixed(1)+'px');
+      el.style.setProperty('--sy',sy.toFixed(1)+'px');
+      el.style.setProperty('--rot',rot.toFixed(1)+'deg');
+    }
+    function fall(c,ls,d,s){setTimeout(function(){ls.forEach(function(l,i){setTimeout(function(){var sp=document.createElement('span');sp.className='fall-letter';sp.textContent=l;scatterLetter(sp,i,ls.length);c.appendChild(sp);},i*s);});},d);}
+    function grow(c,ls,d,s){setTimeout(function(){ls.forEach(function(l,i){setTimeout(function(){var sp=document.createElement('span');sp.className='grow-letter';sp.textContent=l;scatterLetter(sp,i,ls.length);c.appendChild(sp);},i*s);});},d);}
+    var PLANT_DELAY=1050;
+    /* 0 Plant grows, then bursts to scatter the letters */
+    setTimeout(function(){
+      var pw=document.getElementById('bs-plant-wrap');
+      if(pw)pw.classList.add('bs-scatter');
+    },PLANT_DELAY-150);
     /* 1 H */
-    h.style.animation='bsElasticFall 0.72s cubic-bezier(0.34,1.3,0.64,1) forwards';h.style.opacity='1';
-    fall(arvest,lH,900,80);
-    /* 2 T */
-    setTimeout(function(){t.style.animation='bsElasticFall 0.72s cubic-bezier(0.34,1.3,0.64,1) forwards';t.style.opacity='1';grow(rust,lT,80,100);},1700);
-    /* 3 F */
-    setTimeout(function(){f.style.animation='bsElasticFall 0.72s cubic-bezier(0.34,1.3,0.64,1) forwards';f.style.opacity='1';grow(inance,lF,10,60);},3100);
+    setTimeout(function(){
+      scatterLetter(h,3,7);
+      h.style.animation='bsPlantScatter 0.68s cubic-bezier(0.22,1.15,0.4,1) forwards';h.style.opacity='1';
+      fall(arvest,lH,900,80);
+      /* 2 T */
+      setTimeout(function(){scatterLetter(t,1,5);t.style.animation='bsPlantScatter 0.68s cubic-bezier(0.22,1.15,0.4,1) forwards';t.style.opacity='1';grow(rust,lT,80,100);},1700);
+      /* 3 F */
+      setTimeout(function(){scatterLetter(f,0,7);f.style.animation='bsPlantScatter 0.68s cubic-bezier(0.22,1.15,0.4,1) forwards';f.style.opacity='1';grow(inance,lF,10,60);},3100);
+    },PLANT_DELAY);
     // 4. Anniversary badge – automatically from group start date
 setTimeout(function(){
   try{
@@ -2604,7 +2686,7 @@ setTimeout(function(){
   } catch(err) {
     console.warn('Anniversary badge error:', err);
   }
-}, 4400);
+}, 5450);
     /* 5 Loading label cycle */
     var ll=['LOADING\u2026','MEMBERS\u2026','BALANCES\u2026','ALMOST READY\u2026'];
     var li=0,lv=setInterval(function(){li++;var el=document.getElementById('bs-loading-label');if(el)el.textContent=ll[li%ll.length];},1700);
@@ -2613,7 +2695,7 @@ setTimeout(function(){
       clearInterval(lv);
       var el=document.getElementById('bs-loading-label');if(el)el.textContent='READY \u2713';
       window.completeSplashAndShowLogin&&window.completeSplashAndShowLogin();
-    },8800);
+    },9850);
   }
   if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',run);}else{run();}
 })();
@@ -3028,7 +3110,7 @@ setTimeout(function(){
   <button class="ni" id="ni-home" onclick="goTab('home',this)"><div class="ico">🏠</div><span>Home</span><div class="ni-bar"></div></button>
   <button class="ni ni-dashboard-btn" id="ni-statistics" onclick="goTab('statistics',this)"><div class="ico ni-dash-ico">📞</div><span>Dashboard</span><div class="ni-bar"></div></button>
   <button class="ni" id="ni-account" onclick="goTab('account',this)"><div class="ico">👤</div><span>Account</span><div class="ni-bar"></div></button>
-  <button class="ni" id="ni-admin" onclick="goTab('admin',this)"><div class="ico">🔐</div><span>Admin</span><div class="ni-bar"></div></button>
+  <button class="ni" id="ni-admin" onclick="goTab('admin',this)" style="display:none!important"><div class="ico">🔐</div><span>Admin</span><div class="ni-bar"></div></button>
 </div>
 </div>
 </div>
@@ -3930,6 +4012,8 @@ let settings = {
 };
 let adminShowGrid = true;   // true = show grid, false = show normal admin tab content
 let currentUser=null,adminUnlocked=false,currentAdminTab='savings';
+let preloadedChatMessages = [];      // Stores current user's chat messages
+let chatListenerRef = null;          // Keep reference to detach if needed
 let memberBalances={},memberDebts={},memberLoans={};
 let cashFromDeposits=0,groupProfit=0;
 let realtimePresenceListening=false;
@@ -3949,7 +4033,77 @@ let notifications = {};
 let memberApplicationLoans = {};  // Tracks application loans separately
 let memberAssignedLoans = {};     // Tracks assigned debt loans separately
 let memberPrepaid = {};           // Tracks prepaid balances
+// ==========================================
+// LOADING MANAGER – tracks data readiness
+// ==========================================
 
+const LOADING_STATE = {
+  settings: false,
+  members: false,
+  transactions: false,
+  loans: false,
+  rotation: false,
+  loanSettings: false,
+  notices: false,
+  notifications: false,
+  status: false
+};
+
+const LOADING_MESSAGES = {
+  settings: 'Loading group settings…',
+  members: 'Loading member list…',
+  transactions: 'Loading transaction ledger…',
+  loans: 'Loading loan records…',
+  rotation: 'Loading payout rotation…',
+  loanSettings: 'Loading loan settings…',
+  notices: 'Loading announcements…',
+  notifications: 'Loading notifications…',
+  status: 'Checking online status…'
+};
+
+let allDataLoaded = false;
+
+function updateLoadingProgress() {
+  const total = Object.keys(LOADING_STATE).length;
+  const loaded = Object.values(LOADING_STATE).filter(v => v).length;
+  const percent = Math.round((loaded / total) * 100);
+
+  const statusEl = document.getElementById('bs-loading-label');
+  if (statusEl) {
+    const msg = getCurrentLoadingMessage();
+    statusEl.textContent = `${msg} (${percent}%)`;
+  }
+
+  // If everything is loaded, trigger the finalisation
+  if (loaded === total && !allDataLoaded) {
+    allDataLoaded = true;
+    if (window._onAllDataLoaded) window._onAllDataLoaded();
+  }
+}
+
+function getCurrentLoadingMessage() {
+  for (const key in LOADING_STATE) {
+    if (!LOADING_STATE[key]) {
+      return LOADING_MESSAGES[key] || `Loading ${key}…`;
+    }
+  }
+  return 'Ready!';
+}
+
+function markDataLoaded(source) {
+  if (LOADING_STATE.hasOwnProperty(source) && !LOADING_STATE[source]) {
+    LOADING_STATE[source] = true;
+    updateLoadingProgress();
+  }
+}
+
+// Reset (if needed)
+function resetLoadingState() {
+  for (const key in LOADING_STATE) {
+    LOADING_STATE[key] = false;
+  }
+  allDataLoaded = false;
+}
 function hasActiveLoanFromApplication() {
   // Check if the current user has an active loan that was submitted via the application form
   // (i.e., has loanQuestions array)
@@ -4281,6 +4435,26 @@ function syncCurrentUserFromMembers(){
   currentUser={...fresh};
   localStorage.setItem('ht_user',JSON.stringify(currentUser));
   return before!==JSON.stringify(currentUser);
+}
+// ==========================================
+// CHAT CACHE HELPERS
+// ==========================================
+
+function saveChatCache(userId, messages) {
+  try {
+    localStorage.setItem('chatCache_' + userId, JSON.stringify(messages));
+  } catch (e) {
+    // ignore quota errors
+  }
+}
+
+function loadChatCache(userId) {
+  try {
+    const data = localStorage.getItem('chatCache_' + userId);
+    return data ? JSON.parse(data) : null;
+  } catch (e) {
+    return null;
+  }
 }
 // ── Receiver cycle animation ──────────────────────────────────────────────
 let _receiverTimer = null;
@@ -5874,20 +6048,18 @@ function updateMemberPresence() {
 // OPTIMIZED DATA LOADING - FASTER
 // ==========================================
 
-// Replace your existing loadAllData() with this optimized version
 function loadAllData() {
   if (!db) return;
 
-  // Load settings FIRST (fastest, smallest)
+  // Load settings FIRST
   db.ref('settings').on('value', snap => {
     if (snap.val()) settings = { ...settings, ...snap.val() };
     applySettings();
     if (currentScreen === 'admin' && adminUnlocked) renderAdminTab();
-    // Signal that settings are loaded
-    if (window._onDataLoaded) window._onDataLoaded();
+    markDataLoaded('settings');   // <-- new
   });
 
-  // Load members SECOND (important for UI)
+  // Load members
   db.ref('members').on('value', snap => {
     members = snap.val() ? Object.entries(snap.val()).map(([id, m]) => ({ ...m, id, prepaid: m.prepaid || 0 })) : [];
     computePots();
@@ -5898,9 +6070,10 @@ function loadAllData() {
     updateLoanIndicator();
     if (isLedgerActive()) loadLedger('all');
     if (currentScreen === 'statistics') renderStatistics();
+    markDataLoaded('members');   // <-- new
   });
 
-  // Load transactions THIRD (large data, load in background)
+  // Load transactions
   setTimeout(() => {
     db.ref('transactions').on('value', snap => {
       transactions = snap.val() ? Object.entries(snap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
@@ -5911,20 +6084,22 @@ function loadAllData() {
       updateAccountBalances();
       updateLoanIndicator();
       if (currentScreen === 'statistics') renderStatistics();
+      markDataLoaded('transactions');   // <-- new
     });
   }, 100);
 
-  // Load loans FOURTH (load in background)
+  // Load loans
   setTimeout(() => {
     db.ref('loans').on('value', snap => {
       loans = snap.val() ? Object.entries(snap.val()).map(([id, l]) => ({ ...l, id })) : [];
       if (currentScreen === 'admin' && adminUnlocked && currentAdminTab === 'savings') renderAdminTab();
       updateLoanIndicator();
       if (currentScreen === 'statistics') renderStatistics();
+      markDataLoaded('loans');   // <-- new
     });
   }, 200);
 
-  // Load rotation FIFTH
+  // Load rotation
   setTimeout(() => {
     db.ref('rotation').on('value', snap => {
       rotation = snap.val() || { order: [], currentIndex: 0, history: [] };
@@ -5932,40 +6107,68 @@ function loadAllData() {
       updateHomeUI();
       refreshCarouselPayee();
       if (currentScreen === 'statistics') renderStatistics();
+      markDataLoaded('rotation');   // <-- new
     });
   }, 300);
 
-  // Load other data in background
+  // Load loan settings
   setTimeout(() => {
     db.ref('loanSettings').on('value', snap => {
       if (snap.val()) loanSettings = { ...loanSettings, ...snap.val() };
+      markDataLoaded('loanSettings');   // <-- new
     });
   }, 400);
 
+  // Load notices (mainCarouselNotifs)
   setTimeout(() => {
     db.ref('mainNotices').on('value', snap => {
       const val = snap.val() || {};
       mainCarouselNotifs = Object.entries(val).map(([key, notice]) => ({ ...notice, key }));
       renderMainCarousel();
       if (currentScreen === 'admin' && adminUnlocked && currentAdminTab === 'notice') renderAdminTab();
+      markDataLoaded('notices');   // <-- new
     });
   }, 500);
 
+  // Load loan rotation order and index
   setTimeout(() => {
     db.ref('settings/loanRotationOrder').on('value', snap => {
       if (snap.val()) loanRotationOrder = snap.val();
+      markDataLoaded('loanSettings');   // we can reuse 'loanSettings' or add a separate key
     });
     db.ref('settings/loanReceiverIndex').on('value', snap => {
       if (snap.val() !== null) loanReceiverIndex = snap.val();
     });
   }, 600);
 
+  // Load notifications (once, not continuous)
   setTimeout(() => {
     db.ref('notifications').once('value', snap => {
       notifications = snap.val() || {};
       updateNotificationBadge();
+      markDataLoaded('notifications');   // <-- new
     });
   }, 700);
+
+  // Load status (presence) – optional, but we mark it loaded after first value
+  setTimeout(() => {
+    db.ref('status').once('value', snap => {
+      memberPresence = snap.val() || {};
+      updateAdminMembersList();
+      markDataLoaded('status');   // <-- new
+    });
+  }, 800);
+
+  // ---- TIMEOUT FALLBACK ----
+  setTimeout(function() {
+    if (!allDataLoaded) {
+      console.warn('⚠️ Data load timeout – forcing login now (some data may be missing)');
+      // Force all state to loaded
+      for (const key in LOADING_STATE) LOADING_STATE[key] = true;
+      allDataLoaded = true;
+      if (window._onAllDataLoaded) window._onAllDataLoaded();
+    }
+  }, 15000); // 15 seconds
 }
 
 function updateHomeUI() {
@@ -7147,6 +7350,10 @@ function showMainApp() {
     if (nameSpan) nameSpan.innerText = 'Admin';
     if (referralSpan) referralSpan.innerHTML = `Admin Access – No Referral Code`;
   }
+  // After the app is shown and user is logged in
+if (currentUser && !currentUser.isAdmin) {
+  preloadUserChat(currentUser.id);
+}
   
   if (blankDiv) {
     // Show the welcome blank screen
@@ -8541,6 +8748,9 @@ window.rejectLeaveRequest = async function(requestId) {
 window.logout=function(){
   if(currentUser && !currentUser.isAdmin && db){
     db.ref('/status/' + currentUser.id).set({ state: 'offline', last_changed: Date.now() });
+  if (currentUser && !currentUser.isAdmin) {
+  localStorage.removeItem('chatCache_' + currentUser.id);
+}
   }
   currentUser=null;adminUnlocked=false;
   document.getElementById('app').classList.remove('on');
@@ -12048,6 +12258,50 @@ async function executeDebtAssignment(member, principal, interestRate, interest, 
   console.log(`   Member: ${member.name}`);
   console.log(`   Amount: UGX ${principal.toLocaleString()}`);
   console.log(`   Total Repay: UGX ${totalRepay.toLocaleString()}`);
+}
+function preloadUserChat(userId) {
+  if (!db || !userId) return;
+
+  // 1. Load messages once from Firebase
+  db.ref('chats/' + userId + '/messages').once('value', snap => {
+    const data = snap.val() || {};
+    const msgs = Object.keys(data).map(key => ({
+      key: key,
+      from: data[key].from,
+      text: data[key].text,
+      ts: data[key].ts,
+      read: data[key].read
+    }));
+    msgs.sort((a, b) => a.ts - b.ts);
+    preloadedChatMessages = msgs;
+    saveChatCache(userId, msgs);               // <-- save to cache
+    console.log(`📩 Preloaded ${msgs.length} chat messages for ${userId}`);
+  });
+
+  // 2. Attach real‑time listener for updates (as before)
+  if (chatListenerRef) chatListenerRef.off();
+  chatListenerRef = db.ref('chats/' + userId + '/messages');
+  chatListenerRef.on('child_added', snap => {
+    const msg = snap.val();
+    msg.key = snap.key;
+    if (!preloadedChatMessages.find(m => m.key === msg.key)) {
+      preloadedChatMessages.push(msg);
+      preloadedChatMessages.sort((a, b) => a.ts - b.ts);
+      saveChatCache(userId, preloadedChatMessages);   // <-- update cache
+    }
+  });
+  chatListenerRef.on('child_changed', snap => {
+    const updated = snap.val();
+    const idx = preloadedChatMessages.findIndex(m => m.key === snap.key);
+    if (idx !== -1) {
+      preloadedChatMessages[idx] = { ...updated, key: snap.key };
+      saveChatCache(userId, preloadedChatMessages);
+    }
+  });
+  chatListenerRef.on('child_removed', snap => {
+    preloadedChatMessages = preloadedChatMessages.filter(m => m.key !== snap.key);
+    saveChatCache(userId, preloadedChatMessages);
+  });
 }
 function previewTransactionReceipt() {
   const phone = document.getElementById('tx-member')?.value;
@@ -18346,5 +18600,749 @@ document.addEventListener('click',function(e){
   animation: navDotBounce 0.4s cubic-bezier(0.34,1.56,0.64,1) both;
 }
 </style>
+
+<!-- ═══════════════════════════════════════════════════════════════════
+     HARVEST TRUST — ENHANCED VISUALS + FLOATING CHAT WIDGET
+     ═══════════════════════════════════════════════════════════════════ -->
+
+<!-- Chat FAB -->
+<div id="chat-fab" style="display:none;position:fixed;bottom:90px;right:16px;z-index:9000;">
+  <button onclick="toggleChatPanel()"
+    style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#f59e0b,#d97706);
+           border:none;cursor:pointer;box-shadow:0 4px 24px rgba(245,158,11,0.55);
+           display:flex;align-items:center;justify-content:center;font-size:1.5rem;
+           position:relative;transition:transform 0.25s cubic-bezier(0.34,1.56,0.64,1);color:#fff;">
+    &#128172;
+    <span id="chat-fab-badge"
+      style="display:none;position:absolute;top:-4px;right:-4px;background:#ef4444;
+             color:#fff;font-size:0.55rem;font-weight:800;min-width:18px;height:18px;
+             border-radius:99px;align-items:center;justify-content:center;padding:0 4px;
+             border:2px solid #060e1a;animation:chtBadge 1.5s ease-in-out infinite;">0</span>
+  </button>
+  <div style="position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);
+              white-space:nowrap;font-size:0.55rem;font-weight:700;
+              color:rgba(245,158,11,0.9);letter-spacing:0.5px;">Chat</div>
+</div>
+
+<!-- Chat Panel -->
+<div id="chat-panel"
+  style="position:fixed;bottom:0;right:0;width:100%;max-width:420px;height:80vh;
+         max-height:600px;background:linear-gradient(180deg,#0a1628,#060e1a);
+         border-radius:24px 24px 0 0;border:1px solid rgba(245,158,11,0.25);
+         border-bottom:none;box-shadow:0 -8px 48px rgba(0,0,0,0.7);z-index:9001;
+         display:none;flex-direction:column;overflow:hidden;
+         transform:translateY(100%);transition:transform 0.38s cubic-bezier(0.22,1,0.36,1);">
+
+  <!-- Header -->
+  <div style="padding:14px 16px 10px;background:linear-gradient(135deg,rgba(245,158,11,0.14),rgba(6,182,212,0.07));
+       border-bottom:1px solid rgba(255,255,255,0.07);flex-shrink:0;">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="width:36px;height:36px;border-radius:50%;
+             background:linear-gradient(135deg,#f59e0b,#06b6d4);
+             display:flex;align-items:center;justify-content:center;font-size:1.1rem;">&#128172;</div>
+        <div>
+          <div id="chat-panel-title" style="font-weight:800;color:#f0f6ff;font-size:0.9rem;">Chat</div>
+          <div style="font-size:0.62rem;color:rgba(6,182,212,0.9);display:flex;align-items:center;gap:4px;">
+            <span style="width:6px;height:6px;border-radius:50%;background:#10b981;
+                         display:inline-block;animation:chtOnline 2s infinite;"></span>Online
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button id="chat-back-btn" onclick="chatGoBack()"
+          style="display:none;background:rgba(255,255,255,0.07);border:none;border-radius:99px;
+                 padding:5px 12px;color:#b0c4de;cursor:pointer;font-size:0.72rem;">&#8592; Back</button>
+        <button onclick="toggleChatPanel()"
+          style="background:rgba(255,255,255,0.07);border:none;width:30px;height:30px;
+                 border-radius:50%;color:#b0c4de;cursor:pointer;font-size:1rem;
+                 display:flex;align-items:center;justify-content:center;">&#10005;</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin member list -->
+  <div id="chat-member-list" style="display:none;flex:1;overflow-y:auto;padding:12px;">
+    <div style="font-size:0.7rem;color:rgba(245,158,11,0.8);font-weight:700;
+         text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Member Conversations</div>
+    <div id="chat-member-list-inner"></div>
+  </div>
+
+  <!-- Conversation -->
+  <div id="chat-convo" style="display:none;flex:1;overflow-y:auto;padding:12px;scroll-behavior:smooth;">
+    <div id="chat-messages"></div>
+  </div>
+
+  <!-- Input -->
+  <div id="chat-input-area"
+  style="display:none;padding:10px 12px;border-top:1px solid rgba(255,255,255,0.07);
+         background:rgba(0,0,0,0.2);flex-shrink:0;">
+  <div style="display:flex;gap:8px;align-items:flex-end;">
+    <textarea id="chat-input" placeholder="Type a message..." rows="1"
+      style="flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
+             border-radius:14px;padding:9px 13px;color:#f0f6ff;font-size:0.82rem;
+             resize:none;outline:none;max-height:120px;overflow-y:auto;line-height:1.4;
+             font-family:'DM Sans',sans-serif;"
+      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMsg();}"
+      oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px';">
+    </textarea>
+    <button onclick="sendChatMsg()"
+      style="width:40px;height:40px;border-radius:50%;
+             background:linear-gradient(135deg,#f59e0b,#d97706);
+             border:none;cursor:pointer;display:flex;align-items:center;
+             justify-content:center;font-size:1.1rem;flex-shrink:0;
+             box-shadow:0 2px 12px rgba(245,158,11,0.4);">&#10148;</button>
+  </div>
+  <div style="text-align:center;margin-top:5px;font-size:0.58rem;color:rgba(90,122,154,0.7);">
+    Messages are private between you and admin
+  </div>
+</div>
+
+<!-- Enhanced CSS -->
+<style>
+body::before{content:'';position:fixed;inset:0;z-index:-2;pointer-events:none;
+  background:radial-gradient(ellipse 80% 60% at 20% 10%,rgba(245,158,11,0.07),transparent 60%),
+    radial-gradient(ellipse 60% 80% at 80% 90%,rgba(6,182,212,0.07),transparent 60%),
+    radial-gradient(ellipse 50% 50% at 50% 50%,rgba(139,92,246,0.04),transparent 60%);
+  animation:bgMesh 20s ease-in-out infinite alternate;}
+@keyframes bgMesh{0%,100%{opacity:.7}50%{opacity:1}}
+
+.ht-orb{position:fixed;border-radius:50%;pointer-events:none;z-index:-1;filter:blur(80px);opacity:.13;}
+.ht-orb-1{width:320px;height:320px;background:radial-gradient(circle,#f59e0b,transparent 70%);top:-60px;left:-60px;animation:orb1 25s ease-in-out infinite;}
+.ht-orb-2{width:260px;height:260px;background:radial-gradient(circle,#06b6d4,transparent 70%);bottom:80px;right:-40px;animation:orb2 30s ease-in-out infinite;}
+.ht-orb-3{width:200px;height:200px;background:radial-gradient(circle,#8b5cf6,transparent 70%);top:40%;left:30%;animation:orb3 35s ease-in-out infinite;}
+@keyframes orb1{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(40px,30px) scale(1.1)}66%{transform:translate(-20px,50px) scale(.9)}}
+@keyframes orb2{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(-50px,-30px) scale(1.08)}66%{transform:translate(30px,-50px) scale(.92)}}
+@keyframes orb3{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(60px,-40px) scale(1.15)}}
+
+.card{background:rgba(255,255,255,.05)!important;backdrop-filter:blur(18px) saturate(1.4)!important;-webkit-backdrop-filter:blur(18px) saturate(1.4)!important;border:1px solid rgba(255,255,255,.09)!important;box-shadow:0 2px 12px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.06)!important;}
+.card:hover{background:rgba(255,255,255,.08)!important;border-color:rgba(245,158,11,.22)!important;box-shadow:0 8px 32px rgba(0,0,0,.45)!important;transform:translateY(-3px)!important;}
+
+.ss-tile{position:relative;overflow:hidden;}
+.ss-tile::after{content:'';position:absolute;top:-50%;left:-60%;width:40%;height:200%;background:linear-gradient(to right,transparent,rgba(255,255,255,.06),transparent);transform:skewX(-20deg);animation:tileSweep 6s ease-in-out infinite;pointer-events:none;}
+@keyframes tileSweep{0%,70%,100%{left:-60%;opacity:0}20%{left:160%;opacity:1}}
+
+.hdr{background:linear-gradient(135deg,rgba(245,158,11,.12),rgba(6,182,212,.06),rgba(139,92,246,.08))!important;backdrop-filter:blur(20px)!important;border-bottom:1px solid rgba(245,158,11,.15)!important;}
+
+#nav{background:rgba(6,14,26,.92)!important;backdrop-filter:blur(24px) saturate(1.8)!important;border-top:1px solid rgba(245,158,11,.15)!important;box-shadow:0 -4px 24px rgba(0,0,0,.5)!important;}
+.ni.on .ico{filter:drop-shadow(0 0 8px var(--gold));}
+
+.txc{position:relative;overflow:hidden;}
+.txc::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(245,158,11,.05),transparent);opacity:0;transition:opacity .3s;pointer-events:none;}
+.txc:hover::after{opacity:1;}
+
+@keyframes listIn{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)}}
+.mc,.txc{animation:listIn .35s cubic-bezier(.22,1,.36,1) both;}
+.mc:nth-child(1),.txc:nth-child(1){animation-delay:.02s}.mc:nth-child(2),.txc:nth-child(2){animation-delay:.06s}
+.mc:nth-child(3),.txc:nth-child(3){animation-delay:.10s}.mc:nth-child(4),.txc:nth-child(4){animation-delay:.14s}
+.mc:nth-child(5),.txc:nth-child(5){animation-delay:.18s}.mc:nth-child(6),.txc:nth-child(6){animation-delay:.22s}
+.mc:nth-child(7),.txc:nth-child(7){animation-delay:.26s}.mc:nth-child(8),.txc:nth-child(8){animation-delay:.30s}
+
+@keyframes goldGlow{0%,100%{text-shadow:0 0 0 rgba(245,158,11,0)}50%{text-shadow:0 0 16px rgba(245,158,11,.45)}}
+.sv{animation:goldGlow 3.5s ease-in-out infinite;}
+
+.btn{transition:background .25s,transform .18s cubic-bezier(.34,1.56,.64,1),box-shadow .25s,border-color .25s!important;}
+.btn:hover{transform:translateY(-1px)!important;box-shadow:0 6px 20px rgba(0,0,0,.35)!important;}
+.btn:active{transform:scale(.96) translateY(0)!important;transition-duration:.08s!important;}
+
+.ov{backdrop-filter:blur(6px)!important;}
+.bs{box-shadow:0 24px 80px rgba(0,0,0,.75),inset 0 1px 0 rgba(255,255,255,.05)!important;}
+
+.inp{background:rgba(255,255,255,.05)!important;border:1px solid rgba(255,255,255,.09)!important;}
+.inp:focus{background:rgba(255,255,255,.08)!important;border-color:rgba(245,158,11,.5)!important;box-shadow:0 0 0 3px rgba(245,158,11,.15)!important;}
+
+.sec-h::after{background:linear-gradient(90deg,var(--gold),var(--teal),transparent)!important;}
+
+@keyframes pgEnter{from{opacity:0;transform:translateY(20px) scale(.985);filter:blur(2px)}to{opacity:1;transform:translateY(0) scale(1);filter:blur(0)}}
+.tab.on{animation:pgEnter .4s cubic-bezier(.22,1,.36,1) both!important;}
+
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:rgba(255,255,255,.03)}
+::-webkit-scrollbar-thumb{background:rgba(245,158,11,.35);border-radius:99px}
+::-webkit-scrollbar-thumb:hover{background:rgba(245,158,11,.6)}
+
+@keyframes chtBadge{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
+@keyframes chtMsgIn{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:translateY(0) scale(1)}}
+@keyframes chtOnline{0%,100%{opacity:1}50%{opacity:.5}}
+@keyframes fabIn{from{opacity:0;transform:scale(.5) rotate(-20deg)}to{opacity:1;transform:scale(1) rotate(0)}}
+
+.cht-out{display:flex;justify-content:flex-end;margin-bottom:8px;animation:chtMsgIn .28s cubic-bezier(.22,1,.36,1) both;}
+.cht-out .cht-bbl{background:linear-gradient(135deg,#f59e0b,#d97706);color:#000;border-radius:16px 16px 4px 16px;padding:8px 12px;max-width:75%;font-size:.82rem;line-height:1.45;box-shadow:0 2px 10px rgba(245,158,11,.35);word-break:break-word;}
+.cht-in{display:flex;justify-content:flex-start;margin-bottom:8px;animation:chtMsgIn .28s cubic-bezier(.22,1,.36,1) both;}
+.cht-in .cht-bbl{background:rgba(255,255,255,.09);color:#f0f6ff;border-radius:16px 16px 16px 4px;padding:8px 12px;max-width:75%;font-size:.82rem;line-height:1.45;border:1px solid rgba(255,255,255,.1);word-break:break-word;}
+/* Chat message meta – show admin name in a subtle color */
+.cht-meta {
+  font-size: 0.58rem;
+  color: rgba(90,122,154,0.8);
+  margin-top: 3px;
+  padding: 0 4px;
+}
+.cht-meta .admin-name {
+  color: var(--gold);
+  font-weight: 600;
+}
+.cht-div{text-align:center;font-size:.6rem;color:rgba(90,122,154,.6);margin:12px 0 8px;}
+.cht-mi{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:14px;cursor:pointer;transition:background .2s;margin-bottom:6px;border:1px solid rgba(255,255,255,.05);position:relative;}
+.cht-mi:hover{background:rgba(255,255,255,.06);border-color:rgba(245,158,11,.2);}
+.cht-dot{position:absolute;right:12px;width:8px;height:8px;border-radius:50%;background:#ef4444;}
+.cht-typing{display:flex;align-items:center;gap:4px;padding:6px 12px;}
+.cht-typing span{width:6px;height:6px;border-radius:50%;background:rgba(245,158,11,.7);display:inline-block;animation:chtDot 1s ease-in-out infinite;}
+.cht-typing span:nth-child(2){animation-delay:.15s}.cht-typing span:nth-child(3){animation-delay:.30s}
+@keyframes chtDot{0%,80%,100%{transform:translateY(0) scale(.8);opacity:.5}40%{transform:translateY(-7px) scale(1.1);opacity:1}}
+</style>
+
+<!-- Chat Widget JS
+     NOTE: currentUser, db, members are declared with `let` in the main script.
+     In non-module HTML scripts they share the global lexical scope, so they
+     are accessible by bare name here — but NOT via window.currentUser etc. -->
+<script>
+(function() {
+  var _chatOpen = false;
+  var _chatMemberId = null;
+  var _chatListeners = {};
+  var _chatUnread = 0;
+
+  /* DOM helpers */
+  function _el(id)    { return document.getElementById(id); }
+  function _show(id)  { var e = _el(id); if (e) e.style.display = 'block'; }
+  function _hide(id)  { var e = _el(id); if (e) e.style.display = 'none'; }
+  function _flex(id)  { var e = _el(id); if (e) e.style.display = 'flex'; }
+
+  function _esc(s) {
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+  }
+  function _time(ts) {
+    var d = new Date(ts), n = new Date();
+    if (d.toDateString() === n.toDateString())
+      return d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+    return d.toLocaleDateString([], {month: 'short', day: 'numeric'})
+      + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+  }
+  function _col(name) {
+    var c = ['#f59e0b','#06b6d4','#10b981','#8b5cf6','#ef4444','#3b82f6'], h = 0;
+    for (var i = 0; i < (name || '').length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
+    return c[Math.abs(h) % c.length];
+  }
+
+  /* Safe access to let-declared globals */
+  function _cu()  { try { return (typeof currentUser  !== 'undefined') ? currentUser  : null; } catch(e) { return null; } }
+  function _db()  { try { return (typeof db           !== 'undefined') ? db           : null; } catch(e) { return null; } }
+  function _mbs() { try { return (typeof members      !== 'undefined') ? members      : [];   } catch(e) { return [];   } }
+
+  /* ── FAB visibility ─────────────────────────────────────────── */
+  function _showFab() {
+    var fab = _el('chat-fab');
+    if (!fab) return;
+    if (_cu()) {
+      fab.style.display = 'block';
+      fab.style.animation = 'fabIn .5s cubic-bezier(.34,1.56,.64,1) both';
+    } else {
+      fab.style.display = 'none';
+      if (_chatOpen) _closePanel();
+    }
+  }
+
+  /* ── Toggle ─────────────────────────────────────────────────── */
+  window.toggleChatPanel = function() { if (_chatOpen) _closePanel(); else _openPanel(); };
+
+  function _openPanel() {
+    var panel = _el('chat-panel');
+    if (!panel) return;
+    var cu = _cu();
+    if (!cu) return;
+    _chatOpen = true;
+    panel.style.display = 'flex';
+    panel.style.flexDirection = 'column';
+    setTimeout(function() { panel.style.transform = 'translateY(0)'; }, 10);
+    if (cu.isAdmin) _showAdminList();
+    else _showMemberConvo(cu.id);
+  }
+
+  function _closePanel() {
+    var panel = _el('chat-panel');
+    if (!panel) return;
+    _chatOpen = false;
+    panel.style.transform = 'translateY(100%)';
+    setTimeout(function() { if (!_chatOpen) panel.style.display = 'none'; }, 420);
+    Object.keys(_chatListeners).forEach(function(k) { try { _chatListeners[k](); } catch(e) {} });
+    _chatListeners = {};
+    _chatMemberId = null;
+    _hide('chat-member-list'); _hide('chat-convo');
+    _hide('chat-input-area'); _hide('chat-back-btn');
+  }
+
+  /* ── Admin: list members ────────────────────────────────────── */
+  function _showAdminList() {
+    var titleEl = _el('chat-panel-title');
+    if (titleEl) titleEl.textContent = 'Member Chats';
+    _show('chat-member-list'); _hide('chat-convo');
+    _hide('chat-input-area'); _hide('chat-back-btn');
+    _chatMemberId = null;
+    var inner = _el('chat-member-list-inner');
+    if (!inner) return;
+    var database = _db();
+    if (!database) {
+      inner.innerHTML = '<div style="color:rgba(239,68,68,.8);text-align:center;padding:12px;font-size:.8rem;">Not connected</div>';
+      return;
+    }
+    inner.innerHTML = '<div style="text-align:center;padding:20px;color:rgba(90,122,154,.7);font-size:.8rem;">Loading...</div>';
+    if (_chatListeners['__al']) { try { _chatListeners['__al'](); } catch(e) {} }
+
+    var handler = database.ref('chats').on('value', function(snap) {
+      var allChats = snap.val() || {};
+      var approved = _mbs().filter(function(m) { return m.approved; });
+      var seen = {};
+      approved.forEach(function(m) { seen[m.id] = true; });
+      Object.keys(allChats).forEach(function(id) { seen[id] = true; });
+
+      var html = '', total = 0;
+      Object.keys(seen).forEach(function(mid) {
+        var member = _mbs().find(function(m) { return m.id === mid; });
+        if (!member) return;
+        var msgs = allChats[mid] ? Object.values(allChats[mid].messages || {}) : [];
+        msgs.sort(function(a, b) { return a.ts - b.ts; });
+        var last = msgs[msgs.length - 1];
+        var unread = msgs.filter(function(m) { return m.from !== 'admin' && !m.read; }).length;
+        total += unread;
+        var init = (member.name || '').split(' ').map(function(n) { return n[0] || ''; }).join('').toUpperCase().slice(0, 2);
+        var col  = _col(member.name);
+        /* use data attribute to avoid quoting issues with names */
+        var idx  = Object.keys(seen).indexOf(mid);
+        html += '<div class="cht-mi" data-mid="' + _esc(member.id) + '" data-mname="' + _esc(member.name) + '" onclick="chtOpenMember(this)">'
+          + '<div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,' + col + ',' + col + 'aa);display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:800;color:#fff;flex-shrink:0;">' + init + '</div>'
+          + '<div style="flex:1;min-width:0;">'
+          + '<div style="font-weight:700;color:#f0f6ff;font-size:.82rem;">' + _esc(member.name) + '</div>'
+          + '<div style="font-size:.65rem;color:rgba(90,122,154,.8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (last ? _esc((last.text || '').slice(0, 45)) : 'No messages yet') + '</div>'
+          + '</div>'
+          + (unread > 0 ? '<div class="cht-dot"></div>' : '')
+          + '</div>';
+      });
+      inner.innerHTML = html || '<div style="text-align:center;padding:20px;color:rgba(90,122,154,.7);font-size:.8rem;">No approved members yet</div>';
+      _chatUnread = total;
+      _updateBadge();
+    });
+    _chatListeners['__al'] = function() { database.ref('chats').off('value', handler); };
+  }
+
+  /* member row uses data attributes — no inline JS string escaping needed */
+  window.chtOpenMember = function(el) {
+    var mid   = el.getAttribute('data-mid');
+    var mname = el.getAttribute('data-mname');
+    _chatMemberId = mid;
+    var titleEl = _el('chat-panel-title');
+    if (titleEl) titleEl.textContent = mname || 'Member Chat';
+    _hide('chat-member-list'); _flex('chat-convo'); _flex('chat-input-area');
+    var bb = _el('chat-back-btn'); if (bb) bb.style.display = 'inline-flex';
+    _listenConvo(mid, true);
+  };
+
+  window.chatGoBack = function() {
+    if (_chatMemberId && _chatListeners[_chatMemberId]) {
+      try { _chatListeners[_chatMemberId](); } catch(e) {}
+      delete _chatListeners[_chatMemberId];
+    }
+    _chatMemberId = null;
+    _showAdminList();
+  };
+
+  /* ── Member convo ───────────────────────────────────────────── */
+  function _showMemberConvo(mid) {
+    var titleEl = _el('chat-panel-title');
+    if (titleEl) titleEl.textContent = 'Chat with Admin';
+    _hide('chat-member-list'); _flex('chat-convo'); _flex('chat-input-area'); _hide('chat-back-btn');
+    _listenConvo(mid, false);
+  }
+
+  function _listenConvo(mid, isAdmin) {
+  var database = _db();
+  if (!database) return;
+  var ref = database.ref('chats/' + mid + '/messages');
+  var msgsEl = _el('chat-messages');
+  if (msgsEl) msgsEl.innerHTML = '<div class="cht-typing"><span></span><span></span><span></span></div>';
+
+  var cu = _cu();
+
+  // ---- TRY CACHE FIRST ----
+  var cached = loadChatCache(mid);
+  if (cached && cached.length > 0) {
+    _renderMsgs(cached, isAdmin, mid, ref);
+  } 
+  // fallback to preloaded in‑memory (if any)
+  else if (!isAdmin && cu && cu.id === mid && preloadedChatMessages.length > 0) {
+    _renderMsgs(preloadedChatMessages, isAdmin, mid, ref);
+  }
+
+  // ---- ATTACH REAL‑TIME LISTENER (for updates) ----
+  if (_chatListeners[mid]) { try { _chatListeners[mid](); } catch(e) {} }
+
+  var handler = ref.on('value', function(snap) {
+    var data = snap.val() || {};
+    var arr = Object.keys(data).map(function(k) {
+      var v = data[k];
+      return { key: k, from: v.from, text: v.text, ts: v.ts, read: v.read };
+    });
+    arr.sort(function(a, b) { return a.ts - b.ts; });
+    _renderMsgs(arr, isAdmin, mid, ref);
+
+    // Update cache and in‑memory store
+    if (!isAdmin && cu && cu.id === mid) {
+      preloadedChatMessages = arr;
+      saveChatCache(mid, arr);
+    }
+  });
+
+  _chatListeners[mid] = function() { ref.off('value', handler); };
+}
+
+  function _renderMsgs(arr, isAdmin, mid, ref) {
+  var member = _mbs().find(function(m) { return m.id === mid; }) || _cu();
+  var msgs   = _el('chat-messages');
+  if (!msgs) return;
+  var html = '', lastDate = '';
+
+  arr.forEach(function(msg) {
+    var ds = new Date(msg.ts).toDateString();
+    if (ds !== lastDate) {
+      lastDate = ds;
+      html += '<div class="cht-div">'
+        + new Date(msg.ts).toLocaleDateString([], {weekday: 'short', month: 'short', day: 'numeric'})
+        + '</div>';
+    }
+
+    var isOut = isAdmin ? (msg.from === 'admin') : (msg.from !== 'admin');
+    var cls   = isOut ? 'cht-out' : 'cht-in';
+    var sender = msg.senderName || (msg.from === 'admin' ? 'Admin' : (member && member.name) || 'Member');
+
+    // Build delete button – show if admin or message owner
+    var canDelete = false;
+    if (isAdmin) canDelete = true;
+    else if (!isAdmin && msg.from === mid) canDelete = true;
+    var deleteBtn = canDelete ? 
+      '<span style="margin-left:8px;cursor:pointer;font-size:0.7rem;color:rgba(239,68,68,0.6);" onclick="deleteChatMessage(\'' + mid + '\',\'' + msg.key + '\')">&#128465;</span>' :
+      '';
+
+    html += '<div class="' + cls + '">'
+      + '<div>'
+      + '<div class="cht-bbl">' + _esc(msg.text || '') + deleteBtn + '</div>'
+      + '<div class="cht-meta" style="text-align:' + (isOut ? 'right' : 'left') + '">'
+      + (isOut ? '' : _esc(sender) + ' &middot; ')
+      + _time(msg.ts)
+      + (isOut && msg.read  ? ' &middot; <span style="color:#06b6d4">&#10003;&#10003;</span>' : '')
+      + (isOut && !msg.read ? ' &middot; <span style="color:rgba(90,122,154,.5)">&#10003;</span>' : '')
+      + '</div></div></div>';
+
+    // Mark as read if admin viewing or member viewing and message is from admin
+    if (isAdmin  && msg.from !== 'admin' && !msg.read) ref.child(msg.key).update({ read: true });
+    if (!isAdmin && msg.from === 'admin' && !msg.read) {
+      ref.child(msg.key).update({ read: true });
+      _chatUnread = Math.max(0, _chatUnread - 1);
+      _updateBadge();
+    }
+  });
+
+  if (!arr.length) {
+    html = '<div style="text-align:center;padding:40px 20px;color:rgba(90,122,154,0.7);">'
+      + '<div style="font-size:2.5rem;margin-bottom:8px;">&#128172;</div>'
+      + '<div style="font-size:.82rem;">No messages yet. Say hello!</div></div>';
+  }
+  msgs.innerHTML = html;
+  var convo = _el('chat-convo');
+  if (convo) convo.scrollTop = convo.scrollHeight;
+}
+  /* ── Send ───────────────────────────────────────────────────── */
+  window.sendChatMsg = function() {
+  var input = _el('chat-input');
+  if (!input) return;
+  var text = input.value.trim();
+  if (!text) return;
+  var database = _db(), cu = _cu();
+  if (!database || !cu) return;
+  var tid = cu.isAdmin ? _chatMemberId : cu.id;
+  if (!tid) { try { toast('Select a member first', '#f59e0b'); } catch(e) {} return; }
+
+  // Determine sender name
+  var senderName = cu.isAdmin ? (cu.name || 'Admin') : (cu.name || 'Member');
+
+  var msg = {
+    from: cu.isAdmin ? 'admin' : tid,
+    senderName: senderName,
+    text: text,
+    ts: Date.now(),
+    read: false
+  };
+  input.value = '';
+  input.style.height = 'auto';
+  database.ref('chats/' + tid + '/messages').push(msg)
+    .then(function() {
+      database.ref('chats/' + tid + '/meta').update({ lastTs: Date.now(), lastMsg: text.slice(0, 80) });
+    })
+    .catch(function() { try { toast('Send failed', '#ef4444'); } catch(e) {} });
+};
+window.deleteChatMessage = function(chatId, msgKey) {
+  var database = _db();
+  if (!database) return;
+  var cu = _cu();
+  if (!cu) return;
+
+  // Check if user has permission: either admin, or the message belongs to them
+  // We'll retrieve the message to check 'from'
+  database.ref('chats/' + chatId + '/messages/' + msgKey).once('value', function(snap) {
+    var msg = snap.val();
+    if (!msg) return;
+    var isOwner = (!cu.isAdmin && msg.from === cu.id);
+    var isAdmin = cu.isAdmin;
+    if (isOwner || isAdmin) {
+      database.ref('chats/' + chatId + '/messages/' + msgKey).remove()
+        .then(function() {
+          try { toast('Message deleted', '#f59e0b'); } catch(e) {}
+        })
+        .catch(function() { try { toast('Delete failed', '#ef4444'); } catch(e) {} });
+    } else {
+      try { toast('You can only delete your own messages', '#ef4444'); } catch(e) {}
+    }
+  });
+};
+
+  /* ── Member unread badge ────────────────────────────────────── */
+  function _startBadge() {
+    var database = _db(), cu = _cu();
+    if (!database || !cu || cu.isAdmin) return;
+    database.ref('chats/' + cu.id + '/messages').on('value', function(snap) {
+      var msgs   = snap.val() || {};
+      var unread = Object.values(msgs).filter(function(m) { return m.from === 'admin' && !m.read; }).length;
+      _chatUnread = unread;
+      _updateBadge();
+    });
+  }
+
+  function _updateBadge() {
+    var b = _el('chat-fab-badge');
+    if (!b) return;
+    if (_chatUnread > 0) {
+      b.style.display = 'flex';
+      b.textContent   = _chatUnread > 9 ? '9+' : String(_chatUnread);
+    } else {
+      b.style.display = 'none';
+    }
+  }
+
+  /* ── Poll until logged in ───────────────────────────────────── */
+  var _poll = setInterval(function() {
+    var cu = _cu();
+    _showFab();
+    if (cu) {
+      clearInterval(_poll);
+      setTimeout(function() {
+        _startBadge();
+        var database = _db();
+        if (cu.isAdmin && database) {
+          database.ref('chats').on('value', function(snap) {
+            var all = snap.val() || {}, total = 0;
+            Object.values(all).forEach(function(c) {
+              Object.values(c.messages || {}).forEach(function(m) {
+                if (m.from !== 'admin' && !m.read) total++;
+              });
+            });
+            _chatUnread = total;
+            _updateBadge();
+          });
+        }
+      }, 200);
+    }
+  }, 700);
+
+  /* ── Close on outside click ─────────────────────────────────── */
+  document.addEventListener('click', function(e) {
+    if (!_chatOpen) return;
+    var panel = _el('chat-panel'), fab = _el('chat-fab');
+    if (panel && !panel.contains(e.target) && fab && !fab.contains(e.target)) _closePanel();
+  }, true);
+
+  /* ── Ambient orbs ───────────────────────────────────────────── */
+  function _injectOrbs() {
+    if (!document.body) return;
+    ['ht-orb-1', 'ht-orb-2', 'ht-orb-3'].forEach(function(cls) {
+      if (!document.querySelector('.' + cls)) {
+        var o = document.createElement('div');
+        o.className = 'ht-orb ' + cls;
+        document.body.appendChild(o);
+      }
+    });
+  }
+  if (document.readyState === 'loading')
+    document.addEventListener('DOMContentLoaded', _injectOrbs);
+  else
+    _injectOrbs();
+
+})();
+</script>
+
+<style id="htf-book-transitions">
+#content{ perspective:1800px; }
+.tab{ backface-visibility:hidden; -webkit-backface-visibility:hidden; transform-style:preserve-3d; }
+.tab.book-out-fwd{ animation:htfBookOutFwd .6s cubic-bezier(.45,.05,.55,.95) forwards !important; z-index:5; }
+.tab.book-in-fwd{ animation:htfBookInFwd .6s cubic-bezier(.45,.05,.55,.95) forwards !important; z-index:6; }
+.tab.book-out-bwd{ animation:htfBookOutBwd .6s cubic-bezier(.45,.05,.55,.95) forwards !important; z-index:5; }
+.tab.book-in-bwd{ animation:htfBookInBwd .6s cubic-bezier(.45,.05,.55,.95) forwards !important; z-index:6; }
+@keyframes htfBookOutFwd{
+  0%{transform:rotateY(0deg) translateZ(0);opacity:1;transform-origin:100% 50%;}
+  100%{transform:rotateY(-104deg) translateZ(-260px);opacity:0;transform-origin:100% 50%;}
+}
+@keyframes htfBookInFwd{
+  0%{transform:rotateY(104deg) translateZ(-260px);opacity:0;transform-origin:0% 50%;}
+  100%{transform:rotateY(0deg) translateZ(0);opacity:1;transform-origin:0% 50%;}
+}
+@keyframes htfBookOutBwd{
+  0%{transform:rotateY(0deg) translateZ(0);opacity:1;transform-origin:0% 50%;}
+  100%{transform:rotateY(104deg) translateZ(-260px);opacity:0;transform-origin:0% 50%;}
+}
+@keyframes htfBookInBwd{
+  0%{transform:rotateY(-104deg) translateZ(-260px);opacity:0;transform-origin:100% 50%;}
+  100%{transform:rotateY(0deg) translateZ(0);opacity:1;transform-origin:100% 50%;}
+}
+/* Swipe hint shown on phones when a member taps the nav instead of swiping */
+#htf-swipe-hint{position:fixed;left:50%;bottom:calc(var(--nav, 70px) + 14px);transform:translateX(-50%) translateY(12px);
+  background:rgba(6,14,26,.94);color:#f0f6ff;padding:9px 18px;border-radius:999px;font-family:'DM Sans',sans-serif;
+  font-size:.78rem;font-weight:600;letter-spacing:.3px;display:flex;align-items:center;gap:8px;
+  box-shadow:0 8px 24px rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.12);opacity:0;pointer-events:none;
+  z-index:9998;transition:opacity .25s ease, transform .25s ease;}
+#htf-swipe-hint.show{opacity:1;transform:translateX(-50%) translateY(0);}
+#htf-swipe-hint .htf-hand{display:inline-block;animation:htfHandSwipe 1.1s ease-in-out infinite;}
+@keyframes htfHandSwipe{0%,100%{transform:translateX(-6px);}50%{transform:translateX(6px);}}
+.ni.htf-nudge{animation:htfNiNudge .4s ease;}
+@keyframes htfNiNudge{0%,100%{transform:translateY(0);}30%{transform:translateY(-3px) scale(0.96);}60%{transform:translateY(0) scale(1.04);}}
+/* Circle "pour" ripple overlay for desktop button clicks */
+.htf-pour{position:fixed;border-radius:50%;pointer-events:none;z-index:9999;
+  background:radial-gradient(circle at 35% 35%, var(--gold,#f59e0b), var(--teal,#06b6d4) 55%, var(--purple,#8b5cf6) 100%);
+  transform:scale(0);opacity:.92;}
+.htf-pour.htf-pour-run{animation:htfPourExpand .62s cubic-bezier(.22,.61,.36,1) forwards;}
+@keyframes htfPourExpand{
+  0%{transform:scale(0);opacity:.92;}
+  65%{transform:scale(1);opacity:.8;}
+  100%{transform:scale(1.05);opacity:0;}
+}
+</style>
+<script>
+(function(){
+  var TAB_ORDER=['home','statistics','account'];
+  var isTouch = (window.matchMedia && window.matchMedia('(pointer:coarse)').matches) || ('ontouchstart' in window);
+
+  /* ── Wrap goTab once more: drive the book-page-flip transition ── */
+  var baseGoTab = window.goTab;
+  window.goTab = function(tab, btn){
+    var prevTab = typeof currentScreen !== 'undefined' ? currentScreen : null;
+    var prevEl = prevTab ? document.getElementById('t-' + prevTab) : null;
+    baseGoTab(tab, btn);
+    var newEl = document.getElementById('t-' + tab);
+    if(!prevEl || !newEl || prevEl === newEl) return;
+    var pi = TAB_ORDER.indexOf(prevTab), ni = TAB_ORDER.indexOf(tab);
+    var forward = (pi === -1 || ni === -1) ? true : (ni > pi);
+    ['book-out-fwd','book-in-fwd','book-out-bwd','book-in-bwd'].forEach(function(c){
+      prevEl.classList.remove(c); newEl.classList.remove(c);
+    });
+    void prevEl.offsetWidth; // restart animation reliably
+    prevEl.classList.add(forward ? 'book-out-fwd' : 'book-out-bwd');
+    newEl.classList.add(forward ? 'book-in-fwd' : 'book-in-bwd');
+    setTimeout(function(){
+      prevEl.classList.remove('book-out-fwd','book-out-bwd');
+      newEl.classList.remove('book-in-fwd','book-in-bwd');
+    }, 620);
+  };
+
+  function isMainTab(tab){ return TAB_ORDER.indexOf(tab) !== -1; }
+  function neighborTab(dir){
+    var cur = TAB_ORDER.indexOf(currentScreen);
+    if(cur === -1) return null;
+    var ni = cur + dir;
+    if(ni < 0 || ni >= TAB_ORDER.length) return null;
+    return TAB_ORDER[ni];
+  }
+
+  var hintTimer = null;
+  function showSwipeHint(btn){
+    var el = document.getElementById('htf-swipe-hint');
+    if(!el){
+      el = document.createElement('div');
+      el.id = 'htf-swipe-hint';
+      el.innerHTML = '<span class="htf-hand">\u2194</span><span>Swipe to switch tabs</span>';
+      document.body.appendChild(el);
+    }
+    el.classList.add('show');
+    clearTimeout(hintTimer);
+    hintTimer = setTimeout(function(){ el.classList.remove('show'); }, 1250);
+    if(btn){
+      btn.classList.remove('htf-nudge');
+      void btn.offsetWidth;
+      btn.classList.add('htf-nudge');
+    }
+  }
+
+  function triggerPour(x, y){
+    var el = document.createElement('div');
+    el.className = 'htf-pour';
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var dx = Math.max(x, vw - x), dy = Math.max(y, vh - y);
+    var maxDist = Math.sqrt(dx*dx + dy*dy) * 2.15;
+    el.style.width = maxDist + 'px';
+    el.style.height = maxDist + 'px';
+    el.style.left = (x - maxDist/2) + 'px';
+    el.style.top = (y - maxDist/2) + 'px';
+    document.body.appendChild(el);
+    requestAnimationFrame(function(){ el.classList.add('htf-pour-run'); });
+    setTimeout(function(){ el.remove(); }, 700);
+  }
+
+  function wireNav(){
+    var navBtns = document.querySelectorAll('#nav .ni');
+    navBtns.forEach(function(btn){
+      if(btn.id === 'ni-admin') return;
+      if(isTouch){
+        // Phones: tapping the nav only shows a swipe hint, it never switches tabs.
+        btn.addEventListener('click', function(e){
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          showSwipeHint(btn);
+        }, true);
+      } else {
+        // Desktop: click still switches tabs (book flip), plus a color-pour ripple.
+        btn.addEventListener('click', function(e){
+          triggerPour(e.clientX, e.clientY);
+        });
+      }
+    });
+
+    if(isTouch){
+      var contentEl = document.getElementById('content');
+      var swipeStart = null;
+      if(contentEl){
+        contentEl.addEventListener('touchstart', function(e){
+          if(e.touches.length !== 1) return;
+          swipeStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        }, { passive: true });
+        contentEl.addEventListener('touchend', function(e){
+          if(!swipeStart) return;
+          var touch = e.changedTouches[0];
+          var dx = touch.clientX - swipeStart.x;
+          var dy = touch.clientY - swipeStart.y;
+          swipeStart = null;
+          if(Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 1.4) return;
+          if(!isMainTab(currentScreen)) return;
+          var dir = dx < 0 ? 1 : -1;
+          var target = neighborTab(dir);
+          if(!target) return;
+          window.goTab(target, document.getElementById('ni-' + target));
+        }, { passive: true });
+      }
+    }
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', wireNav);
+  } else {
+    wireNav();
+  }
+})();
+</script>
 </body>
   </html>
