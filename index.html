@@ -19125,7 +19125,86 @@ function _updateReplyTimeDisplay(hours) {
     el.textContent = '';
   }
 }
+// ─── Improved Swipe Listeners ──────────────────────────────────
+let touchStartX = 0;
+let touchStartY = 0;
+let isSwiping = false;
+let swipeDirection = null;
 
+function attachSwipeListeners(container) {
+  if (!container) return;
+
+  // Remove old listeners to avoid duplicates
+  container.removeEventListener('touchstart', _handleTouchStart);
+  container.removeEventListener('touchmove', _handleTouchMove);
+  container.removeEventListener('touchend', _handleTouchEnd);
+  container.removeEventListener('touchcancel', _handleTouchCancel);
+
+  container.addEventListener('touchstart', _handleTouchStart, { passive: true });
+  container.addEventListener('touchmove', _handleTouchMove, { passive: false });
+  container.addEventListener('touchend', _handleTouchEnd, { passive: true });
+  container.addEventListener('touchcancel', _handleTouchCancel, { passive: true });
+}
+
+function _handleTouchStart(e) {
+  const touch = e.touches[0];
+  if (!touch) return;
+  touchStartX = touch.screenX;
+  touchStartY = touch.screenY;
+  isSwiping = false;
+  swipeDirection = null;
+}
+
+function _handleTouchMove(e) {
+  if (e.touches.length === 0) return;
+  const touch = e.touches[0];
+  const dx = touch.screenX - touchStartX;
+  const dy = touch.screenY - touchStartY;
+  const absDx = Math.abs(dx);
+  const absDy = Math.abs(dy);
+
+  // If horizontal swipe is detected (and more than vertical)
+  if (absDx > 20 && absDx > absDy * 1.2) {
+    isSwiping = true;
+    swipeDirection = dx < 0 ? 'left' : 'right';
+    // Prevent vertical scrolling when swiping horizontally
+    e.preventDefault();
+    showSwipeHint();
+  } else {
+    // If vertical scrolling, allow it
+    isSwiping = false;
+  }
+}
+
+function _handleTouchEnd(e) {
+  if (!isSwiping) {
+    // Tap (no swipe) – show hint briefly
+    showSwipeHint();
+    return;
+  }
+
+  // Determine if the swipe was enough to change page
+  const touch = e.changedTouches[0];
+  if (!touch) return;
+  const dx = touch.screenX - touchStartX;
+  if (Math.abs(dx) > 50) {
+    const dir = dx < 0 ? 1 : -1;
+    const newIndex = currentBookIndex + dir;
+    if (newIndex >= 0 && newIndex < BOOK_PAGES.length) {
+      switchBookPage(newIndex, dir < 0 ? 'backward' : 'forward');
+    }
+  }
+  isSwiping = false;
+  swipeDirection = null;
+  hideSwipeHint();
+}
+
+function _handleTouchCancel(e) {
+  // Reset state if touch is interrupted
+  isSwiping = false;
+  swipeDirection = null;
+  hideSwipeHint();
+}
 // Expose setChatReplyTime globally (so the button can call it)
 window.setChatReplyTime = function() {
   var input = document.getElementById('chat-reply-input');
