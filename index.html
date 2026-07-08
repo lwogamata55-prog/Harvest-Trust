@@ -957,6 +957,12 @@ body {
 .tab{position:absolute;inset:0;overflow-y:auto;padding:16px 14px calc(var(--nav) + 56px);opacity:0;pointer-events:none;transform:translateY(22px) scale(0.99);transition:opacity 0.35s var(--ease-smooth),transform 0.35s var(--ease-spring)}.tab.on{opacity:1;pointer-events:all;transform:translateY(0) scale(1)}
 #nav{position:absolute;bottom:0;left:0;right:0;height:var(--nav);display:flex;background:rgba(6,14,26,0.92);backdrop-filter:blur(32px);border-top:1px solid rgba(255,255,255,0.06);padding-bottom:env(safe-area-inset-bottom);z-index:20;box-shadow:0 -4px 24px rgba(0,0,0,0.5)}
 .ni{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:none;color:var(--t3);font-size:0.48rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;cursor:pointer;border:none;transition:all 0.25s var(--ease-spring);padding-top:6px;position:relative;overflow:hidden}.ni:active{transform:scale(0.9)}.ni.on{color:var(--gold)}.ni .ico{font-size:1.2rem;transition:transform 0.3s var(--ease-spring),filter 0.3s}.ni.on .ico{transform:scale(1.22) translateY(-2px);filter:drop-shadow(0 2px 6px rgba(245,158,11,0.5))}.ni-bar{position:absolute;bottom:4px;left:50%;transform:translateX(-50%) scaleX(0);width:24px;height:3px;border-radius:99px;background:linear-gradient(90deg,var(--gold),var(--teal));transition:transform 0.3s var(--ease-spring)}.ni.on .ni-bar{transform:translateX(-50%) scaleX(1)}
+#image-preview-modal {
+  backdrop-filter: blur(8px);
+}
+#image-preview-modal img {
+  box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+}
 #loan-turn-message {
   background: rgba(0,0,0,0.3);
   padding: 6px 12px;
@@ -3770,7 +3776,10 @@ Thank you for your patience and understanding. 🙏
     </div>
   </div>
 </div>
-
+<!-- Image Preview Modal -->
+<div id="image-preview-modal" onclick="closeImagePreview()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:99999;align-items:center;justify-content:center;cursor:pointer;padding:20px;">
+  <img id="image-preview-modal-img" src="" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;">
+</div>
 <!-- ========================================== -->
 <!-- MEMBER LOAN DETAILS MODAL                 -->
 <!-- ========================================== -->
@@ -4588,7 +4597,19 @@ function enableButtonShatterReactions(){
     shatterButtonReaction(el,ev);
   },true);
 }
+function openImagePreview(src) {
+  const modal = document.getElementById('image-preview-modal');
+  const img = document.getElementById('image-preview-modal-img');
+  if (modal && img) {
+    img.src = src;
+    modal.style.display = 'flex';
+  }
+}
 
+function closeImagePreview() {
+  const modal = document.getElementById('image-preview-modal');
+  if (modal) modal.style.display = 'none';
+}
 function openOv(id) {
   const el = document.getElementById(id);
   if (el) {
@@ -15173,7 +15194,35 @@ function renderSetupQuestions() {
   
   container.innerHTML = html;
 }
+// ─── Image Handling ──────────────────────────────────────────
+let pendingImageData = null; // stores base64 of image to send
 
+function handleChatImageSelect(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    pendingImageData = e.target.result;
+    // Show preview
+    const preview = document.getElementById('chat-image-preview');
+    const img = document.getElementById('chat-image-preview-img');
+    if (preview && img) {
+      img.src = pendingImageData;
+      preview.style.display = 'block';
+    }
+    // Reset the input so the same file can be selected again
+    input.value = '';
+  };
+  reader.readAsDataURL(file);
+}
+
+function cancelImagePreview() {
+  pendingImageData = null;
+  const preview = document.getElementById('chat-image-preview');
+  if (preview) preview.style.display = 'none';
+  const img = document.getElementById('chat-image-preview-img');
+  if (img) img.src = '';
+}
 /**
  * Handle setup file upload
  */
@@ -18673,10 +18722,27 @@ document.addEventListener('click',function(e){
   </div>
 
   <!-- Input -->
-  <div id="chat-input-area"
+ <div id="chat-input-area"
   style="display:none;padding:10px 12px;border-top:1px solid rgba(255,255,255,0.07);
          background:rgba(0,0,0,0.2);flex-shrink:0;">
+  
+  <!-- Image preview (hidden initially) -->
+  <div id="chat-image-preview" style="display:none;margin-bottom:8px;position:relative;">
+    <img id="chat-image-preview-img" src="" style="max-width:100%;max-height:120px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);">
+    <button onclick="cancelImagePreview()" style="position:absolute;top:-8px;right:-8px;background:rgba(239,68,68,0.9);border:none;border-radius:50%;width:24px;height:24px;color:#fff;cursor:pointer;font-size:12px;line-height:24px;text-align:center;">✕</button>
+  </div>
+  
   <div style="display:flex;gap:8px;align-items:flex-end;">
+    <!-- Attachment button -->
+    <button onclick="document.getElementById('chat-file-input').click()"
+      style="width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,0.06);
+             border:1px solid rgba(255,255,255,0.1);cursor:pointer;display:flex;align-items:center;
+             justify-content:center;font-size:1.2rem;flex-shrink:0;color:var(--t3);">
+      📎
+    </button>
+    <input type="file" id="chat-file-input" accept="image/*" style="display:none" onchange="handleChatImageSelect(this)">
+
+    <!-- Text input -->
     <textarea id="chat-input" placeholder="Type a message..." rows="1"
       style="flex:1;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
              border-radius:14px;padding:9px 13px;color:#f0f6ff;font-size:0.82rem;
@@ -18685,6 +18751,8 @@ document.addEventListener('click',function(e){
       onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMsg();}"
       oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px';">
     </textarea>
+    
+    <!-- Send button -->
     <button onclick="sendChatMsg()"
       style="width:40px;height:40px;border-radius:50%;
              background:linear-gradient(135deg,#f59e0b,#d97706);
@@ -18692,6 +18760,7 @@ document.addEventListener('click',function(e){
              justify-content:center;font-size:1.1rem;flex-shrink:0;
              box-shadow:0 2px 12px rgba(245,158,11,0.4);">&#10148;</button>
   </div>
+  
   <div style="text-align:center;margin-top:5px;font-size:0.58rem;color:rgba(90,122,154,0.7);">
     Messages are private between you and admin
   </div>
@@ -18797,6 +18866,7 @@ body::before{content:'';position:fixed;inset:0;z-index:-2;pointer-events:none;
 <script>
 (function() {
   var _chatOpen = false;
+  var _adminChatName = null;
   var _chatMemberId = null;
   var _chatListeners = {};
   var _chatUnread = 0;
@@ -18888,15 +18958,27 @@ body::before{content:'';position:fixed;inset:0;z-index:-2;pointer-events:none;
     return;
   }
 
-  // Build the reply time setter UI
-  var replyHtml = '<div style="background:rgba(245,158,11,0.06);border-radius:12px;padding:10px 14px;margin-bottom:14px;border:1px solid rgba(245,158,11,0.15);">' +
-    '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">' +
-    '<span style="font-size:0.7rem;font-weight:600;color:var(--t3);">⏱️ Reply time (hours):</span>' +
-    '<input type="number" id="chat-reply-input" min="0" max="72" step="0.5" style="width:70px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:6px 10px;color:#f0f6ff;font-size:0.8rem;">' +
-    '<button onclick="setChatReplyTime()" style="background:linear-gradient(135deg,#f59e0b,#d97706);border:none;border-radius:8px;padding:6px 14px;color:#fff;font-weight:700;cursor:pointer;">Save</button>' +
-    '<span id="chat-reply-current" style="font-size:0.7rem;color:var(--gold);margin-left:auto;"></span>' +
-    '</div>' +
-    '</div>';
+  // Build the admin settings UI (display name + reply time)
+var replyHtml = '<div style="background:rgba(245,158,11,0.06);border-radius:12px;padding:10px 14px;margin-bottom:14px;border:1px solid rgba(245,158,11,0.15);">' +
+
+  // --- Admin Display Name ---
+  '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;">' +
+  '<span style="font-size:0.7rem;font-weight:600;color:var(--t3);">👤 Admin name:</span>' +
+  '<input type="text" id="chat-admin-name-input" style="flex:1;min-width:120px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:6px 10px;color:#f0f6ff;font-size:0.8rem;" placeholder="e.g., Lwogata">' +
+  '<button onclick="setAdminChatName()" style="background:linear-gradient(135deg,#f59e0b,#d97706);border:none;border-radius:8px;padding:6px 14px;color:#fff;font-weight:700;cursor:pointer;">Save</button>' +
+  '<span id="chat-admin-name-current" style="font-size:0.7rem;color:var(--gold);margin-left:auto;"></span>' +
+  '</div>' +
+
+  // --- Reply Time ---
+  '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">' +
+  '<span style="font-size:0.7rem;font-weight:600;color:var(--t3);">⏱️ Reply time (hours):</span>' +
+  '<input type="number" id="chat-reply-input" min="0" max="72" step="0.5" style="width:70px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:6px 10px;color:#f0f6ff;font-size:0.8rem;">' +
+  '<button onclick="setChatReplyTime()" style="background:linear-gradient(135deg,#f59e0b,#d97706);border:none;border-radius:8px;padding:6px 14px;color:#fff;font-weight:700;cursor:pointer;">Save</button>' +
+  '<span id="chat-reply-current" style="font-size:0.7rem;color:var(--gold);margin-left:auto;"></span>' +
+  '</div>' +
+
+  '</div>';
+
 
   inner.innerHTML = replyHtml + '<div id="chat-member-list-items"></div>';
   var listItems = document.getElementById('chat-member-list-items');
@@ -19031,7 +19113,6 @@ body::before{content:'';position:fixed;inset:0;z-index:-2;pointer-events:none;
     var cls   = isOut ? 'cht-out' : 'cht-in';
     var sender = msg.senderName || (msg.from === 'admin' ? 'Admin' : (member && member.name) || 'Member');
 
-    // Build delete button – show if admin or message owner
     var canDelete = false;
     if (isAdmin) canDelete = true;
     else if (!isAdmin && msg.from === mid) canDelete = true;
@@ -19039,9 +19120,18 @@ body::before{content:'';position:fixed;inset:0;z-index:-2;pointer-events:none;
       '<span style="margin-left:8px;cursor:pointer;font-size:0.7rem;color:rgba(239,68,68,0.6);" onclick="deleteChatMessage(\'' + mid + '\',\'' + msg.key + '\')">&#128465;</span>' :
       '';
 
+    // Build message content: text + image
+    var contentHtml = '';
+    if (msg.text) contentHtml += _esc(msg.text);
+    if (msg.imageData) {
+      contentHtml += '<div style="margin-top:4px;">'
+        + '<img src="' + msg.imageData + '" style="max-width:100%;max-height:200px;border-radius:8px;cursor:pointer;border:1px solid rgba(255,255,255,0.1);" onclick="openImagePreview(this.src)">'
+        + '</div>';
+    }
+
     html += '<div class="' + cls + '">'
       + '<div>'
-      + '<div class="cht-bbl">' + _esc(msg.text || '') + deleteBtn + '</div>'
+      + '<div class="cht-bbl">' + contentHtml + deleteBtn + '</div>'
       + '<div class="cht-meta" style="text-align:' + (isOut ? 'right' : 'left') + '">'
       + (isOut ? '' : _esc(sender) + ' &middot; ')
       + _time(msg.ts)
@@ -19049,7 +19139,7 @@ body::before{content:'';position:fixed;inset:0;z-index:-2;pointer-events:none;
       + (isOut && !msg.read ? ' &middot; <span style="color:rgba(90,122,154,.5)">&#10003;</span>' : '')
       + '</div></div></div>';
 
-    // Mark as read if admin viewing or member viewing and message is from admin
+    // Mark as read
     if (isAdmin  && msg.from !== 'admin' && !msg.read) ref.child(msg.key).update({ read: true });
     if (!isAdmin && msg.from === 'admin' && !msg.read) {
       ref.child(msg.key).update({ read: true });
@@ -19067,35 +19157,70 @@ body::before{content:'';position:fixed;inset:0;z-index:-2;pointer-events:none;
   var convo = _el('chat-convo');
   if (convo) convo.scrollTop = convo.scrollHeight;
 }
+
   /* ── Send ───────────────────────────────────────────────────── */
-  window.sendChatMsg = function() {
+ window.sendChatMsg = function() {
   var input = _el('chat-input');
-  if (!input) return;
-  var text = input.value.trim();
-  if (!text) return;
+  var text = input ? input.value.trim() : '';
+  if (!text && !pendingImageData) {
+    try { toast('Enter a message or select an image', '#f59e0b'); } catch(e) {}
+    return;
+  }
   var database = _db(), cu = _cu();
   if (!database || !cu) return;
   var tid = cu.isAdmin ? _chatMemberId : cu.id;
   if (!tid) { try { toast('Select a member first', '#f59e0b'); } catch(e) {} return; }
 
-  // Determine sender name
-  var senderName = cu.isAdmin ? (cu.name || 'Admin') : (cu.name || 'Member');
+  // Use the admin display name if admin, else member name
+  var senderName = cu.isAdmin ? (_adminChatName || 'Admin') : (cu.name || 'Member');
 
   var msg = {
     from: cu.isAdmin ? 'admin' : tid,
     senderName: senderName,
-    text: text,
+    text: text || '',
     ts: Date.now(),
     read: false
   };
-  input.value = '';
-  input.style.height = 'auto';
+  if (pendingImageData) {
+    msg.imageData = pendingImageData;
+  }
+
   database.ref('chats/' + tid + '/messages').push(msg)
     .then(function() {
-      database.ref('chats/' + tid + '/meta').update({ lastTs: Date.now(), lastMsg: text.slice(0, 80) });
+      database.ref('chats/' + tid + '/meta').update({ lastTs: Date.now(), lastMsg: text ? text.slice(0, 80) : '📷 Image' });
+      if (input) { input.value = ''; input.style.height = 'auto'; }
+      cancelImagePreview();
     })
     .catch(function() { try { toast('Send failed', '#ef4444'); } catch(e) {} });
 };
+
+function _loadAdminChatNameSync() {
+  var database = _db();
+  if (!database) return;
+  database.ref('settings/adminChatName').once('value', function(snap) {
+    _adminChatName = snap.val() || 'Admin';
+    // Also update the UI if visible
+    var display = document.getElementById('chat-admin-name-current');
+    if (display) display.textContent = 'Current: ' + _adminChatName;
+    var input = document.getElementById('chat-admin-name-input');
+    if (input) input.value = _adminChatName;
+  });
+}
+
+window.setAdminChatName = function() {
+  var input = document.getElementById('chat-admin-name-input');
+  if (!input) return;
+  var name = input.value.trim();
+  if (!name) { try { toast('Please enter a display name', '#ef4444'); } catch(e) {} return; }
+  var database = _db();
+  if (!database) return;
+  database.ref('settings/adminChatName').set(name).then(function() {
+    try { toast('Admin name set to "' + name + '"', '#10b981'); } catch(e) {}
+    var display = document.getElementById('chat-admin-name-current');
+    if (display) display.textContent = 'Current: ' + name;
+  }).catch(function() { try { toast('Failed to save', '#ef4444'); } catch(e) {} });
+};
+
 // ─── Reply Time Helpers ──────────────────────────────────
 function _loadReplyTime() {
   var database = _db();
@@ -19221,7 +19346,18 @@ window.setChatReplyTime = function() {
     _updateReplyTimeDisplay(hours);
   }).catch(function() { try { toast('Failed to save', '#ef4444'); } catch(e) {} });
 };
-
+function _listenAdminChatNameChanges() {
+  var database = _db();
+  if (!database) return;
+  database.ref('settings/adminChatName').on('value', function(snap) {
+    _adminChatName = snap.val() || 'Admin';
+    // Update UI if visible
+    var display = document.getElementById('chat-admin-name-current');
+    if (display) display.textContent = 'Current: ' + _adminChatName;
+    var input = document.getElementById('chat-admin-name-input');
+    if (input) input.value = _adminChatName;
+  });
+}
 // Also listen for real-time changes to the reply time (for all users)
 function _listenReplyTimeChanges() {
   var database = _db();
