@@ -18644,9 +18644,8 @@ document.addEventListener('click',function(e){
         <div>
           <div id="chat-panel-title" style="font-weight:800;color:#f0f6ff;font-size:0.9rem;">Chat</div>
           <div style="font-size:0.62rem;color:rgba(6,182,212,0.9);display:flex;align-items:center;gap:4px;">
-            <span style="width:6px;height:6px;border-radius:50%;background:#10b981;
-                         display:inline-block;animation:chtOnline 2s infinite;"></span>Online
-          </div>
+  <span style="width:6px;height:6px;border-radius:50%;background:#10b981;display:inline-block;animation:chtOnline 2s infinite;"></span>Online
+</div><div id="chat-reply-time" style="font-size:0.55rem;color:var(--t3);margin-top:2px;"></div>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;">
@@ -18874,56 +18873,74 @@ body::before{content:'';position:fixed;inset:0;z-index:-2;pointer-events:none;
 
   /* ── Admin: list members ────────────────────────────────────── */
   function _showAdminList() {
-    var titleEl = _el('chat-panel-title');
-    if (titleEl) titleEl.textContent = 'Member Chats';
-    _show('chat-member-list'); _hide('chat-convo');
-    _hide('chat-input-area'); _hide('chat-back-btn');
-    _chatMemberId = null;
-    var inner = _el('chat-member-list-inner');
-    if (!inner) return;
-    var database = _db();
-    if (!database) {
-      inner.innerHTML = '<div style="color:rgba(239,68,68,.8);text-align:center;padding:12px;font-size:.8rem;">Not connected</div>';
-      return;
-    }
-    inner.innerHTML = '<div style="text-align:center;padding:20px;color:rgba(90,122,154,.7);font-size:.8rem;">Loading...</div>';
-    if (_chatListeners['__al']) { try { _chatListeners['__al'](); } catch(e) {} }
+  var titleEl = _el('chat-panel-title');
+  if (titleEl) titleEl.textContent = 'Member Chats';
+  _show('chat-member-list'); _hide('chat-convo');
+  _hide('chat-input-area'); _hide('chat-back-btn');
+  _chatMemberId = null;
 
-    var handler = database.ref('chats').on('value', function(snap) {
-      var allChats = snap.val() || {};
-      var approved = _mbs().filter(function(m) { return m.approved; });
-      var seen = {};
-      approved.forEach(function(m) { seen[m.id] = true; });
-      Object.keys(allChats).forEach(function(id) { seen[id] = true; });
-
-      var html = '', total = 0;
-      Object.keys(seen).forEach(function(mid) {
-        var member = _mbs().find(function(m) { return m.id === mid; });
-        if (!member) return;
-        var msgs = allChats[mid] ? Object.values(allChats[mid].messages || {}) : [];
-        msgs.sort(function(a, b) { return a.ts - b.ts; });
-        var last = msgs[msgs.length - 1];
-        var unread = msgs.filter(function(m) { return m.from !== 'admin' && !m.read; }).length;
-        total += unread;
-        var init = (member.name || '').split(' ').map(function(n) { return n[0] || ''; }).join('').toUpperCase().slice(0, 2);
-        var col  = _col(member.name);
-        /* use data attribute to avoid quoting issues with names */
-        var idx  = Object.keys(seen).indexOf(mid);
-        html += '<div class="cht-mi" data-mid="' + _esc(member.id) + '" data-mname="' + _esc(member.name) + '" onclick="chtOpenMember(this)">'
-          + '<div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,' + col + ',' + col + 'aa);display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:800;color:#fff;flex-shrink:0;">' + init + '</div>'
-          + '<div style="flex:1;min-width:0;">'
-          + '<div style="font-weight:700;color:#f0f6ff;font-size:.82rem;">' + _esc(member.name) + '</div>'
-          + '<div style="font-size:.65rem;color:rgba(90,122,154,.8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (last ? _esc((last.text || '').slice(0, 45)) : 'No messages yet') + '</div>'
-          + '</div>'
-          + (unread > 0 ? '<div class="cht-dot"></div>' : '')
-          + '</div>';
-      });
-      inner.innerHTML = html || '<div style="text-align:center;padding:20px;color:rgba(90,122,154,.7);font-size:.8rem;">No approved members yet</div>';
-      _chatUnread = total;
-      _updateBadge();
-    });
-    _chatListeners['__al'] = function() { database.ref('chats').off('value', handler); };
+  // Add reply time setter at the top of the member list
+  var inner = _el('chat-member-list-inner');
+  if (!inner) return;
+  var database = _db();
+  if (!database) {
+    inner.innerHTML = '<div style="color:rgba(239,68,68,.8);text-align:center;padding:12px;font-size:.8rem;">Not connected</div>';
+    return;
   }
+
+  // Build the reply time setter UI
+  var replyHtml = '<div style="background:rgba(245,158,11,0.06);border-radius:12px;padding:10px 14px;margin-bottom:14px;border:1px solid rgba(245,158,11,0.15);">' +
+    '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">' +
+    '<span style="font-size:0.7rem;font-weight:600;color:var(--t3);">⏱️ Reply time (hours):</span>' +
+    '<input type="number" id="chat-reply-input" min="0" max="72" step="0.5" style="width:70px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:6px 10px;color:#f0f6ff;font-size:0.8rem;">' +
+    '<button onclick="setChatReplyTime()" style="background:linear-gradient(135deg,#f59e0b,#d97706);border:none;border-radius:8px;padding:6px 14px;color:#fff;font-weight:700;cursor:pointer;">Save</button>' +
+    '<span id="chat-reply-current" style="font-size:0.7rem;color:var(--gold);margin-left:auto;"></span>' +
+    '</div>' +
+    '</div>';
+
+  inner.innerHTML = replyHtml + '<div id="chat-member-list-items"></div>';
+  var listItems = document.getElementById('chat-member-list-items');
+  if (!listItems) return;
+
+  // Load current reply time and display it
+  _loadReplyTime();
+
+  // Now load the member list
+  if (_chatListeners['__al']) { try { _chatListeners['__al'](); } catch(e) {} }
+
+  var handler = database.ref('chats').on('value', function(snap) {
+    var allChats = snap.val() || {};
+    var approved = _mbs().filter(function(m) { return m.approved; });
+    var seen = {};
+    approved.forEach(function(m) { seen[m.id] = true; });
+    Object.keys(allChats).forEach(function(id) { seen[id] = true; });
+
+    var html = '', total = 0;
+    Object.keys(seen).forEach(function(mid) {
+      var member = _mbs().find(function(m) { return m.id === mid; });
+      if (!member) return;
+      var msgs = allChats[mid] ? Object.values(allChats[mid].messages || {}) : [];
+      msgs.sort(function(a, b) { return a.ts - b.ts; });
+      var last = msgs[msgs.length - 1];
+      var unread = msgs.filter(function(m) { return m.from !== 'admin' && !m.read; }).length;
+      total += unread;
+      var init = (member.name || '').split(' ').map(function(n) { return n[0] || ''; }).join('').toUpperCase().slice(0, 2);
+      var col = _col(member.name);
+      html += '<div class="cht-mi" data-mid="' + _esc(member.id) + '" data-mname="' + _esc(member.name) + '" onclick="chtOpenMember(this)">'
+        + '<div style="width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,' + col + ',' + col + 'aa);display:flex;align-items:center;justify-content:center;font-size:.8rem;font-weight:800;color:#fff;flex-shrink:0;">' + init + '</div>'
+        + '<div style="flex:1;min-width:0;">'
+        + '<div style="font-weight:700;color:#f0f6ff;font-size:.82rem;">' + _esc(member.name) + '</div>'
+        + '<div style="font-size:.65rem;color:rgba(90,122,154,.8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (last ? _esc((last.text || '').slice(0, 45)) : 'No messages yet') + '</div>'
+        + '</div>'
+        + (unread > 0 ? '<div class="cht-dot"></div>' : '')
+        + '</div>';
+    });
+    listItems.innerHTML = html || '<div style="text-align:center;padding:20px;color:rgba(90,122,154,.7);font-size:.8rem;">No approved members yet</div>';
+    _chatUnread = total;
+    _updateBadge();
+  });
+  _chatListeners['__al'] = function() { database.ref('chats').off('value', handler); };
+}
 
   /* member row uses data attributes — no inline JS string escaping needed */
   window.chtOpenMember = function(el) {
@@ -19079,6 +19096,69 @@ body::before{content:'';position:fixed;inset:0;z-index:-2;pointer-events:none;
     })
     .catch(function() { try { toast('Send failed', '#ef4444'); } catch(e) {} });
 };
+// ─── Reply Time Helpers ──────────────────────────────────
+function _loadReplyTime() {
+  var database = _db();
+  if (!database) return;
+  database.ref('settings/chatReplyTime').once('value', function(snap) {
+    var hours = snap.val();
+    if (hours !== null && hours !== undefined) {
+      var display = document.getElementById('chat-reply-current');
+      if (display) display.textContent = 'Current: ' + hours + 'h';
+      // Also update the chat header for member view
+      _updateReplyTimeDisplay(hours);
+      // Fill the input
+      var input = document.getElementById('chat-reply-input');
+      if (input) input.value = hours;
+    }
+  });
+}
+
+function _updateReplyTimeDisplay(hours) {
+  var el = document.getElementById('chat-reply-time');
+  if (!el) return;
+  if (hours && hours > 0) {
+    var msg = hours === 1 ? 'hour' : 'hours';
+    el.textContent = '⏱️ Admin typically replies within ' + hours + ' ' + msg;
+    el.style.color = 'var(--gold)';
+  } else {
+    el.textContent = '';
+  }
+}
+
+// Expose setChatReplyTime globally (so the button can call it)
+window.setChatReplyTime = function() {
+  var input = document.getElementById('chat-reply-input');
+  if (!input) return;
+  var hours = parseFloat(input.value);
+  if (isNaN(hours) || hours < 0) { try { toast('Enter a valid number of hours', '#ef4444'); } catch(e) {} return; }
+  var database = _db();
+  if (!database) return;
+  database.ref('settings/chatReplyTime').set(hours).then(function() {
+    try { toast('Reply time set to ' + hours + ' hours', '#10b981'); } catch(e) {}
+    // Update display
+    var display = document.getElementById('chat-reply-current');
+    if (display) display.textContent = 'Current: ' + hours + 'h';
+    _updateReplyTimeDisplay(hours);
+  }).catch(function() { try { toast('Failed to save', '#ef4444'); } catch(e) {} });
+};
+
+// Also listen for real-time changes to the reply time (for all users)
+function _listenReplyTimeChanges() {
+  var database = _db();
+  if (!database) return;
+  database.ref('settings/chatReplyTime').on('value', function(snap) {
+    var hours = snap.val();
+    if (hours !== null && hours !== undefined) {
+      _updateReplyTimeDisplay(hours);
+      // Update the admin setter current value
+      var display = document.getElementById('chat-reply-current');
+      if (display) display.textContent = 'Current: ' + hours + 'h';
+      var input = document.getElementById('chat-reply-input');
+      if (input) input.value = hours;
+    }
+  });
+}
 window.deleteChatMessage = function(chatId, msgKey) {
   var database = _db();
   if (!database) return;
@@ -19136,6 +19216,8 @@ window.deleteChatMessage = function(chatId, msgKey) {
       setTimeout(function() {
         _startBadge();
         var database = _db();
+        // Start listening to reply time changes
+    if (database) _listenReplyTimeChanges();
         if (cu.isAdmin && database) {
           database.ref('chats').on('value', function(snap) {
             var all = snap.val() || {}, total = 0;
