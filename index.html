@@ -579,7 +579,106 @@ body {
   background-size: 200% 100%;
   animation: progressShimmer 2s linear infinite;
 }
+/* ── Enhanced Ledger Tab ── */
+#stats-ledger {
+  padding: 8px 4px;
+}
 
+#stats-ledger .sec-h {
+  font-size: 0.9rem;
+  margin-bottom: 8px;
+  color: var(--gold);
+}
+
+#stats-ledger .ledger-search .inp {
+  background: rgba(255,255,255,0.06) !important;
+  border: 1px solid var(--br) !important;
+  border-radius: 10px !important;
+  padding: 8px 12px !important;
+  font-size: 0.8rem !important;
+  color: var(--t) !important;
+}
+
+#stats-ledger .ledger-search .btn {
+  border-radius: 10px !important;
+  padding: 8px 14px !important;
+}
+
+#stats-ledger .lfilter {
+  gap: 6px;
+  padding: 4px 0 10px;
+  border-bottom: 1px solid var(--br);
+  margin-bottom: 12px;
+}
+
+#stats-ledger .lf-btn {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--br);
+  border-radius: 20px;
+  padding: 5px 14px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--t3);
+  transition: all 0.2s;
+}
+
+#stats-ledger .lf-btn.active {
+  background: var(--gold);
+  color: #fff;
+  border-color: var(--gold);
+}
+
+#stats-ledger .lf-btn:hover:not(.active) {
+  background: rgba(255,255,255,0.08);
+  color: var(--t);
+}
+
+#stats-ledger .txc {
+  background: rgba(255,255,255,0.03) !important;
+  border: 1px solid rgba(255,255,255,0.06) !important;
+  border-radius: 12px !important;
+  padding: 10px 14px !important;
+  margin-bottom: 6px !important;
+  transition: all 0.2s ease;
+}
+
+#stats-ledger .txc:hover {
+  background: rgba(255,255,255,0.06) !important;
+  border-color: rgba(245,158,11,0.2) !important;
+  transform: translateX(3px);
+}
+
+#stats-ledger .txc-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.06);
+  font-size: 0.9rem;
+}
+
+#stats-ledger .txc-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+#stats-ledger .txc-desc {
+  font-size: 0.65rem;
+  color: var(--t3);
+}
+
+#stats-ledger .txc-amount {
+  font-size: 0.75rem;
+}
+
+#stats-ledger .txc-date {
+  font-size: 0.55rem;
+}
+
+#stats-ledger .tx-select {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--gold);
+}
 /* Setup Overlay Styles */
 #setup-overlay {
   animation: fadeIn 0.5s ease;
@@ -5423,10 +5522,12 @@ async function getOrCreateActiveLoan(memberId, memberPhone, memberName) {
 function refreshUI() {
   computePots();
   updateHomeUI();
-  if (isLedgerActive()) loadLedger('all');
-  if (currentScreen === 'account') updateAccountUI();
-  if (currentScreen === 'admin' && adminUnlocked) renderAdminTab();
+  updateAccountBalances();
+  updateAccountUI();
+  updateLoanIndicator();
   updateNotificationBadge();
+  if (isLedgerActive()) loadLedger(window.currentLedgerFilter || 'all');
+  if (currentAdminTab === 'savings' && adminUnlocked) renderAdminTab();
   if (currentScreen === 'statistics') renderStatistics();
 }
 
@@ -6551,7 +6652,23 @@ window.removeCarouselNotice = function(key) {
 };
 function refreshCarouselPayee(){ renderMainCarousel(); }
 
-const TX_ICONS={deposit:'💰',withdraw:'📤',fine:'⚡',welfare:'🤝',expense:'📋',payout:'✅',debt:'🧾',debt_cleared:'✔️',profit_dist:'🎉',loan_disbursement:'💸',loan_repayment:'💳',loan_adjustment:'📈'};
+const TX_ICONS = {
+  deposit: '💰',
+  withdraw: '📤',
+  fine: '⚡',
+  welfare: '🤝',
+  expense: '📋',
+  payout: '✅',
+  debt: '🧾',
+  debt_cleared: '🧾',
+  profit_dist: '🎉',
+  loan_disbursement: '💸',
+  loan_repayment: '💳',
+  loan_adjustment: '📈',
+  loan_interest: '📈',
+  prepaid_used: '💠',
+  prepaid_balance: '💠'
+};
 // Update character counter for carousel message
 function updateMsgCounter() {
   const textarea = document.getElementById('c-msg');
@@ -6572,14 +6689,81 @@ function attachMsgCounterListener() {
   }
 }
 
-function renderTxRow(tx,i){
-  const m=members.find(m=>m.phone===tx.memberPhone)||{name:tx.memberName||'?'};
-  const ico=TX_ICONS[tx.type]||'💫';
-  const d=tx.date?new Date(tx.date).toLocaleDateString():'';
-  const isPos=(tx.type==='deposit'||tx.type==='payout'||tx.type==='profit_dist'||tx.type==='loan_repayment');
-  const editBtn=adminUnlocked&&tx.type!=='payout'?'<button class="btn btn-sm btn-sec" style="margin-left:8px;padding:5px 8px;" onclick="openEditTx(\''+tx.id+'\')">✏️</button>':'';
-  return '<div class="txc" style="animation-delay:'+(i*0.04)+'s"><div class="txc-icon">'+ico+'</div><div class="txc-info"><div class="txc-name">'+m.name+'</div><div class="txc-desc">'+(tx.description||tx.type)+'</div></div><div style="display:flex;align-items:center"><div><div class="txc-amount '+(isPos?'pos':'neg')+'">UGX '+(+tx.amount).toLocaleString()+'</div><div class="txc-date">'+d+'</div></div>'+editBtn+'</div></div>';
+function renderTxRow(tx, i) {
+  const m = members.find(m => m.phone === tx.memberPhone) || { name: tx.memberName || '?' };
+  const d = tx.date ? new Date(tx.date).toLocaleDateString() : '';
+  const isPos = (tx.type === 'deposit' || tx.type === 'payout' || tx.type === 'profit_dist' || tx.type === 'loan_repayment' || tx.type === 'debt_cleared');
+
+  // Determine display name and icon
+  let displayName = tx.type;
+  let icon = TX_ICONS[tx.type] || '💫';
+
+  if (tx.type === 'deposit') {
+    if (tx.isPrepaid) {
+      displayName = 'Prepaid Savings';
+      icon = '📅';
+    } else if (tx.isDailySavings) {
+      displayName = 'Daily Savings';
+      icon = '💰';
+    } else {
+      displayName = 'Deposit';
+      icon = '💰';
+    }
+  } else if (tx.type === 'welfare') {
+    displayName = tx.isPrepaid ? 'Prepaid Welfare' : 'Welfare';
+    icon = '🤝';
+  } else if (tx.type === 'loan_repayment') {
+    if (tx.description && tx.description.includes('application')) {
+      displayName = '⭐ Loan Repayment (App)';
+    } else if (tx.description && tx.description.includes('Extra')) {
+      displayName = '💪 Extra Loan Repayment';
+    } else {
+      displayName = '📋 Loan Repayment';
+    }
+  } else if (tx.type === 'debt_cleared') {
+    displayName = '🧾 Debt Cleared';
+  } else if (tx.type === 'loan_disbursement') {
+    displayName = '💸 Loan Disbursed';
+  } else if (tx.type === 'fine') {
+    displayName = '⚡ Fine';
+  } else if (tx.type === 'payout') {
+    displayName = '✅ Payout';
+  } else if (tx.type === 'expense') {
+    displayName = '📤 Expense';
+  } else if (tx.type === 'profit_dist') {
+    displayName = '🎉 Profit Distribution';
+  } else if (tx.type === 'prepaid_used') {
+    displayName = '💠 Prepaid Used';
+  } else if (tx.type === 'prepaid_balance') {
+    displayName = '💠 Prepaid Balance';
+  } else if (tx.type === 'loan_adjustment') {
+    displayName = '📈 Loan Adjustment';
+  } else if (tx.type === 'loan_interest') {
+    displayName = '📈 Loan Interest';
+  }
+
+  const editBtn = adminUnlocked && tx.type !== 'payout' ?
+    '<button class="btn btn-sm btn-sec" style="margin-left:8px;padding:5px 8px;" onclick="openEditTx(\'' + tx.id + '\')">✏️</button>' :
+    '';
+
+  return `
+    <div class="txc" style="animation-delay:${(i * 0.04)}s">
+      <div class="txc-icon">${icon}</div>
+      <div class="txc-info">
+        <div class="txc-name">${m.name}</div>
+        <div class="txc-desc">${displayName}${tx.description && !tx.description.includes('Daily') && !tx.description.includes('Welfare') && !tx.description.includes('Prepaid') && !tx.description.includes('Cleared') && !tx.description.includes('Repayment') ? ' · ' + tx.description : ''}</div>
+      </div>
+      <div style="display:flex;align-items:center">
+        <div>
+          <div class="txc-amount ${isPos ? 'pos' : 'neg'}">UGX ${(+tx.amount).toLocaleString()}</div>
+          <div class="txc-date">${d}</div>
+        </div>
+        ${editBtn}
+      </div>
+    </div>
+  `;
 }
+
 // ==========================================
 // LEDGER GLOBAL VARIABLES
 // ==========================================
@@ -11498,57 +11682,54 @@ function getPrepaidPeriod(member) {
 // ADD TRANSACTION WITH PREVIEW
 // ==========================================
 window.addTransactionWithPreview = async function() {
+  console.log('🔹 addTransactionWithPreview called');
   const phone = document.getElementById('tx-member')?.value;
   const type = document.getElementById('tx-type')?.value;
   const amount = parseFloat(document.getElementById('tx-amount')?.value);
   const desc = document.getElementById('tx-desc')?.value;
   const member = members.find(m => m.phone === phone);
-  
+
   if (!member || !amount || amount <= 0) {
     toast('Select a member and enter a valid amount', '#ef4444');
+    console.log('❌ Invalid input');
     return;
   }
-  
-  async function refreshAfterDeposit() {
-    const loansSnap = await db.ref('loans').once('value');
-    loans = loansSnap.val() ? Object.entries(loansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
-    const txSnap = await db.ref('transactions').once('value');
-    transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
-    computePots();
-    refreshUI();
-    if (isLedgerActive()) loadLedger(window.currentLedgerFilter || 'all');
-    if (currentAdminTab === 'savings' && adminUnlocked) renderAdminTab();
-  }
-  
+  console.log(`✅ Member: ${member.name}, Amount: ${amount}, Type: ${type}`);
+
   try {
     if (type === 'deposit') {
-      // Save deposit
+      console.log('🔹 Processing deposit...');
       const depositTxs = await processDepositWithFutureDays(member, amount, Date.now(), desc || 'Manual deposit');
+      console.log('🔹 Deposit transactions:', depositTxs);
+
       const writes = depositTxs.map(tx => db.ref('transactions').push(tx));
       await Promise.all(writes);
-      await refreshAfterDeposit();
-      
-      // Show receipt modal
-      showTransactionReceiptModal(member, 'deposit', amount, desc || 'Deposit',
-        // Confirm & Send (share receipt)
-        async () => {
-          // optionally share
-          closeOv('ov-add-tx');
-          toast(`Deposit saved! ${money(amount)} applied.`, '#10b981');
-        },
-        // Confirm & Don't Send
-        async () => {
-          closeOv('ov-add-tx');
-          toast(`Deposit saved! ${money(amount)} applied.`, '#10b981');
-        },
-        // Cancel (close receipt)
-        () => {
-          closeOv('ov-add-tx');
-          toast('Deposit already saved.', '#f59e0b');
-        }
-      );
+      console.log('✅ Deposit saved to Firebase');
+
+      // Reload transactions and loans
+      console.log('🔹 Reloading transactions and loans...');
+      const [txSnap, loansSnap] = await Promise.all([
+        db.ref('transactions').once('value'),
+        db.ref('loans').once('value')
+      ]);
+      transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
+      loans = loansSnap.val() ? Object.entries(loansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
+      console.log(`✅ Reloaded ${transactions.length} transactions, ${loans.length} loans`);
+
+      // Recompute and update UI
+      console.log('🔹 Recomputing and updating UI...');
+      computePots();
+      refreshUI();
+      if (isLedgerActive()) loadLedger(window.currentLedgerFilter || 'all');
+      if (currentAdminTab === 'savings' && adminUnlocked) renderAdminTab();
+
+      toast(`Deposit saved! ${money(amount)} applied.`, '#10b981');
+      console.log('✅ Deposit flow completed');
+      closeOv('ov-add-tx');
+
     } else {
-      // Non-deposit transaction (withdrawal, fine, etc.)
+      // Non-deposit
+      console.log('🔹 Saving non-deposit transaction...');
       await db.ref('transactions').push({
         memberPhone: phone,
         memberName: member.name,
@@ -11557,13 +11738,17 @@ window.addTransactionWithPreview = async function() {
         description: desc || type,
         date: Date.now()
       });
+      console.log('✅ Non-deposit saved');
+
+      const txSnap = await db.ref('transactions').once('value');
+      transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
       computePots();
       refreshUI();
-      closeOv('ov-add-tx');
       toast(`${type} recorded!`, '#10b981');
+      closeOv('ov-add-tx');
     }
   } catch (err) {
-    console.error(err);
+    console.error('❌ Transaction error:', err);
     toast('Transaction failed. Please try again.', '#ef4444');
   }
 };
@@ -11870,19 +12055,19 @@ function previewTransactionReceipt() {
   const amount = parseFloat(document.getElementById('tx-amount')?.value);
   const desc = document.getElementById('tx-desc')?.value;
   const member = members.find(m => m.phone === phone);
-  
+
   if (!member || !amount || amount <= 0) {
     toast('Select a member and enter a valid amount', '#ef4444');
     return;
   }
-  
+
   computePots();
-  
+
   const dailyAmount = settings.dailyAmount || 2000;
   const welfareAmount = settings.welfareAmount || 500;
   const requiredToday = dailyAmount + welfareAmount;
   const todayStart = new Date().setHours(0, 0, 0, 0);
-  
+
   let paidDailyToday = 0, welfarePaidToday = false;
   transactions.forEach(tx => {
     if (tx.memberPhone === member.phone && tx.date >= todayStart && tx.date < todayStart + 86400000) {
@@ -11893,11 +12078,11 @@ function previewTransactionReceipt() {
   const neededDaily = Math.max(0, dailyAmount - paidDailyToday);
   const neededWelfare = welfarePaidToday ? 0 : welfareAmount;
   const deficitToday = neededDaily + neededWelfare;
-  
+
   const prepaidBalance = memberPrepaid[member.phone] || 0;
   let remaining = amount;
   let usedToday = 0, usedPrepaid = 0;
-  
+
   if (deficitToday > 0) {
     if (prepaidBalance > 0) {
       usedPrepaid = Math.min(prepaidBalance, deficitToday);
@@ -11908,14 +12093,14 @@ function previewTransactionReceipt() {
       remaining -= usedToday;
     }
   }
-  
+
   const appBalance = memberApplicationLoans[member.phone] || 0;
   const assignedBalance = memberAssignedLoans[member.phone] || 0;
   const totalLoanBalance = memberLoans[member.phone] || 0;
   const debtBalance = memberDebts[member.phone] || 0;
-  
+
   let usedApp = 0, usedAssigned = 0, usedDebt = 0, extraLoanRepay = 0;
-  
+
   if (remaining > 0 && appBalance > 0) {
     usedApp = Math.min(remaining, appBalance);
     remaining -= usedApp;
@@ -11932,12 +12117,10 @@ function previewTransactionReceipt() {
     extraLoanRepay = Math.min(remaining, totalLoanBalance - usedApp - usedAssigned);
     remaining -= extraLoanRepay;
   }
-  
-  // ★ Projected remaining loan ★
+
   const loanRepaymentTotal = usedApp + usedAssigned + extraLoanRepay;
   const projectedRemainingLoan = Math.max(0, totalLoanBalance - loanRepaymentTotal);
-  
-  // ★ Projected prepaid date ★
+
   let projectedPrepaidDate = null;
   if (remaining > 0) {
     const daysCovered = Math.floor(remaining / requiredToday);
@@ -11945,8 +12128,36 @@ function previewTransactionReceipt() {
       projectedPrepaidDate = new Date(todayStart + (daysCovered + 1) * 86400000);
     }
   }
-  
-  // ★ Pass both to the receipt ★
+
+  // ===== SAVE FUNCTION =====
+  const onSave = async function() {
+    try {
+      const depositTxs = await processDepositWithFutureDays(member, amount, Date.now(), desc || 'Manual deposit');
+      const writes = depositTxs.map(tx => db.ref('transactions').push(tx));
+      await Promise.all(writes);
+
+      const [txSnap, loansSnap] = await Promise.all([
+        db.ref('transactions').once('value'),
+        db.ref('loans').once('value')
+      ]);
+      transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
+      loans = loansSnap.val() ? Object.entries(loansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
+
+      computePots();
+      refreshUI();
+      if (isLedgerActive()) loadLedger(window.currentLedgerFilter || 'all');
+      if (currentAdminTab === 'savings' && adminUnlocked) renderAdminTab();
+
+      toast(`Deposit saved! ${money(amount)} applied.`, '#10b981');
+      return true;
+    } catch (err) {
+      console.error('Save error:', err);
+      toast('Failed to save transaction.', '#ef4444');
+      return false;
+    }
+  };
+
+  // ===== OPEN RECEIPT MODAL =====
   showTransactionReceiptModal(
     member,
     type,
@@ -11954,18 +12165,19 @@ function previewTransactionReceipt() {
     desc || type,
     null, null, null, null,
     true,                      // isPreview
-    projectedPrepaidDate,      // projected prepaid date
-    projectedRemainingLoan     // ← projected remaining loan
+    projectedPrepaidDate,
+    projectedRemainingLoan,
+    onSave                     // pass the save function
   );
 }
 
-function showTransactionReceiptModal(member, txType, amount, description, onConfirmSend, onConfirmNoSend, onCancel, onPrint, isPreview = false, projectedPrepaidDate = null, projectedRemainingLoan = null) {
+function showTransactionReceiptModal(member, txType, amount, description, onConfirmSend, onConfirmNoSend, onCancel, onPrint, isPreview = false, projectedPrepaidDate = null, projectedRemainingLoan = null, onSave = null) {
   const safeAmount = Number(amount) || 0;
   computePots();
-  
+
   const accountBalance = memberBalances[member?.phone] || 0;
   const displayLoanBalance = (isPreview && projectedRemainingLoan !== null) ? projectedRemainingLoan : (memberLoans[member?.phone] || 0);
-  
+
   let prepaidUntil = 'Not prepaid';
   if (projectedPrepaidDate) {
     prepaidUntil = projectedPrepaidDate.toLocaleDateString();
@@ -11973,14 +12185,14 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
     const prepaidInfo = getPrepaidPeriod(member);
     if (prepaidInfo) prepaidUntil = prepaidInfo.lastDate.toLocaleDateString();
   }
-  
+
   function buildReceiptHTML() {
     const date = new Date();
     const receiptId = `Qwerty${Date.now().toString().slice(-6)}`;
     const dateLabel = date.toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' });
     const timeLabel = date.toLocaleTimeString('en-UG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const txTypeUpper = (txType || 'transaction').toUpperCase();
-    
+
     return `
       <div id="receipt-content" style="max-width:340px;margin:0 auto;background:#ffffff;border-radius:24px;padding:30px 20px 24px;font-family:-apple-system,BlinkMacSystemFont,'Inter','DM Sans',sans-serif;box-shadow:0 8px 40px rgba(90,60,200,0.10);text-align:center;">
         <div style="width:56px;height:56px;border-radius:50%;background:#22c55e;display:flex;align-items:center;justify-content:center;margin:0 auto 14px auto;">
@@ -12035,16 +12247,36 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
   const modal = document.createElement('div');
   modal.className = 'ov on';
   modal.style.zIndex = '20020';
-  
+
+  // ---- Button section ----
+  let buttonsHTML = '';
+
+  if (isPreview) {
+    buttonsHTML = `
+      <!-- Confirm & Save (primary action) -->
+      <button id="receipt-confirm-save" style="width:100%;padding:11px;border:none;border-radius:10px;background:#22c55e;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">✅ Confirm & Save</button>
+      <!-- All action buttons -->
+      <button id="receipt-confirm-send-pc" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">💻 Copy Image (PC)</button>
+      <button id="receipt-confirm-send-phone" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">📱 Send Image (Phone)</button>
+      <button id="receipt-confirm-nosend" style="width:100%;padding:11px;border:none;border-radius:10px;background:#6d28d9;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">✅ Save Without Sharing</button>
+      <button id="receipt-print" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">🖨️ Print</button>
+      <button id="receipt-cancel" style="width:100%;padding:9px;border:none;border-radius:10px;background:#f3f4f6;color:#6b7280;font-size:0.8rem;font-weight:600;cursor:pointer;font-family:inherit;">✕ Cancel</button>
+    `;
+  } else {
+    buttonsHTML = `
+      <button id="receipt-confirm-send-pc" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">💻 Copy Image (PC)</button>
+      <button id="receipt-confirm-send-phone" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">📱 Send Image (Phone)</button>
+      <button id="receipt-confirm-nosend" style="width:100%;padding:11px;border:none;border-radius:10px;background:#6d28d9;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">✅ Save Without Sharing</button>
+      <button id="receipt-print" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">🖨️ Print</button>
+      <button id="receipt-cancel" style="width:100%;padding:9px;border:none;border-radius:10px;background:#f3f4f6;color:#6b7280;font-size:0.8rem;font-weight:600;cursor:pointer;font-family:inherit;">✕ Cancel</button>
+    `;
+  }
+
   modal.innerHTML = `
     <div class="bs" style="max-width:420px;padding:0;overflow:hidden;border-radius:24px 24px 0 0;display:flex;flex-direction:column;max-height:90vh;">
       <div style="background:#fff;padding:20px 24px 12px;overflow-y:auto;flex:1;min-height:0;">${receiptHTML}</div>
       <div style="background:#fff;padding:12px 20px 20px;display:flex;flex-direction:column;gap:8px;flex-shrink:0;border-top:1px solid #f3f4f6;">
-        <button id="receipt-confirm-send-pc" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">💻 Copy Image (PC)</button>
-        <button id="receipt-confirm-send-phone" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">📱 Send Image (Phone)</button>
-        <button id="receipt-confirm-nosend" style="width:100%;padding:11px;border:none;border-radius:10px;background:#6d28d9;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">✅ Save Without Sharing</button>
-        <button id="receipt-print" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">🖨️ Print</button>
-        <button id="receipt-cancel" style="width:100%;padding:9px;border:none;border-radius:10px;background:#f3f4f6;color:#6b7280;font-size:0.8rem;font-weight:600;cursor:pointer;font-family:inherit;">✕ Cancel</button>
+        ${buttonsHTML}
       </div>
     </div>
   `;
@@ -12056,9 +12288,71 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
     setTimeout(() => modal.remove(), 300);
   };
 
+  // ---- Preview mode handlers ----
+  if (isPreview) {
+    // Confirm & Save
+    document.querySelector('#receipt-confirm-save').onclick = async () => {
+      if (onSave) {
+        const success = await onSave();
+        if (success) {
+          closeModal();
+          closeOv('ov-add-tx');
+        }
+      } else {
+        toast('Save function not available', '#ef4444');
+      }
+    };
+
+    // PC Copy (preview – copies the preview image)
+    document.querySelector('#receipt-confirm-send-pc').onclick = async () => {
+      const data = await renderElementToImage(receiptElement);
+      if (!data) { toast('Failed', '#ef4444'); return; }
+      try {
+        const blob = await (await fetch(data)).blob();
+        await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+        toast('📋 Copied!', '#06b6d4');
+      } catch (err) {
+        const blob = await (await fetch(data)).blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'receipt.png'; a.click();
+        URL.revokeObjectURL(url);
+        toast('📸 Downloaded', '#f59e0b');
+      }
+    };
+
+    // Phone Share (preview)
+    document.querySelector('#receipt-confirm-send-phone').onclick = async () => {
+      await shareReceiptImage(receiptElement, 'Transaction Receipt', `UGX ${safeAmount.toLocaleString()}`, 'receipt.png');
+    };
+
+    // Save Without Sharing (preview – closes without saving)
+    document.querySelector('#receipt-confirm-nosend').onclick = () => {
+      closeModal();
+      toast('Preview closed', '#f59e0b');
+    };
+
+    // Print (preview)
+    document.querySelector('#receipt-print').onclick = async () => {
+      const data = await renderElementToImage(receiptElement);
+      if (!data) { toast('Failed', '#ef4444'); return; }
+      const w = window.open('', '_blank');
+      w.document.write(`<!DOCTYPE html><html><head><title>Receipt</title><style>body{margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff;}img{max-width:100%;}</style></head><body><img src="${data}"></body></html>`);
+      w.document.close(); w.focus(); w.print();
+    };
+
+    // Cancel
+    document.querySelector('#receipt-cancel').onclick = () => {
+      closeModal();
+      toast('Preview closed', '#f59e0b');
+    };
+    return;
+  }
+
+  // ---- Non-preview handlers ----
   document.querySelector('#receipt-confirm-send-pc').onclick = async () => {
     const data = await renderElementToImage(receiptElement);
-    if (!data) { toast('Failed to generate image', '#ef4444'); return; }
+    if (!data) { toast('Failed', '#ef4444'); return; }
     try {
       const blob = await (await fetch(data)).blob();
       await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
@@ -12103,6 +12397,7 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
     toast('Cancelled', '#ff0000');
   };
 }
+
 // Simple fallback canvas generator (if html2canvas fails) – you can reuse the old canvas function
 function generateSimpleReceiptFallback(member, txType, amount, description, accountBalance, appBalance, projectedRemainingLoan, prepaidBalance) {
   try {
@@ -14869,6 +15164,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
   const dailyAmount = settings.dailyAmount || 2000;
   const welfareAmount = settings.welfareAmount || 500;
   const requiredToday = dailyAmount + welfareAmount;
+  const todayStr = new Date(todayStart).toLocaleDateString();
 
   // 1. Today's requirement
   let paidDailyToday = 0, welfarePaidToday = false;
@@ -14882,7 +15178,6 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
   const neededWelfare = welfarePaidToday ? 0 : welfareAmount;
   const deficitToday = neededDaily + neededWelfare;
 
-  // Use prepaid first
   const prepaidBalance = memberPrepaid[member.phone] || 0;
   let usedPrepaidToday = 0, prepaidRemaining = prepaidBalance;
   if (deficitToday > 0 && prepaidRemaining > 0) {
@@ -14890,9 +15185,11 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
     prepaidRemaining -= usedPrepaidToday;
     if (usedPrepaidToday > 0) {
       writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'prepaid_used', amount: usedPrepaidToday,
-        description: `Prepaid used for today's requirement (${money(usedPrepaidToday)})`,
+        memberPhone: member.phone,
+        memberName: member.name,
+        type: 'prepaid_used',
+        amount: usedPrepaidToday,
+        description: `💠 Prepaid used for today's requirement (${money(usedPrepaidToday)})`,
         date: now + 500
       });
     }
@@ -14907,18 +15204,22 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
     welfarePortion = usedToday - dailyPortion;
     if (dailyPortion > 0) {
       writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'deposit', amount: dailyPortion,
+        memberPhone: member.phone,
+        memberName: member.name,
+        type: 'deposit',
+        amount: dailyPortion,
         isDailySavings: true,
-        description: `Daily savings for ${new Date(todayStart).toLocaleDateString()}`,
+        description: `📆 Daily savings for ${todayStr}`,
         date: todayStart + 1500
       });
     }
     if (welfarePortion > 0) {
       writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'welfare', amount: welfarePortion,
-        description: `Welfare for ${new Date(todayStart).toLocaleDateString()}`,
+        memberPhone: member.phone,
+        memberName: member.name,
+        type: 'welfare',
+        amount: welfarePortion,
+        description: `🤝 Welfare for ${todayStr}`,
         date: todayStart + 500,
         autoDeduction: true
       });
@@ -14941,9 +15242,11 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
     if (repaymentAmount > 0) {
       const newRepaidAmount = (loan.repaidAmount || 0) + repaymentAmount;
       writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'loan_repayment', amount: repaymentAmount,
-        description: `Loan repayment (application)`,
+        memberPhone: member.phone,
+        memberName: member.name,
+        type: 'loan_repayment',
+        amount: repaymentAmount,
+        description: `⭐ Loan repayment (application) – ${money(repaymentAmount)}`,
         date: now + 2,
         loanId: loan.id
       });
@@ -14974,9 +15277,11 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
     if (repaymentAmount > 0) {
       const newRepaidAmount = (loan.repaidAmount || 0) + repaymentAmount;
       writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'loan_repayment', amount: repaymentAmount,
-        description: `Loan repayment`,
+        memberPhone: member.phone,
+        memberName: member.name,
+        type: 'loan_repayment',
+        amount: repaymentAmount,
+        description: `📋 Loan repayment (assigned) – ${money(repaymentAmount)}`,
         date: now + 3,
         loanId: loan.id
       });
@@ -14994,34 +15299,34 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
     remaining -= usedForDebt;
     if (usedForDebt > 0) {
       writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'debt_cleared', amount: usedForDebt,
-        description: `Cleared debt of ${money(usedForDebt)}`,
+        memberPhone: member.phone,
+        memberName: member.name,
+        type: 'debt_cleared',
+        amount: usedForDebt,
+        description: `🧾 Debt cleared – ${money(usedForDebt)}`,
         date: now + 4
       });
     }
   }
 
-  // ★★★ EXTRA: Apply remaining to total loan balance (for Frank/Hajjarah) ★★★
+  // 5. Extra loan repayment (for Frank/Hajjarah)
   const totalLoanBalance = memberLoans[member.phone] || 0;
   if (remaining > 0 && totalLoanBalance > 0) {
     const extraRepay = Math.min(remaining, totalLoanBalance);
     remaining -= extraRepay;
     if (extraRepay > 0) {
-      // Add a loan_repayment for the extra amount
       writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'loan_repayment', amount: extraRepay,
-        description: `Extra loan repayment (${money(extraRepay)})`,
+        memberPhone: member.phone,
+        memberName: member.name,
+        type: 'loan_repayment',
+        amount: extraRepay,
+        description: `💪 Extra loan repayment – ${money(extraRepay)}`,
         date: now + 5
       });
-      // Update any active loan's repaidAmount? We need to find the oldest active loan and update it.
-      // To keep it simple, we'll just record it as a loan_repayment without a specific loanId.
-      // The computePots will handle it.
     }
   }
 
-  // 5. Prepay future days (if any remaining)
+  // 6. Prepay future days
   if (remaining > 0) {
     let currentDay = todayStart + 86400000;
     const maxDays = 30;
@@ -15029,18 +15334,23 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
     let remainingPrepay = remaining;
 
     while (remainingPrepay >= requiredToday && daysProcessed < maxDays) {
+      const dateStr = new Date(currentDay).toLocaleDateString();
       writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'deposit', amount: dailyAmount,
+        memberPhone: member.phone,
+        memberName: member.name,
+        type: 'deposit',
+        amount: dailyAmount,
         isPrepaid: true,
-        description: `Prepaid daily savings for ${new Date(currentDay).toLocaleDateString()}`,
+        description: `📆 Prepaid daily savings for ${dateStr}`,
         date: currentDay + 1500
       });
       writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'welfare', amount: welfareAmount,
+        memberPhone: member.phone,
+        memberName: member.name,
+        type: 'welfare',
+        amount: welfareAmount,
         isPrepaid: true,
-        description: `Prepaid welfare for ${new Date(currentDay).toLocaleDateString()}`,
+        description: `🤝 Prepaid welfare for ${dateStr}`,
         date: currentDay + 500,
         autoDeduction: true
       });
@@ -15050,23 +15360,28 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
     }
 
     if (remainingPrepay > 0 && daysProcessed < maxDays) {
+      const dateStr = new Date(currentDay).toLocaleDateString();
       const dailyPortionPartial = Math.min(remainingPrepay, dailyAmount);
       const welfarePortionPartial = remainingPrepay - dailyPortionPartial;
       if (dailyPortionPartial > 0) {
         writes.push({
-          memberPhone: member.phone, memberName: member.name,
-          type: 'deposit', amount: dailyPortionPartial,
+          memberPhone: member.phone,
+          memberName: member.name,
+          type: 'deposit',
+          amount: dailyPortionPartial,
           isPrepaid: true,
-          description: `Prepaid daily savings for ${new Date(currentDay).toLocaleDateString()} (partial)`,
+          description: `📆 Prepaid daily savings for ${dateStr} (partial)`,
           date: currentDay + 1500
         });
       }
       if (welfarePortionPartial > 0) {
         writes.push({
-          memberPhone: member.phone, memberName: member.name,
-          type: 'welfare', amount: welfarePortionPartial,
+          memberPhone: member.phone,
+          memberName: member.name,
+          type: 'welfare',
+          amount: welfarePortionPartial,
           isPrepaid: true,
-          description: `Prepaid welfare for ${new Date(currentDay).toLocaleDateString()} (partial)`,
+          description: `🤝 Prepaid welfare for ${dateStr} (partial)`,
           date: currentDay + 500,
           autoDeduction: true
         });
@@ -15076,24 +15391,23 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
         memberPrepaid[member.phone] = (memberPrepaid[member.phone] || 0) + remainingForDay;
         await db.ref('members/' + member.id + '/prepaid').set(memberPrepaid[member.phone]);
         writes.push({
-          memberPhone: member.phone, memberName: member.name,
+          memberPhone: member.phone,
+          memberName: member.name,
           type: 'prepaid_balance',
           amount: remainingForDay,
-          description: `Prepaid balance for ${new Date(currentDay).toLocaleDateString()} (${money(remainingForDay)} remaining)`,
+          description: `💠 Prepaid balance for ${dateStr} (${money(remainingForDay)} remaining)`,
           date: currentDay + 1000
         });
       }
     }
   }
 
-  // Update prepaid balance if changed
   if (prepaidRemaining !== undefined && prepaidRemaining !== prepaidBalance) {
     await db.ref('members/' + member.id + '/prepaid').set(prepaidRemaining);
   }
 
   return writes;
 }
-
 async function calculateProjectedLoanBalanceAfterDeposit(member, depositAmount) {
   // Simulate the deposit allocation without writing to database
   let remaining = depositAmount;
