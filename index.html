@@ -957,6 +957,26 @@ body {
 .tab{position:absolute;inset:0;overflow-y:auto;padding:16px 14px calc(var(--nav) + 56px);opacity:0;pointer-events:none;transform:translateY(22px) scale(0.99);transition:opacity 0.35s var(--ease-smooth),transform 0.35s var(--ease-spring)}.tab.on{opacity:1;pointer-events:all;transform:translateY(0) scale(1)}
 #nav{position:absolute;bottom:0;left:0;right:0;height:var(--nav);display:flex;background:rgba(6,14,26,0.92);backdrop-filter:blur(32px);border-top:1px solid rgba(255,255,255,0.06);padding-bottom:env(safe-area-inset-bottom);z-index:20;box-shadow:0 -4px 24px rgba(0,0,0,0.5)}
 .ni{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:none;color:var(--t3);font-size:0.48rem;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;cursor:pointer;border:none;transition:all 0.25s var(--ease-spring);padding-top:6px;position:relative;overflow:hidden}.ni:active{transform:scale(0.9)}.ni.on{color:var(--gold)}.ni .ico{font-size:1.2rem;transition:transform 0.3s var(--ease-spring),filter 0.3s}.ni.on .ico{transform:scale(1.22) translateY(-2px);filter:drop-shadow(0 2px 6px rgba(245,158,11,0.5))}.ni-bar{position:absolute;bottom:4px;left:50%;transform:translateX(-50%) scaleX(0);width:24px;height:3px;border-radius:99px;background:linear-gradient(90deg,var(--gold),var(--teal));transition:transform 0.3s var(--ease-spring)}.ni.on .ni-bar{transform:translateX(-50%) scaleX(1)}
+/* ─── Image Viewer ─────────────────────────────────────── */
+#image-viewer {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0s 0.3s;
+}
+#image-viewer.active {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.3s ease, visibility 0s 0s;
+}
+#image-viewer.active img {
+  transform: scale(1) !important;
+}
+#image-viewer-close:hover {
+  background: rgba(255,255,255,0.25);
+}
+#image-viewer-close:active {
+  transform: scale(0.92);
+}
 #image-preview-modal {
   backdrop-filter: blur(8px);
 }
@@ -3776,9 +3796,12 @@ Thank you for your patience and understanding. 🙏
     </div>
   </div>
 </div>
-<!-- Image Preview Modal -->
-<div id="image-preview-modal" onclick="closeImagePreview()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:99999;align-items:center;justify-content:center;cursor:pointer;padding:20px;">
-  <img id="image-preview-modal-img" src="" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;">
+<!-- ─── WhatsApp‑style Image Viewer ────────────────────── -->
+<div id="image-viewer" style="display:none;position:fixed;inset:0;z-index:999999;background:rgba(0,0,0,0.92);backdrop-filter:blur(8px);align-items:center;justify-content:center;flex-direction:column;padding:20px;cursor:pointer;">
+  <div style="position:relative;width:100%;height:100%;display:flex;align-items:center;justify-content:center;">
+    <img id="image-viewer-img" src="" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,0.6);transition:transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);transform:scale(0.8);">
+  </div>
+  <button id="image-viewer-close" style="position:absolute;top:20px;right:20px;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);color:#fff;font-size:1.5rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10;" onclick="closeImageViewer()">✕</button>
 </div>
 <!-- ========================================== -->
 <!-- MEMBER LOAN DETAILS MODAL                 -->
@@ -4597,6 +4620,52 @@ function enableButtonShatterReactions(){
     shatterButtonReaction(el,ev);
   },true);
 }
+// ─── WhatsApp‑style Image Viewer (Global) ──────────────
+function openImageViewer(src) {
+  const viewer = document.getElementById('image-viewer');
+  const img = document.getElementById('image-viewer-img');
+  if (!viewer || !img) {
+    console.error('Image viewer elements not found');
+    return;
+  }
+  img.src = src;
+  viewer.style.display = 'flex';
+  // Force reflow then add class for animation
+  void viewer.offsetWidth;
+  viewer.classList.add('active');
+}
+
+function closeImageViewer() {
+  const viewer = document.getElementById('image-viewer');
+  if (!viewer) return;
+  viewer.classList.remove('active');
+  // Hide after transition ends
+  setTimeout(() => {
+    if (!viewer.classList.contains('active')) {
+      viewer.style.display = 'none';
+    }
+  }, 350);
+}
+
+// Click on backdrop closes viewer
+document.addEventListener('click', function(e) {
+  const viewer = document.getElementById('image-viewer');
+  if (!viewer || !viewer.classList.contains('active')) return;
+  if (e.target === viewer) {
+    closeImageViewer();
+  }
+});
+
+// Close on Escape key
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    closeImageViewer();
+  }
+});
+
+// Expose functions to window for inline onclick
+window.openImageViewer = openImageViewer;
+window.closeImageViewer = closeImageViewer;
 function openImagePreview(src) {
   const modal = document.getElementById('image-preview-modal');
   const img = document.getElementById('image-preview-modal-img');
@@ -10556,7 +10625,7 @@ function renderAdminTab() {
 
   const pendingLoans = loans.filter(l => l.status === 'pending');
   
-  // Group active loans by member
+   // Active loans – filter out zero balance
   const activeByMember = {};
   loans.forEach(l => {
     if (l.status === 'approved' && !l.repaid) {
@@ -10592,7 +10661,6 @@ function renderAdminTab() {
       if (l.loanQuestions && l.loanQuestions.length > 0) {
         activeByMember[l.memberId].appLoanCount++;
         activeByMember[l.memberId].appLoanBalance += (l.totalRepay - (l.repaidAmount || 0));
-        
         if (l.dueDate && l.dueDate < Date.now()) {
           const daysOverdue = Math.floor((Date.now() - l.dueDate) / (1000 * 60 * 60 * 24));
           if (daysOverdue > activeByMember[l.memberId].daysOverdue) {
@@ -10607,7 +10675,13 @@ function renderAdminTab() {
       }
     }
   });
-  const entries = Object.entries(activeByMember);
+
+  // Filter out members with zero loan balance
+  let entries = Object.entries(activeByMember);
+  entries = entries.filter(([memberId, data]) => {
+    const totalBalance = memberLoans[data.memberPhone] || 0;
+    return totalBalance > 0;
+  });
 
   // ===== HELPER FUNCTIONS =====
   function money(n) { n = Number(n) || 0; return (n < 0 ? '-' : '') + 'UGX ' + Math.abs(n).toLocaleString(); }
@@ -12523,35 +12597,16 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
   modal.className = 'ov on';
   modal.style.zIndex = '20020';
 
-  // ---- Button section ----
-  let buttonsHTML = '';
-
-  if (isPreview) {
-    buttonsHTML = `
-      <!-- Confirm & Save (primary action) -->
-      <button id="receipt-confirm-save" style="width:100%;padding:11px;border:none;border-radius:10px;background:#22c55e;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">✅ Confirm & Save</button>
-      <!-- All action buttons -->
-      <button id="receipt-confirm-send-pc" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">💻 Copy Image (PC)</button>
-      <button id="receipt-confirm-send-phone" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">📱 Send Image (Phone)</button>
-      <button id="receipt-confirm-nosend" style="width:100%;padding:11px;border:none;border-radius:10px;background:#6d28d9;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">✅ Save Without Sharing</button>
-      <button id="receipt-print" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">🖨️ Print</button>
-      <button id="receipt-cancel" style="width:100%;padding:9px;border:none;border-radius:10px;background:#f3f4f6;color:#6b7280;font-size:0.8rem;font-weight:600;cursor:pointer;font-family:inherit;">✕ Cancel</button>
-    `;
-  } else {
-    buttonsHTML = `
-      <button id="receipt-confirm-send-pc" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">💻 Copy Image (PC)</button>
-      <button id="receipt-confirm-send-phone" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">📱 Send Image (Phone)</button>
-      <button id="receipt-confirm-nosend" style="width:100%;padding:11px;border:none;border-radius:10px;background:#6d28d9;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">✅ Save Without Sharing</button>
-      <button id="receipt-print" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">🖨️ Print</button>
-      <button id="receipt-cancel" style="width:100%;padding:9px;border:none;border-radius:10px;background:#f3f4f6;color:#6b7280;font-size:0.8rem;font-weight:600;cursor:pointer;font-family:inherit;">✕ Cancel</button>
-    `;
-  }
-
+  // Buttons: all except Cancel will save first (if onSave provided)
   modal.innerHTML = `
     <div class="bs" style="max-width:420px;padding:0;overflow:hidden;border-radius:24px 24px 0 0;display:flex;flex-direction:column;max-height:90vh;">
       <div style="background:#fff;padding:20px 24px 12px;overflow-y:auto;flex:1;min-height:0;">${receiptHTML}</div>
       <div style="background:#fff;padding:12px 20px 20px;display:flex;flex-direction:column;gap:8px;flex-shrink:0;border-top:1px solid #f3f4f6;">
-        ${buttonsHTML}
+        <button id="receipt-copy-pc" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">💻 Copy, Save & Send (PC)</button>
+        <button id="receipt-copy-phone" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">📱 Copy, Save & Send (Phone)</button>
+        <button id="receipt-save-only" style="width:100%;padding:11px;border:none;border-radius:10px;background:#6d28d9;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">✅ Save Without Sharing</button>
+        <button id="receipt-print" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">🖨️ Print</button>
+        <button id="receipt-cancel" style="width:100%;padding:9px;border:none;border-radius:10px;background:#f3f4f6;color:#6b7280;font-size:0.8rem;font-weight:600;cursor:pointer;font-family:inherit;">✕ Cancel</button>
       </div>
     </div>
   `;
@@ -12563,71 +12618,24 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
     setTimeout(() => modal.remove(), 300);
   };
 
-  // ---- Preview mode handlers ----
-  if (isPreview) {
-    // Confirm & Save
-    document.querySelector('#receipt-confirm-save').onclick = async () => {
-      if (onSave) {
-        const success = await onSave();
-        if (success) {
-          closeModal();
-          closeOv('ov-add-tx');
-        }
-      } else {
-        toast('Save function not available', '#ef4444');
+  // Helper to perform save action (if provided)
+  const performSave = async () => {
+    if (typeof onSave === 'function') {
+      const success = await onSave();
+      if (!success) {
+        toast('Failed to save transaction', '#ef4444');
+        return false;
       }
-    };
+    }
+    return true;
+  };
 
-    // PC Copy (preview – copies the preview image)
-    document.querySelector('#receipt-confirm-send-pc').onclick = async () => {
-      const data = await renderElementToImage(receiptElement);
-      if (!data) { toast('Failed', '#ef4444'); return; }
-      try {
-        const blob = await (await fetch(data)).blob();
-        await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-        toast('📋 Copied!', '#06b6d4');
-      } catch (err) {
-        const blob = await (await fetch(data)).blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = 'receipt.png'; a.click();
-        URL.revokeObjectURL(url);
-        toast('📸 Downloaded', '#f59e0b');
-      }
-    };
-
-    // Phone Share (preview)
-    document.querySelector('#receipt-confirm-send-phone').onclick = async () => {
-      await shareReceiptImage(receiptElement, 'Transaction Receipt', `UGX ${safeAmount.toLocaleString()}`, 'receipt.png');
-    };
-
-    // Save Without Sharing (preview – closes without saving)
-    document.querySelector('#receipt-confirm-nosend').onclick = () => {
-      closeModal();
-      toast('Preview closed', '#f59e0b');
-    };
-
-    // Print (preview)
-    document.querySelector('#receipt-print').onclick = async () => {
-      const data = await renderElementToImage(receiptElement);
-      if (!data) { toast('Failed', '#ef4444'); return; }
-      const w = window.open('', '_blank');
-      w.document.write(`<!DOCTYPE html><html><head><title>Receipt</title><style>body{margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff;}img{max-width:100%;}</style></head><body><img src="${data}"></body></html>`);
-      w.document.close(); w.focus(); w.print();
-    };
-
-    // Cancel
-    document.querySelector('#receipt-cancel').onclick = () => {
-      closeModal();
-      toast('Preview closed', '#f59e0b');
-    };
-    return;
-  }
-
-  // ---- Non-preview handlers ----
-  document.querySelector('#receipt-confirm-send-pc').onclick = async () => {
+  // --- Button: Copy to PC ---
+  document.querySelector('#receipt-copy-pc').onclick = async () => {
+    const saved = await performSave();
+    if (!saved) return;
     const data = await renderElementToImage(receiptElement);
-    if (!data) { toast('Failed', '#ef4444'); return; }
+    if (!data) { toast('Failed to generate image', '#ef4444'); return; }
     try {
       const blob = await (await fetch(data)).blob();
       await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
@@ -12641,37 +12649,48 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
       toast('📸 Downloaded', '#f59e0b');
     }
     closeModal();
-    if (onConfirmSend) onConfirmSend();
+    if (typeof onConfirmSend === 'function') onConfirmSend();
   };
 
-  document.querySelector('#receipt-confirm-send-phone').onclick = async () => {
+  // --- Button: Share via Phone ---
+  document.querySelector('#receipt-copy-phone').onclick = async () => {
+    const saved = await performSave();
+    if (!saved) return;
     await shareReceiptImage(receiptElement, 'Transaction Receipt', `UGX ${safeAmount.toLocaleString()}`, 'receipt.png');
     closeModal();
-    if (onConfirmSend) onConfirmSend();
+    if (typeof onConfirmSend === 'function') onConfirmSend();
   };
 
-  document.querySelector('#receipt-confirm-nosend').onclick = () => {
+  // --- Button: Save Without Sharing ---
+  document.querySelector('#receipt-save-only').onclick = async () => {
+    const saved = await performSave();
+    if (!saved) return;
     closeModal();
-    if (onConfirmNoSend) onConfirmNoSend();
+    if (typeof onConfirmNoSend === 'function') onConfirmNoSend();
     toast('✅ Saved', '#10b981');
   };
 
+  // --- Button: Print ---
   document.querySelector('#receipt-print').onclick = async () => {
+    const saved = await performSave();
+    if (!saved) return;
     const data = await renderElementToImage(receiptElement);
-    if (!data) { toast('Failed', '#ef4444'); return; }
+    if (!data) { toast('Failed to generate image', '#ef4444'); return; }
     const w = window.open('', '_blank');
     w.document.write(`<!DOCTYPE html><html><head><title>Receipt</title><style>body{margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff;}img{max-width:100%;}</style></head><body><img src="${data}"></body></html>`);
     w.document.close(); w.focus(); w.print();
     closeModal();
-    if (onPrint) onPrint();
+    if (typeof onPrint === 'function') onPrint();
   };
 
+  // --- Button: Cancel ---
   document.querySelector('#receipt-cancel').onclick = () => {
     closeModal();
-    if (onCancel) onCancel();
+    if (typeof onCancel === 'function') onCancel();
     toast('Cancelled', '#ff0000');
   };
 }
+
 
 // Simple fallback canvas generator (if html2canvas fails) – you can reuse the old canvas function
 function generateSimpleReceiptFallback(member, txType, amount, description, accountBalance, appBalance, projectedRemainingLoan, prepaidBalance) {
@@ -19120,12 +19139,12 @@ var replyHtml = '<div style="background:rgba(245,158,11,0.06);border-radius:12px
       '<span style="margin-left:8px;cursor:pointer;font-size:0.7rem;color:rgba(239,68,68,0.6);" onclick="deleteChatMessage(\'' + mid + '\',\'' + msg.key + '\')">&#128465;</span>' :
       '';
 
-    // Build message content: text + image
     var contentHtml = '';
     if (msg.text) contentHtml += _esc(msg.text);
     if (msg.imageData) {
+      // Use a unique ID for the image (or use class with onclick)
       contentHtml += '<div style="margin-top:4px;">'
-        + '<img src="' + msg.imageData + '" style="max-width:100%;max-height:200px;border-radius:8px;cursor:pointer;border:1px solid rgba(255,255,255,0.1);" onclick="openImagePreview(this.src)">'
+        + '<img src="' + msg.imageData + '" class="cht-img" style="max-width:100%;max-height:200px;border-radius:8px;cursor:pointer;border:1px solid rgba(255,255,255,0.1);" onclick="openImageViewer(this.src)">'
         + '</div>';
     }
 
@@ -19139,7 +19158,6 @@ var replyHtml = '<div style="background:rgba(245,158,11,0.06);border-radius:12px
       + (isOut && !msg.read ? ' &middot; <span style="color:rgba(90,122,154,.5)">&#10003;</span>' : '')
       + '</div></div></div>';
 
-    // Mark as read
     if (isAdmin  && msg.from !== 'admin' && !msg.read) ref.child(msg.key).update({ read: true });
     if (!isAdmin && msg.from === 'admin' && !msg.read) {
       ref.child(msg.key).update({ read: true });
@@ -19156,6 +19174,29 @@ var replyHtml = '<div style="background:rgba(245,158,11,0.06);border-radius:12px
   msgs.innerHTML = html;
   var convo = _el('chat-convo');
   if (convo) convo.scrollTop = convo.scrollHeight;
+  // ─── Event Delegation for Images (fallback) ─────────────
+if (msgs) {
+  // Remove any previous listener to avoid duplicates
+  msgs.removeEventListener('click', _handleImageClick);
+  msgs.addEventListener('click', _handleImageClick);
+}
+
+function _handleImageClick(e) {
+  var target = e.target;
+  if (target.classList && target.classList.contains('cht-img')) {
+    var src = target.getAttribute('src');
+    if (src) {
+      // Use the global openImageViewer function
+      if (typeof window.openImageViewer === 'function') {
+        window.openImageViewer(src);
+      } else if (typeof openImageViewer === 'function') {
+        openImageViewer(src);
+      } else {
+        console.warn('openImageViewer not defined');
+      }
+    }
+  }
+}
 }
 
   /* ── Send ───────────────────────────────────────────────────── */
@@ -19250,86 +19291,7 @@ function _updateReplyTimeDisplay(hours) {
     el.textContent = '';
   }
 }
-// ─── Improved Swipe Listeners ──────────────────────────────────
-let touchStartX = 0;
-let touchStartY = 0;
-let isSwiping = false;
-let swipeDirection = null;
 
-function attachSwipeListeners(container) {
-  if (!container) return;
-
-  // Remove old listeners to avoid duplicates
-  container.removeEventListener('touchstart', _handleTouchStart);
-  container.removeEventListener('touchmove', _handleTouchMove);
-  container.removeEventListener('touchend', _handleTouchEnd);
-  container.removeEventListener('touchcancel', _handleTouchCancel);
-
-  container.addEventListener('touchstart', _handleTouchStart, { passive: true });
-  container.addEventListener('touchmove', _handleTouchMove, { passive: false });
-  container.addEventListener('touchend', _handleTouchEnd, { passive: true });
-  container.addEventListener('touchcancel', _handleTouchCancel, { passive: true });
-}
-
-function _handleTouchStart(e) {
-  const touch = e.touches[0];
-  if (!touch) return;
-  touchStartX = touch.screenX;
-  touchStartY = touch.screenY;
-  isSwiping = false;
-  swipeDirection = null;
-}
-
-function _handleTouchMove(e) {
-  if (e.touches.length === 0) return;
-  const touch = e.touches[0];
-  const dx = touch.screenX - touchStartX;
-  const dy = touch.screenY - touchStartY;
-  const absDx = Math.abs(dx);
-  const absDy = Math.abs(dy);
-
-  // If horizontal swipe is detected (and more than vertical)
-  if (absDx > 20 && absDx > absDy * 1.2) {
-    isSwiping = true;
-    swipeDirection = dx < 0 ? 'left' : 'right';
-    // Prevent vertical scrolling when swiping horizontally
-    e.preventDefault();
-    showSwipeHint();
-  } else {
-    // If vertical scrolling, allow it
-    isSwiping = false;
-  }
-}
-
-function _handleTouchEnd(e) {
-  if (!isSwiping) {
-    // Tap (no swipe) – show hint briefly
-    showSwipeHint();
-    return;
-  }
-
-  // Determine if the swipe was enough to change page
-  const touch = e.changedTouches[0];
-  if (!touch) return;
-  const dx = touch.screenX - touchStartX;
-  if (Math.abs(dx) > 50) {
-    const dir = dx < 0 ? 1 : -1;
-    const newIndex = currentBookIndex + dir;
-    if (newIndex >= 0 && newIndex < BOOK_PAGES.length) {
-      switchBookPage(newIndex, dir < 0 ? 'backward' : 'forward');
-    }
-  }
-  isSwiping = false;
-  swipeDirection = null;
-  hideSwipeHint();
-}
-
-function _handleTouchCancel(e) {
-  // Reset state if touch is interrupted
-  isSwiping = false;
-  swipeDirection = null;
-  hideSwipeHint();
-}
 // Expose setChatReplyTime globally (so the button can call it)
 window.setChatReplyTime = function() {
   var input = document.getElementById('chat-reply-input');
@@ -19521,6 +19483,10 @@ window.deleteChatMessage = function(chatId, msgKey) {
 }
 </style>
 <script>
+// ─── Global Chat Variables ──────────────────────────────
+window.pendingImageData = null;      // base64 image data
+window._chatMemberId = null;         // selected member (for admin)
+window._adminChatName = 'Admin';     // admin display name
 (function(){
   var TAB_ORDER=['home','statistics','account'];
   var isTouch = (window.matchMedia && window.matchMedia('(pointer:coarse)').matches) || ('ontouchstart' in window);
@@ -19556,25 +19522,6 @@ window.deleteChatMessage = function(chatId, msgKey) {
     return TAB_ORDER[ni];
   }
 
-  var hintTimer = null;
-  function showSwipeHint(btn){
-    var el = document.getElementById('htf-swipe-hint');
-    if(!el){
-      el = document.createElement('div');
-      el.id = 'htf-swipe-hint';
-      el.innerHTML = '<span class="htf-hand">\u2194</span><span>Swipe to switch tabs</span>';
-      document.body.appendChild(el);
-    }
-    el.classList.add('show');
-    clearTimeout(hintTimer);
-    hintTimer = setTimeout(function(){ el.classList.remove('show'); }, 1250);
-    if(btn){
-      btn.classList.remove('htf-nudge');
-      void btn.offsetWidth;
-      btn.classList.add('htf-nudge');
-    }
-  }
-
   function triggerPour(x, y){
     var el = document.createElement('div');
     el.className = 'htf-pour';
@@ -19599,7 +19546,6 @@ window.deleteChatMessage = function(chatId, msgKey) {
         btn.addEventListener('click', function(e){
           e.preventDefault();
           e.stopImmediatePropagation();
-          showSwipeHint(btn);
         }, true);
       } else {
         // Desktop: click still switches tabs (book flip), plus a color-pour ripple.
