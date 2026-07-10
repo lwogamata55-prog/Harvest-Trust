@@ -555,6 +555,22 @@ body {
 .pending-num{width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,var(--amber),var(--gold2));color:#fff;font-size:0.65rem;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 #app{position:fixed;inset:0;display:flex;flex-direction:column;opacity:0;transform:translateY(16px) scale(0.99);transition:opacity 0.4s var(--ease-smooth),transform 0.4s var(--ease-spring);pointer-events:none}
 #app.on{opacity:1;transform:none;pointer-events:all}
+/* Prominent App Name in Header */
+#hdr .hdr-l {
+  gap: 4px;
+}
+#hdr .hdr-name {
+  font-size: 1.2rem !important;
+  font-weight: 500 !important;
+  letter-spacing: -0.5px;
+  background: linear-gradient(135deg, var(--gold), var(--teal));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+#hdr .hdr-sub {
+  display: none; /* Hide the "by Lwogamata" subtitle to keep it clean, or keep it if you prefer */
+}
 #hdr{height:var(--hdr);flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 16px;background:rgba(6,14,26,0.85);backdrop-filter:blur(28px);border-bottom:1px solid rgba(255,255,255,0.06);z-index:20;position:relative}
 #hdr::after{content:'';position:absolute;bottom:-1px;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--gold),var(--teal),var(--purple),var(--gold),transparent);animation:shimmer 3s linear infinite;background-size:200% 100%;opacity:0.7}
 .hdr-l{display:flex;align-items:center;gap:10px}
@@ -4312,6 +4328,7 @@ async function checkAndAssignDebts() {
         memberName: member.name,
         type: 'loan_adjustment',   // instead of 'debt'
         amount: deficit,
+        receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
         description: `Missed daily saving (${money(deficit)}) – added to loan balance`,
         date: Date.now(),
         autoMidnight: true
@@ -4323,6 +4340,7 @@ async function checkAndAssignDebts() {
           memberName: member.name,
           type: 'fine',
           amount: interestAmount,
+          receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
           description: `Penalty interest (${settings.penaltyInterestRate}%) on missed saving for ${todayDateStr}`,
           date: Date.now() + 1,
           autoMidnight: true
@@ -5034,6 +5052,7 @@ async function sendHarshReminder(memberId) {
         memberName: member.name,
         type: 'fine',
         amount: penalty,
+        receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
         description: `Overdue penalty (${loanSettings.overduePenalty || 2}%) - ${daysOverdue} days overdue on APPLICATION LOAN`,
         date: Date.now()
       });
@@ -5221,6 +5240,70 @@ function generateAnniversaryBadge() {
   } catch (err) {
     console.warn('Anniversary badge generation error:', err);
   }
+}
+function generateReceiptNumber() {
+  const timestamp = Date.now().toString(36).toUpperCase();
+  const random = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return "HTF-" + timestamp + "-" + random;
+}
+
+function getReceiptQuote(member) {
+  const phone = member?.phone || '';
+  const loanBalance = memberLoans[phone] || 0;
+  const debtBalance = memberDebts[phone] || 0;
+  const prepaidBalance = memberPrepaid[phone] || 0;
+  const totalOwed = loanBalance + debtBalance;
+
+  // Determine category
+  let category = '';
+  if (totalOwed === 0 && prepaidBalance === 0) category = 'clear';
+  else if (totalOwed === 0 && prepaidBalance > 0) category = 'prepaid';
+  else if (totalOwed > 0 && prepaidBalance > 0) category = 'mix';
+  else if (totalOwed > 0 && prepaidBalance === 0) {
+    if (totalOwed > 100000) category = 'large_debt';
+    else if (totalOwed > 10000) category = 'medium_debt';
+    else category = 'small_debt';
+  } else category = 'other';
+
+  const quotes = {
+    clear: [
+      '🌱 You are debt-free! Keep up the great savings habit.',
+      '💪 Zero balance – you’re building a strong financial future.',
+      '🎯 No outstanding debt. You’re on track!',
+    ],
+    prepaid: [
+      '💠 You have prepaid future days – great planning!',
+      '⏳ You’re ahead of schedule. Keep it up!',
+      '📅 Prepaid balance means you’re ready for tomorrow.',
+    ],
+    small_debt: [
+      '💳 Small debt – pay it off soon to avoid interest.',
+      '📉 You owe a little. Clear it quickly and stay healthy.',
+      '🧾 Minor debt – settle within a week for peace of mind.',
+    ],
+    medium_debt: [
+      '⚠️ Moderate debt – consider a repayment plan.',
+      '📊 Your debt is building. Focus on clearing it step by step.',
+      '⏰ Medium debt – the sooner you repay, the less interest.',
+    ],
+    large_debt: [
+      '🚨 Large debt – please contact admin immediately.',
+      '📉 Significant loan – prioritise repayment to avoid penalties.',
+      '💪 You can clear this with consistent daily savings.',
+    ],
+    mix: [
+      '🔄 You have both prepaid and debt. Use prepaid to offset future days.',
+      '⚖️ Prepaid balance can cover future savings while you clear debt.',
+      '🧠 Smart move: prepaid covers tomorrow, focus on today’s debt.',
+    ],
+    other: [
+      '💬 Thank you for saving with Harvest Trust Finance.',
+      '🌾 Together we grow. Keep saving daily.',
+    ],
+  };
+
+  const list = quotes[category] || quotes.other;
+  return list[Math.floor(Math.random() * list.length)];
 }
 function generateRepaymentSchedule(principal, interestRate, weeks, startDate) {
   const extraWeekly = loanSettings.extraWeeklyInterest || 2;
@@ -5588,56 +5671,62 @@ function generatePayoutFallbackPhone(beneficiary, weeklyGross, loan, netPayout) 
     return null;
   }
 }
-function showWeeklyPayoutReceiptModal(beneficiary, weeklyGross, loan, netPayout, onConfirmShare, onConfirmNoShare, onPrint, onCancel) {
+window.showWeeklyPayoutReceiptModal = function(beneficiary, weeklyGross, loan, netPayout, onConfirmShare, onConfirmNoShare, onPrint, onCancel) {
   const safeGross = Number(weeklyGross) || 0;
   const safeLoan = Number(loan) || 0;
   const safeNet = Number(netPayout) || 0;
   computePots();
 
-  const dateLabel = new Date().toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' });
-  const timeLabel = new Date().toLocaleTimeString('en-UG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const receiptNumber = generateReceiptNumber();
+  const quote = getReceiptQuote(beneficiary);
 
   function buildReceiptHTML() {
-    const receiptId = `Qwerty${Date.now().toString().slice(-6)}`;
     return `
-      <div id="receipt-content" style="max-width:340px;margin:0 auto;background:#ffffff;border-radius:24px;padding:30px 20px 24px;font-family:-apple-system,BlinkMacSystemFont,'Inter','DM Sans',sans-serif;box-shadow:0 8px 40px rgba(90,60,200,0.10);text-align:center;">
-        <div style="width:56px;height:56px;border-radius:50%;background:#22c55e;display:flex;align-items:center;justify-content:center;margin:0 auto 14px auto;">
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+    <div id="receipt-content" style="max-width:360px;margin:0 auto;background:#ffffff;border-radius:24px;padding:24px 20px 20px;font-family:'DM Sans',sans-serif;text-align:center;color:#111827;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+      <!-- App Name (Bigger) -->
+      <div style="font-size:1.1rem;font-weight:900;color:#111827;letter-spacing:-0.5px;">🌾 Harvest Trust Finance</div>
+      <div style="width:40px;height:3px;background:#f59e0b;margin:8px auto 12px;border-radius:99px;"></div>
+      
+      <!-- MAIN TRANSACTION (Big font) -->
+      <div style="font-size:2.8rem;font-weight:900;color:#6d28d9;line-height:1.2;margin:8px 0;">UGX ${safeNet.toLocaleString()}</div>
+      <div style="font-size:0.75rem;color:#9ca3af;font-weight:600;margin-bottom:16px;">Weekly Payout</div>
+      
+      <div style="border-top:1px solid #f3f4f6;margin-bottom:14px;"></div>
+      
+      <!-- Details Grid -->
+      <div style="text-align:left;font-size:0.85rem;">
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+          <span style="color:#6b7280;">Beneficiary</span>
+          <span style="font-weight:600;">${escapeHtml(beneficiary?.name || 'Unknown')}</span>
         </div>
-        <div style="font-size:1rem;font-weight:700;color:#111827;margin-bottom:2px;">Payout Success!</div>
-        <div style="font-size:0.75rem;color:#9ca3af;margin-bottom:16px;">Weekly payout processed successfully.</div>
-        <div style="border-top:1px solid #f3f4f6;margin-bottom:14px;"></div>
-        <div style="text-align:left;font-size:0.8rem;">
-          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-            <span style="color:#9ca3af;">Beneficiary</span>
-            <span>${escapeHtml(beneficiary?.name || 'Unknown')}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-            <span style="color:#9ca3af;">Phone</span>
-            <span>${beneficiary?.phone || 'N/A'}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-            <span style="color:#9ca3af;">Gross</span>
-            <span>UGX ${safeGross.toLocaleString()}</span>
-          </div>
-          ${safeLoan > 0 ? `
-          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-            <span style="color:#9ca3af;">Loan Deduction</span>
-            <span style="color:#ef4444;">- UGX ${safeLoan.toLocaleString()}</span>
-          </div>` : ''}
-          <div style="display:flex;justify-content:space-between;padding:6px 0;">
-            <span style="color:#9ca3af;">💰 Net Payout</span>
-            <span style="font-weight:700;color:#6d28d9;">UGX ${safeNet.toLocaleString()}</span>
-          </div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+          <span style="color:#6b7280;">Gross Amount</span>
+          <span style="font-weight:600;">UGX ${safeGross.toLocaleString()}</span>
         </div>
-        <div style="margin-top:12px;padding-top:10px;border-top:1px solid #f3f4f6;text-align:center;">
-          <div style="font-size:0.7rem;color:#9ca3af;font-weight:500;">${settings?.groupName || 'Harvest Trust Finance'}</div>
-          <div style="font-size:0.6rem;color:#d1d5db;">Official Receipt</div>
+        ${safeLoan > 0 ? `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;"><span style="color:#6b7280;">Loan Deduction</span><span style="font-weight:600;color:#ef4444;">- UGX ${safeLoan.toLocaleString()}</span></div>` : ''}
+        <div style="display:flex;justify-content:space-between;padding:6px 0;background:#f3e8ff;border-radius:6px;padding:8px 12px;margin:6px 0;border:1px solid #8b5cf6;">
+          <span style="color:#5b21b6;font-weight:700;">💰 Net Payout</span>
+          <span style="color:#5b21b6;font-weight:900;">UGX ${safeNet.toLocaleString()}</span>
         </div>
       </div>
+      
+      <!-- Quote -->
+      <div style="margin-top:14px;padding:10px;background:#f7fafc;border-radius:8px;font-size:0.75rem;color:#4a5568;font-style:italic;border-left:3px solid #f59e0b;text-align:left;">
+        ${escapeHtml(quote)}
+      </div>
+      
+      <!-- Footer with Bigger Receipt Number -->
+      <div style="margin-top:16px;padding-top:12px;border-top:1px solid #f3f4f6;">
+        <div style="font-size:0.85rem;font-weight:700;color:#1a202c;letter-spacing:0.5px;font-family:monospace;">
+          Receipt #: ${receiptNumber}
+        </div>
+        <div style="font-size:0.5rem;color:#9ca3af;margin-top:4px;">${new Date().toLocaleString()}</div>
+      </div>
+    </div>
     `;
   }
 
+  // ----- Modal rendering -----
   const receiptHTML = buildReceiptHTML();
   const modal = document.createElement('div');
   modal.className = 'ov on';
@@ -5646,21 +5735,19 @@ function showWeeklyPayoutReceiptModal(beneficiary, weeklyGross, loan, netPayout,
     <div class="bs" style="max-width:420px;padding:0;overflow:hidden;border-radius:24px 24px 0 0;display:flex;flex-direction:column;max-height:90vh;">
       <div style="background:#fff;padding:20px 24px 12px;overflow-y:auto;flex:1;min-height:0;">${receiptHTML}</div>
       <div style="background:#fff;padding:12px 20px 20px;display:flex;flex-direction:column;gap:8px;flex-shrink:0;border-top:1px solid #f3f4f6;">
-        <button id="payout-confirm-send-pc" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">💻 Copy Image (PC)</button>
-        <button id="payout-confirm-send-phone" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">📱 Send Image (Phone)</button>
-        <button id="payout-confirm-noshare" style="width:100%;padding:11px;border:none;border-radius:10px;background:#6d28d9;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">✅ Save Without Sharing</button>
-        <button id="payout-print" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">🖨️ Print</button>
-        <button id="payout-cancel" style="width:100%;padding:9px;border:none;border-radius:10px;background:#f3f4f6;color:#6b7280;font-size:0.8rem;font-weight:600;cursor:pointer;font-family:inherit;">✕ Cancel</button>
+        <button id="payout-confirm-send-pc" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;">💻 Copy Image (PC)</button>
+        <button id="payout-confirm-send-phone" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;">📱 Send Image (Phone)</button>
+        <button id="payout-confirm-noshare" style="width:100%;padding:11px;border:none;border-radius:10px;background:#6d28d9;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;">✅ Save Without Sharing</button>
+        <button id="payout-print" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;">🖨️ Print</button>
+        <button id="payout-cancel" style="width:100%;padding:9px;border:none;border-radius:10px;background:#f3f4f6;color:#6b7280;font-size:0.8rem;font-weight:600;cursor:pointer;">✕ Cancel</button>
       </div>
     </div>
   `;
   document.body.appendChild(modal);
 
+  // ----- Button handlers -----
   const receiptElement = modal.querySelector('#receipt-content');
-  const closeModal = () => {
-    modal.classList.remove('on');
-    setTimeout(() => modal.remove(), 300);
-  };
+  const closeModal = () => { modal.classList.remove('on'); setTimeout(() => modal.remove(), 300); };
 
   document.querySelector('#payout-confirm-send-pc').onclick = async () => {
     const data = await renderElementToImage(receiptElement);
@@ -5708,7 +5795,7 @@ function showWeeklyPayoutReceiptModal(beneficiary, weeklyGross, loan, netPayout,
     if (onCancel) onCancel();
     toast('Cancelled', '#ff0000');
   };
-}
+};
 
 async function updateLoanRepaidStatus(phone) {
   console.log(`updateLoanRepaidStatus called for phone ${phone}`);
@@ -5839,6 +5926,7 @@ async function processDepositWithCarryover(member, depositAmount, depositTimesta
       memberName: member.name,
       type: 'prepaid_used',
       amount: usedPrepaidToday,
+      receiptNumber: generateReceiptNumber(),
       description: `Prepaid used for today's requirement (${money(usedPrepaidToday)})`,
       date: now + 500
     });
@@ -5860,6 +5948,7 @@ async function processDepositWithCarryover(member, depositAmount, depositTimesta
         memberPhone: member.phone, memberName: member.name,
         type: 'deposit', amount: dailyPortion,
         isDailySavings: true,
+        receiptNumber: generateReceiptNumber(),
         description: `Daily savings for ${new Date(todayStart).toLocaleDateString()}`,
         date: todayStart + 1500
       });
@@ -5868,6 +5957,7 @@ async function processDepositWithCarryover(member, depositAmount, depositTimesta
       writes.push({
         memberPhone: member.phone, memberName: member.name,
         type: 'welfare', amount: welfarePortion,
+        receiptNumber: generateReceiptNumber(),
         description: `Welfare for ${new Date(todayStart).toLocaleDateString()}`,
         date: todayStart + 500,
         autoDeduction: true
@@ -5896,6 +5986,7 @@ async function processDepositWithCarryover(member, depositAmount, depositTimesta
       writes.push({
         memberPhone: member.phone, memberName: member.name,
         type: 'loan_repayment', amount: repaymentAmount,
+        receiptNumber: generateReceiptNumber(),
         description: `Repayment for application loan ${loan.id}`,
         date: now + 2,
         loanId: loan.id
@@ -5933,6 +6024,7 @@ async function processDepositWithCarryover(member, depositAmount, depositTimesta
       writes.push({
         memberPhone: member.phone, memberName: member.name,
         type: 'loan_repayment', amount: repaymentAmount,
+        receiptNumber: generateReceiptNumber(),
         description: `Repayment for assigned debt loan ${loan.id}`,
         date: now + 3,
         loanId: loan.id
@@ -5953,6 +6045,7 @@ async function processDepositWithCarryover(member, depositAmount, depositTimesta
       writes.push({
         memberPhone: member.phone, memberName: member.name,
         type: 'debt_cleared', amount: usedForDebt,
+        receiptNumber: generateReceiptNumber(),
         description: `Cleared debt of ${money(usedForDebt)}`,
         date: now + 4
       });
@@ -5976,6 +6069,7 @@ async function processDepositWithCarryover(member, depositAmount, depositTimesta
         memberPhone: member.phone, memberName: member.name,
         type: 'deposit', amount: dailyAmount,
         isPrepaid: true,
+        receiptNumber: generateReceiptNumber(),
         description: `Prepaid daily savings for ${new Date(currentDay).toLocaleDateString()}`,
         date: currentDay + 1500
       });
@@ -5983,6 +6077,7 @@ async function processDepositWithCarryover(member, depositAmount, depositTimesta
         memberPhone: member.phone, memberName: member.name,
         type: 'welfare', amount: welfareAmount,
         isPrepaid: true,
+        receiptNumber: generateReceiptNumber(),
         description: `Prepaid welfare for ${new Date(currentDay).toLocaleDateString()}`,
         date: currentDay + 500,
         autoDeduction: true
@@ -6002,6 +6097,7 @@ async function processDepositWithCarryover(member, depositAmount, depositTimesta
           memberPhone: member.phone, memberName: member.name,
           type: 'deposit', amount: dailyPortion,
           isPrepaid: true,
+          receiptNumber: generateReceiptNumber(),
           description: `Prepaid daily savings for ${new Date(currentDay).toLocaleDateString()} (partial)`,
           date: currentDay + 1500
         });
@@ -6011,6 +6107,7 @@ async function processDepositWithCarryover(member, depositAmount, depositTimesta
           memberPhone: member.phone, memberName: member.name,
           type: 'welfare', amount: welfarePortion,
           isPrepaid: true,
+          receiptNumber: generateReceiptNumber(),
           description: `Prepaid welfare for ${new Date(currentDay).toLocaleDateString()} (partial)`,
           date: currentDay + 500,
           autoDeduction: true
@@ -6028,6 +6125,7 @@ async function processDepositWithCarryover(member, depositAmount, depositTimesta
           memberPhone: member.phone, memberName: member.name,
           type: 'prepaid_balance',
           amount: remainingForDay,
+          receiptNumber: generateReceiptNumber(),
           description: `Prepaid balance for ${new Date(currentDay).toLocaleDateString()} (${money(remainingForDay)} remaining)`,
           date: currentDay + 1000
         });
@@ -6061,6 +6159,7 @@ function buildDepositTransactions(member, dailyAmount, timestamp, description) {
     writes.push({
       memberPhone: member.phone, memberName: member.name,
       type: 'debt_cleared', amount: a,
+      receiptNumber: generateReceiptNumber(),
       description: 'Debt repayment (prepay)',
       date: now,
     });
@@ -6070,6 +6169,7 @@ function buildDepositTransactions(member, dailyAmount, timestamp, description) {
   writes.push({
     memberPhone: member.phone, memberName: member.name,
     type: 'deposit', amount: dailyAmount,
+    receiptNumber: generateReceiptNumber(),
     description: description || `Daily savings for ${new Date(todayStart).toLocaleDateString()}`,
     date: now + 1000,
   });
@@ -7065,16 +7165,40 @@ let selectedTransactions = new Set();  // ← THIS MUST BE DEFINED
 let ledgerFilter = 'all';
 let ledgerSearchText = "";
 
-function applyLedgerFilters() {
+window.applyLedgerFilters = function() {
   const search = document.getElementById("ledger-search").value.trim().toLowerCase();
   ledgerSearchText = search;
   loadLedger(ledgerFilter);
-}
+};
 
-function clearLedgerFilters() {
+window.clearLedgerFilters = function() {
   document.getElementById("ledger-search").value = "";
   ledgerSearchText = "";
   loadLedger(ledgerFilter);
+};
+
+// Also update the filter condition inside loadLedger (find the line with `ledgerSearchText` and replace it)
+// Inside loadLedger, locate this block:
+//   if (ledgerSearchText) {
+//     filtered = filtered.filter(tx => {
+//       const member = members.find(m => m.phone === tx.memberPhone) || { name: tx.memberName || '' };
+//       const amountStr = tx.amount.toString();
+//       const desc = (tx.description || '').toLowerCase();
+//       const name = (member.name || '').toLowerCase();
+//       return name.includes(ledgerSearchText) || desc.includes(ledgerSearchText) || amountStr.includes(ledgerSearchText);
+//     });
+//   }
+// REPLACE WITH:
+
+if (ledgerSearchText) {
+  filtered = filtered.filter(tx => {
+    const member = members.find(m => m.phone === tx.memberPhone) || { name: tx.memberName || '' };
+    const amountStr = tx.amount.toString();
+    const desc = (tx.description || '').toLowerCase();
+    const name = (member.name || '').toLowerCase();
+    const receipt = (tx.receiptNumber || '').toLowerCase();
+    return name.includes(ledgerSearchText) || desc.includes(ledgerSearchText) || amountStr.includes(ledgerSearchText) || receipt.includes(ledgerSearchText);
+  });
 }
 function cleanRotationOrder() {
   if (!rotation.order || !members.length) return;
@@ -9191,6 +9315,7 @@ window.confirmMultiLoanApproval = async function() {
           memberName: member.name,
           type: 'loan_disbursement',
           amount: amount,
+          receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
           description: `Loan: ${reason} (${totalRate}%)`,
           date: Date.now(),
           loanId: loanRef.key
@@ -9203,6 +9328,7 @@ window.confirmMultiLoanApproval = async function() {
             memberName: member.name,
             type: 'loan_interest',
             amount: interest,
+            receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
             description: `Interest for loan (${totalRate}%)`,
             date: Date.now() + 1,
             loanId: loanRef.key
@@ -10201,6 +10327,7 @@ window.approveLoan = function(lid) {
       memberName: loan.memberName,
       type: 'loan_disbursement',
       amount: principal,
+      receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
       description: `Loan principal: UGX ${principal.toLocaleString()}`,
       date: Date.now()
     });
@@ -10211,6 +10338,7 @@ window.approveLoan = function(lid) {
         memberName: loan.memberName,
         type: 'loan_adjustment',
         amount: interest,
+        receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
         description: `Interest on loan of UGX ${principal.toLocaleString()} (${loan.interestRate}%)`,
         date: Date.now() + 1
       });
@@ -10253,6 +10381,7 @@ function checkOverdueLoans(){
           memberName: loan.memberName,
           type: 'debt',
           amount: penalty,
+          receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
           description: `Overdue loan penalty (${loanSettings.overduePenalty}%)`,
           date: Date.now()
         }).then(()=>{
@@ -10452,6 +10581,7 @@ window.approveApplication = async function(key) {
       memberName: newMember.name,
       type: 'debt',
       amount: signupFee,
+      receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
       description: `Signup fee (UGX ${signupFee.toLocaleString()})`,
       date: Date.now(),
       isSignupFee: true
@@ -10462,6 +10592,7 @@ window.approveApplication = async function(key) {
       memberName: 'System',
       type: 'profit_dist',
       amount: signupFee,
+      receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
       description: `Signup fee from ${a.name} added to profit pool`,
       date: Date.now() + 1
     });
@@ -11079,6 +11210,7 @@ if (entries.length) {
       ${warningsHtml}
       <div class="card">
         <div class="sec-h">⚡ Quick Actions</div>
+        <button class="btn btn-teal btn-full" onclick="openReceiptLookup()">🔍 Find Receipt</button>
         <button class="btn btn-gold btn-full" onclick="openOv('ov-add-mbr')">👤 Add New Member</button>
         <button class="btn btn-teal btn-full" onclick="loadApplications()">📝 View Applications<span id="apps-badge-wrap" style="display:none;background:var(--red);color:#fff;border-radius:99px;padding:1px 7px;font-size:0.65rem;font-weight:800;margin-left:4px"><span id="apps-count">0</span></span></button>
         <button class="btn btn-purple btn-full" onclick="generateGroupReport()">📊 Generate Group Report</button>
@@ -11317,6 +11449,7 @@ async function assignDebtToSingleMember(member, principal, interestRate, dueDate
     memberName: member.name,
     type: 'loan_disbursement',
     amount: principal,
+    receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
     description: `${reason} (principal)`,
     date: Date.now()
   });
@@ -11326,6 +11459,7 @@ async function assignDebtToSingleMember(member, principal, interestRate, dueDate
       memberName: member.name,
       type: 'loan_adjustment',
       amount: interest,
+      receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
       description: `Interest (${interestRate}%)`,
       date: Date.now() + 1
     });
@@ -11428,6 +11562,7 @@ function confirmMultiAddTransaction() {
           memberName: member.name,
           type: type,
           amount: amount,
+          receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
           description: description,
           date: Date.now()
         });
@@ -12040,6 +12175,7 @@ window.addTransactionWithPreview = async function() {
         memberName: member.name,
         type: type,
         amount: amount,
+        receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
         description: desc || type,
         date: Date.now()
       });
@@ -12069,7 +12205,7 @@ window.addFine = async function() {
     async () => {
       await db.ref('transactions').push({
         memberPhone: phone, memberName: member.name, type: 'fine',
-        amount: amount, description: reason || 'Fine', date: Date.now()
+        amount: amount, receiptNumber: generateReceiptNumber(),   description: reason || 'Fine', date: Date.now()
       });
       toast('Fine applied!', '#f59e0b');
       computePots(); refreshUI();
@@ -12078,7 +12214,7 @@ window.addFine = async function() {
     async () => {
       await db.ref('transactions').push({
         memberPhone: phone, memberName: member.name, type: 'fine',
-        amount: amount, description: reason || 'Fine', date: Date.now()
+        amount: amount, receiptNumber: generateReceiptNumber(),   description: reason || 'Fine', date: Date.now()
       });
       toast('Fine applied!', '#f59e0b');
       computePots(); refreshUI();
@@ -12101,7 +12237,7 @@ window.addWelfare = async function() {
     async () => {
       await db.ref('transactions').push({
         memberPhone: phone, memberName: member.name, type: 'welfare',
-        amount: amount, description: desc || 'Welfare', date: Date.now()
+        amount: amount, receiptNumber: generateReceiptNumber(),   description: desc || 'Welfare', date: Date.now()
       });
       toast('Welfare recorded!', '#8b5cf6');
       computePots(); refreshUI();
@@ -12110,7 +12246,7 @@ window.addWelfare = async function() {
     async () => {
       await db.ref('transactions').push({
         memberPhone: phone, memberName: member.name, type: 'welfare',
-        amount: amount, description: desc || 'Welfare', date: Date.now()
+        amount: amount, receiptNumber: generateReceiptNumber(),   description: desc || 'Welfare', date: Date.now()
       });
       toast('Welfare recorded!', '#8b5cf6');
       computePots(); refreshUI();
@@ -12121,7 +12257,7 @@ window.addWelfare = async function() {
     null
   );
 };
-window.addExpense=function(){const desc=document.getElementById('exp-desc').value,amount=+document.getElementById('exp-amount').value;if(!desc||!amount){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('transactions').push({type:'expense',amount,description:desc,date:Date.now()}).then(()=>{toast(t('record_expense_btn'),'#ef4444');['exp-desc','exp-amount','exp-paidto'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});closeOv('ov-add-exp');});};
+window.addExpense=function(){const desc=document.getElementById('exp-desc').value,amount=+document.getElementById('exp-amount').value;if(!desc||!amount){toast(t('fill_all_fields'),'#ef4444');return;}db.ref('transactions').push({type:'expense',amount,receiptNumber: generateReceiptNumber(),   description:desc,date:Date.now()}).then(()=>{toast(t('record_expense_btn'),'#ef4444');['exp-desc','exp-amount','exp-paidto'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});closeOv('ov-add-exp');});};
 // Update preview when type or amount changes
 window.updateGroupTxPreview = function() {
   const type = document.getElementById('group-tx-type').value;
@@ -12322,6 +12458,7 @@ async function executeDebtAssignment(member, principal, interestRate, interest, 
     memberName: member.name,
     type: 'loan_disbursement',
     amount: principal,
+    receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
     description: `${reason} (principal) - Debt assigned by admin`,
     date: Date.now(),
     loanId: loanId
@@ -12335,6 +12472,7 @@ async function executeDebtAssignment(member, principal, interestRate, interest, 
       memberName: member.name,
       type: 'loan_interest',
       amount: interest,
+      receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
       description: `Interest (${interestRate}%) on assigned debt`,
       date: Date.now() + 1,
       loanId: loanId
@@ -12520,12 +12658,14 @@ function previewTransactionReceipt() {
   );
 }
 
-function showTransactionReceiptModal(member, txType, amount, description, onConfirmSend, onConfirmNoSend, onCancel, onPrint, isPreview = false, projectedPrepaidDate = null, projectedRemainingLoan = null, onSave = null) {
+window.showTransactionReceiptModal = function(member, txType, amount, description, onConfirmSend, onConfirmNoSend, onCancel, onPrint, isPreview = false, projectedPrepaidDate = null, projectedRemainingLoan = null, onSave = null) {
   const safeAmount = Number(amount) || 0;
   computePots();
 
   const accountBalance = memberBalances[member?.phone] || 0;
   const displayLoanBalance = (isPreview && projectedRemainingLoan !== null) ? projectedRemainingLoan : (memberLoans[member?.phone] || 0);
+  const receiptNumber = generateReceiptNumber();
+  const quote = getReceiptQuote(member);
 
   let prepaidUntil = 'Not prepaid';
   if (projectedPrepaidDate) {
@@ -12537,88 +12677,86 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
 
   function buildReceiptHTML() {
     const date = new Date();
-    const receiptId = `Qwerty${Date.now().toString().slice(-6)}`;
     const dateLabel = date.toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' });
     const timeLabel = date.toLocaleTimeString('en-UG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const txTypeUpper = (txType || 'transaction').toUpperCase();
 
     return `
-      <div id="receipt-content" style="max-width:340px;margin:0 auto;background:#ffffff;border-radius:24px;padding:30px 20px 24px;font-family:-apple-system,BlinkMacSystemFont,'Inter','DM Sans',sans-serif;box-shadow:0 8px 40px rgba(90,60,200,0.10);text-align:center;">
-        <div style="width:56px;height:56px;border-radius:50%;background:#22c55e;display:flex;align-items:center;justify-content:center;margin:0 auto 14px auto;">
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+    <div id="receipt-content" style="max-width:360px;margin:0 auto;background:#ffffff;border-radius:24px;padding:24px 20px 20px;font-family:'DM Sans',sans-serif;text-align:center;color:#111827;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+      <!-- App Name (Bigger) -->
+      <div style="font-size:1.1rem;font-weight:900;color:#111827;letter-spacing:-0.5px;">🌾 Harvest Trust Finance</div>
+      <div style="width:40px;height:3px;background:#f59e0b;margin:8px auto 12px;border-radius:99px;"></div>
+      
+      <!-- MAIN TRANSACTION (Big font) -->
+      <div style="font-size:2.8rem;font-weight:900;color:#16a34a;line-height:1.2;margin:8px 0;">UGX ${safeAmount.toLocaleString()}</div>
+      <div style="font-size:0.75rem;color:#9ca3af;font-weight:600;margin-bottom:16px;">${txTypeUpper} Successful</div>
+      
+      <div style="border-top:1px solid #f3f4f6;margin-bottom:14px;"></div>
+      
+      <!-- Details Grid -->
+      <div style="text-align:left;font-size:0.85rem;">
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+          <span style="color:#6b7280;">Member</span>
+          <span style="font-weight:600;">${escapeHtml(member?.name || 'Unknown')}</span>
         </div>
-        <div style="font-size:1rem;font-weight:700;color:#111827;margin-bottom:2px;">Payment Success!</div>
-        <div style="font-size:0.75rem;color:#9ca3af;margin-bottom:16px;">Your payment was successful.</div>
-        <div style="border-top:1px solid #f3f4f6;margin-bottom:14px;"></div>
-        <div style="text-align:left;font-size:0.8rem;">
-          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-            <span style="color:#9ca3af;">Amount</span>
-            <span style="font-weight:700;">UGX ${safeAmount.toLocaleString()}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-            <span style="color:#9ca3af;">Status</span>
-            <span style="color:#16a34a;font-weight:600;">Success</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-            <span style="color:#9ca3af;">Transaction ID</span>
-            <span style="font-family:monospace;font-size:0.7rem;">${receiptId}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-            <span style="color:#9ca3af;">Member</span>
-            <span>${escapeHtml(member?.name || 'Unknown')}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-            <span style="color:#9ca3af;">Payment Method</span>
-            <span>${txType === 'deposit' ? 'Deposit' : txTypeUpper}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-            <span style="color:#9ca3af;">Payment Time</span>
-            <span>${dateLabel}, ${timeLabel}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-            <span style="color:#9ca3af;">💰 Remaining Loan</span>
-            <span style="font-weight:700;color:${displayLoanBalance > 0 ? '#ef4444' : '#10b981'};">UGX ${displayLoanBalance.toLocaleString()}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:6px 0;">
-            <span style="color:#9ca3af;">📅 Prepaid until</span>
-            <span style="font-weight:600;color:#0891b2;">${prepaidUntil}</span>
-          </div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+          <span style="color:#6b7280;">Payment Method</span>
+          <span style="font-weight:600;">${txType === 'deposit' ? 'Deposit' : txTypeUpper}</span>
         </div>
-        <div style="margin-top:12px;padding-top:10px;border-top:1px solid #f3f4f6;text-align:center;">
-          <div style="font-size:0.7rem;color:#9ca3af;font-weight:500;">${settings?.groupName || 'Harvest Trust Finance'}</div>
-          <div style="font-size:0.6rem;color:#d1d5db;">Official Receipt</div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+          <span style="color:#6b7280;">Date & Time</span>
+          <span style="font-weight:600;">${dateLabel}, ${timeLabel}</span>
         </div>
+        <!-- Remaining Loan Balance (Overall) -->
+        <div style="display:flex;justify-content:space-between;padding:6px 0;background:#e8f4fd;border-radius:6px;padding:8px 12px;margin:6px 0;border:1px solid #06b6d4;">
+          <span style="color:#0e7490;font-weight:700;">💰 Remaining Loan Balance</span>
+          <span style="color:#0e7490;font-weight:900;">UGX ${displayLoanBalance.toLocaleString()}</span>
+        </div>
+        ${(txType === 'deposit' && description) ? `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;"><span style="color:#6b7280;">Note</span><span style="font-weight:600;">${escapeHtml(description)}</span></div>` : ''}
       </div>
+      
+      <!-- Quote -->
+      <div style="margin-top:14px;padding:10px;background:#f7fafc;border-radius:8px;font-size:0.75rem;color:#4a5568;font-style:italic;border-left:3px solid #f59e0b;text-align:left;">
+        ${escapeHtml(quote)}
+      </div>
+      
+      <!-- Footer with Bigger Receipt Number -->
+      <div style="margin-top:16px;padding-top:12px;border-top:1px solid #f3f4f6;">
+        <div style="font-size:0.85rem;font-weight:700;color:#1a202c;letter-spacing:0.5px;font-family:monospace;">
+          Receipt #: ${receiptNumber}
+        </div>
+        <div style="font-size:0.5rem;color:#9ca3af;margin-top:4px;">${new Date().toLocaleString()}</div>
+      </div>
+    </div>
     `;
   }
 
+  // ----- Modal rendering -----
   const receiptHTML = buildReceiptHTML();
   const modal = document.createElement('div');
   modal.className = 'ov on';
   modal.style.zIndex = '20020';
-
-  // Buttons: all except Cancel will save first (if onSave provided)
   modal.innerHTML = `
     <div class="bs" style="max-width:420px;padding:0;overflow:hidden;border-radius:24px 24px 0 0;display:flex;flex-direction:column;max-height:90vh;">
       <div style="background:#fff;padding:20px 24px 12px;overflow-y:auto;flex:1;min-height:0;">${receiptHTML}</div>
       <div style="background:#fff;padding:12px 20px 20px;display:flex;flex-direction:column;gap:8px;flex-shrink:0;border-top:1px solid #f3f4f6;">
-        <button id="receipt-copy-pc" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">💻 Copy, Save & Send (PC)</button>
-        <button id="receipt-copy-phone" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">📱 Copy, Save & Send (Phone)</button>
-        <button id="receipt-save-only" style="width:100%;padding:11px;border:none;border-radius:10px;background:#6d28d9;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">✅ Save Without Sharing</button>
-        <button id="receipt-print" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">🖨️ Print</button>
-        <button id="receipt-cancel" style="width:100%;padding:9px;border:none;border-radius:10px;background:#f3f4f6;color:#6b7280;font-size:0.8rem;font-weight:600;cursor:pointer;font-family:inherit;">✕ Cancel</button>
+        <button id="receipt-copy-pc" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;">💻 Copy Image (PC)</button>
+        <button id="receipt-copy-phone" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;">📱 Send Image (Phone)</button>
+        <button id="receipt-save-only" style="width:100%;padding:11px;border:none;border-radius:10px;background:#6d28d9;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;">✅ Save Without Sharing</button>
+        <button id="receipt-print" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;">🖨️ Print</button>
+        <button id="receipt-cancel" style="width:100%;padding:9px;border:none;border-radius:10px;background:#f3f4f6;color:#6b7280;font-size:0.8rem;font-weight:600;cursor:pointer;">✕ Cancel</button>
       </div>
     </div>
   `;
   document.body.appendChild(modal);
 
+  // ----- Button handlers (same as before) -----
   const receiptElement = modal.querySelector('#receipt-content');
   const closeModal = () => {
     modal.classList.remove('on');
     setTimeout(() => modal.remove(), 300);
   };
 
-  // Helper to perform save action (if provided)
   const performSave = async () => {
     if (typeof onSave === 'function') {
       const success = await onSave();
@@ -12630,12 +12768,11 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
     return true;
   };
 
-  // --- Button: Copy to PC ---
   document.querySelector('#receipt-copy-pc').onclick = async () => {
     const saved = await performSave();
     if (!saved) return;
     const data = await renderElementToImage(receiptElement);
-    if (!data) { toast('Failed to generate image', '#ef4444'); return; }
+    if (!data) { toast('Failed', '#ef4444'); return; }
     try {
       const blob = await (await fetch(data)).blob();
       await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
@@ -12649,49 +12786,43 @@ function showTransactionReceiptModal(member, txType, amount, description, onConf
       toast('📸 Downloaded', '#f59e0b');
     }
     closeModal();
-    if (typeof onConfirmSend === 'function') onConfirmSend();
+    if (onConfirmSend) onConfirmSend();
   };
 
-  // --- Button: Share via Phone ---
   document.querySelector('#receipt-copy-phone').onclick = async () => {
     const saved = await performSave();
     if (!saved) return;
     await shareReceiptImage(receiptElement, 'Transaction Receipt', `UGX ${safeAmount.toLocaleString()}`, 'receipt.png');
     closeModal();
-    if (typeof onConfirmSend === 'function') onConfirmSend();
+    if (onConfirmSend) onConfirmSend();
   };
 
-  // --- Button: Save Without Sharing ---
   document.querySelector('#receipt-save-only').onclick = async () => {
     const saved = await performSave();
     if (!saved) return;
     closeModal();
-    if (typeof onConfirmNoSend === 'function') onConfirmNoSend();
+    if (onConfirmNoSend) onConfirmNoSend();
     toast('✅ Saved', '#10b981');
   };
 
-  // --- Button: Print ---
   document.querySelector('#receipt-print').onclick = async () => {
     const saved = await performSave();
     if (!saved) return;
     const data = await renderElementToImage(receiptElement);
-    if (!data) { toast('Failed to generate image', '#ef4444'); return; }
+    if (!data) { toast('Failed', '#ef4444'); return; }
     const w = window.open('', '_blank');
     w.document.write(`<!DOCTYPE html><html><head><title>Receipt</title><style>body{margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff;}img{max-width:100%;}</style></head><body><img src="${data}"></body></html>`);
     w.document.close(); w.focus(); w.print();
     closeModal();
-    if (typeof onPrint === 'function') onPrint();
+    if (onPrint) onPrint();
   };
 
-  // --- Button: Cancel ---
   document.querySelector('#receipt-cancel').onclick = () => {
     closeModal();
-    if (typeof onCancel === 'function') onCancel();
+    if (onCancel) onCancel();
     toast('Cancelled', '#ff0000');
   };
-}
-
-
+};
 // Simple fallback canvas generator (if html2canvas fails) – you can reuse the old canvas function
 function generateSimpleReceiptFallback(member, txType, amount, description, accountBalance, appBalance, projectedRemainingLoan, prepaidBalance) {
   try {
@@ -12844,75 +12975,77 @@ function generateSimpleReceiptFallback(member, txType, amount, description, acco
   }
 }
 
-function showDebtReceiptModal(member, principal, interestRate, interest, totalRepay, reason, dueDate, onConfirmSend, onConfirmNoSend, onCancel) {
+window.showDebtReceiptModal = function(member, principal, interestRate, interest, totalRepay, reason, dueDate, onConfirmSend, onConfirmNoSend, onCancel) {
   const safePrincipal = Number(principal) || 0;
   const safeInterest = Number(interest) || 0;
   const safeTotal = Number(totalRepay) || 0;
   computePots();
 
   const existingLoan = memberLoans[member?.phone] || 0;
-  const overallNewLoanBalance = existingLoan + safeTotal;
-
+  const totalLoanAfter = existingLoan + safeTotal;
   const dueDateLabel = new Date(dueDate).toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' });
+  const receiptNumber = generateReceiptNumber();
+  const quote = getReceiptQuote(member);
 
   function buildReceiptHTML() {
-    const date = new Date();
-    const receiptId = `Qwerty${Date.now().toString().slice(-6)}`;
-    const dateLabel = date.toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' });
-    const timeLabel = date.toLocaleTimeString('en-UG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
     return `
-      <div id="receipt-content" style="max-width:340px;margin:0 auto;background:#ffffff;border-radius:24px;padding:30px 20px 24px;font-family:-apple-system,BlinkMacSystemFont,'Inter','DM Sans',sans-serif;box-shadow:0 8px 40px rgba(90,60,200,0.10);text-align:center;">
-        <div style="width:56px;height:56px;border-radius:50%;background:#f59e0b;display:flex;align-items:center;justify-content:center;margin:0 auto 14px auto;">
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/>
-          </svg>
+    <div id="receipt-content" style="max-width:360px;margin:0 auto;background:#ffffff;border-radius:24px;padding:24px 20px 20px;font-family:'DM Sans',sans-serif;text-align:center;color:#111827;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+      <!-- App Name (Bigger) -->
+      <div style="font-size:1.1rem;font-weight:900;color:#111827;letter-spacing:-0.5px;">🌾 Harvest Trust Finance</div>
+      <div style="width:40px;height:3px;background:#f59e0b;margin:8px auto 12px;border-radius:99px;"></div>
+      
+      <!-- MAIN TRANSACTION (Big font) -->
+      <div style="font-size:2.8rem;font-weight:900;color:#ef4444;line-height:1.2;margin:8px 0;">UGX ${safeTotal.toLocaleString()}</div>
+      <div style="font-size:0.75rem;color:#9ca3af;font-weight:600;margin-bottom:16px;">Debt Assigned</div>
+      
+      <div style="border-top:1px solid #f3f4f6;margin-bottom:14px;"></div>
+      
+      <!-- Details Grid -->
+      <div style="text-align:left;font-size:0.85rem;">
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+          <span style="color:#6b7280;">Member</span>
+          <span style="font-weight:600;">${escapeHtml(member?.name || 'Unknown')}</span>
         </div>
-        <div style="font-size:1rem;font-weight:700;color:#111827;margin-bottom:2px;">Debt Assigned</div>
-        <div style="font-size:0.75rem;color:#9ca3af;margin-bottom:16px;">Debt assignment was successful.</div>
-        <div style="border-top:1px solid #f3f4f6;margin-bottom:14px;"></div>
-        <div style="text-align:left;font-size:0.8rem;">
-          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-            <span style="color:#9ca3af;">Member</span>
-            <span>${escapeHtml(member?.name || 'Unknown')}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-            <span style="color:#9ca3af;">Principal</span>
-            <span style="font-weight:700;color:#ef4444;">UGX ${safePrincipal.toLocaleString()}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-            <span style="color:#9ca3af;">Interest Rate</span>
-            <span>${interestRate}%</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-            <span style="color:#9ca3af;">Interest</span>
-            <span>UGX ${safeInterest.toLocaleString()}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-            <span style="color:#9ca3af;">Total to Repay</span>
-            <span style="font-weight:700;color:#ef4444;">UGX ${safeTotal.toLocaleString()}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-            <span style="color:#9ca3af;">Existing Loan Balance</span>
-            <span>UGX ${existingLoan.toLocaleString()}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-            <span style="color:#9ca3af;">Reason</span>
-            <span>${escapeHtml(reason || 'N/A')}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:6px 0;">
-            <span style="color:#9ca3af;">📅 Due Date</span>
-            <span style="font-weight:600;color:#0891b2;">${dueDateLabel}</span>
-          </div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+          <span style="color:#6b7280;">Principal</span>
+          <span style="font-weight:600;">UGX ${safePrincipal.toLocaleString()}</span>
         </div>
-        <div style="margin-top:12px;padding-top:10px;border-top:1px solid #f3f4f6;text-align:center;">
-          <div style="font-size:0.7rem;color:#9ca3af;font-weight:500;">${settings?.groupName || 'Harvest Trust Finance'}</div>
-          <div style="font-size:0.6rem;color:#d1d5db;">Official Receipt</div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+          <span style="color:#6b7280;">Interest (${interestRate}%)</span>
+          <span style="font-weight:600;">UGX ${safeInterest.toLocaleString()}</span>
+        </div>
+        <!-- Overall Loan Balance -->
+        <div style="display:flex;justify-content:space-between;padding:6px 0;background:#fef3c7;border-radius:6px;padding:8px 12px;margin:6px 0;border:1px solid #f59e0b;">
+          <span style="color:#92400e;font-weight:700;">💰 Total Loan Balance</span>
+          <span style="color:#92400e;font-weight:900;">UGX ${totalLoanAfter.toLocaleString()}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+          <span style="color:#6b7280;">Reason</span>
+          <span style="font-weight:600;">${escapeHtml(reason || 'N/A')}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;">
+          <span style="color:#6b7280;">Due Date</span>
+          <span style="font-weight:600;color:#0891b2;">${dueDateLabel}</span>
         </div>
       </div>
+      
+      <!-- Quote -->
+      <div style="margin-top:14px;padding:10px;background:#f7fafc;border-radius:8px;font-size:0.75rem;color:#4a5568;font-style:italic;border-left:3px solid #f59e0b;text-align:left;">
+        ${escapeHtml(quote)}
+      </div>
+      
+      <!-- Footer with Bigger Receipt Number -->
+      <div style="margin-top:16px;padding-top:12px;border-top:1px solid #f3f4f6;">
+        <div style="font-size:0.85rem;font-weight:700;color:#1a202c;letter-spacing:0.5px;font-family:monospace;">
+          Receipt #: ${receiptNumber}
+        </div>
+        <div style="font-size:0.5rem;color:#9ca3af;margin-top:4px;">${new Date().toLocaleString()}</div>
+      </div>
+    </div>
     `;
   }
 
+  // ----- Modal rendering (same as before, just using the new HTML) -----
   const receiptHTML = buildReceiptHTML();
   const modal = document.createElement('div');
   modal.className = 'ov on';
@@ -12921,21 +13054,19 @@ function showDebtReceiptModal(member, principal, interestRate, interest, totalRe
     <div class="bs" style="max-width:420px;padding:0;overflow:hidden;border-radius:24px 24px 0 0;display:flex;flex-direction:column;max-height:90vh;">
       <div style="background:#fff;padding:20px 24px 12px;overflow-y:auto;flex:1;min-height:0;">${receiptHTML}</div>
       <div style="background:#fff;padding:12px 20px 20px;display:flex;flex-direction:column;gap:8px;flex-shrink:0;border-top:1px solid #f3f4f6;">
-        <button id="debt-confirm-send-pc" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">💻 Copy Image (PC)</button>
-        <button id="debt-confirm-send-phone" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">📱 Send Image (Phone)</button>
-        <button id="debt-confirm-nosend" style="width:100%;padding:11px;border:none;border-radius:10px;background:#6d28d9;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">✅ Save Without Sharing</button>
-        <button id="debt-print" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;">🖨️ Print</button>
-        <button id="debt-cancel" style="width:100%;padding:9px;border:none;border-radius:10px;background:#f3f4f6;color:#6b7280;font-size:0.8rem;font-weight:600;cursor:pointer;font-family:inherit;">✕ Cancel</button>
+        <button id="debt-confirm-send-pc" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;">💻 Copy Image (PC)</button>
+        <button id="debt-confirm-send-phone" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;">📱 Send Image (Phone)</button>
+        <button id="debt-confirm-nosend" style="width:100%;padding:11px;border:none;border-radius:10px;background:#6d28d9;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;">✅ Save Without Sharing</button>
+        <button id="debt-print" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;">🖨️ Print</button>
+        <button id="debt-cancel" style="width:100%;padding:9px;border:none;border-radius:10px;background:#f3f4f6;color:#6b7280;font-size:0.8rem;font-weight:600;cursor:pointer;">✕ Cancel</button>
       </div>
     </div>
   `;
   document.body.appendChild(modal);
 
+  // ----- Button event listeners (same as before) -----
   const receiptElement = modal.querySelector('#receipt-content');
-  const closeModal = () => {
-    modal.classList.remove('on');
-    setTimeout(() => modal.remove(), 300);
-  };
+  const closeModal = () => { modal.classList.remove('on'); setTimeout(() => modal.remove(), 300); };
 
   document.querySelector('#debt-confirm-send-pc').onclick = async () => {
     const data = await renderElementToImage(receiptElement);
@@ -12982,8 +13113,7 @@ function showDebtReceiptModal(member, principal, interestRate, interest, totalRe
     if (onCancel) onCancel();
     toast('Cancelled', '#ff0000');
   };
-}
-
+};
 // ==========================================
 // DEBT ASSIGNMENT RECEIPT - PHONE STYLE
 // ==========================================
@@ -13492,6 +13622,7 @@ window.executeProfitDistribution = function() {
           memberName: best.m.name,
           type: 'profit_dist',
           amount: amount,
+          receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
           description: `${cat.name} reward`,
           date: Date.now() + 1
         }));
@@ -13516,6 +13647,7 @@ window.executeProfitDistribution = function() {
             memberName: m.name,
             type: 'profit_dist',
             amount: perMember,
+            receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
             description: 'Profit equal share (no active days recorded)',
             date: Date.now()
           }));
@@ -13530,6 +13662,7 @@ window.executeProfitDistribution = function() {
             memberName: m.name,
             type: 'profit_dist',
             amount: share,
+            receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
             description: `Profit share (${daysMap[m.id]} days active)`,
             date: Date.now()
           }));
@@ -13629,7 +13762,7 @@ async function executeWeeklyPayout(beneficiary, weeklyGross, loan, netPayout) {
   const writes = [
     db.ref('transactions').push({
       memberPhone: beneficiary.phone, memberName: beneficiary.name,
-      type: 'payout', amount: netPayout, description: 'Weekly payout', date: Date.now()
+      type: 'payout', amount: netPayout,receiptNumber: generateReceiptNumber(), description: 'Weekly payout', date: Date.now()
     })
   ];
   
@@ -13637,7 +13770,7 @@ async function executeWeeklyPayout(beneficiary, weeklyGross, loan, netPayout) {
   if (loan > 0) {
     writes.push(db.ref('transactions').push({
       memberPhone: beneficiary.phone, memberName: beneficiary.name,
-      type: 'loan_repayment', amount: loan, description: 'Loan cleared on payout', date: Date.now() + 2
+      type: 'loan_repayment', amount: loan,receiptNumber: generateReceiptNumber(), description: 'Loan cleared on payout', date: Date.now() + 2
     }));
   }
   
@@ -13719,6 +13852,7 @@ window.confirmApproveLoan = async function(loanId) {
     memberName: loan.memberName,
     type: 'loan_disbursement',
     amount: principal,
+    receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
     description: `Loan principal: UGX ${principal.toLocaleString()} (${totalRate}%)`,
     date: Date.now(),
     loanId: loanId // Link to specific loan
@@ -13731,6 +13865,7 @@ window.confirmApproveLoan = async function(loanId) {
       memberName: loan.memberName,
       type: 'loan_interest',
       amount: interest,
+      receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
       description: `Interest on loan (${totalRate}%) - Loan ID: ${loanId}`,
       date: Date.now() + 1,
       loanId: loanId
@@ -14743,6 +14878,7 @@ async function distributeProfits() {
           memberName: m.name,
           type: 'profit_dist',
           amount: perMember,
+          receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
           description: 'Anniversary profit distribution',
           date: Date.now(),
           isAnniversary: true
@@ -14758,6 +14894,7 @@ async function distributeProfits() {
           memberName: m.name,
           type: 'profit_dist',
           amount: share,
+          receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
           description: `Anniversary profit (${daysMap[m.id]} days active)`,
           date: Date.now(),
           isAnniversary: true
@@ -14811,6 +14948,7 @@ async function distributeProfits() {
         memberName: best.m.name,
         type: 'profit_dist',
         amount: amount,
+        receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
         description: `${cat.name} reward`,
         date: Date.now() + 1000,
         isAnniversary: true
@@ -14838,7 +14976,7 @@ async function clearAllDebts() {
   
   // Create a clearing record
   writes.push(db.ref('transactions').push({
-    type: 'system',
+    type: 'system',receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
     description: 'All debts cleared at anniversary',
     date: Date.now(),
     isAnniversary: true
@@ -14867,7 +15005,7 @@ async function clearAllLoans() {
   
   // Create a clearing record
   loanWrites.push(db.ref('transactions').push({
-    type: 'system',
+    type: 'system',receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
     description: 'All loans cleared at anniversary',
     date: Date.now(),
     isAnniversary: true
@@ -15535,6 +15673,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
         memberName: member.name,
         type: 'prepaid_used',
         amount: usedPrepaidToday,
+        receiptNumber: generateReceiptNumber(),
         description: `💠 Prepaid used for today's requirement (${money(usedPrepaidToday)})`,
         date: now + 500
       });
@@ -15554,6 +15693,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
         memberName: member.name,
         type: 'deposit',
         amount: dailyPortion,
+        receiptNumber: generateReceiptNumber(),
         isDailySavings: true,
         description: `📆 Daily savings for ${todayStr}`,
         date: todayStart + 1500
@@ -15565,6 +15705,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
         memberName: member.name,
         type: 'welfare',
         amount: welfarePortion,
+        receiptNumber: generateReceiptNumber(),
         description: `🤝 Welfare for ${todayStr}`,
         date: todayStart + 500,
         autoDeduction: true
@@ -15592,6 +15733,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
         memberName: member.name,
         type: 'loan_repayment',
         amount: repaymentAmount,
+        receiptNumber: generateReceiptNumber(),
         description: `⭐ Loan repayment (application) – ${money(repaymentAmount)}`,
         date: now + 2,
         loanId: loan.id
@@ -15627,6 +15769,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
         memberName: member.name,
         type: 'loan_repayment',
         amount: repaymentAmount,
+        receiptNumber: generateReceiptNumber(),
         description: `📋 Loan repayment (assigned) – ${money(repaymentAmount)}`,
         date: now + 3,
         loanId: loan.id
@@ -15649,6 +15792,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
         memberName: member.name,
         type: 'debt_cleared',
         amount: usedForDebt,
+        receiptNumber: generateReceiptNumber(),
         description: `🧾 Debt cleared – ${money(usedForDebt)}`,
         date: now + 4
       });
@@ -15666,6 +15810,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
         memberName: member.name,
         type: 'loan_repayment',
         amount: extraRepay,
+        receiptNumber: generateReceiptNumber(),
         description: `💪 Extra loan repayment – ${money(extraRepay)}`,
         date: now + 5
       });
@@ -15686,6 +15831,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
         memberName: member.name,
         type: 'deposit',
         amount: dailyAmount,
+        receiptNumber: generateReceiptNumber(),
         isPrepaid: true,
         description: `📆 Prepaid daily savings for ${dateStr}`,
         date: currentDay + 1500
@@ -15696,6 +15842,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
         type: 'welfare',
         amount: welfareAmount,
         isPrepaid: true,
+        receiptNumber: generateReceiptNumber(),
         description: `🤝 Prepaid welfare for ${dateStr}`,
         date: currentDay + 500,
         autoDeduction: true
@@ -15716,6 +15863,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
           type: 'deposit',
           amount: dailyPortionPartial,
           isPrepaid: true,
+          receiptNumber: generateReceiptNumber(),
           description: `📆 Prepaid daily savings for ${dateStr} (partial)`,
           date: currentDay + 1500
         });
@@ -15727,6 +15875,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
           type: 'welfare',
           amount: welfarePortionPartial,
           isPrepaid: true,
+          receiptNumber: generateReceiptNumber(),
           description: `🤝 Prepaid welfare for ${dateStr} (partial)`,
           date: currentDay + 500,
           autoDeduction: true
@@ -15741,6 +15890,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
           memberName: member.name,
           type: 'prepaid_balance',
           amount: remainingForDay,
+          receiptNumber: generateReceiptNumber(),
           description: `💠 Prepaid balance for ${dateStr} (${money(remainingForDay)} remaining)`,
           date: currentDay + 1000
         });
@@ -15836,6 +15986,7 @@ window.approveReferralBonus = async function(appKey, referrerId, referredName) {
       memberName: referrer.name,
       type: 'profit_dist',
       amount: 10000,
+      receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
       description: `Referral bonus for ${referredName} joining`,
       date: Date.now()
     });
@@ -15877,7 +16028,7 @@ window.saveCoverDays = function() {const phone = document.getElementById('cover-
 
     // 2. Interest for this day (direct profit)
     const interest = Math.round(da * interestRate);
-    if (interest > 0) {writes.push(db.ref('transactions').push({memberPhone: member.phone,memberName: member.name,type: 'cover_interest',amount: interest,description: `Cover interest for ${dk} (${interestRate*100}%)`,date: new Date(dk).getTime() + 500 // slightly after deposit
+    if (interest > 0) {writes.push(db.ref('transactions').push({memberPhone: member.phone,memberName: member.name,type: 'cover_interest',amount: interest,receiptNumber: generateReceiptNumber(), description: `Cover interest for ${dk} (${interestRate*100}%)`,date: new Date(dk).getTime() + 500 // slightly after deposit
         }));}});Promise.all(writes).then(() => {toast('Cover days saved! ✅', '#10b981');closeOv('ov-cover');computePots();updateHomeUI();if (isLedgerActive()) loadLedger('all');}).catch(err => {console.error(err);toast('Save failed', '#ef4444');});};
 window.addMember = function() {
   const name = document.getElementById('mbr-name').value.trim();
@@ -16316,7 +16467,7 @@ window.confirmRenewal=function(){
   var fee=settings.renewalFee||0,cy=getMembershipYear(currentUser);
   var p=[db.ref('members/'+currentUser.id).update({lastRenewalYear:cy})];
   if(fee>0){
-    p.push(db.ref('transactions').push({memberPhone:currentUser.phone,memberName:currentUser.name,type:'fine',amount:fee,description:'Annual membership renewal – Year '+cy,date:Date.now()}));
+    p.push(db.ref('transactions').push({memberPhone:currentUser.phone,memberName:currentUser.name,type:'fine',amount:fee,receiptNumber: generateReceiptNumber(),description:'Annual membership renewal – Year '+cy,date:Date.now()}));
   }
   Promise.all(p).then(function(){
     currentUser.lastRenewalYear=cy;
@@ -16823,6 +16974,28 @@ window.shareGroupReportWhatsApp = function() {
   const encoded = encodeURIComponent(message);
   const adminPhone = '0770371720'; // Change to your group/admin WhatsApp number
   window.open(`https://wa.me/${adminPhone}?text=${encoded}`, '_blank');
+};
+window.openReceiptLookup = function() {
+  const receiptNumber = prompt("Enter Receipt Number (e.g., HTF-...):");
+  if (!receiptNumber) return;
+  const found = transactions.filter(tx => tx.receiptNumber === receiptNumber);
+  if (found.length === 0) {
+    toast('No transaction found with that receipt number.', '#ef4444');
+    return;
+  }
+  const tx = found[0];
+  const member = members.find(m => m.phone === tx.memberPhone) || { name: 'Unknown' };
+  const html = `
+    <div class="card" style="padding:16px;">
+      <div><strong>Receipt Number:</strong> ${tx.receiptNumber}</div>
+      <div><strong>Member:</strong> ${member.name}</div>
+      <div><strong>Type:</strong> ${tx.type}</div>
+      <div><strong>Amount:</strong> UGX ${tx.amount.toLocaleString()}</div>
+      <div><strong>Description:</strong> ${tx.description || 'N/A'}</div>
+      <div><strong>Date:</strong> ${new Date(tx.date).toLocaleString()}</div>
+    </div>
+  `;
+  showModal(html, 'Transaction Details');
 };
 window.openHelpModal = function() {
   openOv('ov-help');
