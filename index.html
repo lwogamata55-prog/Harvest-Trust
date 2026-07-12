@@ -1863,6 +1863,16 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
 @media (prefers-reduced-motion:reduce){.btn.shatter-pop,.auth-btn.shatter-pop,.auth-toggle-btn.shatter-pop,.lf-btn.shatter-pop,.admin-tab.shatter-pop,.ni.shatter-pop,.menu-item.shatter-pop,.daily-check.shatter-pop{animation:none!important}.button-shard{display:none!important}}
 
 .theme-preview{border:1px solid var(--br);border-radius:16px;padding:12px;background:var(--card);box-shadow:var(--sh);display:flex;align-items:center;gap:10px}.theme-dot{width:30px;height:30px;border-radius:999px;background:linear-gradient(135deg,var(--gold),var(--gold2));box-shadow:0 4px 14px var(--gold3)}.theme-preview-text{font-size:.76rem;color:var(--t2);line-height:1.35}.theme-note{font-size:.7rem;color:var(--t3);margin-top:6px;line-height:1.45}
+/* Payout action modal */
+#ov-payout-action .bs {
+  animation: ovSlideUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+#ov-payout-action .btn {
+  transition: all 0.2s ease;
+}
+#ov-payout-action .btn:active {
+  transform: scale(0.96);
+}
 /* Loan Preview Modal Styles */
 #ov-loan-preview .bs {
   max-width: 500px;
@@ -4289,6 +4299,31 @@ Thank you for your patience and understanding. 🙏
     <div style="display: flex; gap: 8px; margin-top: 4px;">
       <button class="btn btn-gold" style="flex: 1; padding: 8px; font-size: 0.75rem; border-radius: 10px;" onclick="confirmAdvanceRotation()">✅ Confirm</button>
       <button class="btn btn-sec" style="flex: 1; padding: 8px; font-size: 0.75rem; border-radius: 10px;" onclick="closeOv('ov-advance-rotation')">Cancel</button>
+    </div>
+  </div>
+</div>
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- PAYOUT ACTION MODAL – TIME HAS ELAPSED               -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div class="ov" id="ov-payout-action" onclick="maybeClose(event,'ov-payout-action')">
+  <div class="bs" style="max-width: 420px; text-align: center; padding: 24px 20px;">
+    <div style="font-size: 3rem; margin-bottom: 8px;">⏰</div>
+    <div class="bs-title" style="font-size: 1.3rem; margin-bottom: 4px;">Today is Payout Day!</div>
+    <div style="color: var(--t2); font-size: 0.9rem; margin-bottom: 16px;">
+      The payout period for <strong id="payout-action-receiver">—</strong> has ended.
+      <br>What would you like to do?
+    </div>
+    
+    <div style="display: flex; flex-direction: column; gap: 12px;">
+      <button class="btn btn-gold" style="padding: 14px; font-size: 1rem; border-radius: 14px;" onclick="handlePayoutAdvance()">
+        ✅ Advance to Next Member
+      </button>
+      <button class="btn btn-teal" style="padding: 14px; font-size: 1rem; border-radius: 14px;" onclick="handlePayoutExtend()">
+        ⏰ Add 1 More Day
+      </button>
+      <button class="btn btn-sec" style="padding: 10px; font-size: 0.8rem; border-radius: 12px;" onclick="handlePayoutRemindLater()">
+  Remind Me Later
+</button>
     </div>
   </div>
 </div>
@@ -6878,6 +6913,10 @@ function updateHomeUI() {
     const lblEl = document.getElementById('payout-progress-label');
     if (lblEl) lblEl.innerText = '';
   }
+  // Inside updateHomeUI() – at the very end
+if (currentUser && currentUser.isAdmin) {
+  checkPayoutOverdue();
+}
 
   // ---- Pending deposit warning (shows names, no money) ----
   updatePendingDepositWarning();
@@ -9433,6 +9472,12 @@ window.rejectLeaveRequest = async function(requestId) {
 window.logout=function(){
   if(currentUser && !currentUser.isAdmin && db){
     db.ref('/status/' + currentUser.id).set({ state: 'offline', last_changed: Date.now() });
+  // Inside logout()
+if (_remindTimer) {
+  clearTimeout(_remindTimer);
+  _remindTimer = null;
+}
+_payoutPromptShown = false;
   if (currentUser && !currentUser.isAdmin) {
   localStorage.removeItem('chatCache_' + currentUser.id);
 }
@@ -10839,6 +10884,146 @@ window.rejectLoan=function(lid){
     if(currentAdminTab==='savings')renderAdminTab();
   });
 };
+// ════════════════════════════════════════════════════════════
+// CHECK PAYOUT OVERDUE – Shows the action modal
+// ════════════════════════════════════════════════════════════
+
+let _payoutPromptShown = false;
+
+function checkPayoutOverdue() {
+  // Only run for admin
+  if (!currentUser || !currentUser.isAdmin) return;
+  if (!rotation.order || !rotation.order.length) return;
+  if (!rotation.payoutEndDate) return;
+
+  const now = Date.now();
+  const endDate = rotation.payoutEndDate;
+
+  // If not overdue, reset the flag and return
+  if (now <= endDate) {
+    _payoutPromptShown = false;
+    return;
+  }
+
+  // If already shown this session (and reminder not reset), don't show again
+  if (_payoutPromptShown) return;
+
+  // Get current receiver name
+  const currentIdx = rotation.currentIndex || 0;
+  const memberId = rotation.order[currentIdx];
+  const member = members.find(m => m.id === memberId);
+  const name = member ? member.name : 'Unknown';
+
+  // Show the modal
+  showPayoutActionModal(name);
+}
+
+function showPayoutActionModal(receiverName) {
+  document.getElementById('payout-action-receiver').innerText = receiverName || 'Unknown';
+  openOv('ov-payout-action');
+  _payoutPromptShown = true;
+}
+
+// ════════════════════════════════════════════════════════════
+// REMIND ME LATER – Handles the "Remind Me Later" button
+// ════════════════════════════════════════════════════════════
+
+let _remindTimer = null; // stores the timeout reference
+
+function handlePayoutRemindLater() {
+  // 1. Close the modal
+  closeOv('ov-payout-action');
+
+  // 2. Show a confirmation toast
+  toast('⏰ Reminder set. We\'ll notify you again in 5 minutes.', '#06b6d4');
+
+  // 3. Reset the flag after 5 minutes so the modal can appear again
+  if (_remindTimer) {
+    clearTimeout(_remindTimer);
+    _remindTimer = null;
+  }
+
+  _remindTimer = setTimeout(function() {
+    // Reset the flag so checkPayoutOverdue() can show the modal again
+    _payoutPromptShown = false;
+
+    // If we're still on the home page and still overdue, show again
+    if (currentScreen === 'home' && currentUser && currentUser.isAdmin) {
+      checkPayoutOverdue();
+    } else {
+      // If not on home, just let it trigger next time the admin visits home
+      console.log('⏰ Reminder ready – will show on next home visit.');
+    }
+
+    _remindTimer = null;
+  }, 5 * 60 * 1000); // 5 minutes
+
+  // 4. Also update the button text so the admin knows a reminder is set
+  // (Optional visual feedback)
+  const remindBtn = document.querySelector('#ov-payout-action .btn-sec');
+  if (remindBtn) {
+    remindBtn.textContent = '⏰ Reminder set (5 min)';
+    remindBtn.disabled = true;
+    remindBtn.style.opacity = '0.6';
+    remindBtn.style.cursor = 'not-allowed';
+
+    // Re-enable after the timeout (or when modal opens again)
+    setTimeout(function() {
+      if (remindBtn) {
+        remindBtn.textContent = 'Remind Me Later';
+        remindBtn.disabled = false;
+        remindBtn.style.opacity = '1';
+        remindBtn.style.cursor = 'pointer';
+      }
+    }, 5 * 60 * 1000);
+  }
+}
+
+// ─── Handle "Advance" ─────────────────────────────────────────
+function handlePayoutAdvance() {
+  closeOv('ov-payout-action');
+  // Call the existing advance rotation logic (opens date picker)
+  advanceRotation();
+}
+
+// ─── Handle "Extend Time" ────────────────────────────────────
+function handlePayoutExtend() {
+  closeOv('ov-payout-action');
+  
+  const days = prompt('How many extra days would you like to add?', '1');
+  if (days === null) return; // cancelled
+  const extraDays = parseInt(days);
+  if (isNaN(extraDays) || extraDays <= 0) {
+    toast('Invalid number of days', '#ef4444');
+    return;
+  }
+  
+  extendPayoutTime(extraDays);
+}
+
+function extendPayoutTime(extraDays) {
+  if (!rotation.payoutEndDate) return;
+  
+  const newEnd = rotation.payoutEndDate + (extraDays * 24 * 60 * 60 * 1000);
+  const updateData = {
+    payoutEndDate: newEnd,
+    extendedAt: Date.now(),
+    extendedBy: extraDays
+  };
+  
+  db.ref('rotation').update(updateData)
+    .then(() => {
+      rotation.payoutEndDate = newEnd;
+      toast(`⏰ Payout period extended by ${extraDays} day(s)`, '#06b6d4');
+      updateHomeUI();
+      updateReceiverDisplay();
+      _payoutPromptShown = false; // allow prompt again if still overdue later
+    })
+    .catch(err => {
+      console.error(err);
+      toast('Failed to extend time', '#ef4444');
+    });
+}
 
 function checkOverdueLoans(){
   const now = Date.now();
@@ -16824,44 +17009,120 @@ window.unlockAdmin = function() {
   }
 };
 window.lockAdmin=function(){adminUnlocked=false;document.getElementById('adm-lock').classList.remove('hidden');document.getElementById('adm-panel').classList.add('hidden');toast(t('admin_locked'),'#06b6d4');};
+// ════════════════════════════════════════════════════════════
+// goTab – Handles tab switching with book-flip animations
+// ════════════════════════════════════════════════════════════
+
 window.goTab = function(tab, btn) {
+  // ── 1. Clean up timers from previous tab ──
+  if (tab !== 'home') {
+    // Stop countdown timer when leaving home
+    if (window._countdownTimer) {
+      clearInterval(window._countdownTimer);
+      window._countdownTimer = null;
+    }
+    // Stop receiver typing animation when leaving home
+    if (receiverTypingTimer) {
+      clearTimeout(receiverTypingTimer);
+      receiverTypingTimer = null;
+    }
+  }
+
+  // ── 2. Store last non-admin tab ──
+  if (tab !== 'admin' && tab !== 'manage') {
+    localStorage.setItem('lastNonAdminTab', tab);
+  }
+
+  // ── 3. Get previous tab (for book-flip animation) ──
+  const prevTab = typeof currentScreen !== 'undefined' ? currentScreen : null;
+  const prevEl = prevTab ? document.getElementById('t-' + prevTab) : null;
+  const newEl = document.getElementById('t-' + tab);
+
+  // ── 4. Update tab classes ──
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
-  const target = document.getElementById('t-' + tab);
-  if (target) target.classList.add('on');
+  if (newEl) newEl.classList.add('on');
+
+  // ── 5. Update nav button state ──
   if (btn) {
     document.querySelectorAll('.ni').forEach(b => b.classList.remove('on'));
     btn.classList.add('on');
-  }
-  // Inside goTab, before switching:
-if (tab !== 'home') {
-  if (window._countdownTimer) {
-    clearInterval(window._countdownTimer);
-    window._countdownTimer = null;
-  }
-} else {
-  // Restart when coming back to home
-  if (!window._countdownTimer && rotation.order && rotation.order.length) {
-    startReceiverAnimation();
-  }
-}
-  currentScreen = tab;
-  if (tab === 'home') { updateHomeRecent(); updateHomeUI(); }
-  if (tab === 'account') { updateAccountUI(); updateAccountBalances(); }
-  if (tab === 'admin') {
-  if (currentUser?.isAdmin && adminUnlocked) {
-    document.getElementById('adm-lock').classList.add('hidden');
-    document.getElementById('adm-panel').classList.remove('hidden');
-    adminShowGrid = true;
-    // Hide the top tabs
-    const adminTabs = document.querySelector('.admin-tabs');
-    if (adminTabs) adminTabs.style.display = 'none';
-    showAdminWelcome();   // shows welcome then grid
   } else {
-    document.getElementById('adm-lock').classList.remove('hidden');
-    document.getElementById('adm-panel').classList.add('hidden');
+    // If no btn provided, try to find matching nav item
+    const navBtn = document.getElementById('ni-' + tab);
+    if (navBtn) {
+      document.querySelectorAll('.ni').forEach(b => b.classList.remove('on'));
+      navBtn.classList.add('on');
+    }
   }
-}
-  if (tab === 'statistics') renderStatistics();
+
+  // ── 6. Book-flip animation (only if both elements exist and are different) ──
+  if (prevEl && newEl && prevEl !== newEl) {
+    const pi = ['home', 'statistics', 'account', 'admin'].indexOf(prevTab);
+    const ni = ['home', 'statistics', 'account', 'admin'].indexOf(tab);
+    const forward = (pi === -1 || ni === -1) ? true : (ni > pi);
+
+    // Remove previous animation classes
+    ['book-out-fwd', 'book-in-fwd', 'book-out-bwd', 'book-in-bwd'].forEach(function(c) {
+      prevEl.classList.remove(c);
+      newEl.classList.remove(c);
+    });
+
+    // Trigger reflow to restart animation
+    void prevEl.offsetWidth;
+
+    // Add animation classes
+    prevEl.classList.add(forward ? 'book-out-fwd' : 'book-out-bwd');
+    newEl.classList.add(forward ? 'book-in-fwd' : 'book-in-bwd');
+
+    // Clean up after animation
+    setTimeout(function() {
+      prevEl.classList.remove('book-out-fwd', 'book-out-bwd');
+      newEl.classList.remove('book-in-fwd', 'book-in-bwd');
+    }, 620);
+  }
+
+  // ── 7. Update current screen state ──
+  currentScreen = tab;
+
+  // ── 8. Tab-specific actions ──
+  if (tab === 'home') {
+    updateHomeRecent();
+    updateHomeUI();
+    // Restart receiver animation if not already running
+    if (!window._countdownTimer && rotation.order && rotation.order.length) {
+      startReceiverAnimation();
+    }
+    // Check for overdue payout (admin only)
+    if (currentUser && currentUser.isAdmin) {
+      checkPayoutOverdue();
+    }
+  }
+  if (tab === 'account') {
+    updateAccountUI();
+    updateAccountBalances();
+  }
+  if (tab === 'admin') {
+    if (currentUser && currentUser.isAdmin && adminUnlocked) {
+      document.getElementById('adm-lock').classList.add('hidden');
+      document.getElementById('adm-panel').classList.remove('hidden');
+      adminShowGrid = true;
+      const adminTabs = document.querySelector('.admin-tabs');
+      if (adminTabs) adminTabs.style.display = 'none';
+      showAdminWelcome();
+    } else {
+      document.getElementById('adm-lock').classList.remove('hidden');
+      document.getElementById('adm-panel').classList.add('hidden');
+    }
+  }
+  if (tab === 'statistics') {
+    renderStatistics();
+  }
+
+  // ── 9. Update notification badge ──
+  updateNotificationBadge();
+
+  // ── 10. Hide loading overlay if visible ──
+  if (typeof hideTabLoading === 'function') hideTabLoading();
 };
 function showModal(content, title) {
   // Remove any existing modal overlay
