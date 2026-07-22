@@ -2242,7 +2242,14 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
   letter-spacing: 0.5px;
   text-shadow: 0 0 12px rgba(245, 158, 11, 0.2);
 }
-
+/*/////////////////*/
+.payout-countdown .countdown-text,
+.payout-progress-fill,
+.payout-date-value {
+    will-change: transform, opacity;
+    backface-visibility: hidden;
+    transform: translateZ(0);
+}
 /* Countdown */
 .payout-countdown {
   position: relative;
@@ -4503,74 +4510,91 @@ function updateLoadingProgress() {
   }
 }
 function getLastPayoutDate() {
-  // Find the most recent payout transaction
-  const payouts = transactions
-    .filter(tx => tx.type === 'payout')
-    .sort((a, b) => (b.date || 0) - (a.date || 0));
-  
-  if (payouts.length > 0) {
-    return payouts[0].date;
-  }
-  
-  // Fallback: use group start date if available
-  if (settings.groupStartDate) {
-    const start = new Date(settings.groupStartDate);
-    return start.getTime();
-  }
-  
-  // Ultimate fallback: today - 7 days
-  return Date.now() - (7 * 24 * 60 * 60 * 1000);
+    // If there are payout transactions, use the latest one
+    const payouts = transactions
+        .filter(tx => tx.type === 'payout')
+        .sort((a, b) => (b.date || 0) - (a.date || 0));
+    if (payouts.length > 0) {
+        return payouts[0].date;
+    }
+    // If we have a group start date, use that
+    if (settings.groupStartDate) {
+        return new Date(settings.groupStartDate).getTime();
+    }
+    // Ultimate fallback: today - 7 days
+    return Date.now() - (7 * 24 * 60 * 60 * 1000);
+}
+// ──────────────────────────────────────────────────────────────
+// GET NEXT PAYMENT DUE DATE – Based on member's balance
+// ──────────────────────────────────────────────────────────────
+
+function getNextPaymentDueDate(member, depositAmount) {
+    const dailyReq = (settings.dailyAmount || 2000) + (settings.welfareAmount || 500);
+    const currentBalance = memberBalances[member.phone] || 0;
+    const prepaid = memberPrepaid[member.phone] || 0;
+    const totalAvailable = currentBalance + prepaid + (depositAmount || 0);
+    
+    // Days covered = totalAvailable / dailyReq
+    const daysCovered = Math.floor(totalAvailable / dailyReq);
+    const nextDue = new Date();
+    nextDue.setDate(nextDue.getDate() + daysCovered + 1);
+    
+    return {
+        daysCovered: daysCovered,
+        nextDueDate: nextDue,
+        display: daysCovered === 0 ? 'Today' : `in ${daysCovered} day${daysCovered > 1 ? 's' : ''} (${nextDue.toLocaleDateString()})`
+    };
 }
 function getNextPayoutDate() {
-  // If we have a stored payout end date, use it
-  if (rotation.payoutEndDate) {
-    return rotation.payoutEndDate;
-  }
-  
-  // Fallback: last payout + 7 days
-  const lastPayout = getLastPayoutDate();
-  return lastPayout + (7 * 24 * 60 * 60 * 1000);
+    // 1. If we have a stored end date, use it
+    if (rotation.payoutEndDate) {
+        return rotation.payoutEndDate;
+    }
+    // 2. Compute from last payout (or fallback)
+    const last = getLastPayoutDate();
+    return last + (7 * 24 * 60 * 60 * 1000);
 }
 function getPayoutCountdown(now, nextPayout) {
-  const diff = nextPayout - now;
-  
-  if (diff <= 0) {
-    return { 
-      text: '🎉 TODAY IS PAYOUT DAY!', 
-      className: 'today',
-      progress: 100,
-      label: 'Payout day!'
+    const diff = nextPayout - now;
+    if (!nextPayout || isNaN(nextPayout)) {
+        return {
+            text: '⏳ Waiting for payout schedule',
+            className: 'away',
+            progress: 0,
+            label: 'No schedule set'
+        };
+    }
+    if (diff <= 0) {
+        return {
+            text: '🎉 TODAY IS PAYOUT DAY!',
+            className: 'today',
+            progress: 100,
+            label: 'Payout day! 🎉'
+        };
+    }
+    const days = Math.floor(diff / (24 * 60 * 60 * 1000));
+    const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+    const minutes = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
+    const seconds = Math.floor((diff % (60 * 1000)) / 1000);
+
+    let text = '';
+    if (days > 0) text = `${days}d ${hours}h ${minutes}m`;
+    else if (hours > 0) text = `${hours}h ${minutes}m ${seconds}s`;
+    else if (minutes > 0) text = `${minutes}m ${seconds}s`;
+    else text = `${seconds}s`;
+
+    const weekMs = 7 * 24 * 60 * 60 * 1000;
+    const elapsed = weekMs - diff;
+    const progress = Math.min(100, Math.max(0, (elapsed / weekMs) * 100));
+
+    return {
+        text: `⏳ ${text} left`,
+        className: 'countdown',
+        progress: progress,
+        label: `${Math.round(progress)}% complete`
     };
-  }
-  
-  const days = Math.floor(diff / (24 * 60 * 60 * 1000));
-  const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
-  const minutes = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
-  const seconds = Math.floor((diff % (60 * 1000)) / 1000);
-  
-  let text = '';
-  if (days > 0) {
-    text = `${days}d ${hours}h ${minutes}m`;
-  } else if (hours > 0) {
-    text = `${hours}h ${minutes}m ${seconds}s`;
-  } else if (minutes > 0) {
-    text = `${minutes}m ${seconds}s`;
-  } else {
-    text = `${seconds}s`;
-  }
-  
-  // Calculate progress through the week (0-100%)
-  const weekMs = 7 * 24 * 60 * 60 * 1000;
-  const elapsed = weekMs - diff;
-  const progress = Math.min(100, Math.max(0, (elapsed / weekMs) * 100));
-  
-  return {
-    text: `⏳ ${text} left`,
-    className: 'countdown',
-    progress: progress,
-    label: `${Math.round(progress)}% complete`
-  };
 }
+
 function getCurrentLoadingMessage() {
   for (const key in LOADING_STATE) {
     if (!LOADING_STATE[key]) {
@@ -4953,110 +4977,150 @@ let _receiverTimer = null;
 let _receiverCycleIdx = 0;
 
 function startReceiverAnimation() {
-  // Clear old timers
-  if (window._countdownTimer) {
-    clearInterval(window._countdownTimer);
-    window._countdownTimer = null;
-  }
+    // Clear any existing timers
+    if (window._countdownTimer) {
+        clearInterval(window._countdownTimer);
+        window._countdownTimer = null;
+    }
 
-  // Show the receiver immediately
-  updateReceiverDisplay();
+    // Update the display immediately
+    updateReceiverDisplay();
 
-  // Start the live countdown timer (updates every second)
-  window._countdownTimer = setInterval(function() {
-    updatePayoutDateAndCountdown();
-  }, 1000);
+    // Start a single interval for countdown updates (every 2 seconds)
+    window._countdownTimer = setInterval(function() {
+        // Only update if we're on the home tab
+        if (currentScreen === 'home') {
+            updatePayoutDateAndCountdown();
+        }
+    }, 2000);
 }
 
 function updateReceiverDisplay() {
-  const order = rotation.order;
-  const nameEl = document.getElementById('weekly-payee-name');
-  const infoEl = document.getElementById('payout-rotation-info');
-  const dateEl = document.getElementById('payout-exact-date');
+    const nameEl = document.getElementById('weekly-payee-name');
+    const infoEl = document.getElementById('payout-rotation-info');
+    const dateEl = document.getElementById('payout-exact-date');
 
-  if (!order || !order.length) {
+    // Check if we have a valid rotation order
+    const order = rotation.order || [];
+    if (!order.length) {
+        if (nameEl) nameEl.innerText = '— (no rotation)';
+        if (infoEl) infoEl.innerText = 'No members in rotation';
+        if (dateEl) dateEl.innerText = '—';
+        // Still update countdown to show "awaiting schedule"
+        updatePayoutDateAndCountdown();
+        return;
+    }
+
+    // Get the current receiver index
+    let currentIdx = rotation.currentIndex || 0;
+    if (currentIdx >= order.length) currentIdx = 0;
+    const memberId = order[currentIdx];
+    const member = members.find(m => m.id === memberId);
+
+    // Update name with a smooth transition
     if (nameEl) {
-      nameEl.textContent = '— (no rotation)';
-      if (receiverTypingTimer) {
-        clearTimeout(receiverTypingTimer);
-        receiverTypingTimer = null;
-      }
-    }
-    if (infoEl) infoEl.innerText = 'No active members in rotation';
-    if (dateEl) dateEl.innerText = '—';
-    return;
-  }
-
-  // --- GET THE REAL CURRENT RECEIVER (SINGULAR) ---
-  let currentIdx = rotation.currentIndex || 0;
-  if (currentIdx >= order.length) currentIdx = 0;
-  
-  const memberId = order[currentIdx];
-  const member = members.find(m => m.id === memberId);
-
-  // --- UPDATE THE NAME WITH TYPING ANIMATION ---
-  if (nameEl) {
-    if (!member) {
-      nameEl.textContent = '⚠️ Member removed';
-      nameEl.style.color = 'var(--red)';
-      if (receiverTypingTimer) {
-        clearTimeout(receiverTypingTimer);
-        receiverTypingTimer = null;
-      }
-    } else {
-      nameEl.style.color = ''; // reset
-      if (currentTypingName !== member.name) {
-        currentTypingName = '';
-        receiverCharIndex = 0;
-        if (receiverTypingTimer) {
-          clearTimeout(receiverTypingTimer);
-          receiverTypingTimer = null;
+        if (!member) {
+            nameEl.innerText = '⚠️ Member removed';
+            nameEl.style.color = 'var(--red)';
+        } else {
+            // If we have a typing animation, use it, else fallback to direct set
+            if (typeof typeReceiverName === 'function' && currentTypingName !== member.name) {
+                currentTypingName = '';
+                receiverCharIndex = 0;
+                if (receiverTypingTimer) {
+                    clearTimeout(receiverTypingTimer);
+                    receiverTypingTimer = null;
+                }
+                typeReceiverName(member.name);
+            } else {
+                // Direct set if typing not available
+                nameEl.innerText = member.name;
+                nameEl.style.color = 'var(--gold)';
+            }
         }
-      }
-      typeReceiverName(member.name);
     }
-  }
 
-  // --- UPDATE ROTATION INFO ---
-  if (infoEl) {
-    const total = order.length;
-    infoEl.innerText = `⭐ Current Receiver · #${currentIdx + 1} of ${total}`;
-  }
+    // Update rotation info
+    if (infoEl) {
+        const total = order.length;
+        infoEl.innerText = `⭐ Current Receiver · #${currentIdx + 1} of ${total}`;
+    }
 
-  // --- UPDATE DATE & COUNTDOWN ---
-  updatePayoutDateAndCountdown();
+    // Update date and countdown (this function handles missing dates gracefully)
+    updatePayoutDateAndCountdown();
 }
 
-// --- NEW: Separate function to update date + countdown every second ---
+// ── Optimized countdown updater (reduces DOM writes) ──
+const _cache = {
+    dateEl: null,
+    textEl: null,
+    fillEl: null,
+    labelEl: null,
+    lastDate: '',
+    lastText: '',
+    lastProgress: '',
+    lastLabel: ''
+};
+
+function getCachedElements() {
+    if (!_cache.dateEl) {
+        _cache.dateEl = document.getElementById('payout-exact-date');
+        _cache.textEl = document.getElementById('payout-countdown-text');
+        _cache.fillEl = document.getElementById('payout-progress-fill');
+        _cache.labelEl = document.getElementById('payout-progress-label');
+    }
+    return _cache;
+}
+
 function updatePayoutDateAndCountdown() {
-  const now = Date.now();
-  const nextPayout = getNextPayoutDate();
-  
-  // Exact Date
-  const dateEl = document.getElementById('payout-exact-date');
-  if (dateEl) {
-    const d = new Date(nextPayout);
-    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-    dateEl.innerText = d.toLocaleDateString('en-UG', options);
-  }
-  
-  // Countdown
-  const countdown = getPayoutCountdown(now, nextPayout);
-  const textEl = document.getElementById('payout-countdown-text');
-  if (textEl) {
-    textEl.innerText = countdown.text;
-    textEl.className = 'countdown-text ' + countdown.className;
-  }
-  
-  // Progress Bar
-  const fillEl = document.getElementById('payout-progress-fill');
-  const labelEl = document.getElementById('payout-progress-label');
-  if (fillEl) {
-    fillEl.style.width = countdown.progress + '%';
-  }
-  if (labelEl) {
-    labelEl.innerText = countdown.label;
-  }
+    const dateEl = document.getElementById('payout-exact-date');
+    const textEl = document.getElementById('payout-countdown-text');
+    const fillEl = document.getElementById('payout-progress-fill');
+    const labelEl = document.getElementById('payout-progress-label');
+
+    if (!dateEl) return; // not on home tab
+
+    const now = Date.now();
+    let nextPayout = getNextPayoutDate();
+
+    // Validate the nextPayout date
+    if (!nextPayout || isNaN(nextPayout) || nextPayout < now - 86400000) {
+        // If invalid, fallback to today + 7 days
+        nextPayout = now + (7 * 24 * 60 * 60 * 1000);
+    }
+
+    // Format exact date
+    const dateStr = new Date(nextPayout).toLocaleDateString('en-UG', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+    if (dateEl.textContent !== dateStr) {
+        dateEl.textContent = dateStr;
+    }
+
+    // Countdown
+    const countdown = getPayoutCountdown(now, nextPayout);
+    if (textEl) {
+        if (textEl.textContent !== countdown.text) {
+            textEl.textContent = countdown.text;
+            textEl.className = 'countdown-text ' + countdown.className;
+        }
+    }
+
+    // Progress bar
+    if (fillEl) {
+        const newWidth = countdown.progress + '%';
+        if (fillEl.style.width !== newWidth) {
+            fillEl.style.width = newWidth;
+        }
+    }
+    if (labelEl) {
+        if (labelEl.textContent !== countdown.label) {
+            labelEl.textContent = countdown.label;
+        }
+    }
 }
 // ── isLedgerActive helper ─────────────────────────────────────────────────
 function isLedgerActive() {
@@ -5361,7 +5425,22 @@ function recalculateLoanBalances() {
     }
   });
 }
+// ──────────────────────────────────────────────────────────────
+// GET DEPOSIT COVERAGE – Based on the deposit amount only
+// ──────────────────────────────────────────────────────────────
 
+function getDepositCoverage(depositAmount) {
+    const dailyReq = (settings.dailyAmount || 2000) + (settings.welfareAmount || 500);
+    const daysCovered = Math.floor(depositAmount / dailyReq);
+    const nextDue = new Date();
+    nextDue.setDate(nextDue.getDate() + daysCovered + 1);
+    
+    return {
+        daysCovered: daysCovered,
+        nextDueDate: nextDue,
+        display: daysCovered === 0 ? 'Today' : `${nextDue.toLocaleDateString()}(${daysCovered} day${daysCovered > 1 ? 's' : ''})`
+    };
+}
 function getDaysActive(member) {
   if (!member.joinDate) return 0;
   const join = new Date(member.joinDate);
@@ -6163,129 +6242,155 @@ function generatePayoutFallbackPhone(beneficiary, weeklyGross, loan, netPayout) 
   }
 }
 window.showWeeklyPayoutReceiptModal = function(beneficiary, weeklyGross, loan, netPayout, onConfirmShare, onConfirmNoShare, onPrint, onCancel) {
-  const safeGross = Number(weeklyGross) || 0;
-  const safeLoan = Number(loan) || 0;
-  const safeNet = Number(netPayout) || 0;
-  computePots();
+    const safeGross = Number(weeklyGross) || 0;
+    const safeLoan = Number(loan) || 0;
+    const safeNet = Number(netPayout) || 0;
+    computePots();
 
-  const receiptNumber = generateReceiptNumber();
-  const quote = getReceiptQuote(beneficiary);
+    const receiptNumber = generateReceiptNumber();
+    const quote = getReceiptQuote(beneficiary);
 
-  function buildReceiptHTML() {
-    return `
-    <div id="receipt-content" style="max-width:360px;margin:0 auto;background:#ffffff;border-radius:24px;padding:24px 20px 20px;font-family:'DM Sans',sans-serif;text-align:center;color:#111827;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
-      <!-- App Name (Bigger) -->
-      <div style="font-size:1.1rem;font-weight:900;color:#111827;letter-spacing:-0.5px;">🌾 Harvest Trust Finance</div>
-      <div style="width:40px;height:3px;background:#f59e0b;margin:8px auto 12px;border-radius:99px;"></div>
-      
-      <!-- MAIN TRANSACTION (Big font) -->
-      <div style="font-size:2.8rem;font-weight:900;color:#6d28d9;line-height:1.2;margin:8px 0;">UGX ${safeNet.toLocaleString()}</div>
-      <div style="font-size:0.75rem;color:#9ca3af;font-weight:600;margin-bottom:16px;">Weekly Payout</div>
-      
-      <div style="border-top:1px solid #f3f4f6;margin-bottom:14px;"></div>
-      
-      <!-- Details Grid -->
-      <div style="text-align:left;font-size:0.85rem;">
-        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-          <span style="color:#6b7280;">Beneficiary</span>
-          <span style="font-weight:600;">${escapeHtml(beneficiary?.name || 'Unknown')}</span>
+    const nextPayoutDate = rotation.payoutEndDate ? new Date(rotation.payoutEndDate) : new Date(Date.now() + 7*24*60*60*1000);
+    const daysUntilPayout = Math.ceil((nextPayoutDate - Date.now()) / (1000 * 60 * 60 * 24));
+    const payoutDisplay = daysUntilPayout <= 0 ? 'Today' : `in ${daysUntilPayout} day${daysUntilPayout > 1 ? 's' : ''} (${nextPayoutDate.toLocaleDateString()})`;
+
+    function buildReceiptHTML() {
+        return `
+        <div id="receipt-content" style="max-width:360px;margin:0 auto;background:#ffffff;border-radius:24px;padding:24px 20px 20px;font-family:'DM Sans',sans-serif;text-align:center;color:#111827;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+            <div style="font-size:1.1rem;font-weight:900;color:#111827;letter-spacing:-0.5px;">🌾 Harvest Trust Finance</div>
+            <div style="width:40px;height:3px;background:#f59e0b;margin:8px auto 12px;border-radius:99px;"></div>
+            
+            <div style="font-size:2.8rem;font-weight:900;color:#6d28d9;line-height:1.2;margin:8px 0;">UGX ${safeNet.toLocaleString()}</div>
+            <div style="font-size:0.75rem;color:#9ca3af;font-weight:600;margin-bottom:16px;">Weekly Payout</div>
+            
+            <div style="border-top:1px solid #f3f4f6;margin-bottom:14px;"></div>
+            
+            <div style="text-align:left;font-size:0.85rem;">
+                <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                    <span style="color:#6b7280;">Beneficiary</span>
+                    <span style="font-weight:600;">${escapeHtml(beneficiary?.name || 'Unknown')}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                    <span style="color:#6b7280;">Gross Amount</span>
+                    <span style="font-weight:600;">UGX ${safeGross.toLocaleString()}</span>
+                </div>
+                ${safeLoan > 0 ? `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;"><span style="color:#6b7280;">Loan Deduction</span><span style="font-weight:600;color:#ef4444;">- UGX ${safeLoan.toLocaleString()}</span></div>` : ''}
+                <div style="display:flex;justify-content:space-between;padding:6px 0;background:#f3e8ff;border-radius:6px;padding:8px 12px;margin:6px 0;border:1px solid #8b5cf6;">
+                    <span style="color:#5b21b6;font-weight:700;">💰 Net Payout</span>
+                    <span style="color:#5b21b6;font-weight:900;">UGX ${safeNet.toLocaleString()}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:6px 0;background:#fef3c7;border-radius:6px;padding:8px 12px;margin:6px 0;border:1px solid #f59e0b;">
+                    <span style="color:#92400e;font-weight:700;">📅 Next Payout</span>
+                    <span style="color:#92400e;font-weight:900;">${payoutDisplay}</span>
+                </div>
+            </div>
+            
+            <div style="margin-top:14px;padding:10px;background:#f7fafc;border-radius:8px;font-size:0.75rem;color:#4a5568;font-style:italic;border-left:3px solid #f59e0b;text-align:left;">
+                ${escapeHtml(quote)}
+            </div>
+            
+            <div style="margin-top:16px;padding-top:12px;border-top:1px solid #f3f4f6;">
+                <div style="font-size:0.85rem;font-weight:700;color:#1a202c;letter-spacing:0.5px;font-family:monospace;">
+                    Receipt #: ${receiptNumber}
+                </div>
+                <div style="font-size:0.5rem;color:#9ca3af;margin-top:4px;">${new Date().toLocaleString()}</div>
+            </div>
         </div>
-        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-          <span style="color:#6b7280;">Gross Amount</span>
-          <span style="font-weight:600;">UGX ${safeGross.toLocaleString()}</span>
-        </div>
-        ${safeLoan > 0 ? `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;"><span style="color:#6b7280;">Loan Deduction</span><span style="font-weight:600;color:#ef4444;">- UGX ${safeLoan.toLocaleString()}</span></div>` : ''}
-        <div style="display:flex;justify-content:space-between;padding:6px 0;background:#f3e8ff;border-radius:6px;padding:8px 12px;margin:6px 0;border:1px solid #8b5cf6;">
-          <span style="color:#5b21b6;font-weight:700;">💰 Net Payout</span>
-          <span style="color:#5b21b6;font-weight:900;">UGX ${safeNet.toLocaleString()}</span>
-        </div>
-      </div>
-      
-      <!-- Quote -->
-      <div style="margin-top:14px;padding:10px;background:#f7fafc;border-radius:8px;font-size:0.75rem;color:#4a5568;font-style:italic;border-left:3px solid #f59e0b;text-align:left;">
-        ${escapeHtml(quote)}
-      </div>
-      
-      <!-- Footer with Bigger Receipt Number -->
-      <div style="margin-top:16px;padding-top:12px;border-top:1px solid #f3f4f6;">
-        <div style="font-size:0.85rem;font-weight:700;color:#1a202c;letter-spacing:0.5px;font-family:monospace;">
-          Receipt #: ${receiptNumber}
-        </div>
-        <div style="font-size:0.5rem;color:#9ca3af;margin-top:4px;">${new Date().toLocaleString()}</div>
-      </div>
-    </div>
-    `;
-  }
-
-  // ----- Modal rendering -----
-  const receiptHTML = buildReceiptHTML();
-  const modal = document.createElement('div');
-  modal.className = 'ov on';
-  modal.style.zIndex = '20020';
-  modal.innerHTML = `
-    <div class="bs" style="max-width:420px;padding:0;overflow:hidden;border-radius:24px 24px 0 0;display:flex;flex-direction:column;max-height:90vh;">
-      <div style="background:#fff;padding:20px 24px 12px;overflow-y:auto;flex:1;min-height:0;">${receiptHTML}</div>
-      <div style="background:#fff;padding:12px 20px 20px;display:flex;flex-direction:column;gap:8px;flex-shrink:0;border-top:1px solid #f3f4f6;">
-        <button id="payout-confirm-send-pc" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;">💻 Copy Image (PC)</button>
-        <button id="payout-confirm-send-phone" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;">📱 Send Image (Phone)</button>
-        <button id="payout-confirm-noshare" style="width:100%;padding:11px;border:none;border-radius:10px;background:#6d28d9;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;">✅ Save Without Sharing</button>
-        <button id="payout-print" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;">🖨️ Print</button>
-        <button id="payout-cancel" style="width:100%;padding:9px;border:none;border-radius:10px;background:#f3f4f6;color:#6b7280;font-size:0.8rem;font-weight:600;cursor:pointer;">✕ Cancel</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
-
-  // ----- Button handlers -----
-  const receiptElement = modal.querySelector('#receipt-content');
-  const closeModal = () => { modal.classList.remove('on'); setTimeout(() => modal.remove(), 300); };
-
-  document.querySelector('#payout-confirm-send-pc').onclick = async () => {
-    const data = await renderElementToImage(receiptElement);
-    if (!data) { toast('Failed', '#ef4444'); return; }
-    try {
-      const blob = await (await fetch(data)).blob();
-      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-      toast('📋 Copied!', '#06b6d4');
-    } catch (err) {
-      const blob = await (await fetch(data)).blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'payout_receipt.png'; a.click();
-      URL.revokeObjectURL(url);
-      toast('📸 Downloaded', '#f59e0b');
+        `;
     }
-    closeModal();
-    if (onConfirmShare) onConfirmShare();
-  };
 
-  document.querySelector('#payout-confirm-send-phone').onclick = async () => {
-    await shareReceiptImage(receiptElement, 'Payout Receipt', `UGX ${safeNet.toLocaleString()}`, 'payout_receipt.png');
-    closeModal();
-    if (onConfirmShare) onConfirmShare();
-  };
+    // ----- Modal with new buttons -----
+    const receiptHTML = buildReceiptHTML();
+    const modal = document.createElement('div');
+    modal.className = 'ov on';
+    modal.style.zIndex = '20020';
+    modal.innerHTML = `
+        <div class="bs" style="max-width:420px;padding:0;overflow:hidden;border-radius:24px 24px 0 0;display:flex;flex-direction:column;max-height:90vh;">
+            <div style="background:#fff;padding:20px 24px 12px;overflow-y:auto;flex:1;min-height:0;">${receiptHTML}</div>
+            <div style="background:#fff;padding:12px 20px 20px;display:flex;flex-direction:column;gap:8px;flex-shrink:0;border-top:1px solid #f3f4f6;">
+                <button id="payout-whatsapp" style="width:100%;padding:11px;border:none;border-radius:10px;background:#25D366;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">💬 Send on WhatsApp</button>
+                <button id="payout-copy-pc" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">📋 Copy Image (PC)</button>
+                <button id="payout-save-only" style="width:100%;padding:11px;border:none;border-radius:10px;background:#6d28d9;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">💾 Save Without Sharing</button>
+                <button id="payout-cancel" style="width:100%;padding:9px;border:1px solid #e5e7eb;border-radius:10px;background:transparent;color:#6b7280;font-size:0.8rem;font-weight:600;cursor:pointer;">✕ Cancel</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
 
-  document.querySelector('#payout-confirm-noshare').onclick = () => {
-    closeModal();
-    if (onConfirmNoShare) onConfirmNoShare();
-    toast('✅ Saved', '#10b981');
-  };
+    const receiptElement = modal.querySelector('#receipt-content');
+    const closeModal = () => {
+        modal.classList.remove('on');
+        setTimeout(() => modal.remove(), 300);
+    };
 
-  document.querySelector('#payout-print').onclick = async () => {
-    const data = await renderElementToImage(receiptElement);
-    if (!data) { toast('Failed', '#ef4444'); return; }
-    const w = window.open('', '_blank');
-    w.document.write(`<!DOCTYPE html><html><head><title>Payout Receipt</title><style>body{margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff;}img{max-width:100%;}</style></head><body><img src="${data}"></body></html>`);
-    w.document.close(); w.focus(); w.print();
-    closeModal();
-    if (onPrint) onPrint();
-  };
+    async function getReceiptBlob() {
+        const data = await renderElementToImage(receiptElement);
+        if (!data) { toast('Failed to generate receipt image', '#ef4444'); return null; }
+        return await (await fetch(data)).blob();
+    }
 
-  document.querySelector('#payout-cancel').onclick = () => {
-    closeModal();
-    if (onCancel) onCancel();
-    toast('Cancelled', '#ff0000');
-  };
+    document.querySelector('#payout-whatsapp').onclick = async () => {
+        const blob = await getReceiptBlob();
+        if (!blob) return;
+        let phone = beneficiary?.phone || '';
+        let formattedPhone = phone.replace(/\D/g, '');
+        if (formattedPhone.startsWith('0')) formattedPhone = '256' + formattedPhone.slice(1);
+        if (!formattedPhone.startsWith('256')) formattedPhone = '256' + formattedPhone;
+
+        if (navigator.share) {
+            try {
+                const file = new File([blob], 'payout_receipt.png', { type: 'image/png' });
+                await navigator.share({ title: 'Payout Receipt', text: `Payout for ${beneficiary?.name}`, files: [file] });
+                toast('✅ Shared!', '#10b981');
+                closeModal();
+                if (onConfirmShare) onConfirmShare();
+                return;
+            } catch (e) { if (e.name === 'AbortError') return; }
+        }
+
+        const dataUrl = await renderElementToImage(receiptElement);
+        if (!dataUrl) { toast('Failed', '#ef4444'); return; }
+        const message = `🌾 *Harvest Trust Finance* 🌾\n\n📄 *Payout Receipt*\nBeneficiary: ${beneficiary?.name}\nAmount: UGX ${safeNet.toLocaleString()}\nReceipt #: ${receiptNumber}`;
+        window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = `payout_${receiptNumber}.png`;
+        a.click();
+        toast('💬 WhatsApp opened. Image downloaded – attach manually.', '#25D366');
+        closeModal();
+        if (onConfirmShare) onConfirmShare();
+    };
+
+    document.querySelector('#payout-copy-pc').onclick = async () => {
+        const blob = await getReceiptBlob();
+        if (!blob) return;
+        try {
+            await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+            toast('📋 Copied!', '#06b6d4');
+        } catch {
+            const dataUrl = await renderElementToImage(receiptElement);
+            if (!dataUrl) { toast('Failed', '#ef4444'); return; }
+            const a = document.createElement('a');
+            a.href = dataUrl;
+            a.download = `payout_${receiptNumber}.png`;
+            a.click();
+            toast('📸 Downloaded', '#f59e0b');
+        }
+        closeModal();
+        if (onConfirmShare) onConfirmShare();
+    };
+
+    document.querySelector('#payout-save-only').onclick = () => {
+        closeModal();
+        if (onConfirmNoShare) onConfirmNoShare();
+        toast('✅ Saved', '#10b981');
+    };
+
+    document.querySelector('#payout-cancel').onclick = () => {
+        closeModal();
+        if (onCancel) onCancel();
+        toast('Cancelled', '#ff0000');
+    };
 };
 
 async function updateLoanRepaidStatus(phone) {
@@ -13315,170 +13420,224 @@ function previewTransactionReceipt() {
 }
 
 window.showTransactionReceiptModal = function(member, txType, amount, description, onConfirmSend, onConfirmNoSend, onCancel, onPrint, isPreview = false, projectedPrepaidDate = null, projectedRemainingLoan = null, onSave = null) {
-  const safeAmount = Number(amount) || 0;
-  computePots();
+    const safeAmount = Number(amount) || 0;
+    computePots();
 
-  const accountBalance = memberBalances[member?.phone] || 0;
-  const displayLoanBalance = (isPreview && projectedRemainingLoan !== null) ? projectedRemainingLoan : (memberLoans[member?.phone] || 0);
-  const receiptNumber = generateReceiptNumber();
-  const quote = getReceiptQuote(member);
+    const displayLoanBalance = (isPreview && projectedRemainingLoan !== null) ? projectedRemainingLoan : (memberLoans[member?.phone] || 0);
+    const receiptNumber = generateReceiptNumber();
+    const quote = getReceiptQuote(member);
 
-  let prepaidUntil = 'Not prepaid';
-  if (projectedPrepaidDate) {
-    prepaidUntil = projectedPrepaidDate.toLocaleDateString();
-  } else {
-    const prepaidInfo = getPrepaidPeriod(member);
-    if (prepaidInfo) prepaidUntil = prepaidInfo.lastDate.toLocaleDateString();
-  }
+    // ── Compute deposit coverage (only for deposit receipts) ──
+    let depositCoverage = { daysCovered: 0, nextDueDate: new Date(), display: 'Today' };
+    if (member && txType === 'deposit') {
+        depositCoverage = getDepositCoverage(safeAmount);
+    }
 
-  function buildReceiptHTML() {
-    const date = new Date();
-    const dateLabel = date.toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' });
-    const timeLabel = date.toLocaleTimeString('en-UG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    const txTypeUpper = (txType || 'transaction').toUpperCase();
+    function buildReceiptHTML() {
+        const date = new Date();
+        const dateLabel = date.toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' });
+        const timeLabel = date.toLocaleTimeString('en-UG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const txTypeUpper = (txType || 'transaction').toUpperCase();
 
-    return `
-    <div id="receipt-content" style="max-width:360px;margin:0 auto;background:#ffffff;border-radius:24px;padding:24px 20px 20px;font-family:'DM Sans',sans-serif;text-align:center;color:#111827;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
-      <!-- App Name (Bigger) -->
-      <div style="font-size:1.1rem;font-weight:900;color:#111827;letter-spacing:-0.5px;">🌾 Harvest Trust Finance</div>
-      <div style="width:40px;height:3px;background:#f59e0b;margin:8px auto 12px;border-radius:99px;"></div>
-      
-      <!-- MAIN TRANSACTION (Big font) -->
-      <div style="font-size:2.8rem;font-weight:900;color:#16a34a;line-height:1.2;margin:8px 0;">UGX ${safeAmount.toLocaleString()}</div>
-      <div style="font-size:0.75rem;color:#9ca3af;font-weight:600;margin-bottom:16px;">${txTypeUpper} Successful</div>
-      
-      <div style="border-top:1px solid #f3f4f6;margin-bottom:14px;"></div>
-      
-      <!-- Details Grid -->
-      <div style="text-align:left;font-size:0.85rem;">
-        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-          <span style="color:#6b7280;">Member</span>
-          <span style="font-weight:600;">${escapeHtml(member?.name || 'Unknown')}</span>
+        return `
+        <div id="receipt-content" style="max-width:360px;margin:0 auto;background:#ffffff;border-radius:24px;padding:24px 20px 20px;font-family:'DM Sans',sans-serif;text-align:center;color:#111827;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+            <div style="font-size:1.1rem;font-weight:900;color:#111827;letter-spacing:-0.5px;">🌾 Harvest Trust Finance</div>
+            <div style="width:40px;height:3px;background:#f59e0b;margin:8px auto 12px;border-radius:99px;"></div>
+            
+            <div style="font-size:2.8rem;font-weight:900;color:#16a34a;line-height:1.2;margin:8px 0;">UGX ${safeAmount.toLocaleString()}</div>
+            <div style="font-size:0.75rem;color:#9ca3af;font-weight:600;margin-bottom:16px;">${txTypeUpper} Successful</div>
+            
+            <div style="border-top:1px solid #f3f4f6;margin-bottom:14px;"></div>
+            
+            <div style="text-align:left;font-size:0.85rem;">
+                <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                    <span style="color:#6b7280;">Member</span>
+                    <span style="font-weight:600;">${escapeHtml(member?.name || 'Unknown')}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                    <span style="color:#6b7280;">Payment Method</span>
+                    <span style="font-weight:600;">${txType === 'deposit' ? 'Deposit' : txTypeUpper}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                    <span style="color:#6b7280;">Date & Time</span>
+                    <span style="font-weight:600;">${dateLabel}, ${timeLabel}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:6px 0;background:#e8f4fd;border-radius:6px;padding:8px 12px;margin:6px 0;border:1px solid #06b6d4;">
+                    <span style="color:#0e7490;font-weight:700;">💰 Remaining Loan Balance</span>
+                    <span style="color:#0e7490;font-weight:900;">UGX ${displayLoanBalance.toLocaleString()}</span>
+                </div>
+                ${(txType === 'deposit' && description) ? `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;"><span style="color:#6b7280;">Note</span><span style="font-weight:600;">${escapeHtml(description)}</span></div>` : ''}
+                ${txType === 'deposit' ? `
+                <div style="display:flex;justify-content:space-between;padding:6px 0;background:#fef3c7;border-radius:6px;padding:8px 12px;margin:6px 0;border:1px solid #f59e0b;">
+                    <span style="color:#92400e;font-weight:700;">📅 This deposit runs till</span>
+                    <span style="color:#92400e;font-weight:900;">${depositCoverage.display}</span>
+                </div>
+                ` : ''}
+            </div>
+            
+            <div style="margin-top:14px;padding:10px;background:#f7fafc;border-radius:8px;font-size:0.75rem;color:#4a5568;font-style:italic;border-left:3px solid #f59e0b;text-align:left;">
+                ${escapeHtml(quote)}
+            </div>
+            
+            <div style="margin-top:16px;padding-top:12px;border-top:1px solid #f3f4f6;">
+                <div style="font-size:0.85rem;font-weight:700;color:#1a202c;letter-spacing:0.5px;font-family:monospace;">
+                    Receipt #: ${receiptNumber}
+                </div>
+                <div style="font-size:0.5rem;color:#9ca3af;margin-top:4px;">${new Date().toLocaleString()}</div>
+            </div>
         </div>
-        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-          <span style="color:#6b7280;">Payment Method</span>
-          <span style="font-weight:600;">${txType === 'deposit' ? 'Deposit' : txTypeUpper}</span>
+        `;
+    }
+
+    // ----- Modal rendering with new buttons -----
+    const receiptHTML = buildReceiptHTML();
+    const modal = document.createElement('div');
+    modal.className = 'ov on';
+    modal.style.zIndex = '20020';
+    modal.innerHTML = `
+        <div class="bs" style="max-width:420px;padding:0;overflow:hidden;border-radius:24px 24px 0 0;display:flex;flex-direction:column;max-height:90vh;">
+            <div style="background:#fff;padding:20px 24px 12px;overflow-y:auto;flex:1;min-height:0;">${receiptHTML}</div>
+            <div style="background:#fff;padding:12px 20px 20px;display:flex;flex-direction:column;gap:8px;flex-shrink:0;border-top:1px solid #f3f4f6;">
+                <button id="receipt-whatsapp" style="width:100%;padding:11px;border:none;border-radius:10px;background:#25D366;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;">
+                    💬 Send on WhatsApp
+                </button>
+                <button id="receipt-copy-pc" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;">
+                    📋 Copy Image (PC)
+                </button>
+                <button id="receipt-save-only" style="width:100%;padding:11px;border:none;border-radius:10px;background:#6d28d9;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:8px;">
+                    💾 Save Without Sharing
+                </button>
+                <button id="receipt-cancel" style="width:100%;padding:9px;border:1px solid #e5e7eb;border-radius:10px;background:transparent;color:#6b7280;font-size:0.8rem;font-weight:600;cursor:pointer;font-family:inherit;">✕ Cancel</button>
+            </div>
         </div>
-        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-          <span style="color:#6b7280;">Date & Time</span>
-          <span style="font-weight:600;">${dateLabel}, ${timeLabel}</span>
-        </div>
-        <!-- Remaining Loan Balance (Overall) -->
-        <div style="display:flex;justify-content:space-between;padding:6px 0;background:#e8f4fd;border-radius:6px;padding:8px 12px;margin:6px 0;border:1px solid #06b6d4;">
-          <span style="color:#0e7490;font-weight:700;">💰 Remaining Loan Balance</span>
-          <span style="color:#0e7490;font-weight:900;">UGX ${displayLoanBalance.toLocaleString()}</span>
-        </div>
-        ${(txType === 'deposit' && description) ? `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;"><span style="color:#6b7280;">Note</span><span style="font-weight:600;">${escapeHtml(description)}</span></div>` : ''}
-      </div>
-      
-      <!-- Quote -->
-      <div style="margin-top:14px;padding:10px;background:#f7fafc;border-radius:8px;font-size:0.75rem;color:#4a5568;font-style:italic;border-left:3px solid #f59e0b;text-align:left;">
-        ${escapeHtml(quote)}
-      </div>
-      
-      <!-- Footer with Bigger Receipt Number -->
-      <div style="margin-top:16px;padding-top:12px;border-top:1px solid #f3f4f6;">
-        <div style="font-size:0.85rem;font-weight:700;color:#1a202c;letter-spacing:0.5px;font-family:monospace;">
-          Receipt #: ${receiptNumber}
-        </div>
-        <div style="font-size:0.5rem;color:#9ca3af;margin-top:4px;">${new Date().toLocaleString()}</div>
-      </div>
-    </div>
     `;
-  }
+    document.body.appendChild(modal);
 
-  // ----- Modal rendering -----
-  const receiptHTML = buildReceiptHTML();
-  const modal = document.createElement('div');
-  modal.className = 'ov on';
-  modal.style.zIndex = '20020';
-  modal.innerHTML = `
-    <div class="bs" style="max-width:420px;padding:0;overflow:hidden;border-radius:24px 24px 0 0;display:flex;flex-direction:column;max-height:90vh;">
-      <div style="background:#fff;padding:20px 24px 12px;overflow-y:auto;flex:1;min-height:0;">${receiptHTML}</div>
-      <div style="background:#fff;padding:12px 20px 20px;display:flex;flex-direction:column;gap:8px;flex-shrink:0;border-top:1px solid #f3f4f6;">
-        <button id="receipt-copy-pc" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;">💻 Copy Image (PC)</button>
-        <button id="receipt-copy-phone" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;">📱 Send Image (Phone)</button>
-        <button id="receipt-save-only" style="width:100%;padding:11px;border:none;border-radius:10px;background:#6d28d9;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;">✅ Save Without Sharing</button>
-        <button id="receipt-print" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;">🖨️ Print</button>
-        <button id="receipt-cancel" style="width:100%;padding:9px;border:none;border-radius:10px;background:#f3f4f6;color:#6b7280;font-size:0.8rem;font-weight:600;cursor:pointer;">✕ Cancel</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
+    // ----- Button Handlers -----
+    const receiptElement = modal.querySelector('#receipt-content');
+    const closeModal = () => {
+        modal.classList.remove('on');
+        setTimeout(() => modal.remove(), 300);
+    };
 
-  // ----- Button handlers (same as before) -----
-  const receiptElement = modal.querySelector('#receipt-content');
-  const closeModal = () => {
-    modal.classList.remove('on');
-    setTimeout(() => modal.remove(), 300);
-  };
-
-  const performSave = async () => {
-    if (typeof onSave === 'function') {
-      const success = await onSave();
-      if (!success) {
-        toast('Failed to save transaction', '#ef4444');
-        return false;
-      }
+    // Helper: generate image blob
+    async function getReceiptBlob() {
+        const data = await renderElementToImage(receiptElement);
+        if (!data) { toast('Failed to generate receipt image', '#ef4444'); return null; }
+        return await (await fetch(data)).blob();
     }
-    return true;
-  };
 
-  document.querySelector('#receipt-copy-pc').onclick = async () => {
-    const saved = await performSave();
-    if (!saved) return;
-    const data = await renderElementToImage(receiptElement);
-    if (!data) { toast('Failed', '#ef4444'); return; }
-    try {
-      const blob = await (await fetch(data)).blob();
-      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-      toast('📋 Copied!', '#06b6d4');
-    } catch (err) {
-      const blob = await (await fetch(data)).blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'receipt.png'; a.click();
-      URL.revokeObjectURL(url);
-      toast('📸 Downloaded', '#f59e0b');
+    // 1. WhatsApp Share
+    document.querySelector('#receipt-whatsapp').onclick = async () => {
+        const blob = await getReceiptBlob();
+        if (!blob) return;
+
+        // Format member phone number for WhatsApp
+        let phone = member?.phone || '';
+        let formattedPhone = phone.replace(/\D/g, '');
+        if (formattedPhone.startsWith('0')) {
+            formattedPhone = '256' + formattedPhone.slice(1);
+        }
+        if (!formattedPhone.startsWith('256')) {
+            formattedPhone = '256' + formattedPhone;
+        }
+
+        // Try native share (mobile)
+        if (navigator.share) {
+            try {
+                const file = new File([blob], 'receipt.png', { type: 'image/png' });
+                await navigator.share({
+                    title: 'Receipt',
+                    text: `Receipt for ${member?.name}`,
+                    files: [file]
+                });
+                toast('✅ Shared successfully!', '#10b981');
+                closeModal();
+                if (onConfirmSend) onConfirmSend();
+                return;
+            } catch (e) {
+                if (e.name !== 'AbortError') {
+                    console.warn('Share failed, falling back to WhatsApp link', e);
+                } else {
+                    return; // User cancelled
+                }
+            }
+        }
+
+        // Fallback: open WhatsApp with a pre-filled message (image not possible via wa.me)
+        // Instead, we'll generate a data URL and create a downloadable link that user can attach manually.
+        const dataUrl = await renderElementToImage(receiptElement);
+        if (!dataUrl) { toast('Failed', '#ef4444'); return; }
+
+        // Open WhatsApp with a message
+        const message = `🌾 *Harvest Trust Finance* 🌾\n\n📄 *Receipt*\nMember: ${member?.name}\nAmount: UGX ${safeAmount.toLocaleString()}\nDate: ${new Date().toLocaleString()}\nReceipt #: ${receiptNumber}`;
+        const waUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`;
+        window.open(waUrl, '_blank');
+
+        // Also download the image (user can attach manually)
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = `receipt_${receiptNumber}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(dataUrl), 5000);
+
+        toast('💬 WhatsApp opened. Image downloaded – attach it manually.', '#25D366');
+        closeModal();
+        if (onConfirmSend) onConfirmSend();
+    };
+
+    // 2. Copy Image (PC)
+    document.querySelector('#receipt-copy-pc').onclick = async () => {
+        const blob = await getReceiptBlob();
+        if (!blob) return;
+        try {
+            await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+            toast('📋 Image copied to clipboard!', '#06b6d4');
+        } catch (err) {
+            // Fallback download
+            const dataUrl = await renderElementToImage(receiptElement);
+            if (!dataUrl) { toast('Failed', '#ef4444'); return; }
+            const a = document.createElement('a');
+            a.href = dataUrl;
+            a.download = `receipt_${receiptNumber}.png`;
+            a.click();
+            toast('📸 Image downloaded', '#f59e0b');
+        }
+        closeModal();
+        if (onConfirmSend) onConfirmSend();
+    };
+
+    // 3. Save Without Sharing
+    document.querySelector('#receipt-save-only').onclick = async () => {
+        const saved = await performSave();
+        if (!saved) return;
+        closeModal();
+        if (onConfirmNoSend) onConfirmNoSend();
+        toast('✅ Saved', '#10b981');
+    };
+
+    // 4. Cancel
+    document.querySelector('#receipt-cancel').onclick = () => {
+        closeModal();
+        if (onCancel) onCancel();
+        toast('Cancelled', '#ff0000');
+    };
+
+    // Helper: perform save action (if any)
+    async function performSave() {
+        if (typeof onSave === 'function') {
+            const success = await onSave();
+            if (!success) {
+                toast('Failed to save transaction', '#ef4444');
+                return false;
+            }
+        }
+        return true;
     }
-    closeModal();
-    if (onConfirmSend) onConfirmSend();
-  };
-
-  document.querySelector('#receipt-copy-phone').onclick = async () => {
-    const saved = await performSave();
-    if (!saved) return;
-    await shareReceiptImage(receiptElement, 'Transaction Receipt', `UGX ${safeAmount.toLocaleString()}`, 'receipt.png');
-    closeModal();
-    if (onConfirmSend) onConfirmSend();
-  };
-
-  document.querySelector('#receipt-save-only').onclick = async () => {
-    const saved = await performSave();
-    if (!saved) return;
-    closeModal();
-    if (onConfirmNoSend) onConfirmNoSend();
-    toast('✅ Saved', '#10b981');
-  };
-
-  document.querySelector('#receipt-print').onclick = async () => {
-    const saved = await performSave();
-    if (!saved) return;
-    const data = await renderElementToImage(receiptElement);
-    if (!data) { toast('Failed', '#ef4444'); return; }
-    const w = window.open('', '_blank');
-    w.document.write(`<!DOCTYPE html><html><head><title>Receipt</title><style>body{margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff;}img{max-width:100%;}</style></head><body><img src="${data}"></body></html>`);
-    w.document.close(); w.focus(); w.print();
-    closeModal();
-    if (onPrint) onPrint();
-  };
-
-  document.querySelector('#receipt-cancel').onclick = () => {
-    closeModal();
-    if (onCancel) onCancel();
-    toast('Cancelled', '#ff0000');
-  };
 };
+
 // Simple fallback canvas generator (if html2canvas fails) – you can reuse the old canvas function
 function generateSimpleReceiptFallback(member, txType, amount, description, accountBalance, appBalance, projectedRemainingLoan, prepaidBalance) {
   try {
@@ -13632,144 +13791,171 @@ function generateSimpleReceiptFallback(member, txType, amount, description, acco
 }
 
 window.showDebtReceiptModal = function(member, principal, interestRate, interest, totalRepay, reason, dueDate, onConfirmSend, onConfirmNoSend, onCancel) {
-  const safePrincipal = Number(principal) || 0;
-  const safeInterest = Number(interest) || 0;
-  const safeTotal = Number(totalRepay) || 0;
-  computePots();
+    const safePrincipal = Number(principal) || 0;
+    const safeInterest = Number(interest) || 0;
+    const safeTotal = Number(totalRepay) || 0;
+    computePots();
 
-  const existingLoan = memberLoans[member?.phone] || 0;
-  const totalLoanAfter = existingLoan + safeTotal;
-  const dueDateLabel = new Date(dueDate).toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' });
-  const receiptNumber = generateReceiptNumber();
-  const quote = getReceiptQuote(member);
+    const existingLoan = memberLoans[member?.phone] || 0;
+    const totalLoanAfter = existingLoan + safeTotal;
+    const dueDateLabel = new Date(dueDate).toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' });
+    const receiptNumber = generateReceiptNumber();
+    const quote = getReceiptQuote(member);
 
-  function buildReceiptHTML() {
-    return `
-    <div id="receipt-content" style="max-width:360px;margin:0 auto;background:#ffffff;border-radius:24px;padding:24px 20px 20px;font-family:'DM Sans',sans-serif;text-align:center;color:#111827;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
-      <!-- App Name (Bigger) -->
-      <div style="font-size:1.1rem;font-weight:900;color:#111827;letter-spacing:-0.5px;">🌾 Harvest Trust Finance</div>
-      <div style="width:40px;height:3px;background:#f59e0b;margin:8px auto 12px;border-radius:99px;"></div>
-      
-      <!-- MAIN TRANSACTION (Big font) -->
-      <div style="font-size:2.8rem;font-weight:900;color:#ef4444;line-height:1.2;margin:8px 0;">UGX ${safeTotal.toLocaleString()}</div>
-      <div style="font-size:0.75rem;color:#9ca3af;font-weight:600;margin-bottom:16px;">Debt Assigned</div>
-      
-      <div style="border-top:1px solid #f3f4f6;margin-bottom:14px;"></div>
-      
-      <!-- Details Grid -->
-      <div style="text-align:left;font-size:0.85rem;">
-        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-          <span style="color:#6b7280;">Member</span>
-          <span style="font-weight:600;">${escapeHtml(member?.name || 'Unknown')}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-          <span style="color:#6b7280;">Principal</span>
-          <span style="font-weight:600;">UGX ${safePrincipal.toLocaleString()}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-          <span style="color:#6b7280;">Interest (${interestRate}%)</span>
-          <span style="font-weight:600;">UGX ${safeInterest.toLocaleString()}</span>
-        </div>
-        <!-- Overall Loan Balance -->
-        <div style="display:flex;justify-content:space-between;padding:6px 0;background:#fef3c7;border-radius:6px;padding:8px 12px;margin:6px 0;border:1px solid #f59e0b;">
-          <span style="color:#92400e;font-weight:700;">💰 Total Loan Balance</span>
-          <span style="color:#92400e;font-weight:900;">UGX ${totalLoanAfter.toLocaleString()}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-          <span style="color:#6b7280;">Reason</span>
-          <span style="font-weight:600;">${escapeHtml(reason || 'N/A')}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;padding:6px 0;">
-          <span style="color:#6b7280;">Due Date</span>
-          <span style="font-weight:600;color:#0891b2;">${dueDateLabel}</span>
-        </div>
-      </div>
-      
-      <!-- Quote -->
-      <div style="margin-top:14px;padding:10px;background:#f7fafc;border-radius:8px;font-size:0.75rem;color:#4a5568;font-style:italic;border-left:3px solid #f59e0b;text-align:left;">
-        ${escapeHtml(quote)}
-      </div>
-      
-      <!-- Footer with Bigger Receipt Number -->
-      <div style="margin-top:16px;padding-top:12px;border-top:1px solid #f3f4f6;">
-        <div style="font-size:0.85rem;font-weight:700;color:#1a202c;letter-spacing:0.5px;font-family:monospace;">
-          Receipt #: ${receiptNumber}
-        </div>
-        <div style="font-size:0.5rem;color:#9ca3af;margin-top:4px;">${new Date().toLocaleString()}</div>
-      </div>
-    </div>
-    `;
-  }
+    const now = Date.now();
+    const daysUntilDue = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24));
+    const nextPaymentDisplay = daysUntilDue <= 0 ? 'Overdue' : `in ${daysUntilDue} day${daysUntilDue > 1 ? 's' : ''} (${dueDateLabel})`;
 
-  // ----- Modal rendering (same as before, just using the new HTML) -----
-  const receiptHTML = buildReceiptHTML();
-  const modal = document.createElement('div');
-  modal.className = 'ov on';
-  modal.style.zIndex = '20020';
-  modal.innerHTML = `
-    <div class="bs" style="max-width:420px;padding:0;overflow:hidden;border-radius:24px 24px 0 0;display:flex;flex-direction:column;max-height:90vh;">
-      <div style="background:#fff;padding:20px 24px 12px;overflow-y:auto;flex:1;min-height:0;">${receiptHTML}</div>
-      <div style="background:#fff;padding:12px 20px 20px;display:flex;flex-direction:column;gap:8px;flex-shrink:0;border-top:1px solid #f3f4f6;">
-        <button id="debt-confirm-send-pc" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;">💻 Copy Image (PC)</button>
-        <button id="debt-confirm-send-phone" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;">📱 Send Image (Phone)</button>
-        <button id="debt-confirm-nosend" style="width:100%;padding:11px;border:none;border-radius:10px;background:#6d28d9;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;">✅ Save Without Sharing</button>
-        <button id="debt-print" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;">🖨️ Print</button>
-        <button id="debt-cancel" style="width:100%;padding:9px;border:none;border-radius:10px;background:#f3f4f6;color:#6b7280;font-size:0.8rem;font-weight:600;cursor:pointer;">✕ Cancel</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
-
-  // ----- Button event listeners (same as before) -----
-  const receiptElement = modal.querySelector('#receipt-content');
-  const closeModal = () => { modal.classList.remove('on'); setTimeout(() => modal.remove(), 300); };
-
-  document.querySelector('#debt-confirm-send-pc').onclick = async () => {
-    const data = await renderElementToImage(receiptElement);
-    if (!data) { toast('Failed', '#ef4444'); return; }
-    try {
-      const blob = await (await fetch(data)).blob();
-      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-      toast('📋 Copied!', '#06b6d4');
-    } catch (err) {
-      const blob = await (await fetch(data)).blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'debt_receipt.png'; a.click();
-      URL.revokeObjectURL(url);
-      toast('📸 Downloaded', '#f59e0b');
+    function buildReceiptHTML() {
+        return `
+        <div id="receipt-content" style="max-width:360px;margin:0 auto;background:#ffffff;border-radius:24px;padding:24px 20px 20px;font-family:'DM Sans',sans-serif;text-align:center;color:#111827;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+            <div style="font-size:1.1rem;font-weight:900;color:#111827;letter-spacing:-0.5px;">🌾 Harvest Trust Finance</div>
+            <div style="width:40px;height:3px;background:#f59e0b;margin:8px auto 12px;border-radius:99px;"></div>
+            
+            <div style="font-size:2.8rem;font-weight:900;color:#ef4444;line-height:1.2;margin:8px 0;">UGX ${safeTotal.toLocaleString()}</div>
+            <div style="font-size:0.75rem;color:#9ca3af;font-weight:600;margin-bottom:16px;">Debt Assigned</div>
+            
+            <div style="border-top:1px solid #f3f4f6;margin-bottom:14px;"></div>
+            
+            <div style="text-align:left;font-size:0.85rem;">
+                <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                    <span style="color:#6b7280;">Member</span>
+                    <span style="font-weight:600;">${escapeHtml(member?.name || 'Unknown')}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                    <span style="color:#6b7280;">Principal</span>
+                    <span style="font-weight:600;">UGX ${safePrincipal.toLocaleString()}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                    <span style="color:#6b7280;">Interest (${interestRate}%)</span>
+                    <span style="font-weight:600;">UGX ${safeInterest.toLocaleString()}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:6px 0;background:#fef3c7;border-radius:6px;padding:8px 12px;margin:6px 0;border:1px solid #f59e0b;">
+                    <span style="color:#92400e;font-weight:700;">💰 Total Loan Balance</span>
+                    <span style="color:#92400e;font-weight:900;">UGX ${totalLoanAfter.toLocaleString()}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:6px 0;background:#e8f4fd;border-radius:6px;padding:8px 12px;margin:6px 0;border:1px solid #06b6d4;">
+                    <span style="color:#0e7490;font-weight:700;">📅 Next Payment Due</span>
+                    <span style="color:#0e7490;font-weight:900;">${nextPaymentDisplay}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                    <span style="color:#6b7280;">Reason</span>
+                    <span style="font-weight:600;">${escapeHtml(reason || 'N/A')}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:6px 0;">
+                    <span style="color:#6b7280;">Due Date</span>
+                    <span style="font-weight:600;color:#0891b2;">${dueDateLabel}</span>
+                </div>
+            </div>
+            
+            <div style="margin-top:14px;padding:10px;background:#f7fafc;border-radius:8px;font-size:0.75rem;color:#4a5568;font-style:italic;border-left:3px solid #f59e0b;text-align:left;">
+                ${escapeHtml(quote)}
+            </div>
+            
+            <div style="margin-top:16px;padding-top:12px;border-top:1px solid #f3f4f6;">
+                <div style="font-size:0.85rem;font-weight:700;color:#1a202c;letter-spacing:0.5px;font-family:monospace;">
+                    Receipt #: ${receiptNumber}
+                </div>
+                <div style="font-size:0.5rem;color:#9ca3af;margin-top:4px;">${new Date().toLocaleString()}</div>
+            </div>
+        </div>
+        `;
     }
-    closeModal();
-    if (onConfirmSend) onConfirmSend();
-  };
 
-  document.querySelector('#debt-confirm-send-phone').onclick = async () => {
-    await shareReceiptImage(receiptElement, 'Debt Assignment', `UGX ${safeTotal.toLocaleString()}`, 'debt_receipt.png');
-    closeModal();
-    if (onConfirmSend) onConfirmSend();
-  };
+    // ----- Modal with new buttons -----
+    const receiptHTML = buildReceiptHTML();
+    const modal = document.createElement('div');
+    modal.className = 'ov on';
+    modal.style.zIndex = '20020';
+    modal.innerHTML = `
+        <div class="bs" style="max-width:420px;padding:0;overflow:hidden;border-radius:24px 24px 0 0;display:flex;flex-direction:column;max-height:90vh;">
+            <div style="background:#fff;padding:20px 24px 12px;overflow-y:auto;flex:1;min-height:0;">${receiptHTML}</div>
+            <div style="background:#fff;padding:12px 20px 20px;display:flex;flex-direction:column;gap:8px;flex-shrink:0;border-top:1px solid #f3f4f6;">
+                <button id="debt-whatsapp" style="width:100%;padding:11px;border:none;border-radius:10px;background:#25D366;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">💬 Send on WhatsApp</button>
+                <button id="debt-copy-pc" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">📋 Copy Image (PC)</button>
+                <button id="debt-save-only" style="width:100%;padding:11px;border:none;border-radius:10px;background:#6d28d9;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">💾 Save Without Sharing</button>
+                <button id="debt-cancel" style="width:100%;padding:9px;border:1px solid #e5e7eb;border-radius:10px;background:transparent;color:#6b7280;font-size:0.8rem;font-weight:600;cursor:pointer;">✕ Cancel</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
 
-  document.querySelector('#debt-confirm-nosend').onclick = () => {
-    closeModal();
-    if (onConfirmNoSend) onConfirmNoSend();
-    toast('✅ Saved', '#10b981');
-  };
+    const receiptElement = modal.querySelector('#receipt-content');
+    const closeModal = () => {
+        modal.classList.remove('on');
+        setTimeout(() => modal.remove(), 300);
+    };
 
-  document.querySelector('#debt-print').onclick = async () => {
-    const data = await renderElementToImage(receiptElement);
-    if (!data) { toast('Failed', '#ef4444'); return; }
-    const w = window.open('', '_blank');
-    w.document.write(`<!DOCTYPE html><html><head><title>Debt Receipt</title><style>body{margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff;}img{max-width:100%;}</style></head><body><img src="${data}"></body></html>`);
-    w.document.close(); w.focus(); w.print();
-    closeModal();
-  };
+    async function getReceiptBlob() {
+        const data = await renderElementToImage(receiptElement);
+        if (!data) { toast('Failed to generate receipt image', '#ef4444'); return null; }
+        return await (await fetch(data)).blob();
+    }
 
-  document.querySelector('#debt-cancel').onclick = () => {
-    closeModal();
-    if (onCancel) onCancel();
-    toast('Cancelled', '#ff0000');
-  };
+    document.querySelector('#debt-whatsapp').onclick = async () => {
+        const blob = await getReceiptBlob();
+        if (!blob) return;
+        let phone = member?.phone || '';
+        let formattedPhone = phone.replace(/\D/g, '');
+        if (formattedPhone.startsWith('0')) formattedPhone = '256' + formattedPhone.slice(1);
+        if (!formattedPhone.startsWith('256')) formattedPhone = '256' + formattedPhone;
+
+        if (navigator.share) {
+            try {
+                const file = new File([blob], 'debt_receipt.png', { type: 'image/png' });
+                await navigator.share({ title: 'Debt Receipt', text: `Debt receipt for ${member?.name}`, files: [file] });
+                toast('✅ Shared!', '#10b981');
+                closeModal();
+                if (onConfirmSend) onConfirmSend();
+                return;
+            } catch (e) { if (e.name === 'AbortError') return; }
+        }
+
+        const dataUrl = await renderElementToImage(receiptElement);
+        if (!dataUrl) { toast('Failed', '#ef4444'); return; }
+        const message = `🌾 *Harvest Trust Finance* 🌾\n\n📄 *Debt Receipt*\nMember: ${member?.name}\nAmount: UGX ${safeTotal.toLocaleString()}\nDue: ${dueDateLabel}\nReceipt #: ${receiptNumber}`;
+        window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = `debt_${receiptNumber}.png`;
+        a.click();
+        toast('💬 WhatsApp opened. Image downloaded – attach manually.', '#25D366');
+        closeModal();
+        if (onConfirmSend) onConfirmSend();
+    };
+
+    document.querySelector('#debt-copy-pc').onclick = async () => {
+        const blob = await getReceiptBlob();
+        if (!blob) return;
+        try {
+            await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+            toast('📋 Copied!', '#06b6d4');
+        } catch {
+            const dataUrl = await renderElementToImage(receiptElement);
+            if (!dataUrl) { toast('Failed', '#ef4444'); return; }
+            const a = document.createElement('a');
+            a.href = dataUrl;
+            a.download = `debt_${receiptNumber}.png`;
+            a.click();
+            toast('📸 Downloaded', '#f59e0b');
+        }
+        closeModal();
+        if (onConfirmSend) onConfirmSend();
+    };
+
+    document.querySelector('#debt-save-only').onclick = () => {
+        closeModal();
+        if (onConfirmNoSend) onConfirmNoSend();
+        toast('✅ Saved', '#10b981');
+    };
+
+    document.querySelector('#debt-cancel').onclick = () => {
+        closeModal();
+        if (onCancel) onCancel();
+        toast('Cancelled', '#ff0000');
+    };
 };
+
 // ==========================================
 // DEBT ASSIGNMENT RECEIPT - PHONE STYLE
 // ==========================================
