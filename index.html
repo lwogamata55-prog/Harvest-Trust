@@ -262,6 +262,15 @@
   0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0.2); }
   50% { box-shadow: 0 0 20px 4px rgba(245,158,11,0.1); }
 }
+.weekly-receiver-card,
+.receiver-name,
+.payout-date-value,
+.payout-countdown .countdown-text,
+.payout-progress-fill {
+    will-change: transform, opacity;
+    backface-visibility: hidden;
+    transform: translateZ(0);
+}
 .weekly-receiver-card {
   animation: pulseGlow 3s ease-in-out infinite;
 }
@@ -2004,7 +2013,12 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
 /* ──────────────────────────────────────────────────────── */
 /* HOME PAGE – NO SCROLLING, COMPACT LAYOUT              */
 /* ──────────────────────────────────────────────────────── */
-
+#t-home {
+    overflow: hidden !important;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
 #t-home {
   display: flex !important;
   flex-direction: column;
@@ -2306,13 +2320,15 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 .payout-progress-fill {
-  height: 100%;
-  border-radius: 99px;
-  background: linear-gradient(90deg, var(--gold), var(--teal), var(--purple));
-  background-size: 200% 100%;
-  animation: progressShimmer 2s linear infinite;
-  transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1);
-  width: 0%;
+    height: 100%;
+    border-radius: 99px;
+    background: linear-gradient(90deg, var(--gold), var(--teal), var(--purple));
+    background-size: 200% 100%;
+    animation: progressShimmer 2s linear infinite;
+    transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+    transform: scaleX(0);
+    transform-origin: left center;
+    will-change: transform;
 }
 .payout-progress-label {
   font-size: 0.55rem;
@@ -4972,28 +4988,6 @@ function loadChatCache(userId) {
     return null;
   }
 }
-// ── Receiver cycle animation ──────────────────────────────────────────────
-let _receiverTimer = null;
-let _receiverCycleIdx = 0;
-
-function startReceiverAnimation() {
-    // Clear any existing timers
-    if (window._countdownTimer) {
-        clearInterval(window._countdownTimer);
-        window._countdownTimer = null;
-    }
-
-    // Update the display immediately
-    updateReceiverDisplay();
-
-    // Start a single interval for countdown updates (every 2 seconds)
-    window._countdownTimer = setInterval(function() {
-        // Only update if we're on the home tab
-        if (currentScreen === 'home') {
-            updatePayoutDateAndCountdown();
-        }
-    }, 2000);
-}
 
 function updateReceiverDisplay() {
     const nameEl = document.getElementById('weekly-payee-name');
@@ -5050,78 +5044,104 @@ function updateReceiverDisplay() {
     updatePayoutDateAndCountdown();
 }
 
-// ── Optimized countdown updater (reduces DOM writes) ──
-const _cache = {
+// ──────────────────────────────────────────────────────────────
+// OPTIMIZED RECEIVER CARD – NO BLINKING
+// ──────────────────────────────────────────────────────────────
+
+// Cache DOM elements once
+const _homeCache = {
+    nameEl: null,
+    infoEl: null,
     dateEl: null,
     textEl: null,
     fillEl: null,
     labelEl: null,
+    progressTrack: null,
     lastDate: '',
     lastText: '',
-    lastProgress: '',
+    lastProgress: 0,
     lastLabel: ''
 };
 
-function getCachedElements() {
-    if (!_cache.dateEl) {
-        _cache.dateEl = document.getElementById('payout-exact-date');
-        _cache.textEl = document.getElementById('payout-countdown-text');
-        _cache.fillEl = document.getElementById('payout-progress-fill');
-        _cache.labelEl = document.getElementById('payout-progress-label');
+function getHomeElements() {
+    if (!_homeCache.nameEl) {
+        _homeCache.nameEl = document.getElementById('weekly-payee-name');
+        _homeCache.infoEl = document.getElementById('payout-rotation-info');
+        _homeCache.dateEl = document.getElementById('payout-exact-date');
+        _homeCache.textEl = document.getElementById('payout-countdown-text');
+        _homeCache.fillEl = document.getElementById('payout-progress-fill');
+        _homeCache.labelEl = document.getElementById('payout-progress-label');
+        _homeCache.progressTrack = document.querySelector('.payout-progress-track');
     }
-    return _cache;
+    return _homeCache;
 }
 
+// ── Countdown updater (runs every 3 seconds) ──
 function updatePayoutDateAndCountdown() {
-    const dateEl = document.getElementById('payout-exact-date');
-    const textEl = document.getElementById('payout-countdown-text');
-    const fillEl = document.getElementById('payout-progress-fill');
-    const labelEl = document.getElementById('payout-progress-label');
-
-    if (!dateEl) return; // not on home tab
+    const { dateEl, textEl, fillEl, labelEl } = getHomeElements();
+    if (!dateEl) return;
 
     const now = Date.now();
-    let nextPayout = getNextPayoutDate();
+    const nextPayout = getNextPayoutDate();
 
-    // Validate the nextPayout date
-    if (!nextPayout || isNaN(nextPayout) || nextPayout < now - 86400000) {
-        // If invalid, fallback to today + 7 days
-        nextPayout = now + (7 * 24 * 60 * 60 * 1000);
-    }
-
-    // Format exact date
+    // 1. Date (only update if changed)
     const dateStr = new Date(nextPayout).toLocaleDateString('en-UG', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
     });
     if (dateEl.textContent !== dateStr) {
         dateEl.textContent = dateStr;
     }
 
-    // Countdown
+    // 2. Countdown text (only update if changed)
     const countdown = getPayoutCountdown(now, nextPayout);
-    if (textEl) {
-        if (textEl.textContent !== countdown.text) {
-            textEl.textContent = countdown.text;
-            textEl.className = 'countdown-text ' + countdown.className;
-        }
+    if (textEl.textContent !== countdown.text) {
+        textEl.textContent = countdown.text;
+        textEl.className = 'countdown-text ' + countdown.className;
     }
 
-    // Progress bar
-    if (fillEl) {
-        const newWidth = countdown.progress + '%';
-        if (fillEl.style.width !== newWidth) {
-            fillEl.style.width = newWidth;
-        }
+    // 3. Progress bar (use transform: scaleX, only update when significant change)
+    const newProgress = countdown.progress;
+    if (Math.abs(newProgress - _homeCache.lastProgress) > 0.5) { // update if > 0.5% change
+        // Use transform: scaleX for GPU acceleration
+        const scaleX = newProgress / 100;
+        fillEl.style.transform = `scaleX(${scaleX})`;
+        fillEl.style.transformOrigin = 'left center';
+        _homeCache.lastProgress = newProgress;
     }
-    if (labelEl) {
-        if (labelEl.textContent !== countdown.label) {
-            labelEl.textContent = countdown.label;
-        }
+
+    // 4. Label (only update if changed)
+    if (labelEl.textContent !== countdown.label) {
+        labelEl.textContent = countdown.label;
     }
 }
+
+// ── Main timer ──
+function startReceiverAnimation() {
+    stopHomeTimers();
+    // Update immediately
+    updateReceiverDisplay();
+    updatePayoutDateAndCountdown();
+
+    // Run every 3 seconds (reduces CPU usage)
+    window._countdownTimer = setInterval(function() {
+        // Only update if tab is visible and we're on home
+        if (!document.hidden && currentScreen === 'home') {
+            updatePayoutDateAndCountdown();
+        }
+    }, 3000);
+}
+
+function stopHomeTimers() {
+    if (window._countdownTimer) {
+        clearInterval(window._countdownTimer);
+        window._countdownTimer = null;
+    }
+    if (receiverTypingTimer) {
+        clearTimeout(receiverTypingTimer);
+        receiverTypingTimer = null;
+    }
+}
+
 // ── isLedgerActive helper ─────────────────────────────────────────────────
 function isLedgerActive() {
   if (currentScreen === 'ledger') return true;
@@ -18910,56 +18930,60 @@ function stopMaintenanceTimer() {
 // ═══════════════════════════════════════════════════════
 // TYPING ANIMATION FOR WEEKLY RECEIVER
 // ═══════════════════════════════════════════════════════
-
 let receiverTypingTimer = null;
 let receiverCharIndex = 0;
 let currentTypingName = '';
+let typingRAF = null;
 
 function typeReceiverName(name) {
-  const nameEl = document.getElementById('weekly-payee-name');
-  if (!nameEl) return;
+    const nameEl = document.getElementById('weekly-payee-name');
+    if (!nameEl) return;
 
-  // If no name, show placeholder
-  if (!name) {
-    nameEl.textContent = '—';
-    return;
-  }
-
-  // If the name changed mid-animation, reset everything
-  if (currentTypingName !== name) {
-    currentTypingName = name;
-    receiverCharIndex = 0;
-    if (receiverTypingTimer) {
-      clearTimeout(receiverTypingTimer);
-      receiverTypingTimer = null;
+    if (!name) {
+        nameEl.textContent = '—';
+        return;
     }
-    nameEl.textContent = '';
-  }
 
-  // If we've typed the full name, wait 5 seconds then restart
-  if (receiverCharIndex >= name.length) {
-    if (!receiverTypingTimer) {
-      receiverTypingTimer = setTimeout(() => {
-        // Reset and start again
+    // If name changed, reset
+    if (currentTypingName !== name) {
+        currentTypingName = name;
         receiverCharIndex = 0;
+        if (receiverTypingTimer) {
+            clearTimeout(receiverTypingTimer);
+            receiverTypingTimer = null;
+        }
+        if (typingRAF) cancelAnimationFrame(typingRAF);
         nameEl.textContent = '';
-        receiverTypingTimer = null;
-        typeReceiverName(name);
-      }, 5000); // 5-second pause
     }
-    return;
-  }
 
-  // Type the next character (preserve spaces)
-  nameEl.textContent = name.substring(0, receiverCharIndex + 1);
-  receiverCharIndex++;
+    // Full name displayed? Wait 5 seconds then restart
+    if (receiverCharIndex >= name.length) {
+        if (!receiverTypingTimer) {
+            receiverTypingTimer = setTimeout(() => {
+                receiverCharIndex = 0;
+                nameEl.textContent = '';
+                receiverTypingTimer = null;
+                requestAnimationFrame(() => typeReceiverName(name));
+            }, 5000);
+        }
+        return;
+    }
 
-  // Schedule the next character (100ms per letter)
-  const delay = 100;
-  receiverTypingTimer = setTimeout(() => {
-    receiverTypingTimer = null;
-    typeReceiverName(name);
-  }, delay);
+    // Type next character
+    const newText = name.substring(0, receiverCharIndex + 1);
+    if (nameEl.textContent !== newText) {
+        nameEl.textContent = newText;
+    }
+    receiverCharIndex++;
+
+    // Schedule next character with requestAnimationFrame
+    if (typingRAF) cancelAnimationFrame(typingRAF);
+    typingRAF = requestAnimationFrame(() => {
+        receiverTypingTimer = setTimeout(() => {
+            receiverTypingTimer = null;
+            typeReceiverName(name);
+        }, 120); // 120ms per character
+    });
 }
 
 function updateTimerDisplay() {
@@ -21010,6 +21034,55 @@ window._adminChatName = 'Admin';     // admin display name
     wireNav();
   }
 })();
+// ──────────────────────────────────────────────────────────────
+// TAB VISIBILITY – Pause timers when tab is hidden (Android fix)
+// ──────────────────────────────────────────────────────────────
+
+document.addEventListener('visibilitychange', function() {
+    const homeTab = document.getElementById('t-home');
+    const isHomeActive = homeTab && homeTab.classList.contains('on');
+
+    if (document.hidden) {
+        // ── Tab is hidden – stop all timers ──
+        stopHomeTimers();
+
+        // Cancel any pending typing animation
+        if (typingRAF) {
+            cancelAnimationFrame(typingRAF);
+            typingRAF = null;
+        }
+        if (receiverTypingTimer) {
+            clearTimeout(receiverTypingTimer);
+            receiverTypingTimer = null;
+        }
+
+        console.log('🔇 Home timers paused (tab hidden)');
+    } else {
+        // ── Tab is visible again – restart if on home ──
+        if (isHomeActive && rotation.order && rotation.order.length > 0) {
+            // Restart the countdown timer
+            startReceiverAnimation();
+
+            // Restart typing animation for the current receiver
+            const currentIdx = rotation.currentIndex || 0;
+            const order = rotation.order;
+            if (order[currentIdx]) {
+                const member = members.find(m => m.id === order[currentIdx]);
+                if (member && currentTypingName !== member.name) {
+                    currentTypingName = '';
+                    receiverCharIndex = 0;
+                    if (receiverTypingTimer) {
+                        clearTimeout(receiverTypingTimer);
+                        receiverTypingTimer = null;
+                    }
+                    typeReceiverName(member.name);
+                }
+            }
+
+            console.log('🔄 Home timers resumed (tab visible)');
+        }
+    }
+});
 </script>
 </body>
   </html>
