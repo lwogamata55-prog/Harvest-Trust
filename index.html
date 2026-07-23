@@ -439,16 +439,21 @@ body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;bac
 .bg-orb-1{width:500px;height:500px;background:radial-gradient(circle,rgba(6,182,212,0.08),transparent);top:-150px;right:-150px}
 .bg-orb-2{width:400px;height:400px;background:radial-gradient(circle,rgba(245,158,11,0.07),transparent);bottom:-100px;left:-100px;animation-delay:-5s}
 .bg-orb-3{width:300px;height:300px;background:radial-gradient(circle,rgba(139,92,246,0.06),transparent);top:35%;left:40%;animation-delay:-9s}
-/* Animated gradient background */
+/* Animated gradient background – mobile gets static BG to stop blinking */
 @keyframes gradientShift {
   0% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
   100% { background-position: 0% 50%; }
 }
 body {
-  background: linear-gradient(-45deg, #0a1628, #060e1a, #0f1e36, #060e1a);
-  background-size: 400% 400%;
-  animation: gradientShift 15s ease infinite;
+  background: #060e1a;
+}
+@media (min-width: 769px) {
+  body {
+    background: linear-gradient(-45deg, #0a1628, #060e1a, #0f1e36, #060e1a);
+    background-size: 400% 400%;
+    animation: gradientShift 15s ease infinite;
+  }
 }
 
 /* Floating particles container */
@@ -3473,6 +3478,16 @@ setTimeout(function(){
     </div>
 
     <!-- ════════════════════════════════════════════════════════ -->
+    <!-- WEEKLY HOME PROGRESS – Quick view                      -->
+    <!-- ════════════════════════════════════════════════════════ -->
+    <div id="home-weekly-progress" style="flex-shrink:0;margin:2px 0;padding:6px 8px;background:rgba(255,255,255,0.03);border-radius:10px;border:1px solid rgba(255,255,255,0.05);display:none;">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-size:0.45rem;font-weight:700;color:var(--t3);letter-spacing:1px;">📊 THIS WEEK</div>
+        <div id="home-streak-badge" style="font-size:0.5rem;color:var(--gold);font-weight:700;"></div>
+      </div>
+      <div id="home-week-dots" style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-top:4px;"></div>
+    </div>
+    <!-- ════════════════════════════════════════════════════════ -->
     <!-- PENDING DEPOSIT WARNING – Compact                      -->
     <!-- ════════════════════════════════════════════════════════ -->
     <div id="pending-deposit-list" style="flex-shrink: 0; margin-top: 2px;"></div>
@@ -3569,6 +3584,7 @@ setTimeout(function(){
   <div class="balance-tile">
     <div class="balance-label">💳 Loan Balance</div>   <!-- Changed from "My Debt" -->
     <div class="balance-val" id="account-debt" style="color:var(--red)">UGX 0</div>
+    <div id="loan-schedule-container" style="display:none; margin-top:10px;"></div>
   </div>
   <!-- ===== PREPAID BALANCE - ADD THIS ===== -->
   <div id="account-prepaid" style="display: none; grid-column: span 2;">
@@ -3580,12 +3596,25 @@ setTimeout(function(){
   </div>
 </div>
       </div>
+      <!-- Milestone badges -->
+      <div id="member-badges-row" style="display:none;padding:8px 12px;flex-wrap:wrap;gap:6px;"></div>
+      <!-- Weekly savings progress bar -->
+      <div id="weekly-progress-card" style="display:none;margin:4px 12px 0;padding:10px 12px;background:rgba(255,255,255,0.04);border-radius:14px;border:1px solid rgba(255,255,255,0.07);">
+        <div style="font-size:0.62rem;font-weight:700;color:var(--t3);letter-spacing:1px;margin-bottom:6px;">📊 THIS WEEK'S SAVINGS</div>
+        <div id="weekly-progress-dots" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;"></div>
+        <div id="weekly-streak-label" style="font-size:0.6rem;color:var(--t3);margin-top:4px;text-align:center;"></div>
+      </div>
       <div class="menu-section">
         <div class="menu-item" onclick="openProfileModal()"><span class="menu-icon">👤</span><span class="menu-label">My Profile</span><span class="menu-arrow">›</span></div>
         <div class="menu-item" onclick="openSecurityModal()"><span class="menu-icon">🔐</span><span class="menu-label">Security</span><span class="menu-value" id="account-pin-hint"></span><span class="menu-arrow">›</span></div>
         <div class="menu-item" onclick="openNotificationsModal()"><span class="menu-icon">🔔</span><span class="menu-label">Notifications</span><span class="menu-value" id="notif-count-label" style="color:var(--gold);font-size:0.7rem;font-weight:700;"></span><span class="menu-arrow">›</span></div>
         <div class="menu-item" id="loan-menu-item" onclick="openLoanRequestModal()"><span class="menu-icon">💰</span><span class="menu-label">Request Loan</span><span class="menu-arrow">›</span></div>
         <div class="menu-item" onclick="openHelpModal()"><span class="menu-icon">❓</span><span class="menu-label">Help & Support</span><span class="menu-arrow">›</span></div>
+        <div class="menu-item" onclick="openSavingsCalendar()"><span class="menu-icon">📅</span><span class="menu-label">Savings Calendar</span><span class="menu-arrow">›</span></div>
+        <div class="menu-item" onclick="openProjectionModal()"><span class="menu-icon">📈</span><span class="menu-label">Savings Projection</span><span class="menu-arrow">›</span></div>
+        <div class="menu-item" onclick="openEarlyRepayModal()"><span class="menu-icon">💸</span><span class="menu-label">Repay Loan Early</span><span class="menu-arrow">›</span></div>
+        <div class="menu-item" onclick="openPollsModal()"><span class="menu-icon">🗳️</span><span class="menu-label">Group Polls</span><span class="menu-value" id="polls-badge-label" style="color:var(--gold);font-size:0.7rem;font-weight:700;"></span><span class="menu-arrow">›</span></div>
+        <div class="menu-item" onclick="requestPushPermission()"><span class="menu-icon">🔔</span><span class="menu-label">Enable Push Alerts</span><span class="menu-value" id="push-status-label" style="font-size:0.7rem;font-weight:700;"></span><span class="menu-arrow">›</span></div>
       </div>
       <div class="menu-section">
         <div class="menu-item" onclick="logout()"><span class="menu-icon">🚪</span><span class="menu-label" style="color:var(--red)">Logout</span><span class="menu-arrow">›</span></div>
@@ -3621,6 +3650,7 @@ setTimeout(function(){
           <div class="admin-tab" data-tab="users" onclick="switchAdminTab('users')">👥 Users</div>
           <div class="admin-tab" data-tab="fines" onclick="switchAdminTab('fines')">⚡ Fines</div>
           <div class="admin-tab" data-tab="settings" onclick="switchAdminTab('settings')">⚙️ Settings</div>
+          <div class="admin-tab" data-tab="polls" onclick="switchAdminTab('polls')">🗳️ Polls</div>
         </div>
         <div id="admin-content"></div>
       </div>
@@ -4664,20 +4694,18 @@ function updateLoadingProgress() {
   }
 }
 function getLastPayoutDate() {
-    // If there are payout transactions, use the latest one
-    const payouts = transactions
-        .filter(tx => tx.type === 'payout')
-        .sort((a, b) => (b.date || 0) - (a.date || 0));
+    var payouts = transactions
+        .filter(function(tx) { return tx.type === 'payout'; })
+        .sort(function(a, b) { return (b.date || 0) - (a.date || 0); });
     if (payouts.length > 0) {
         return payouts[0].date;
     }
-    // If we have a group start date, use that
-    if (settings.groupStartDate) {
+    if (settings && settings.groupStartDate) {
         return new Date(settings.groupStartDate).getTime();
     }
-    // Ultimate fallback: today - 7 days
     return Date.now() - (7 * 24 * 60 * 60 * 1000);
 }
+
 // ──────────────────────────────────────────────────────────────
 // GET NEXT PAYMENT DUE DATE – Based on member's balance
 // ──────────────────────────────────────────────────────────────
@@ -4699,17 +4727,23 @@ function getNextPaymentDueDate(member, depositAmount) {
         display: daysCovered === 0 ? 'Today' : `in ${daysCovered} day${daysCovered > 1 ? 's' : ''} (${nextDue.toLocaleDateString()})`
     };
 }
+// ─── Get next payout date with fallback ──────────────────────
 function getNextPayoutDate() {
     // 1. If we have a stored end date, use it
-    if (rotation.payoutEndDate) {
+    if (rotation && rotation.payoutEndDate) {
         return rotation.payoutEndDate;
     }
-    // 2. Compute from last payout (or fallback)
-    const last = getLastPayoutDate();
-    return last + (7 * 24 * 60 * 60 * 1000);
+    // 2. Compute from last payout (or fallback to today + 7 days)
+    var last = getLastPayoutDate();
+    if (last) {
+        return last + (7 * 24 * 60 * 60 * 1000);
+    }
+    // 3. Ultimate fallback: today + 7 days
+    return Date.now() + (7 * 24 * 60 * 60 * 1000);
 }
+
+// ─── Payout countdown with safe defaults ─────────────────────
 function getPayoutCountdown(now, nextPayout) {
-    const diff = nextPayout - now;
     if (!nextPayout || isNaN(nextPayout)) {
         return {
             text: '⏳ Waiting for payout schedule',
@@ -4718,6 +4752,7 @@ function getPayoutCountdown(now, nextPayout) {
             label: 'No schedule set'
         };
     }
+    var diff = nextPayout - now;
     if (diff <= 0) {
         return {
             text: '🎉 TODAY IS PAYOUT DAY!',
@@ -4726,26 +4761,26 @@ function getPayoutCountdown(now, nextPayout) {
             label: 'Payout day! 🎉'
         };
     }
-    const days = Math.floor(diff / (24 * 60 * 60 * 1000));
-    const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
-    const minutes = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
-    const seconds = Math.floor((diff % (60 * 1000)) / 1000);
+    var days = Math.floor(diff / (24 * 60 * 60 * 1000));
+    var hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+    var minutes = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
+    var seconds = Math.floor((diff % (60 * 1000)) / 1000);
 
-    let text = '';
-    if (days > 0) text = `${days}d ${hours}h ${minutes}m`;
-    else if (hours > 0) text = `${hours}h ${minutes}m ${seconds}s`;
-    else if (minutes > 0) text = `${minutes}m ${seconds}s`;
-    else text = `${seconds}s`;
+    var text = '';
+    if (days > 0) text = days + 'd ' + hours + 'h ' + minutes + 'm';
+    else if (hours > 0) text = hours + 'h ' + minutes + 'm ' + seconds + 's';
+    else if (minutes > 0) text = minutes + 'm ' + seconds + 's';
+    else text = seconds + 's';
 
-    const weekMs = 7 * 24 * 60 * 60 * 1000;
-    const elapsed = weekMs - diff;
-    const progress = Math.min(100, Math.max(0, (elapsed / weekMs) * 100));
+    var weekMs = 7 * 24 * 60 * 60 * 1000;
+    var elapsed = weekMs - diff;
+    var progress = Math.min(100, Math.max(0, (elapsed / weekMs) * 100));
 
     return {
-        text: `⏳ ${text} left`,
+        text: '⏳ ' + text + ' left',
         className: 'countdown',
         progress: progress,
-        label: `${Math.round(progress)}% complete`
+        label: Math.round(progress) + '% complete'
     };
 }
 
@@ -4771,6 +4806,33 @@ function resetLoadingState() {
     LOADING_STATE[key] = false;
   }
   allDataLoaded = false;
+}
+// ─── Auto‑logout after 30 minutes of inactivity ────────────
+var _idleTimer = null;
+const IDLE_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+
+function resetIdleTimer() {
+  if (_idleTimer) clearTimeout(_idleTimer);
+  if (!currentUser) return;
+  _idleTimer = setTimeout(function() {
+    if (currentUser) {
+      toast('⏰ Session timed out due to inactivity.', '#f59e0b');
+      logout();
+    }
+  }, IDLE_TIMEOUT);
+}
+
+function startIdleTimer() {
+  // Reset on any user interaction
+  const events = ['click', 'touchstart', 'keydown', 'scroll', 'mousemove'];
+  events.forEach(ev => document.addEventListener(ev, resetIdleTimer));
+  resetIdleTimer(); // start immediately
+}
+
+function stopIdleTimer() {
+  if (_idleTimer) clearTimeout(_idleTimer);
+  const events = ['click', 'touchstart', 'keydown', 'scroll', 'mousemove'];
+  events.forEach(ev => document.removeEventListener(ev, resetIdleTimer));
 }
 function hasActiveLoanFromApplication() {
   // Check if the current user has an active loan that was submitted via the application form
@@ -4807,37 +4869,38 @@ const THEME_PALETTES={
   violet:{name:'Violet Glow',primary:'#7c3aed',primary2:'#5b21b6',accent:'#c084fc',success:'#22c55e'},
   blackgold:{name:'Black Gold',primary:'#ca8a04',primary2:'#854d0e',accent:'#facc15',success:'#22c55e'}
 };
-// Returns days until next anniversary of groupStartDate
-// Returns days until next anniversary of groupStartDate
+// ─── Anniversary countdown ────────────────────────────────────
 function getDaysUntilProfitDistribution() {
-  if (!settings.groupStartDate) return null;
-  const start = new Date(settings.groupStartDate);
-  if (isNaN(start.getTime())) return null;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const currentYear = today.getFullYear();
-  let anniversaryThisYear = new Date(currentYear, start.getMonth(), start.getDate());
-  if (anniversaryThisYear < today) {
-    anniversaryThisYear = new Date(currentYear + 1, start.getMonth(), start.getDate());
-  }
-  const diffTime = anniversaryThisYear - today;
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  return diffDays;
+    if (!settings || !settings.groupStartDate) return null;
+    var start = new Date(settings.groupStartDate);
+    if (isNaN(start.getTime())) return null;
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+    var currentYear = today.getFullYear();
+    var anniversaryThisYear = new Date(currentYear, start.getMonth(), start.getDate());
+    if (anniversaryThisYear < today) {
+        anniversaryThisYear = new Date(currentYear + 1, start.getMonth(), start.getDate());
+    }
+    var diffTime = anniversaryThisYear - today;
+    var diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
 }
 
 function updateAnniversaryCountdown() {
-  const el = document.getElementById('anniversary-countdown');
-  if (!el) return;
-  const days = getDaysUntilProfitDistribution();
-  if (days === null) {
-    el.textContent = '-- days';
-    return;
-  }
-  if (days === 0) {
-    el.textContent = '🎉 Today! Profit distribution day!';
-  } else {
-    el.textContent = `${days} day${days !== 1 ? 's' : ''}`;
-  }
+    var el = document.getElementById('anniversary-countdown');
+    if (!el) return;
+    var days = getDaysUntilProfitDistribution();
+    var newText;
+    if (days === null) {
+        newText = '-- days';
+    } else if (days === 0) {
+        newText = '🎉 Today! Profit distribution day!';
+    } else {
+        newText = days + ' day' + (days !== 1 ? 's' : '');
+    }
+    if (el.textContent !== newText) {
+        el.textContent = newText;
+    }
 }
 
 // Get the start of today (local midnight)
@@ -4878,12 +4941,12 @@ function getTodayStatus(member) {
   return { deficit, surplus, paidDaily, welfarePaid, requiredPerDay, prepaidUsed, newPrepaid, totalAvailable, totalRequired };
 }
 
-// Get next midnight (today's midnight if not passed, else tomorrow's)
+// ─── Midnight timer (debt check) ─────────────────────────────
 function getNextMidnight() {
-  const now = new Date();
-  const midnight = new Date(now);
-  midnight.setHours(24, 0, 0, 0); // next midnight
-  return midnight.getTime();
+    var now = new Date();
+    var midnight = new Date(now);
+    midnight.setHours(24, 0, 0, 0);
+    return midnight.getTime();
 }
 function getDailyStatusForDate(member, dateTimestamp) {
   const dayStart = new Date(dateTimestamp);
@@ -4908,19 +4971,25 @@ function getDailyStatusForDate(member, dateTimestamp) {
 }
 // Update countdown timer on home page
 function updateMidnightTimer() {
-  const timerEl = document.getElementById('midnight-timer');
-  if (!timerEl) return;
-  const now = Date.now();
-  const next = getNextMidnight();
-  const diff = next - now;
-  if (diff <= 0) {
-    timerEl.textContent = "00:00:00";
-    return;
-  }
-  const hours = Math.floor(diff / 3600000);
-  const minutes = Math.floor((diff % 3600000) / 60000);
-  const seconds = Math.floor((diff % 60000) / 1000);
-  timerEl.textContent = `${hours.toString().padStart(2,'0')}:${minutes.toString().padStart(2,'0')}:${seconds.toString().padStart(2,'0')}`;
+    var timerEl = document.getElementById('midnight-timer');
+    if (!timerEl) return;
+    var now = Date.now();
+    var next = getNextMidnight();
+    var diff = next - now;
+    var newText;
+    if (diff <= 0) {
+        newText = '00:00:00';
+    } else {
+        var hours = Math.floor(diff / 3600000);
+        var minutes = Math.floor((diff % 3600000) / 60000);
+        var seconds = Math.floor((diff % 60000) / 1000);
+        newText = hours.toString().padStart(2,'0') + ':' + 
+                  minutes.toString().padStart(2,'0') + ':' + 
+                  seconds.toString().padStart(2,'0');
+    }
+    if (timerEl.textContent !== newText) {
+        timerEl.textContent = newText;
+    }
 }
 
 // Check if midnight has passed and we haven't processed today yet
@@ -5171,11 +5240,9 @@ function updateReceiverDisplay() {
     }
 }
 
-// ──────────────────────────────────────────────────────────────
-// OPTIMIZED COUNTDOWN – No DOM writes unless changed
-// ──────────────────────────────────────────────────────────────
 
-const _homeCache = {
+// ─── Update payout date & countdown with caching ────────────
+var _homeCache = {
     dateEl: null,
     textEl: null,
     fillEl: null,
@@ -5196,29 +5263,35 @@ function getHomeElements() {
     return _homeCache;
 }
 function updatePayoutDateAndCountdown() {
-    const { dateEl, textEl, fillEl, labelEl } = getHomeElements();
+    var els = getHomeElements();
+    var dateEl = els.dateEl, textEl = els.textEl, fillEl = els.fillEl, labelEl = els.labelEl;
     if (!dateEl) return;
 
-    const now = Date.now();
-    const nextPayout = getNextPayoutDate();
+    var now = Date.now();
+    var nextPayout = getNextPayoutDate();
 
     // 1. Date
-    const dateStr = new Date(nextPayout).toLocaleDateString('en-UG', {
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-    });
+    var dateStr = '—';
+    if (nextPayout) {
+        try {
+            dateStr = new Date(nextPayout).toLocaleDateString('en-UG', {
+                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+            });
+        } catch(e) { dateStr = '—'; }
+    }
     if (dateEl.textContent !== dateStr) {
         dateEl.textContent = dateStr;
     }
 
     // 2. Countdown text
-    const countdown = getPayoutCountdown(now, nextPayout);
+    var countdown = getPayoutCountdown(now, nextPayout);
     if (textEl.textContent !== countdown.text) {
         textEl.textContent = countdown.text;
         textEl.className = 'countdown-text ' + countdown.className;
     }
 
-    // 3. Progress bar – use transform, not width
-    const newProgress = Math.round(countdown.progress);
+    // 3. Progress bar (transform)
+    var newProgress = Math.round(countdown.progress);
     if (Math.abs(newProgress - _homeCache.lastProgress) > 0.5) {
         fillEl.style.transform = 'scaleX(' + (newProgress / 100) + ')';
         _homeCache.lastProgress = newProgress;
@@ -5229,44 +5302,77 @@ function updatePayoutDateAndCountdown() {
         labelEl.textContent = countdown.label;
     }
 }
-// ──────────────────────────────────────────────────────────────
-// SINGLE TIMER – All home updates in one place
-// ──────────────────────────────────────────────────────────────
 
-let _homeTimer = null;
-let _homeUpdateInterval = 3000; // 3 seconds
+// ─── Single home timer with requestAnimationFrame ──────────
+var _rafId = null;
+var _homeUpdateInterval = 5000; // 5 seconds
 
 function startHomeUpdates() {
-    stopHomeUpdates();
-    
-    // Immediate first update
-    updateHomeUI();
-    updateReceiverDisplay();
-    updatePayoutDateAndCountdown();
-    updateMidnightTimer();
-    updateAnniversaryCountdown();
-    
-    // Single timer for ALL updates
-    _homeTimer = setInterval(function() {
-        // Only run if tab visible and on home
-        if (!document.hidden && currentScreen === 'home') {
-            updatePayoutDateAndCountdown();
-            updateMidnightTimer();
-            updateAnniversaryCountdown();
+    stopHomeUpdates(); // clear any existing timer
+
+    // ── 1. Immediate first update (no delay) ──
+    if (typeof updateHomeUI === 'function') updateHomeUI();
+
+    // ── 2. Set up the animation frame loop ──
+    var lastRun = 0;
+
+    function tick(timestamp) {
+        if (!lastRun) lastRun = timestamp;
+        if (timestamp - lastRun >= _homeUpdateInterval) {
+            // Only update if tab is visible and we're on the home screen
+            if (!document.hidden && currentScreen === 'home') {
+                // Refresh the dynamic widgets (countdowns, progress)
+                if (typeof updatePayoutDateAndCountdown === 'function') {
+                    updatePayoutDateAndCountdown();
+                }
+                if (typeof updateMidnightTimer === 'function') {
+                    updateMidnightTimer();
+                }
+                if (typeof updateAnniversaryCountdown === 'function') {
+                    updateAnniversaryCountdown();
+                }
+                // Optional: update receiver name typing if needed
+                var order = (rotation && rotation.order) || [];
+                if (order.length) {
+                    var idx = (rotation.currentIndex || 0);
+                    var member = members.find(function(m) { return m.id === order[idx]; });
+                    if (member && currentTypingName !== member.name) {
+                        currentTypingName = '';
+                        receiverCharIndex = 0;
+                        if (typeof typeReceiverName === 'function') {
+                            typeReceiverName(member.name);
+                        }
+                    }
+                }
+                // Also update pending deposit warning if it's a function
+                if (typeof updatePendingDepositWarning === 'function') {
+                    updatePendingDepositWarning();
+                }
+            }
+            lastRun = timestamp;
         }
-    }, _homeUpdateInterval);
+        _rafId = requestAnimationFrame(tick);
+    }
+
+    _rafId = requestAnimationFrame(tick);
 }
 
 function stopHomeUpdates() {
-    if (_homeTimer) {
-        clearInterval(_homeTimer);
-        _homeTimer = null;
+    if (_rafId) {
+        cancelAnimationFrame(_rafId);
+        _rafId = null;
     }
-    if (receiverTypingTimer) {
+    if (typeof receiverTypingTimer !== 'undefined' && receiverTypingTimer) {
         clearTimeout(receiverTypingTimer);
         receiverTypingTimer = null;
     }
+    // Also clear any old interval if still present (safety)
+    if (typeof _homeTimer !== 'undefined' && _homeTimer) {
+        clearInterval(_homeTimer);
+        _homeTimer = null;
+    }
 }
+
 
 // ── isLedgerActive helper ─────────────────────────────────────────────────
 function isLedgerActive() {
@@ -7168,15 +7274,19 @@ function updateHomeUI() {
   // ---- Weekly Total ----
   const weeklyTotalEl = document.getElementById('total-weekly-display');
   if (weeklyTotalEl) {
-    const weeklyTotal = computeTotalWeekly();
+    const weeklyTotal = computeTotalWeekly() || 0;
     weeklyTotalEl.innerText = 'UGX ' + weeklyTotal.toLocaleString();
   }
+  if (currentUser && currentUser.isAdmin) {
+  checkPayoutReminders();
+}
+
 
   // ---- Available Cash ----
   const availableEl = document.getElementById('available-display');
   if (availableEl) {
-    const availableAmount = cashFromDeposits;
-    availableEl.innerText = (availableAmount < 0 ? '-' : '') + 'UGX ' + Math.abs(availableAmount).toLocaleString();
+    const availableAmount = cashFromDeposits || 0;
+    availableEl.innerText = 'UGX ' + availableAmount.toLocaleString();
     availableEl.className = 'ss-val ' + (availableAmount < 0 ? 'sv-red' : 'sv-green');
     availableEl.style.color = availableAmount < 0 ? 'var(--red)' : '';
   }
@@ -7184,59 +7294,149 @@ function updateHomeUI() {
   // ---- Profit Pool ----
   const profitsDisplay = document.getElementById('profits-display');
   if (profitsDisplay) {
-    const profitAmount = groupProfit;
-    profitsDisplay.innerText = (profitAmount < 0 ? '-' : '') + 'UGX ' + Math.abs(profitAmount).toLocaleString();
+    const profitAmount = groupProfit || 0;
+    profitsDisplay.innerText = 'UGX ' + profitAmount.toLocaleString();
     profitsDisplay.className = 'ss-val ' + (profitAmount < 0 ? 'sv-red' : 'sv-teal');
     profitsDisplay.style.color = profitAmount < 0 ? 'var(--red)' : '';
   }
 
-  // ---- Loan receiver message (this doesn't show money, keep it) ----
-  const receiverCard = document.querySelector('.weekly-receiver-card');
-  if (receiverCard && currentUser && !currentUser.isAdmin) {
-    // ... keep the existing code for the message
-  }
-
-  // ---- Receiver card animation + progress ----
-  if (rotation.order?.length) {
-    startReceiverAnimation();
+  // ---- Receiver display (name + rotation info) ----
+  if (typeof updateReceiverDisplay === 'function') {
+    updateReceiverDisplay();
   } else {
-    if (_receiverTimer) { clearInterval(_receiverTimer); _receiverTimer = null; }
+    // fallback: set name and info manually
     const nameEl = document.getElementById('weekly-payee-name');
-    if (nameEl) nameEl.innerText = '—';
     const infoEl = document.getElementById('payout-rotation-info');
-    if (infoEl) infoEl.innerText = '';
-    const fillEl = document.getElementById('payout-progress-fill');
-    if (fillEl) fillEl.style.width = '0%';
-    const lblEl = document.getElementById('payout-progress-label');
-    if (lblEl) lblEl.innerText = '';
-  }
-  // Inside updateHomeUI() – at the very end
-if (currentUser && currentUser.isAdmin) {
-  checkPayoutOverdue();
-}
-
-  // ---- Pending deposit warning (shows names, no money) ----
-  updatePendingDepositWarning();
-
-  // ---- Anniversary countdown (shows days, keep it) ----
-  updateAnniversaryCountdown();
-
-  // ---- Advance rotation button (keep it) ----
-  if (!document.getElementById('home-advance-btn')) {
-    const receiverCard2 = document.querySelector('.weekly-receiver-card');
-    if (receiverCard2 && !receiverCard2.querySelector('.advance-btn')) {
-      const btn = document.createElement('button');
-      btn.id = 'home-advance-btn';
-      btn.className = 'btn btn-sm btn-amber';
-      btn.style.marginTop = '8px';
-      btn.innerHTML = '⏩ Advance Rotation (Admin only)';
-      btn.onclick = () => {
-        if (currentUser && currentUser.isAdmin) advanceRotation();
-        else toast('Admin only', '#ef4444');
-      };
-      receiverCard2.appendChild(btn);
+    const order = (rotation && rotation.order) || [];
+    if (order.length) {
+      const idx = (rotation.currentIndex || 0);
+      const member = members.find(m => m.id === order[idx]);
+      if (nameEl) nameEl.textContent = member ? member.name : '—';
+      if (infoEl) infoEl.textContent = '⭐ Current Receiver · #' + (idx + 1) + ' of ' + order.length;
+    } else {
+      if (nameEl) nameEl.textContent = '—';
+      if (infoEl) infoEl.textContent = 'No active members';
     }
   }
+
+  // ---- Payout countdown and progress bar ----
+  if (typeof updatePayoutDateAndCountdown === 'function') {
+    updatePayoutDateAndCountdown();
+  } else {
+    // fallback: set placeholder values
+    const dateEl = document.getElementById('payout-exact-date');
+    const textEl = document.getElementById('payout-countdown-text');
+    const fillEl = document.getElementById('payout-progress-fill');
+    const labelEl = document.getElementById('payout-progress-label');
+    if (dateEl) dateEl.textContent = '—';
+    if (textEl) textEl.textContent = '⏳ Calculating…';
+    if (fillEl) fillEl.style.transform = 'scaleX(0)';
+    if (labelEl) labelEl.textContent = '0% complete';
+  }
+
+  // ---- Pending deposit warning ----
+  if (typeof updatePendingDepositWarning === 'function') {
+    updatePendingDepositWarning();
+  }
+
+  // ---- Anniversary countdown ----
+  if (typeof updateAnniversaryCountdown === 'function') {
+    updateAnniversaryCountdown();
+  } else {
+    const el = document.getElementById('anniversary-countdown');
+    if (el) el.textContent = '-- days';
+  }
+
+  // ---- Advance rotation button (admin only) ----
+  if (currentUser && currentUser.isAdmin) {
+    if (!document.getElementById('home-advance-btn')) {
+      const receiverCard2 = document.querySelector('.weekly-receiver-card');
+      if (receiverCard2 && !receiverCard2.querySelector('.advance-btn')) {
+        const btn = document.createElement('button');
+        btn.id = 'home-advance-btn';
+        btn.className = 'btn btn-sm btn-amber';
+        btn.style.marginTop = '8px';
+        btn.innerHTML = '⏩ Advance Rotation (Admin only)';
+        btn.onclick = function() {
+          if (currentUser && currentUser.isAdmin) advanceRotation();
+          else toast('Admin only', '#ef4444');
+        };
+        receiverCard2.appendChild(btn);
+      }
+    }
+  }
+
+  // ---- Check payout overdue (admin) ----
+  if (currentUser && currentUser.isAdmin && typeof checkPayoutOverdue === 'function') {
+    checkPayoutOverdue();
+  }
+
+  // ---- Home week progress (if feature exists) ----
+  if (typeof renderHomeWeekProgress === 'function') {
+    renderHomeWeekProgress();
+  }renderMemberOfTheMonth();
+}
+// ─── Reorganise home tab for better mobile UX ──────────────
+function reorganizeHomeTab() {
+  const homeTab = document.getElementById('t-home');
+  if (!homeTab) return;
+
+  // Get existing elements
+  const statsStrip = homeTab.querySelector('.stats-strip');
+  const receiverCard = homeTab.querySelector('.weekly-receiver-card');
+  const carousel = homeTab.querySelector('.notice-banner.carousel-banner');
+  const midnightCard = document.getElementById('midnight-card');
+  const anniversaryCard = document.getElementById('anniversary-card');
+  const pendingList = document.getElementById('pending-deposit-list');
+  const homeWeekProgress = document.getElementById('home-weekly-progress');
+
+  // If already reordered, skip (or we can reorder each time)
+  if (homeTab.dataset.reordered === 'true') return;
+  homeTab.dataset.reordered = 'true';
+
+  // Create a new container for the hero section (receiver card + loan turn)
+  const heroSection = document.createElement('div');
+  heroSection.style.cssText = 'flex-shrink:0; margin-bottom:4px;';
+
+  // Move receiver card into hero
+  if (receiverCard) {
+    receiverCard.style.marginBottom = '2px';
+    heroSection.appendChild(receiverCard);
+  }
+
+  // Move loan turn container if exists
+  const loanTurn = document.getElementById('loan-turn-container');
+  if (loanTurn) heroSection.appendChild(loanTurn);
+
+  // Insert hero at the top
+  homeTab.insertBefore(heroSection, homeTab.firstChild);
+
+  // Move stats strip next (after hero)
+  if (statsStrip) {
+    statsStrip.style.marginBottom = '4px';
+    homeTab.insertBefore(statsStrip, homeTab.firstChild.nextSibling);
+  }
+
+  // Then carousel
+  if (carousel) {
+    carousel.style.marginBottom = '4px';
+    homeTab.insertBefore(carousel, statsStrip.nextSibling);
+  }
+
+  // Then the other cards (midnight, anniversary, pending, weekly progress)
+  const cardContainer = document.createElement('div');
+  cardContainer.style.cssText = 'flex-shrink:0; display:flex; flex-direction:column; gap:4px;';
+  if (midnightCard) cardContainer.appendChild(midnightCard);
+  if (anniversaryCard) cardContainer.appendChild(anniversaryCard);
+  if (pendingList) cardContainer.appendChild(pendingList);
+  if (homeWeekProgress) cardContainer.appendChild(homeWeekProgress);
+
+  homeTab.appendChild(cardContainer);
+
+  // Ensure home tab uses flex column and no overflow
+  homeTab.style.display = 'flex';
+  homeTab.style.flexDirection = 'column';
+  homeTab.style.overflowY = 'auto'; // allow scroll if needed
 }
 // ==========================================
 // UPDATE ACCOUNT BALANCES - WITH PREPAID
@@ -7329,24 +7529,38 @@ function updateAccountUI() {
   displayLoanRepaymentSchedule();
   updateNotificationBadge();
   updateLoanIndicator();
+  addThemeToggleMenuItem();
 }
+// ─── Display loan repayment schedule in account tab ───
 function displayLoanRepaymentSchedule() {
   if (!currentUser || currentUser.isAdmin) return;
-  const activeLoan = loans.find(l => l.memberId === currentUser.id && l.status === 'approved' && !l.repaid);
   const container = document.getElementById('loan-schedule-container');
-  if (!container) return;
-  if (!activeLoan || !activeLoan.repaymentSchedule) {
-    container.innerHTML = '';
-    container.style.display = 'none';
+  if (!container) {
+    // create container if missing
+    const accountDiv = document.querySelector('#t-account .account-header');
+    if (accountDiv) {
+      const div = document.createElement('div');
+      div.id = 'loan-schedule-container';
+      div.style.marginTop = '12px';
+      accountDiv.parentNode.insertBefore(div, accountDiv.nextSibling);
+    }
+  }
+  const cont = document.getElementById('loan-schedule-container');
+  if (!cont) return;
+
+  const activeLoan = loans.find(l => l.memberId === currentUser.id && l.status === 'approved' && !l.repaid);
+  if (!activeLoan || !activeLoan.repaymentSchedule || activeLoan.repaymentSchedule.length === 0) {
+    cont.innerHTML = '';
+    cont.style.display = 'none';
     return;
   }
-  container.style.display = 'block';
+  cont.style.display = 'block';
   let html = `<div class="card"><div class="sec-h">📅 Loan Repayment Plan</div>
     <div style="overflow-x:auto;">
       <table style="width:100%; border-collapse:collapse; font-size:0.75rem;">
         <thead><tr style="background:rgba(245,158,11,0.2);">
           <th style="padding:6px;">Week</th><th style="padding:6px;">Due Date</th><th style="padding:6px;">Principal</th>
-          <th style="padding:6px;">Interest</th><th style="padding:6px;">Payment</th><th style="padding:6px;">Remaining</th>
+          <th style="padding:6px;">Interest</th><th style="padding:6px;">Payment</th><th style="padding:6px;">Balance</th>
         </tr></thead><tbody>`;
   for (let w of activeLoan.repaymentSchedule) {
     html += `<tr>
@@ -7358,8 +7572,75 @@ function displayLoanRepaymentSchedule() {
       <td style="padding:6px;">${money(w.remainingBalance)}</td>
     </tr>`;
   }
-  html += `</tbody>}</div><div class="micro muted">Weekly payments are estimates. Late payments incur penalty.</div></div>`;
+  html += `</tbody></table></div>
+    <div class="micro muted">Weekly payments are estimates. Late payments incur penalty.</div></div>`;
+  cont.innerHTML = html;
+}
+// ─── Display loan repayment schedule in account tab ──────────
+function displayLoanRepaymentSchedule() {
+  if (!currentUser || currentUser.isAdmin) return;
+  var container = document.getElementById('loan-schedule-container');
+  if (!container) return; // make sure this element exists in account tab
+
+  var activeLoan = loans.find(function(l) {
+    return l.memberId === currentUser.id && l.status === 'approved' && !l.repaid;
+  });
+
+  if (!activeLoan || !activeLoan.repaymentSchedule) {
+    container.style.display = 'none';
+    return;
+  }
+
+  container.style.display = 'block';
+  var schedule = activeLoan.repaymentSchedule;
+  var html = '<div class="card"><div class="sec-h">📅 Loan Repayment Plan</div><div style="overflow-x:auto;"><table style="width:100%; border-collapse:collapse; font-size:0.75rem;"><thead><tr style="background:rgba(245,158,11,0.2);"><th style="padding:6px;">Week</th><th style="padding:6px;">Due Date</th><th style="padding:6px;">Principal</th><th style="padding:6px;">Interest</th><th style="padding:6px;">Payment</th><th style="padding:6px;">Remaining</th></tr></thead><tbody>';
+  schedule.forEach(function(w) {
+    html += '<tr><td style="padding:6px;">' + w.week + '</td><td style="padding:6px;">' + new Date(w.dueDate).toLocaleDateString() + '</td><td style="padding:6px;">' + money(w.principalPortion) + '</td><td style="padding:6px;">' + money(w.interestPortion) + '</td><td style="padding:6px;">' + money(w.payment) + '</td><td style="padding:6px;">' + money(w.remainingBalance) + '</td></tr>';
+  });
+  html += '</tbody></table></div><div class="micro muted">Weekly payments are estimates. Late payments incur penalty.</div></div>';
   container.innerHTML = html;
+}
+// ─── Show member's loan turn position on home ──────────────
+// ─── Display loan turn info on home tab ────────────────────
+function updateLoanTurnDisplay() {
+  if (!currentUser || currentUser.isAdmin) return;
+  const container = document.getElementById('loan-turn-container');
+  if (!container) {
+    // Create a small card under receiver card
+    const receiverCard = document.querySelector('.weekly-receiver-card');
+    if (!receiverCard) return;
+    const div = document.createElement('div');
+    div.id = 'loan-turn-container';
+    div.style.cssText = 'margin-top:8px; padding:6px 10px; background:rgba(6,182,212,0.06); border-radius:10px; border:1px solid rgba(6,182,212,0.15);';
+    receiverCard.parentNode.insertBefore(div, receiverCard.nextSibling);
+  }
+  const el = document.getElementById('loan-turn-container');
+  if (!el) return;
+
+  const rotationList = loanRotationOrder.length ? loanRotationOrder : (rotation.order || []);
+  if (!rotationList.length) {
+    el.innerHTML = '<div class="micro muted">Loan rotation not set.</div>';
+    return;
+  }
+  const pos = rotationList.indexOf(currentUser.id);
+  if (pos === -1) {
+    el.innerHTML = '<div class="micro muted">You are not in the loan rotation.</div>';
+    return;
+  }
+  const currentBorrowerId = rotationList[loanReceiverIndex];
+  const currentBorrower = members.find(m => m.id === currentBorrowerId);
+  const weeksLeft = (pos - loanReceiverIndex + rotationList.length) % rotationList.length;
+  const text = weeksLeft === 0 ? 
+    '🎯 You are the current borrower! You can request a loan.' :
+    `⏳ Your loan turn is in ${weeksLeft} week${weeksLeft > 1 ? 's' : ''} (${pos+1}/${rotationList.length})`;
+  const borrowerName = currentBorrower ? currentBorrower.name : 'Unknown';
+  el.innerHTML = `
+    <div style="display:flex; align-items:center; gap:8px; font-size:0.7rem;">
+      <span>💳</span>
+      <span>${text}</span>
+      <span class="micro muted">Current borrower: ${borrowerName}</span>
+    </div>
+  `;
 }
 function updateLoanSummary() {
   const amountInput = document.getElementById('loan-amount');
@@ -8123,7 +8404,75 @@ function toggleTransaction(txId) {
     checkbox.checked = selectedTransactions.has(txId);
   }
 }
+// ─── Dark/Light Mode Toggle ──────────────────────────────────
+function toggleTheme() {
+  const body = document.body;
+  const isDark = body.getAttribute('data-theme-mode') === 'dark';
+  const newMode = isDark ? 'light' : 'dark';
+  body.setAttribute('data-theme-mode', newMode);
+  localStorage.setItem('htf_theme_mode', newMode);
+  // Also update settings if admin
+  if (currentUser && currentUser.isAdmin) {
+    settings.themeMode = newMode;
+    db.ref('settings/themeMode').set(newMode);
+  }
+  // Refresh theme styles
+  applyAppTheme();
+  toast(`Theme switched to ${newMode} mode`, '#06b6d4');
+}
 
+// Apply saved theme on load (call this early)
+function applySavedTheme() {
+  const saved = localStorage.getItem('htf_theme_mode');
+  if (saved) {
+    document.body.setAttribute('data-theme-mode', saved);
+    // Also update settings if admin
+    if (settings && settings.themeMode) {
+      // But use saved as override
+    }
+  } else if (settings && settings.themeMode) {
+    document.body.setAttribute('data-theme-mode', settings.themeMode);
+  } else {
+    // Default: light
+    document.body.setAttribute('data-theme-mode', 'light');
+  }
+  applyAppTheme();
+}
+function addThemeToggleMenuItem() {
+  const accountTab = document.getElementById('t-account');
+  if (!accountTab) return;
+  // Check if already added
+  if (document.getElementById('theme-toggle-item')) return;
+  const menuSection = accountTab.querySelector('.menu-section:last-child');
+  if (!menuSection) return;
+
+  const item = document.createElement('div');
+  item.className = 'menu-item';
+  item.id = 'theme-toggle-item';
+  item.onclick = toggleTheme;
+  item.innerHTML = `
+    <span class="menu-icon">🌓</span>
+    <span class="menu-label">Toggle Dark/Light Mode</span>
+    <span class="menu-value" style="font-size:0.7rem; color:var(--t3);" id="theme-status-label">${document.body.getAttribute('data-theme-mode') || 'light'}</span>
+    <span class="menu-arrow">›</span>
+  `;
+  // Insert before logout
+  const logoutItem = menuSection.querySelector('.menu-item:last-child');
+  if (logoutItem) {
+    menuSection.insertBefore(item, logoutItem);
+  } else {
+    menuSection.appendChild(item);
+  }
+  // Update label on toggle
+  const label = document.getElementById('theme-status-label');
+  if (label) {
+    const observer = new MutationObserver(() => {
+      const mode = document.body.getAttribute('data-theme-mode') || 'light';
+      label.textContent = mode;
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ['data-theme-mode'] });
+  }
+}
 // ==========================================
 // UPDATE UI - Shows selected count
 // ==========================================
@@ -8443,7 +8792,7 @@ if (currentUser && !currentUser.isAdmin) {
     }
     setAdminDoorVisibility();
     if (typeof hideTabLoading === 'function') hideTabLoading();
-  }
+  }reorganizeHomeTab();
 }
 // 10 group-relevant questions
 const securityQuestions = [
@@ -9309,7 +9658,8 @@ window.printSingleReceipt = function() {
     </head>
     <body>
       ${content}
-    </body>
+    
+</body>
     </html>
   `);
   printWindow.document.close();
@@ -10954,7 +11304,207 @@ function openFullLoanRequestModal() {
   
   openOv('ov-loan-request');
 }
+// ─── Modified loan request modal (with guarantor) ────────────
+// Replace your existing openLoanRequestModal with this, or merge the guarantor part
 
+function openLoanRequestModal() {
+  if (!currentUser || currentUser.isAdmin) {
+    toast('Please login as a member', '#ef4444');
+    return;
+  }
+
+  // Refresh loans
+  db.ref('loans').once('value', snap => {
+    loans = snap.val() ? Object.entries(snap.val()).map(([id, l]) => ({ ...l, id })) : [];
+    computePots();
+
+    const rotationList = loanRotationOrder.length ? loanRotationOrder : (rotation.order || []);
+    if (!rotationList.length) {
+      toast('Loan rotation not set. Contact admin.', '#ef4444');
+      return;
+    }
+    if (loanReceiverIndex >= rotationList.length) loanReceiverIndex = 0;
+    const allowedBorrowerId = rotationList[loanReceiverIndex];
+    const allowedBorrower = members.find(m => m.id === allowedBorrowerId);
+
+    if (currentUser.id !== allowedBorrowerId) {
+      const pos = rotationList.indexOf(currentUser.id);
+      const weeksLeft = (pos - loanReceiverIndex + rotationList.length) % rotationList.length;
+      toast(`⏳ Not your turn yet. ${weeksLeft} week(s) remaining.`, '#f59e0b');
+      return;
+    }
+
+    // Check for active application loan
+    const hasActive = loans.some(l => l.memberId === currentUser.id && l.status === 'approved' && !l.repaid && l.loanQuestions && l.loanQuestions.length > 0);
+    if (hasActive) {
+      toast('You already have an active loan. Please repay it first.', '#ef4444');
+      return;
+    }
+
+    // ----- Show the modal with guarantor field -----
+    const infoDiv = document.getElementById('loan-limit-info');
+    let totalDeposits = 0;
+    transactions.forEach(tx => { if (tx.memberPhone === currentUser.phone && tx.type === 'deposit') totalDeposits += tx.amount; });
+    const disciplineMultiplier = loanSettings.disciplineMultiplier || 1.5;
+    const maxLoanByDiscipline = Math.floor(totalDeposits * disciplineMultiplier);
+    const maxLoanByProfit = Math.floor(groupProfit * (loanSettings.maxLoanPercent / 100));
+    const suggestedMax = Math.min(maxLoanByDiscipline, maxLoanByProfit);
+
+    if (infoDiv) {
+      infoDiv.innerHTML = `<strong>Your savings:</strong> ${money(totalDeposits)}<br>
+        <strong>Max loan:</strong> ${money(suggestedMax)}<br>
+        <strong>Interest:</strong> ${loanSettings.interestRate}% + ${loanSettings.extraWeeklyInterest || 2}% per week`;
+    }
+
+    // Add guarantor dropdown (if not already present)
+    let guarantorSelect = document.getElementById('loan-guarantor');
+    if (!guarantorSelect) {
+      const form = document.querySelector('#ov-loan-request .bs');
+      const insertAfter = document.getElementById('loan-q6')?.closest('.fgrp');
+      if (insertAfter) {
+        const div = document.createElement('div');
+        div.className = 'fgrp';
+        div.innerHTML = `
+          <label class="flbl">Guarantor (select a member)</label>
+          <select id="loan-guarantor" class="inp">
+            <option value="">Select a guarantor</option>
+            ${members.filter(m => m.id !== currentUser.id && m.approved).map(m => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('')}
+          </select>
+        `;
+        insertAfter.parentNode.insertBefore(div, insertAfter.nextSibling);
+      }
+    }
+
+    // Set max on amount
+    document.getElementById('loan-amount').max = suggestedMax;
+    document.getElementById('loan-amount').value = '';
+    // Clear other fields
+    ['loan-amount', 'loan-weeks', 'loan-q1', 'loan-q2', 'loan-q3', 'loan-q4', 'loan-q5', 'loan-q6', 'loan-q7', 'loan-q8'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    // Update summary
+    const amountInput = document.getElementById('loan-amount');
+    const weeksSelect = document.getElementById('loan-weeks');
+    const summaryDiv = document.getElementById('loan-summary');
+    const updateSummary = () => {
+      const amt = parseFloat(amountInput?.value);
+      const weeks = parseInt(weeksSelect?.value);
+      if (!amt || amt <= 0 || !weeks || isNaN(weeks)) {
+        if (summaryDiv) { summaryDiv.innerHTML = 'Enter amount and select weeks.'; summaryDiv.style.display = 'block'; }
+        return;
+      }
+      const baseRate = loanSettings.interestRate || 5;
+      const extra = (weeks - 1) * (loanSettings.extraWeeklyInterest || 2);
+      const totalRate = baseRate + extra;
+      const interest = Math.floor(amt * totalRate / 100);
+      const totalRepay = amt + interest;
+      const dueDate = new Date(Date.now() + weeks * 7 * 86400000);
+      if (summaryDiv) {
+        summaryDiv.innerHTML = `<strong>Loan Summary</strong><br>
+          Principal: ${money(amt)}<br>
+          Interest rate: ${totalRate}% (base ${baseRate}% + ${extra}% for ${weeks} weeks)<br>
+          Interest: ${money(interest)}<br>
+          Total to repay: ${money(totalRepay)}<br>
+          Due date: ${dueDate.toLocaleDateString()}<br>
+          <span class="micro">Late payment incurs penalty.</span>`;
+        summaryDiv.style.display = 'block';
+      }
+    };
+    if (amountInput) amountInput.oninput = updateSummary;
+    if (weeksSelect) weeksSelect.onchange = updateSummary;
+    updateSummary();
+
+    // Override submit function to include guarantor
+    const originalSubmit = window.submitLoanWithQuestions;
+    window.submitLoanWithQuestions = function() {
+      const guarantorId = document.getElementById('loan-guarantor')?.value;
+      if (!guarantorId) {
+        toast('Please select a guarantor', '#ef4444');
+        return;
+      }
+      // Call original but we need to modify the data saving to include guarantor.
+      // We'll override the actual submission function.
+      // I'll define a new version below.
+      submitLoanWithGuarantor(guarantorId);
+    };
+
+    openOv('ov-loan-request');
+  });
+}
+
+// ─── Submit loan with guarantor ──────────────────────────────
+function submitLoanWithGuarantor(guarantorId) {
+  const amount = parseFloat(document.getElementById('loan-amount').value);
+  const weeks = parseInt(document.getElementById('loan-weeks').value);
+  if (!amount || amount <= 0) { toast('Enter a valid amount', '#ef4444'); return; }
+  if (!weeks || isNaN(weeks)) { toast('Select repayment period', '#ef4444'); return; }
+
+  const answers = [];
+  for (let i = 1; i <= 8; i++) {
+    const el = document.getElementById(`loan-q${i}`);
+    if (!el) { toast(`Question ${i+1} missing`, '#ef4444'); return; }
+    let val = el.value;
+    if (el.tagName === 'SELECT') {
+      if (val === '' || val === 'Select' || val === 'Select...') {
+        toast(`Please answer question ${i+1}`, '#ef4444');
+        return;
+      }
+    } else if (el.tagName === 'INPUT') {
+      if (i === 7 && val === '') {
+        toast('Please enter your phone number', '#ef4444');
+        return;
+      }
+    }
+    answers.push(val);
+  }
+  const extra = document.getElementById('loan-q8')?.value.trim() || '';
+  answers.push(extra);
+
+  // Check limits
+  computePots();
+  let totalDeposits = 0;
+  transactions.forEach(tx => { if (tx.memberPhone === currentUser.phone && tx.type === 'deposit') totalDeposits += tx.amount; });
+  const disciplineMultiplier = loanSettings.disciplineMultiplier || 1.5;
+  const maxLoanByDiscipline = Math.floor(totalDeposits * disciplineMultiplier);
+  const maxLoanByProfit = Math.floor(groupProfit * (loanSettings.maxLoanPercent / 100));
+  const maxAllowed = Math.min(maxLoanByDiscipline, maxLoanByProfit);
+  if (amount > maxAllowed) { toast(`Exceeds limit: ${money(maxAllowed)}`, '#ef4444'); return; }
+  if (groupProfit <= 0) { toast('No profit pool for loans', '#ef4444'); return; }
+
+  const baseRate = loanSettings.interestRate || 5;
+  const extraRate = (weeks - 1) * (loanSettings.extraWeeklyInterest || 2);
+  const totalRate = baseRate + extraRate;
+  const interest = Math.floor(amount * totalRate / 100);
+  const totalRepay = amount + interest;
+  const dueDate = Date.now() + weeks * 7 * 86400000;
+
+  const guarantorName = members.find(m => m.id === guarantorId)?.name || 'Unknown';
+
+  const loanData = {
+    memberId: currentUser.id,
+    memberName: currentUser.name,
+    memberPhone: currentUser.phone,
+    amount: amount,
+    interestRate: totalRate,
+    totalRepay: totalRepay,
+    reason: answers[0] || 'Not specified',
+    loanQuestions: answers,
+    weeks: weeks,
+    status: 'pending',
+    requestedAt: Date.now(),
+    dueDate: dueDate,
+    repaid: false,
+    penaltyApplied: false,
+    guarantorId: guarantorId,
+    guarantorName: guarantorName
+  };
+
+  db.ref('loans').push(loanData).then(() => {
+    toast(`Loan request of ${money(amount)} (repay ${money(totalRepay)}) submitted with guarantor ${guarantorName}!`, '#10b981');
+    closeOv('ov-loan-request');
+    updateLoanIndicator();
+  }).catch(err => { console.error(err); toast('Failed to submit', '#ef4444'); });
+}
 // Function for admin to open loan form (for testing)
 function openLoanRequestFormForAdmin() {
   // Allow admin to test the loan application flow
@@ -11181,6 +11731,77 @@ window.rejectLoan=function(lid){
     if(currentAdminTab==='savings')renderAdminTab();
   });
 };
+// ─── Schedule payout reminders ──────────────────────────────
+function schedulePayoutReminder() {
+  // Check once per day
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0,10);
+  const lastCheck = localStorage.getItem('htf_payout_reminder_date');
+  if (lastCheck === todayStr) return; // already checked today
+
+  const nextPayout = getNextPayoutDate();
+  if (!nextPayout) return;
+  const diff = nextPayout - Date.now();
+  const oneDay = 24 * 60 * 60 * 1000;
+  if (diff <= oneDay && diff > 0) {
+    // Today is payout day or tomorrow
+    const receiverId = rotation.order && rotation.order[rotation.currentIndex || 0];
+    const member = members.find(m => m.id === receiverId);
+    if (member) {
+      // Send local push notification to receiver (if enabled)
+      sendLocalNotification('💰 Payout Reminder', `Dear ${member.name}, your payout is due ${diff <= 0 ? 'today' : 'tomorrow'}. Please check with admin.`);
+      // Send notification to member's notifications in Firebase
+      db.ref('notifications/' + member.id).push({
+        id: Date.now(),
+        text: `⏰ Your weekly payout is due ${diff <= 0 ? 'today' : 'tomorrow'}. Contact admin if you have questions.`,
+        date: Date.now(),
+        read: false,
+        type: 'payout_reminder'
+      });
+      // Also notify admin
+      db.ref('notifications/admin').push({
+        id: Date.now(),
+        text: `📢 Payout reminder: ${member.name} is due for payout ${diff <= 0 ? 'today' : 'tomorrow'}.`,
+        date: Date.now(),
+        read: false,
+        type: 'admin_payout_reminder'
+      });
+    }
+    localStorage.setItem('htf_payout_reminder_date', todayStr);
+  }
+}
+// ─── Check pending actions and show modal if any ────────────
+function checkPendingRequestsAndNotify() {
+  if (!currentUser || !currentUser.isAdmin) return;
+  let pendingCount = 0;
+
+  // Count pending applications
+  db.ref('applications').orderByChild('status').equalTo('pending').once('value', snap => {
+    pendingCount += snap.val() ? Object.keys(snap.val()).length : 0;
+  });
+  // Count pending loans
+  const pendingLoans = loans.filter(l => l.status === 'pending').length;
+  pendingCount += pendingLoans;
+  // Count pending leave
+  db.ref('leaveRequests').orderByChild('status').equalTo('pending').once('value', snap => {
+    pendingCount += snap.val() ? Object.keys(snap.val()).length : 0;
+  });
+  // Count pending password resets
+  db.ref('passwordResetRequests').orderByChild('status').equalTo('pending').once('value', snap => {
+    pendingCount += snap.val() ? Object.keys(snap.val()).length : 0;
+  });
+
+  // If any pending, open the modal after a short delay
+  setTimeout(() => {
+    if (pendingCount > 0) {
+      // Show the pending requests modal
+      if (typeof loadApplications === 'function') {
+        loadApplications();
+        toast(`📋 ${pendingCount} pending request(s) need your attention`, '#f59e0b');
+      }
+    }
+  }, 2500);
+}
 // ════════════════════════════════════════════════════════════
 // CHECK PAYOUT OVERDUE – Shows the action modal
 // ════════════════════════════════════════════════════════════
@@ -11617,6 +12238,10 @@ window.openApproveLoanModal = async function(loanId) {
   if (!loan) return;
   const member = members.find(m => m.id === loan.memberId);
   if (!member) return;
+  // Inside openApproveLoanModal, add this line to the infoDiv:
+if (loan.guarantorName) {
+  infoDiv.innerHTML += `<div><strong>Guarantor:</strong> ${escapeHtml(loan.guarantorName)}</div>`;
+}
   
   // Show member's answers
   const answers = loan.loanQuestions || [];
@@ -15279,6 +15904,20 @@ window.saveRotationOrder = function() {
     toast('Failed to save order', '#ef4444');
   });
 };
+window.buildDragRotation = function() {
+    // Ensure rotation order exists
+    if (!rotation.order || rotation.order.length === 0) {
+        const approved = members.filter(m => m.approved !== false);
+        rotation.order = approved.map(m => m.id);
+        if (db) {
+            db.ref('rotation/order').set(rotation.order);
+            rotation.currentIndex = 0;
+            db.ref('rotation/currentIndex').set(0);
+        }
+    }
+    dragOrder = rotation.order.slice(); // copy for drag list
+    renderDragList();
+};
 window.buildCoverDaysList=function(){const c=document.getElementById('cover-days-list');c.innerHTML='';for(let i=0;i<14;i++){const d=new Date(Date.now()-i*86400000);const dk=_isoDate(d);const r=document.createElement('div');r.className='daily-check';r.onclick=()=>toggleCoverDay(dk,r);r.innerHTML='<div class="dc-box">✓</div><span>'+d.toLocaleDateString()+'</span>';c.appendChild(r);}};
 function animateFallingText(containerId, text, callback) {
   const container = document.getElementById(containerId);
@@ -17624,6 +18263,7 @@ function showModalEl(el,title){const ov=document.createElement('div');ov.classNa
 function closeModal(){if(window.currentModal)window.currentModal.remove();}
 
 function initAndComplete() {
+  applySavedTheme();
   initFirebase();
   // No fallback timer – let the normal sequence run
 }
@@ -21106,6 +21746,124 @@ window.deleteChatMessage = function(chatId, msgKey) {
   65%{transform:scale(1);opacity:.8;}
   100%{transform:scale(1.05);opacity:0;}
 }
+
+/* ════════════════════════════════════════════════════════════
+   ANDROID / MOBILE BLINK FIX
+   Overrides every animation that causes full-page repaints on
+   Android Chrome. Static backgrounds + no blend-mode compositing
+   = smooth 60 fps on all phones.
+   ════════════════════════════════════════════════════════════ */
+@media screen and (max-width: 768px) {
+
+  /* 1. Body: kill gradient animation + fixed-attachment (broken on Android) */
+  body {
+    animation: none !important;
+    background-attachment: scroll !important;
+    background: #060e1a !important;
+  }
+
+  /* 2. Body pseudo-elements: no drift, no mix-blend-mode */
+  body::before {
+    animation: none !important;
+    background-attachment: scroll !important;
+  }
+  body::after {
+    animation: none !important;
+    mix-blend-mode: normal !important;
+    opacity: 0 !important;
+    background-attachment: scroll !important;
+  }
+
+  /* 3. Floating orbs: hide entirely – blur(80px) on fixed elements = GPU killer */
+  .bg-orb {
+    display: none !important;
+    animation: none !important;
+  }
+
+  /* 4. Floating particles: remove */
+  .particle, .particle-dot {
+    display: none !important;
+  }
+
+  /* 5. Header shimmer – freeze it (still looks nice, no constant repaint) */
+  #hdr::after {
+    animation: none !important;
+    background-position: 0 0 !important;
+  }
+
+  /* 6. Stats-tile infinite glow – only keep entry animation */
+  .ss-tile {
+    animation: tileIn 0.4s var(--ease-spring,cubic-bezier(0.34,1.56,0.64,1)) both !important;
+  }
+
+  /* 7. Text-shadow pulse on money numbers */
+  #profits-display, #total-weekly-display {
+    animation: none !important;
+    text-shadow: none !important;
+  }
+
+  /* 8. Weekly receiver name glow */
+  .weekly-receiver-name {
+    animation: none !important;
+    text-shadow: none !important;
+  }
+
+  /* 9. Receiver card box-shadow pulse */
+  .weekly-receiver-card {
+    animation: none !important;
+  }
+
+  /* 10. Online dot pulse (box-shadow change = repaint) */
+  .sdot {
+    animation: none !important;
+  }
+
+  /* 11. Maintenance float bounce */
+  #maintenance-float-btn {
+    animation: none !important;
+  }
+
+  /* 12. Remove backdrop-filter from content cards –
+         each blurred layer = compositor hit on Android */
+  .card,
+  .ss-tile,
+  .txc,
+  .mc,
+  .app-item,
+  .daily-check,
+  .menu-section,
+  .rot-hero,
+  .admin-header-strip,
+  .notice-banner.carousel-banner {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  /* 13. Theme deep-blue bubbleDrift is applied via body::after above */
+
+  /* 14. Lion breathe / pending-icon animations */
+  .pending-icon {
+    animation: none !important;
+  }
+
+  /* 15. Tab transitions: use simple fade instead of 3D flip on mobile */
+  .tab.book-out-fwd,
+  .tab.book-in-fwd,
+  .tab.book-out-bwd,
+  .tab.book-in-bwd {
+    animation: none !important;
+    transform: none !important;
+  }
+  .tab.on {
+    animation: fadeSlideIn 0.28s ease both !important;
+  }
+
+  /* 16. Ensure main layout stays composited properly */
+  #app {
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+  }
+}
 </style>
 <script>
 // ─── Global Chat Variables ──────────────────────────────
@@ -21115,26 +21873,10 @@ window._adminChatName = 'Admin';     // admin display name
 (function(){
   var TAB_ORDER=['home','statistics','account'];
 
-  /* ── Wrap goTab once more: drive the book-page-flip transition ── */
+  /* ── goTab wrapper: book-flip is already done inside goTab; wrapper only exists for the pour effect ── */
   var baseGoTab = window.goTab;
   window.goTab = function(tab, btn){
-    var prevTab = typeof currentScreen !== 'undefined' ? currentScreen : null;
-    var prevEl = prevTab ? document.getElementById('t-' + prevTab) : null;
     baseGoTab(tab, btn);
-    var newEl = document.getElementById('t-' + tab);
-    if(!prevEl || !newEl || prevEl === newEl) return;
-    var pi = TAB_ORDER.indexOf(prevTab), ni = TAB_ORDER.indexOf(tab);
-    var forward = (pi === -1 || ni === -1) ? true : (ni > pi);
-    ['book-out-fwd','book-in-fwd','book-out-bwd','book-in-bwd'].forEach(function(c){
-      prevEl.classList.remove(c); newEl.classList.remove(c);
-    });
-    void prevEl.offsetWidth; // restart animation reliably
-    prevEl.classList.add(forward ? 'book-out-fwd' : 'book-out-bwd');
-    newEl.classList.add(forward ? 'book-in-fwd' : 'book-in-bwd');
-    setTimeout(function(){
-      prevEl.classList.remove('book-out-fwd','book-out-bwd');
-      newEl.classList.remove('book-in-fwd','book-in-bwd');
-    }, 620);
   };
 
   function triggerPour(x, y){
@@ -21206,5 +21948,1029 @@ document.addEventListener('visibilitychange', function() {
     }
 });
 </script>
+
+<!-- ══════════════════════════════════════════════════════════════
+     NEW FEATURES v3 CSS
+══════════════════════════════════════════════════════════════════ -->
+<style>
+/* ── Milestone badges ── */
+.mbadge{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:0.62rem;font-weight:700;border:1px solid;animation:badgePop 0.4s var(--ease-spring,cubic-bezier(0.34,1.56,0.64,1)) both;}
+.mbadge-gold{background:rgba(245,158,11,0.12);color:var(--gold);border-color:rgba(245,158,11,0.25);}
+.mbadge-teal{background:rgba(6,182,212,0.12);color:var(--teal);border-color:rgba(6,182,212,0.25);}
+.mbadge-green{background:rgba(16,185,129,0.12);color:var(--green);border-color:rgba(16,185,129,0.25);}
+.mbadge-purple{background:rgba(139,92,246,0.12);color:var(--purple,#8b5cf6);border-color:rgba(139,92,246,0.25);}
+.mbadge-red{background:rgba(239,68,68,0.12);color:var(--red);border-color:rgba(239,68,68,0.25);}
+
+/* ── Week-dot ── */
+.wdot{display:flex;flex-direction:column;align-items:center;gap:2px;}
+.wdot-circle{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.5rem;font-weight:700;flex-shrink:0;}
+.wdot-paid{background:var(--green,#10b981);color:#fff;}
+.wdot-missed{background:var(--red,#ef4444);color:#fff;}
+.wdot-partial{background:var(--gold,#f59e0b);color:#fff;}
+.wdot-future{background:rgba(255,255,255,0.08);color:var(--t3);}
+.wdot-today{box-shadow:0 0 0 2px var(--teal,#06b6d4);}
+.wdot-label{font-size:0.4rem;color:var(--t3);font-weight:600;}
+
+/* ── Calendar overlay ── */
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:8px;}
+.cal-day-hdr{text-align:center;font-size:0.55rem;font-weight:700;color:var(--t3);padding:2px;}
+.cal-day{aspect-ratio:1;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:700;cursor:default;position:relative;}
+.cal-paid{background:rgba(16,185,129,0.2);color:var(--green,#10b981);border:1px solid rgba(16,185,129,0.35);}
+.cal-missed{background:rgba(239,68,68,0.15);color:var(--red,#ef4444);border:1px solid rgba(239,68,68,0.3);}
+.cal-partial{background:rgba(245,158,11,0.15);color:var(--gold,#f59e0b);border:1px solid rgba(245,158,11,0.3);}
+.cal-future{background:rgba(255,255,255,0.03);color:var(--t3);border:1px solid rgba(255,255,255,0.05);}
+.cal-today{outline:2px solid var(--teal,#06b6d4);outline-offset:2px;}
+.cal-empty{background:transparent;border:none;}
+.cal-legend{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;font-size:0.62rem;}
+.cal-legend-item{display:flex;align-items:center;gap:4px;}
+.cal-legend-dot{width:10px;height:10px;border-radius:50%;}
+
+/* ── Projection card ── */
+.proj-bar-wrap{background:rgba(255,255,255,0.06);border-radius:8px;height:8px;overflow:hidden;margin:6px 0;}
+.proj-bar-fill{height:100%;border-radius:8px;background:linear-gradient(90deg,var(--teal,#06b6d4),var(--gold,#f59e0b));transition:width 0.8s cubic-bezier(0.22,1,0.36,1);}
+
+/* ── Polls ── */
+.poll-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:14px;margin-bottom:10px;}
+.poll-option{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px;cursor:pointer;border:1.5px solid rgba(255,255,255,0.1);margin-bottom:6px;transition:all 0.2s;}
+.poll-option:hover{border-color:var(--gold);background:rgba(245,158,11,0.06);}
+.poll-option.voted{border-color:var(--gold);background:rgba(245,158,11,0.1);}
+.poll-bar-wrap{background:rgba(255,255,255,0.06);border-radius:6px;height:6px;flex:1;}
+.poll-bar-fill{height:100%;border-radius:6px;background:linear-gradient(90deg,var(--gold),var(--teal));transition:width 0.6s ease;}
+</style>
+
+<!-- ══════════════════════════════════════════════════════════════
+     NEW FEATURE OVERLAYS / MODALS
+══════════════════════════════════════════════════════════════════ -->
+
+<!-- Savings Calendar -->
+<div class="ov" id="ov-calendar" onclick="maybeClose(event,'ov-calendar')">
+  <div class="bs" style="max-width:380px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <button class="btn btn-sm btn-sec" onclick="calNavMonth(-1)">&#8249;</button>
+      <div class="bs-title" id="cal-month-title" style="margin:0;font-size:1rem;"></div>
+      <button class="btn btn-sm btn-sec" onclick="calNavMonth(1)">&#8250;</button>
+    </div>
+    <div class="cal-legend">
+      <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--green);"></div>Paid</div>
+      <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--gold);"></div>Partial</div>
+      <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--red);"></div>Missed</div>
+      <div class="cal-legend-item"><div class="cal-legend-dot" style="background:rgba(255,255,255,0.15);"></div>Future</div>
+    </div>
+    <div id="cal-grid-container"></div>
+    <div id="cal-summary" style="margin-top:10px;font-size:0.72rem;color:var(--t3);text-align:center;"></div>
+    <button class="btn btn-sec btn-full" style="margin-top:10px;" onclick="closeOv('ov-calendar')">Close</button>
+  </div>
+</div>
+
+<!-- Savings Projection -->
+<div class="ov" id="ov-projection" onclick="maybeClose(event,'ov-projection')">
+  <div class="bs" style="max-width:380px;">
+    <div class="bs-title">&#128200; Savings Projection</div>
+    <div id="projection-content"></div>
+    <button class="btn btn-sec btn-full" style="margin-top:12px;" onclick="closeOv('ov-projection')">Close</button>
+  </div>
+</div>
+
+<!-- Early Loan Repayment -->
+<div class="ov" id="ov-early-repay" onclick="maybeClose(event,'ov-early-repay')">
+  <div class="bs" style="max-width:380px;">
+    <div class="bs-title">&#128184; Repay Loan Early</div>
+    <div id="early-repay-info" style="margin-bottom:12px;font-size:0.82rem;color:var(--t2);"></div>
+    <div class="fgrp">
+      <label class="flbl">Amount to Repay (UGX)</label>
+      <input type="number" id="early-repay-amount" class="inp" placeholder="e.g. 50000" oninput="previewEarlyRepay()">
+    </div>
+    <div id="early-repay-preview" style="margin:8px 0;font-size:0.78rem;color:var(--teal);min-height:20px;"></div>
+    <button class="btn btn-gold btn-full" onclick="submitEarlyRepay()">Submit Repayment Request</button>
+    <button class="btn btn-sec btn-full" style="margin-top:8px;" onclick="closeOv('ov-early-repay')">Cancel</button>
+  </div>
+</div>
+
+<!-- Group Polls -->
+<div class="ov" id="ov-polls" onclick="maybeClose(event,'ov-polls')">
+  <div class="bs" style="max-width:420px;">
+    <div class="bs-title">&#128499; Group Polls</div>
+    <div id="polls-list-container"></div>
+    <button class="btn btn-sec btn-full" style="margin-top:10px;" onclick="closeOv('ov-polls')">Close</button>
+  </div>
+</div>
+
+<!-- Admin: Create Poll -->
+<div class="ov" id="ov-create-poll" onclick="maybeClose(event,'ov-create-poll')">
+  <div class="bs" style="max-width:400px;">
+    <div class="bs-title">Create Poll</div>
+    <div class="fgrp">
+      <label class="flbl">Question</label>
+      <input type="text" id="poll-question" class="inp" placeholder="What should we vote on?" maxlength="200">
+    </div>
+    <div id="poll-options-wrap">
+      <div class="fgrp"><label class="flbl">Option 1</label><input type="text" class="inp poll-opt-input" placeholder="Option A"></div>
+      <div class="fgrp"><label class="flbl">Option 2</label><input type="text" class="inp poll-opt-input" placeholder="Option B"></div>
+    </div>
+    <button class="btn btn-sm btn-sec" onclick="addPollOption()" style="margin-bottom:8px;">+ Add Option</button>
+    <button class="btn btn-gold btn-full" onclick="submitCreatePoll()">Create Poll</button>
+    <button class="btn btn-sec btn-full" style="margin-top:8px;" onclick="closeOv('ov-create-poll')">Cancel</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     NEW FEATURES JAVASCRIPT
+══════════════════════════════════════════════════════════════════ -->
+<script>
+// ══════════════════════════════════════════════
+// FEATURE 1 – Weekly Savings Progress Bar
+// ══════════════════════════════════════════════
+function getWeekDates() {
+  var now = new Date();
+  var day = now.getDay();
+  var monday = new Date(now);
+  monday.setDate(now.getDate() - ((day + 6) % 7));
+  monday.setHours(0, 0, 0, 0);
+  var dates = [];
+  for (var i = 0; i < 7; i++) {
+    var d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    dates.push(d);
+  }
+  return dates;
+}
+
+function getWeekDayStatus(member, dateObj) {
+  if (!member) return 'future';
+  var dayStart = new Date(dateObj);
+  dayStart.setHours(0, 0, 0, 0);
+  var dayEnd = dayStart.getTime() + 86400000 - 1;
+  var today = new Date(); today.setHours(0, 0, 0, 0);
+  if (dayStart > today) return 'future';
+  var dailyAmt = (settings && settings.dailyAmount) || 2000;
+  var dep = 0;
+  transactions.forEach(function(tx) {
+    if (tx.memberPhone === member.phone && tx.date >= dayStart.getTime() && tx.date <= dayEnd) {
+      if (tx.type === 'deposit') dep += tx.amount;
+    }
+  });
+  if (dep >= dailyAmt) return 'paid';
+  if (dep > 0) return 'partial';
+  return 'missed';
+}
+
+function renderWeekDots(containerEl, member, compact) {
+  if (!containerEl || !member) return 0;
+  var dates = getWeekDates();
+  var dayNames = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  var today = new Date(); today.setHours(0,0,0,0);
+  var streak = 0;
+  var html = '';
+  dates.forEach(function(d, i) {
+    var status = getWeekDayStatus(member, d);
+    var isToday = d.getTime() === today.getTime();
+    if (status === 'paid') streak++;
+    var dotCls = 'wdot-circle ' + (
+      status === 'paid' ? 'wdot-paid' :
+      status === 'partial' ? 'wdot-partial' :
+      status === 'missed' ? 'wdot-missed' : 'wdot-future'
+    ) + (isToday ? ' wdot-today' : '');
+    var size = compact ? '18px' : '22px';
+    var ico = status === 'paid' ? '\u2713' : status === 'missed' ? '\u2717' : status === 'partial' ? '~' : dayNames[i][0];
+    html += '<div class="wdot"><div class="' + dotCls + '" style="width:' + size + ';height:' + size + ';">' + ico + '</div><div class="wdot-label">' + dayNames[i] + '</div></div>';
+  });
+  containerEl.innerHTML = html;
+  return streak;
+}
+
+function renderHomeWeekProgress() {
+  var card = document.getElementById('home-weekly-progress');
+  var dotsEl = document.getElementById('home-week-dots');
+  var badgeEl = document.getElementById('home-streak-badge');
+  if (!card || !currentUser || currentUser.isAdmin) { if (card) card.style.display = 'none'; return; }
+  var member = members.find(function(m) { return m.id === currentUser.id; });
+  if (!member) return;
+  card.style.display = 'block';
+  var streak = renderWeekDots(dotsEl, member, true);
+  if (badgeEl) badgeEl.textContent = streak > 0 ? '\uD83D\uDD25 ' + streak + '-day streak' : '';
+}
+
+function renderAccountWeekProgress() {
+  var card = document.getElementById('weekly-progress-card');
+  var dotsEl = document.getElementById('weekly-progress-dots');
+  var streakEl = document.getElementById('weekly-streak-label');
+  if (!card || !currentUser || currentUser.isAdmin) { if (card) card.style.display = 'none'; return; }
+  var member = members.find(function(m) { return m.id === currentUser.id; });
+  if (!member) return;
+  card.style.display = 'block';
+  var streak = renderWeekDots(dotsEl, member, false);
+  if (streakEl) streakEl.textContent = streak > 0 ? '\uD83D\uDD25 ' + streak + '-day streak this week' : 'No savings recorded this week yet';
+}
+
+// ══════════════════════════════════════════════
+// FEATURE 2 – Push / Browser Notifications
+// ══════════════════════════════════════════════
+function updatePushStatusLabel() {
+  var el = document.getElementById('push-status-label');
+  if (!el) return;
+  if (!('Notification' in window)) { el.textContent = 'Not supported'; el.style.color = 'var(--t3)'; return; }
+  if (Notification.permission === 'granted') { el.textContent = 'On \u2713'; el.style.color = 'var(--green)'; }
+  else if (Notification.permission === 'denied') { el.textContent = 'Blocked'; el.style.color = 'var(--red)'; }
+  else { el.textContent = 'Tap to enable'; el.style.color = 'var(--gold)'; }
+}
+
+window.requestPushPermission = function() {
+  if (!('Notification' in window)) { toast('Notifications not supported on this device', '#ef4444'); return; }
+  if (Notification.permission === 'granted') { toast('Push alerts already enabled \u2713', '#10b981'); return; }
+  if (Notification.permission === 'denied') { toast('Notifications are blocked. Please allow them in browser settings.', '#ef4444'); return; }
+  Notification.requestPermission().then(function(perm) {
+    updatePushStatusLabel();
+    if (perm === 'granted') {
+      toast('Push alerts enabled! \u2713', '#10b981');
+      sendLocalNotification('\uD83C\uDF3E Harvest Trust Finance', 'Push alerts are now on. You\'ll get payment reminders here.');
+      if (currentUser && db) db.ref('members/' + currentUser.id).update({ notifEnabled: true });
+    } else {
+      toast('Permission denied', '#ef4444');
+    }
+  });
+};
+
+function sendLocalNotification(title, body) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  try { new Notification(title, { body: body, tag: 'htf-' + Date.now() }); } catch(e) {}
+}
+
+function scheduleDailyPushReminder() {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  if (!currentUser || currentUser.isAdmin) return;
+  var member = members.find(function(m) { return m.id === currentUser.id; });
+  if (!member) return;
+  var status = getWeekDayStatus(member, new Date());
+  if (status === 'missed') {
+    var now = new Date();
+    if (now.getHours() >= 18 && now.getHours() < 22) {
+      var lastReminder = localStorage.getItem('htf_last_reminder');
+      var today = new Date().toDateString();
+      if (lastReminder !== today) {
+        sendLocalNotification('\u23F0 Savings Reminder', "Don't forget your daily savings of UGX " + ((settings && settings.dailyAmount) || 2000).toLocaleString() + '!');
+        localStorage.setItem('htf_last_reminder', today);
+      }
+    }
+  }
+}
+
+// ══════════════════════════════════════════════
+// FEATURE 3 – Personal Savings Calendar
+// ══════════════════════════════════════════════
+var calViewYear = new Date().getFullYear();
+var calViewMonth = new Date().getMonth();
+
+// ─── Savings Calendar ──────────────────────────────────────────
+window.openSavingsCalendar = function() {
+    try {
+        calViewYear = new Date().getFullYear();
+        calViewMonth = new Date().getMonth();
+        renderCalendar();
+        var ov = document.getElementById('ov-calendar');
+        if (ov) {
+            ov.classList.add('on');
+            ov.style.display = 'flex';
+        } else {
+            toast('Calendar modal not found', '#ef4444');
+        }
+    } catch (e) {
+        console.error('openSavingsCalendar error:', e);
+        toast('Unable to open calendar', '#ef4444');
+    }
+};
+
+
+window.calNavMonth = function(dir) {
+  calViewMonth += dir;
+  if (calViewMonth > 11) { calViewMonth = 0; calViewYear++; }
+  if (calViewMonth < 0) { calViewMonth = 11; calViewYear--; }
+  renderCalendar();
+};
+
+function renderCalendar() {
+  var member = (currentUser && !currentUser.isAdmin) ? members.find(function(m) { return m.id === currentUser.id; }) : null;
+  var titleEl = document.getElementById('cal-month-title');
+  var container = document.getElementById('cal-grid-container');
+  var summaryEl = document.getElementById('cal-summary');
+  if (!titleEl || !container) return;
+  var monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  titleEl.textContent = monthNames[calViewMonth] + ' ' + calViewYear;
+  var firstDay = new Date(calViewYear, calViewMonth, 1);
+  var daysInMonth = new Date(calViewYear, calViewMonth + 1, 0).getDate();
+  var startDow = (firstDay.getDay() + 6) % 7;
+  var today = new Date(); today.setHours(0,0,0,0);
+  var dayHeaders = ['M','T','W','T','F','S','S'];
+  var html = '<div class="cal-grid">' + dayHeaders.map(function(d) { return '<div class="cal-day-hdr">' + d + '</div>'; }).join('');
+  for (var i = 0; i < startDow; i++) html += '<div class="cal-day cal-empty"></div>';
+  var paid = 0, missed = 0, partial = 0;
+  for (var d = 1; d <= daysInMonth; d++) {
+    var dateObj = new Date(calViewYear, calViewMonth, d);
+    dateObj.setHours(0,0,0,0);
+    var isToday = dateObj.getTime() === today.getTime();
+    var isFuture = dateObj > today;
+    var cls = 'cal-day ';
+    if (member && !isFuture) {
+      var status = getWeekDayStatus(member, dateObj);
+      if (status === 'paid') { cls += 'cal-paid'; paid++; }
+      else if (status === 'partial') { cls += 'cal-partial'; partial++; }
+      else { cls += 'cal-missed'; missed++; }
+    } else { cls += 'cal-future'; }
+    if (isToday) cls += ' cal-today';
+    html += '<div class="' + cls + '">' + d + '</div>';
+  }
+  html += '</div>';
+  container.innerHTML = html;
+  if (member && summaryEl) {
+    var recorded = paid + missed + partial;
+    var rate = recorded > 0 ? Math.round((paid / recorded) * 100) : 0;
+    summaryEl.innerHTML = '<span style="color:var(--green);">\u2713 ' + paid + ' paid</span> &nbsp;|&nbsp; <span style="color:var(--gold);">~ ' + partial + ' partial</span> &nbsp;|&nbsp; <span style="color:var(--red);">\u2717 ' + missed + ' missed</span>&nbsp;&nbsp;\u00B7&nbsp;&nbsp;<strong style="color:var(--teal);">' + rate + '% rate</strong>';
+  }
+}
+
+// ══════════════════════════════════════════════
+// FEATURE 4 – Group Announcement Polls
+// ══════════════════════════════════════════════
+var polls = [];
+var pollsListenerOn = false;
+
+function initPollsListener() {
+  if (pollsListenerOn || !db) return;
+  pollsListenerOn = true;
+  db.ref('polls').on('value', function(snap) {
+    polls = snap.val() ? Object.entries(snap.val()).map(function(e) { return Object.assign({id: e[0]}, e[1]); }) : [];
+    var unvoted = polls.filter(function(p) {
+      return p.active !== false && currentUser && !currentUser.isAdmin && !(p.votes && p.votes[currentUser.id]);
+    }).length;
+    var badge = document.getElementById('polls-badge-label');
+    if (badge) badge.textContent = unvoted > 0 ? unvoted + ' new' : '';
+    if (unvoted > 0) sendLocalNotification('\uD83D\uDDF3\uFE0F New Poll!', 'There\'s a new poll waiting for your vote.');
+  });
+}
+
+// ─── Group Polls ───────────────────────────────────────────────
+window.openPollsModal = function() {
+    try {
+        renderPollsList();
+        var ov = document.getElementById('ov-polls');
+        if (ov) {
+            ov.classList.add('on');
+            ov.style.display = 'flex';
+        } else {
+            toast('Polls modal not found', '#ef4444');
+        }
+    } catch (e) {
+        console.error('openPollsModal error:', e);
+        toast('Unable to open polls', '#ef4444');
+    }
+};
+
+function renderPollsList() {
+  var container = document.getElementById('polls-list-container');
+  if (!container) return;
+  var activePolls = polls.filter(function(p) { return p.active !== false; });
+  if (!activePolls.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">\uD83D\uDDF3\uFE0F</div><div class="empty-state-text">No active polls at the moment</div></div>';
+    return;
+  }
+  container.innerHTML = activePolls.map(function(poll) {
+    var myVote = (currentUser && poll.votes) ? poll.votes[currentUser.id] : null;
+    var totalVotes = poll.votes ? Object.keys(poll.votes).length : 0;
+    var optHtml = (poll.options || []).map(function(opt, i) {
+      var optVotes = poll.votes ? Object.values(poll.votes).filter(function(v) { return v === i; }).length : 0;
+      var pct = totalVotes > 0 ? Math.round((optVotes / totalVotes) * 100) : 0;
+      var isMyVote = myVote === i;
+      return '<div class="poll-option' + (isMyVote ? ' voted' : '') + '" onclick="castVote(\'' + poll.id + '\',' + i + ')">' +
+        '<div style="flex:1;">' +
+        '<div style="font-size:0.82rem;font-weight:' + (isMyVote ? '700' : '500') + ';color:' + (isMyVote ? 'var(--gold)' : 'var(--t)') + ';">' + escapeHtml(opt) + (isMyVote ? ' \u2713' : '') + '</div>' +
+        '<div class="poll-bar-wrap"><div class="poll-bar-fill" style="width:' + pct + '%;"></div></div>' +
+        '</div><div style="font-size:0.72rem;font-weight:700;color:var(--t3);min-width:36px;text-align:right;">' + pct + '%<br><span style="font-size:0.55rem;">' + optVotes + '</span></div></div>';
+    }).join('');
+    var myVoteVal = (myVote !== null && myVote !== undefined) ? myVote : null;
+    return '<div class="poll-card"><div style="font-weight:700;font-size:0.9rem;color:var(--t);margin-bottom:8px;">' + escapeHtml(poll.question) + '</div>' + optHtml +
+      '<div style="font-size:0.6rem;color:var(--t3);margin-top:6px;">' + totalVotes + ' vote' + (totalVotes !== 1 ? 's' : '') + ' \u00B7 ' + (myVoteVal !== null ? 'You voted' : 'Tap to vote') + '</div></div>';
+  }).join('');
+}
+
+window.castVote = function(pollId, optionIndex) {
+  if (!currentUser || currentUser.isAdmin) { toast('Admins cannot vote', '#ef4444'); return; }
+  db.ref('polls/' + pollId + '/votes/' + currentUser.id).set(optionIndex).then(function() {
+    toast('Vote recorded \u2713', '#10b981');
+    renderPollsList();
+  });
+};
+
+window.openCreatePollModal = function() {
+  var ov = document.getElementById('ov-create-poll');
+  if (!ov) return;
+  document.getElementById('poll-question').value = '';
+  document.querySelectorAll('.poll-opt-input').forEach(function(el) { el.value = ''; });
+  var wrap = document.getElementById('poll-options-wrap');
+  wrap.querySelectorAll('.poll-opt-extra').forEach(function(e) { e.remove(); });
+  ov.classList.add('on');
+};
+
+window.addPollOption = function() {
+  var wrap = document.getElementById('poll-options-wrap');
+  var count = wrap.querySelectorAll('.poll-opt-input').length + 1;
+  var div = document.createElement('div');
+  div.className = 'fgrp poll-opt-extra';
+  div.innerHTML = '<label class="flbl">Option ' + count + '</label><input type="text" class="inp poll-opt-input" placeholder="Option ' + String.fromCharCode(64 + count) + '">';
+  wrap.appendChild(div);
+};
+
+window.submitCreatePoll = function() {
+  var q = document.getElementById('poll-question').value.trim();
+  if (!q) { toast('Enter a question', '#ef4444'); return; }
+  var opts = Array.from(document.querySelectorAll('.poll-opt-input')).map(function(el) { return el.value.trim(); }).filter(Boolean);
+  if (opts.length < 2) { toast('Add at least 2 options', '#ef4444'); return; }
+  var poll = { question: q, options: opts, votes: {}, active: true, createdAt: Date.now(), createdBy: 'admin' };
+  db.ref('polls').push(poll).then(function() {
+    toast('Poll created! Members can now vote.', '#10b981');
+    closeOv('ov-create-poll');
+    var approvedMembers = members.filter(function(m) { return m.approved && !m.isAdmin; });
+    approvedMembers.forEach(function(m) {
+      db.ref('notifications/' + m.id).push({ id: Date.now() + '_poll', text: '\uD83D\uDDF3\uFE0F New Poll: ' + q, type: 'poll', read: false, date: Date.now() });
+    });
+    renderAdminPollsTab();
+  });
+};
+
+window.closePoll = function(pollId) {
+  db.ref('polls/' + pollId + '/active').set(false).then(function() {
+    toast('Poll closed', '#f59e0b');
+    renderAdminPollsTab();
+  });
+};
+
+window.deletePoll = function(pollId) {
+  if (!confirm('Delete this poll?')) return;
+  db.ref('polls/' + pollId).remove().then(function() {
+    toast('Poll deleted', '#ef4444');
+    renderAdminPollsTab();
+  });
+};
+
+function renderAdminPollsTab() {
+  var c = document.getElementById('admin-content');
+  if (!c) return;
+  var allPolls = polls.slice().sort(function(a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
+  var html = '<div style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">' +
+    '<div class="sec-h">\uD83D\uDDF3\uFE0F Polls Manager</div>' +
+    '<button class="btn btn-gold btn-sm" onclick="openCreatePollModal()">+ Create Poll</button></div>';
+  if (!allPolls.length) {
+    html += '<div class="empty-state"><div class="empty-state-icon">\uD83D\uDDF3\uFE0F</div><div class="empty-state-text">No polls yet. Create one!</div></div>';
+  } else {
+    allPolls.forEach(function(poll) {
+      var totalVotes = poll.votes ? Object.keys(poll.votes).length : 0;
+      var status = poll.active !== false ? '<span style="color:var(--green);">Active</span>' : '<span style="color:var(--t3);">Closed</span>';
+      var optsHtml = (poll.options || []).map(function(opt, i) {
+        var cnt = poll.votes ? Object.values(poll.votes).filter(function(v) { return v === i; }).length : 0;
+        var pct = totalVotes > 0 ? Math.round((cnt / totalVotes) * 100) : 0;
+        return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:0.75rem;">' +
+          '<div style="flex:1;">' + escapeHtml(opt) + '</div>' +
+          '<div class="poll-bar-wrap" style="width:80px;"><div class="poll-bar-fill" style="width:' + pct + '%;"></div></div>' +
+          '<div style="font-size:0.65rem;color:var(--t3);min-width:30px;">' + pct + '% (' + cnt + ')</div></div>';
+      }).join('');
+      html += '<div class="poll-card">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">' +
+        '<div style="font-weight:700;font-size:0.85rem;">' + escapeHtml(poll.question) + '</div>' +
+        '<div style="font-size:0.65rem;">' + status + '</div></div>' +
+        optsHtml +
+        '<div style="font-size:0.6rem;color:var(--t3);margin-top:4px;">' + totalVotes + ' votes \u00B7 ' + new Date(poll.createdAt || 0).toLocaleDateString() + '</div>' +
+        '<div style="display:flex;gap:6px;margin-top:8px;">' +
+        (poll.active !== false ? '<button class="btn btn-sm" style="background:rgba(245,158,11,0.15);color:var(--gold);" onclick="closePoll(\'' + poll.id + '\')">Close Poll</button>' : '') +
+        '<button class="btn btn-sm btn-red" onclick="deletePoll(\'' + poll.id + '\')">\uD83D\uDDD1\uFE0F Delete</button></div></div>';
+    });
+  }
+  c.innerHTML = html;
+}
+// ─── Member of the Month ──────────────────────────────────────
+function computeMemberOfTheMonth() {
+  const activeMembers = members.filter(m => m.approved);
+  if (!activeMembers.length) return null;
+
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).getTime();
+
+  let bestMember = null;
+  let bestScore = -1;
+
+  for (let m of activeMembers) {
+    let deposits = 0;
+    let days = new Set();
+    transactions.forEach(tx => {
+      if (tx.memberPhone === m.phone && tx.date >= monthStart && tx.date <= monthEnd) {
+        if (tx.type === 'deposit') {
+          deposits += tx.amount;
+          days.add(new Date(tx.date).toISOString().slice(0,10));
+        }
+      }
+    });
+    const consistency = days.size;
+    const score = deposits + consistency * 1000; // weighted
+    if (score > bestScore) {
+      bestScore = score;
+      bestMember = { member: m, deposits, consistency, score };
+    }
+  }
+  return bestMember;
+}
+
+function renderMemberOfTheMonth() {
+  // Show on home tab
+  const homeContainer = document.getElementById('t-home');
+  if (!homeContainer) return;
+  // Remove old badge if exists
+  const oldBadge = document.getElementById('motm-badge');
+  if (oldBadge) oldBadge.remove();
+
+  const winner = computeMemberOfTheMonth();
+  if (!winner) return;
+
+  // Only show if current user is the winner, or admin
+  if (!currentUser || (currentUser.id !== winner.member.id && !currentUser.isAdmin)) return;
+
+  const badge = document.createElement('div');
+  badge.id = 'motm-badge';
+  badge.style.cssText = `
+    background: linear-gradient(135deg, rgba(245,158,11,0.15), rgba(6,182,212,0.08));
+    border: 2px solid var(--gold);
+    border-radius: 16px;
+    padding: 10px 14px;
+    margin: 4px 0 8px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    animation: cardEnter 0.4s ease;
+    flex-shrink: 0;
+  `;
+  if (currentUser.id === winner.member.id) {
+    badge.innerHTML = `
+      <span style="font-size: 2rem;">👑</span>
+      <div>
+        <div style="font-weight: 800; color: var(--gold);">🏆 You are Member of the Month!</div>
+        <div class="micro muted">Top saver this month: ${money(winner.deposits)} over ${winner.consistency} days.</div>
+      </div>
+    `;
+  } else {
+    // Admin view
+    badge.innerHTML = `
+      <span style="font-size: 2rem;">👑</span>
+      <div>
+        <div style="font-weight: 800; color: var(--gold);">🏆 Member of the Month: ${escapeHtml(winner.member.name)}</div>
+        <div class="micro muted">Deposits: ${money(winner.deposits)} · Consistency: ${winner.consistency} days</div>
+      </div>
+    `;
+  }
+  // Insert at top of home tab, after stats strip or hero
+  const hero = homeContainer.querySelector('.weekly-receiver-card');
+  if (hero) {
+    homeContainer.insertBefore(badge, hero);
+  } else {
+    homeContainer.insertBefore(badge, homeContainer.firstChild);
+  }
+}
+// ══════════════════════════════════════════════
+// FEATURE 5 – Member Milestone Badges
+// ══════════════════════════════════════════════
+function computeMemberBadges(member) {
+  if (!member) return [];
+  var badges = [];
+  var phone = member.phone;
+  var txs = transactions.filter(function(tx) { return tx.memberPhone === phone; });
+  var deposits = txs.filter(function(tx) { return tx.type === 'deposit'; });
+  if (deposits.length >= 100) badges.push({ label: '\uD83D\uDCAF 100 Deposits', cls: 'mbadge-gold' });
+  else if (deposits.length >= 50) badges.push({ label: '\u2B50 50 Deposits', cls: 'mbadge-gold' });
+  else if (deposits.length >= 10) badges.push({ label: '\uD83C\uDF1F 10 Deposits', cls: 'mbadge-teal' });
+  var dates = getWeekDates();
+  var streak = 0;
+  for (var i = 0; i < dates.length; i++) {
+    var d = dates[i];
+    var today2 = new Date(); today2.setHours(0,0,0,0);
+    if (d > today2) break;
+    if (getWeekDayStatus(member, d) === 'paid') streak++; else break;
+  }
+  if (streak >= 7) badges.push({ label: '\uD83D\uDD25 Full Week!', cls: 'mbadge-red' });
+  else if (streak >= 5) badges.push({ label: '\uD83D\uDD25 5-Day Streak', cls: 'mbadge-red' });
+  else if (streak >= 3) badges.push({ label: '\uD83D\uDD25 3-Day Streak', cls: 'mbadge-gold' });
+  var repaidLoans = loans.filter(function(l) { return l.memberId === member.id && l.repaid; });
+  if (repaidLoans.length >= 3) badges.push({ label: '\uD83C\uDFC6 3x Loan Repaid', cls: 'mbadge-gold' });
+  else if (repaidLoans.length >= 1) badges.push({ label: '\u2705 Loan Repaid', cls: 'mbadge-green' });
+  var monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
+  var myMonthDep = deposits.filter(function(tx) { return tx.date >= monthStart.getTime(); }).reduce(function(s,tx) { return s + tx.amount; }, 0);
+  var allMemberDeps = members.filter(function(m) { return m.approved; }).map(function(m) {
+    return { phone: m.phone, total: transactions.filter(function(tx) { return tx.memberPhone === m.phone && tx.type === 'deposit' && tx.date >= monthStart.getTime(); }).reduce(function(s,tx) { return s + tx.amount; }, 0) };
+  });
+  allMemberDeps.sort(function(a,b) { return b.total - a.total; });
+  if (allMemberDeps.length > 0 && allMemberDeps[0].phone === phone && myMonthDep > 0) badges.push({ label: '\uD83C\uDFC5 Top Saver', cls: 'mbadge-gold' });
+  var welfareCount = txs.filter(function(tx) { return tx.type === 'welfare'; }).length;
+  if (welfareCount >= 10) badges.push({ label: '\uD83E\uDD1D Welfare Hero', cls: 'mbadge-purple' });
+  return badges;
+}
+
+function renderMemberBadges() {
+  var row = document.getElementById('member-badges-row');
+  if (!row || !currentUser || currentUser.isAdmin) { if (row) row.style.display = 'none'; return; }
+  var member = members.find(function(m) { return m.id === currentUser.id; });
+  var badges = computeMemberBadges(member);
+  if (!badges.length) { row.style.display = 'none'; return; }
+  row.style.display = 'flex';
+  row.innerHTML = badges.map(function(b, i) {
+    return '<span class="mbadge ' + b.cls + '" style="animation-delay:' + (i * 0.06) + 's;">' + b.label + '</span>';
+  }).join('');
+}
+
+// ══════════════════════════════════════════════
+// FEATURE 7 – Savings Projection
+// ══════════════════════════════════════════════
+// ─── Savings Projection ────────────────────────────────────────
+window.openProjectionModal = function() {
+    try {
+        renderProjection();
+        var ov = document.getElementById('ov-projection');
+        if (ov) {
+            ov.classList.add('on');
+            ov.style.display = 'flex';
+        } else {
+            toast('Projection modal not found', '#ef4444');
+        }
+    } catch (e) {
+        console.error('openProjectionModal error:', e);
+        toast('Unable to open projection', '#ef4444');
+    }
+};
+
+function renderProjection() {
+  var container = document.getElementById('projection-content');
+  if (!container || !currentUser || currentUser.isAdmin) {
+    if (container) container.innerHTML = '<div class="muted">Available for members only.</div>';
+    return;
+  }
+  var member = members.find(function(m) { return m.id === currentUser.id; });
+  if (!member) { container.innerHTML = '<div class="muted">Member not found.</div>'; return; }
+  var dailyAmt = (settings && settings.dailyAmount) || 2000;
+  var phone = member.phone;
+  var totalDeposited = transactions.filter(function(tx) { return tx.memberPhone === phone && tx.type === 'deposit'; }).reduce(function(s,tx) { return s + tx.amount; }, 0);
+  var now = new Date();
+  var monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  var monthDeps = transactions.filter(function(tx) { return tx.memberPhone === phone && tx.type === 'deposit' && tx.date >= monthStart; });
+  var monthTotal = monthDeps.reduce(function(s,tx) { return s + tx.amount; }, 0);
+  var daysElapsed = now.getDate();
+  var avgDailyRate = daysElapsed > 0 ? Math.round(monthTotal / daysElapsed) : dailyAmt;
+  var daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  var remainingDays = daysInMonth - daysElapsed;
+  var projectedMonthEnd = monthTotal + (avgDailyRate * remainingDays);
+  var pct = Math.min(100, projectedMonthEnd > 0 ? Math.round((monthTotal / projectedMonthEnd) * 100) : 0);
+  var onTrack = avgDailyRate >= dailyAmt;
+  container.innerHTML =
+    '<div style="background:rgba(255,255,255,0.04);border-radius:12px;padding:12px;margin-bottom:10px;border:1px solid rgba(255,255,255,0.08);">' +
+    '<div style="font-size:0.65rem;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:1px;">Total Saved (All Time)</div>' +
+    '<div style="font-size:1.4rem;font-weight:800;color:var(--gold);font-family:\'JetBrains Mono\',monospace;">UGX ' + totalDeposited.toLocaleString() + '</div></div>' +
+
+    '<div style="background:rgba(255,255,255,0.04);border-radius:12px;padding:12px;margin-bottom:10px;border:1px solid rgba(255,255,255,0.08);">' +
+    '<div style="font-size:0.65rem;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:1px;">Avg Daily Rate This Month</div>' +
+    '<div style="font-size:1.1rem;font-weight:800;color:var(--teal);">UGX ' + avgDailyRate.toLocaleString() + ' / day</div></div>' +
+
+    '<div style="background:rgba(255,255,255,0.04);border-radius:12px;padding:12px;margin-bottom:10px;border:1px solid rgba(255,255,255,0.08);">' +
+    '<div style="font-size:0.65rem;color:var(--t3);font-weight:700;text-transform:uppercase;letter-spacing:1px;">\uD83D\uDCC5 Projected Month-End Total</div>' +
+    '<div style="font-size:1.1rem;font-weight:800;color:var(--green);">UGX ' + projectedMonthEnd.toLocaleString() + '</div>' +
+    '<div class="proj-bar-wrap"><div class="proj-bar-fill" style="width:' + pct + '%;"></div></div>' +
+    '<div style="font-size:0.65rem;color:var(--t3);">' + pct + '% of month saved \u00B7 ' + remainingDays + ' days left</div></div>' +
+
+    '<div style="background:rgba(' + (onTrack ? '6,182,212' : '245,158,11') + ',0.08);border-radius:12px;padding:10px 12px;font-size:0.72rem;color:var(--t3);border:1px solid rgba(' + (onTrack ? '6,182,212' : '245,158,11') + ',0.15);">' +
+    '\uD83D\uDCA1 Save UGX ' + dailyAmt.toLocaleString() + ' every day to stay on track. ' + (onTrack ? '\uD83C\uDFAF You\'re on track!' : '\u26A0\uFE0F Below daily target.') + '</div>';
+}
+
+// ══════════════════════════════════════════════
+// FEATURE 8 – Loan Early Repayment
+// ══════════════════════════════════════════════
+// ─── Early Loan Repayment ──────────────────────────────────────
+window.openEarlyRepayModal = function() {
+    try {
+        if (!currentUser || currentUser.isAdmin) {
+            toast('Available for members only', '#ef4444');
+            return;
+        }
+        var phone = currentUser.phone;
+        var loanBal = (typeof memberLoans !== 'undefined' && memberLoans[phone]) || 0;
+        var infoEl = document.getElementById('early-repay-info');
+        var amtEl = document.getElementById('early-repay-amount');
+        var previewEl = document.getElementById('early-repay-preview');
+        var fgrp = amtEl && amtEl.closest('.fgrp');
+        if (loanBal <= 0) {
+            if (infoEl) infoEl.innerHTML = '<div style="text-align:center;padding:20px;"><div style="font-size:2rem;">✅</div><div style="margin-top:8px;color:var(--green);font-weight:700;">No outstanding loan balance!</div></div>';
+            if (fgrp) fgrp.style.display = 'none';
+            if (previewEl) previewEl.textContent = '';
+        } else {
+            if (infoEl) infoEl.innerHTML = 'Outstanding loan: <strong style="color:var(--red);">UGX ' + loanBal.toLocaleString() + '</strong><br><span style="font-size:0.72rem;color:var(--t3);">Enter how much you want to repay. Admin will process it.</span>';
+            if (fgrp) fgrp.style.display = '';
+            if (amtEl) { amtEl.value = ''; amtEl.max = loanBal; }
+            if (previewEl) previewEl.textContent = '';
+        }
+        var ov = document.getElementById('ov-early-repay');
+        if (ov) {
+            ov.classList.add('on');
+            ov.style.display = 'flex';
+        } else {
+            toast('Early repayment modal not found', '#ef4444');
+        }
+    } catch (e) {
+        console.error('openEarlyRepayModal error:', e);
+        toast('Unable to open early repayment', '#ef4444');
+    }
+};
+
+
+window.previewEarlyRepay = function() {
+  var phone = currentUser && currentUser.phone;
+  var loanBal = (typeof memberLoans !== 'undefined' && memberLoans[phone]) || 0;
+  var val = parseFloat(document.getElementById('early-repay-amount').value) || 0;
+  var previewEl = document.getElementById('early-repay-preview');
+  if (!previewEl) return;
+  if (val <= 0) { previewEl.textContent = ''; return; }
+  if (val > loanBal) { previewEl.style.color = 'var(--red)'; previewEl.textContent = 'Max: UGX ' + loanBal.toLocaleString(); return; }
+  previewEl.style.color = 'var(--teal)';
+  previewEl.textContent = 'Remaining after: UGX ' + (loanBal - val).toLocaleString();
+};
+
+window.submitEarlyRepay = function() {
+  if (!currentUser || currentUser.isAdmin) return;
+  var phone = currentUser.phone;
+  var loanBal = (typeof memberLoans !== 'undefined' && memberLoans[phone]) || 0;
+  var val = parseFloat(document.getElementById('early-repay-amount').value) || 0;
+  if (val <= 0) { toast('Enter a valid amount', '#ef4444'); return; }
+  if (val > loanBal) { toast('Amount exceeds loan balance', '#ef4444'); return; }
+  db.ref('earlyRepayRequests').push({
+    memberId: currentUser.id, memberName: currentUser.name, memberPhone: phone,
+    amount: val, loanBalance: loanBal, requestedAt: Date.now(), status: 'pending'
+  }).then(function() {
+    db.ref('notifications/admin_early_repay').push({ id: Date.now() + '_repay', text: '\uD83D\uDCB8 ' + currentUser.name + ' wants to repay UGX ' + val.toLocaleString() + ' early', type: 'early_repay', read: false, date: Date.now() });
+    toast('Repayment request sent \u2713', '#10b981');
+    closeOv('ov-early-repay');
+  });
+};
+
+window.approveEarlyRepay = function(reqId, memberPhone, amount) {
+  var member = members.find(function(m) { return m.phone === memberPhone; });
+  if (!member) { toast('Member not found', '#ef4444'); return; }
+  db.ref('transactions').push({
+    memberPhone: memberPhone, memberName: member.name, type: 'deposit', amount: amount,
+    description: '\uD83D\uDCB8 Early loan repayment (admin approved)', date: Date.now(),
+    receiptNumber: generateReceiptNumber()
+  }).then(function() {
+    db.ref('earlyRepayRequests/' + reqId).update({ status: 'approved', processedAt: Date.now() });
+    db.ref('notifications/' + member.id).push({ id: Date.now() + '_repay_ok', text: '\u2705 Your early repayment of UGX ' + amount.toLocaleString() + ' was approved!', type: 'repay', read: false, date: Date.now() });
+    toast('Repayment approved and recorded', '#10b981');
+    db.ref('transactions').once('value').then(function(snap) {
+      transactions = snap.val() ? Object.entries(snap.val()).map(function(e) { return Object.assign({id: e[0]}, e[1]); }) : [];
+      computePots(); refreshUI();
+    });
+  });
+};
+
+window.rejectEarlyRepay = function(reqId) {
+  db.ref('earlyRepayRequests/' + reqId).update({ status: 'rejected', processedAt: Date.now() }).then(function() {
+    toast('Request rejected', '#f59e0b');
+    if (typeof renderAdminTab === 'function' && currentAdminTab === 'savings') renderAdminTab();
+  });
+};
+
+function renderEarlyRepayRequests(container) {
+  if (!container || !db) return;
+  db.ref('earlyRepayRequests').orderByChild('status').equalTo('pending').once('value', function(snap) {
+    var requests = snap.val() ? Object.entries(snap.val()).map(function(e) { return Object.assign({id: e[0]}, e[1]); }) : [];
+    if (!requests.length) return;
+    var div = document.createElement('div');
+    div.style.cssText = 'margin-bottom:14px;';
+    div.innerHTML = '<div class="sec-h" style="margin-bottom:8px;">\uD83D\uDCB8 Early Repay Requests</div>' +
+      requests.map(function(r) {
+        return '<div class="txc" style="flex-direction:column;align-items:flex-start;gap:6px;margin-bottom:8px;">' +
+          '<div style="font-weight:700;">' + escapeHtml(r.memberName) + ' wants to repay UGX ' + r.amount.toLocaleString() + '</div>' +
+          '<div style="font-size:0.7rem;color:var(--t3);">Loan balance: UGX ' + r.loanBalance.toLocaleString() + ' \u00B7 ' + new Date(r.requestedAt).toLocaleDateString() + '</div>' +
+          '<div style="display:flex;gap:6px;">' +
+          '<button class="btn btn-sm btn-green" onclick="approveEarlyRepay(\'' + r.id + '\',\'' + r.memberPhone + '\',' + r.amount + ')">\u2705 Approve</button>' +
+          '<button class="btn btn-sm btn-red" onclick="rejectEarlyRepay(\'' + r.id + '\')">\u2717 Reject</button></div></div>';
+      }).join('');
+    container.insertBefore(div, container.firstChild);
+  });
+}
+
+// ══════════════════════════════════════════════
+// HOOK INTO EXISTING FUNCTIONS
+// ══════════════════════════════════════════════
+
+// Safe patch: wrap existing function if it exists, else just assign
+function safePatch(name, wrapper) {
+  var orig = window[name];
+  window[name] = function() {
+    var args = arguments;
+    if (typeof orig === 'function') orig.apply(this, args);
+    wrapper.apply(this, args);
+  };
+}
+
+// Patch updateHomeUI
+safePatch('updateHomeUI', function() { renderHomeWeekProgress(); });
+
+// Patch goTab – add account-tab refresh
+(function() {
+  var _prev = window.goTab;
+  window.goTab = function(tab, btn) {
+    if (typeof _prev === 'function') _prev(tab, btn);
+    if (tab === 'account') {
+      setTimeout(function() {
+        renderMemberBadges();
+        renderAccountWeekProgress();
+        updatePushStatusLabel();
+      }, 60);
+    }
+  };
+})();
+
+// Patch renderAdminTab to handle polls tab
+(function() {
+  var _orig = window.renderAdminTab;
+  window.renderAdminTab = function() {
+    if (currentAdminTab === 'polls') {
+      document.querySelectorAll('.admin-tab').forEach(function(t) { t.classList.remove('active'); });
+      var pollTab = document.querySelector('.admin-tab[data-tab="polls"]');
+      if (pollTab) pollTab.classList.add('active');
+      renderAdminPollsTab();
+      return;
+    }
+    if (typeof _orig === 'function') _orig();
+    if (currentAdminTab === 'savings') {
+      setTimeout(function() {
+        var c = document.getElementById('admin-content');
+        if (c && currentUser && currentUser.isAdmin) renderEarlyRepayRequests(c);
+      }, 120);
+    }
+  };
+})();
+
+// Patch refreshLiveViews
+(function() {
+  var _orig = window.refreshLiveViews || refreshLiveViews;
+  window.refreshLiveViews = function(reason) {
+    if (typeof _orig === 'function') _orig(reason);
+    if (typeof currentScreen !== 'undefined') {
+      if (currentScreen === 'home') renderHomeWeekProgress();
+      if (currentScreen === 'account') { renderMemberBadges(); renderAccountWeekProgress(); }
+    }
+  };
+})();
+
+// Init polls listener once Firebase is ready
+(function waitForDB() {
+  if (typeof db !== 'undefined' && db) {
+    initPollsListener();
+    setInterval(scheduleDailyPushReminder, 3600000);
+    setTimeout(scheduleDailyPushReminder, 8000);
+  } else {
+    setTimeout(waitForDB, 1000);
+  }
+})();
+
+console.log('\u2705 HTF New Features v3 loaded: progress bar, push, calendar, polls, badges, projection, early repay');
+</script>
+
+
+<script>
+(function() {
+
+  // ── PART 1: Modal fix — #app has CSS transform that breaks position:fixed ──
+  // Move each modal to <body> before showing so fixed positioning is correct.
+  function showFixedModal(id) {
+    var el = document.getElementById(id);
+    if (!el) { console.warn('Modal not found:', id); return; }
+    if (el.parentNode !== document.body) document.body.appendChild(el);
+    el.style.display              = 'flex';
+    el.style.position             = 'fixed';
+    el.style.inset                = '0';
+    el.style.zIndex               = '99999';
+    el.style.background           = 'rgba(0,0,0,0.75)';
+    el.style.backdropFilter       = 'blur(12px)';
+    el.style.webkitBackdropFilter = 'blur(12px)';
+    el.style.alignItems           = 'flex-end';
+    el.style.justifyContent       = 'center';
+    el.classList.add('on');
+    el.onclick = function(e) { if (e.target === el) hideFixedModal(id); };
+  }
+
+  function hideFixedModal(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.style.display = 'none';
+    el.classList.remove('on');
+  }
+
+  // Override closeOv to also handle moved modals
+  var _origClose = window.closeOv;
+  window.closeOv = function(id) {
+    hideFixedModal(id);
+    try { if (typeof _origClose === 'function') _origClose(id); } catch(e) {}
+  };
+
+  // ── Savings Calendar ──────────────────────────────────────────────────────
+  window.openSavingsCalendar = function() {
+    try { calViewYear = new Date().getFullYear(); calViewMonth = new Date().getMonth(); renderCalendar(); } catch(e) {}
+    showFixedModal('ov-calendar');
+  };
+
+  // ── Savings Projection ────────────────────────────────────────────────────
+  window.openProjectionModal = function() {
+    try { renderProjection(); } catch(e) {}
+    showFixedModal('ov-projection');
+  };
+
+  // ── Repay Loan Early ──────────────────────────────────────────────────────
+  window.openEarlyRepayModal = function() {
+    try {
+      if (currentUser && currentUser.isAdmin) { toast('Available for members only', '#ef4444'); return; }
+      var phone   = currentUser && currentUser.phone;
+      var loanBal = (typeof memberLoans !== 'undefined' && memberLoans && memberLoans[phone]) || 0;
+      var infoEl  = document.getElementById('early-repay-info');
+      var amtEl   = document.getElementById('early-repay-amount');
+      var prevEl  = document.getElementById('early-repay-preview');
+      var fgrp    = amtEl && amtEl.closest && amtEl.closest('.fgrp');
+      if (loanBal <= 0) {
+        if (infoEl) infoEl.innerHTML = '<div style="text-align:center;padding:20px;"><div style="font-size:2rem;">✅</div><div style="margin-top:8px;color:var(--green);font-weight:700;">No outstanding loan!</div></div>';
+        if (fgrp)  fgrp.style.display = 'none';
+        if (prevEl) prevEl.textContent = '';
+      } else {
+        if (infoEl) infoEl.innerHTML = 'Outstanding loan: <strong style="color:var(--red);">UGX ' + loanBal.toLocaleString() + '</strong><br><span style="font-size:0.72rem;color:var(--t3);">Enter amount to repay. Admin will process it.</span>';
+        if (fgrp)  fgrp.style.display = '';
+        if (amtEl) { amtEl.value = ''; amtEl.max = loanBal; }
+        if (prevEl) prevEl.textContent = '';
+      }
+    } catch(e) { console.warn('earlyRepay setup:', e); }
+    showFixedModal('ov-early-repay');
+  };
+
+  // ── Group Polls (member view) ─────────────────────────────────────────────
+  window.openPollsModal = function() {
+    try { renderPollsList(); } catch(e) {}
+    showFixedModal('ov-polls');
+  };
+
+  // ── Create Poll modal (admin) ─────────────────────────────────────────────
+  window.openCreatePollModal = function() {
+    try {
+      var q = document.getElementById('poll-question');
+      if (q) q.value = '';
+      document.querySelectorAll('.poll-opt-input').forEach(function(el){ el.value=''; });
+      var wrap = document.getElementById('poll-options-wrap');
+      if (wrap) wrap.querySelectorAll('.poll-opt-extra').forEach(function(e){ e.remove(); });
+    } catch(e) {}
+    showFixedModal('ov-create-poll');
+  };
+
+  // ── PART 2: Add Polls tile to Admin Grid & fix switchAdminTab ─────────────
+  // switchAdminTab IS window.switchAdminTab so we can patch it.
+  // renderAdminTab() is a plain fn declaration — we cannot patch it via window.
+  // Solution: intercept switchAdminTab so 'polls' is handled before renderAdminTab runs.
+
+  var _origSwitch = window.switchAdminTab;
+  window.switchAdminTab = function(tab) {
+    if (tab === 'polls') {
+      // Mark tab active in UI
+      document.querySelectorAll('.admin-tab').forEach(function(t){ t.classList.remove('active'); });
+      var pt = document.querySelector('.admin-tab[data-tab="polls"]');
+      if (pt) pt.classList.add('active');
+      // Show admin-tabs bar if hidden
+      var tabsBar = document.querySelector('.admin-tabs');
+      if (tabsBar) tabsBar.style.display = '';
+      // Render polls directly into admin-content
+      try { renderAdminPollsTab(); } catch(e) { console.warn('renderAdminPollsTab:', e); }
+      return; // do NOT call renderAdminTab()
+    }
+    if (typeof _origSwitch === 'function') _origSwitch(tab);
+  };
+
+  // Patch showAdminGrid to inject Polls tile after it renders
+  var _origGrid = window.showAdminGrid;
+  window.showAdminGrid = function() {
+    if (typeof _origGrid === 'function') _origGrid();
+    // Add Polls tile if not already there
+    var grid = document.querySelector('.admin-grid');
+    if (!grid) return;
+    if (grid.querySelector('[data-tab="polls"]')) return; // already there
+    var tile = document.createElement('div');
+    tile.className = 'admin-grid-item';
+    tile.setAttribute('data-tab', 'polls');
+    tile.innerHTML = '<div style="font-size:2rem;">🗳️</div><div style="font-weight:700;font-size:0.85rem;margin-top:4px;">Polls</div>';
+    tile.addEventListener('click', function() {
+      tile.style.transform = 'scale(0.96)';
+      setTimeout(function(){ tile.style.transform = ''; }, 150);
+      window.switchAdminTab('polls');
+    });
+    grid.appendChild(tile);
+  };
+
+  console.log('✅ HTF Patch loaded: modal fix + polls admin grid + switchAdminTab fix');
+})();
+</script>
+
 </body>
   </html>
