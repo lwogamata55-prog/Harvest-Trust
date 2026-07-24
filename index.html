@@ -3354,83 +3354,119 @@ setTimeout(function(){
   <div class="micro muted" style="margin-top: 12px;">Loading...</div>
 </div>
     <div id="t-home" class="tab on">
-       <!-- ════════════════════════════════════════════════════════ -->
-    <!-- WEEKLY HOME PROGRESS – Quick view                      -->
     <!-- ════════════════════════════════════════════════════════ -->
-    <div id="home-weekly-progress" style="flex-shrink:0;margin:2px 0;padding:6px 8px;background:rgba(255,255,255,0.03);border-radius:10px;border:1px solid rgba(255,255,255,0.05);display:none;">
-      <div style="display:flex;align-items:center;justify-content:space-between;">
-        <div style="font-size:0.45rem;font-weight:700;color:var(--t3);letter-spacing:1px;">📊 THIS WEEK</div>
-        <div id="home-streak-badge" style="font-size:0.5rem;color:var(--gold);font-weight:700;"></div>
-      </div>
-      <div id="home-week-dots" style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-top:4px;"></div>
+    <!-- STATS STRIP (2 tiles)                                  -->
+    <!-- ════════════════════════════════════════════════════════ -->
+    <div class="stats-strip" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; flex-shrink: 0;">
+        <div class="ss-tile ss-t-gold" style="padding: 6px 4px; border-radius: 10px;">
+            <div class="ss-ico" style="font-size: 0.8rem;">💰</div>
+            <div class="ss-val sv-gold" id="total-weekly-display" style="font-size: 0.65rem;">UGX 0</div>
+            <div class="ss-lbl" style="font-size: 0.45rem;">Weekly Total</div>
+        </div>
+        <div class="ss-tile ss-t-teal" style="padding: 6px 4px; border-radius: 10px;">
+            <div class="ss-ico" style="font-size: 0.8rem;">📊</div>
+            <div class="ss-val sv-teal" id="available-display" style="font-size: 0.65rem;">UGX 0</div>
+            <div class="ss-lbl" style="font-size: 0.45rem;">Available</div>
+        </div>
     </div>
-   <div class="stats-strip" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; flex-shrink: 0;">
-    <div class="ss-tile ss-t-gold" style="padding: 6px 4px; border-radius: 10px;">
-        <div class="ss-ico" style="font-size: 0.8rem;">💰</div>
-        <div class="ss-val sv-gold" id="total-weekly-display" style="font-size: 0.65rem;">UGX 0</div>
-        <div class="ss-lbl" style="font-size: 0.45rem;">Weekly Total</div>
+
+    <!-- ════════════════════════════════════════════════════════ -->
+    <!-- MEMBER OF THE MONTH                                    -->
+    <!-- ════════════════════════════════════════════════════════ -->
+    <div id="motm-container" style="flex-shrink:0; margin:4px 0; display:none;"></div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- NEXT DEBT CHECK (centered) + Anniversary badge (top‑right) -->
+<!-- ════════════════════════════════════════════════════════ -->
+<div id="midnight-card" style="
+    flex-shrink:0; 
+    margin:4px 0; 
+    padding:10px 14px 8px; 
+    background:rgba(255,255,255,0.04); 
+    border-radius:14px; 
+    border:1px solid rgba(255,255,255,0.08); 
+    text-align:center;
+    position:relative;
+    box-shadow:0 2px 8px rgba(0,0,0,0.2);
+">
+    <!-- Anniversary badge (top‑right) -->
+    <div style="
+        position:absolute; 
+        top:-6px; 
+        right:-6px; 
+        display:flex; 
+        align-items:center; 
+        gap:4px; 
+        background:rgba(245,158,11,0.12); 
+        border:1px solid rgba(245,158,11,0.25); 
+        border-radius:30px; 
+        padding:2px 8px 2px 4px; 
+        box-shadow:0 2px 8px rgba(245,158,11,0.15);
+        backdrop-filter:blur(4px);
+    ">
+        <span style="font-size:0.9rem; line-height:1;">🌙</span>
+        <span id="anniversary-badge" style="
+            font-weight:800; 
+            font-size:0.7rem; 
+            color:var(--gold); 
+            line-height:1.2;
+            min-width:24px; 
+            text-align:center;
+        ">--</span>
+        <span style="font-size:0.5rem; font-weight:600; color:var(--t3); letter-spacing:0.3px;">d</span>
     </div>
-    <div class="ss-tile ss-t-teal" style="padding: 6px 4px; border-radius: 10px;">
-        <div class="ss-ico" style="font-size: 0.8rem;">📊</div>
-        <div class="ss-val sv-teal" id="available-display" style="font-size: 0.65rem;">UGX 0</div>
-        <div class="ss-lbl" style="font-size: 0.45rem;">Available</div>
+
+    <!-- Timer (centered) -->
+    <div>
+        <div style="font-size:0.5rem; font-weight:700; color:var(--t3); text-transform:uppercase; letter-spacing:1.5px;">⏰ Next Debt Check</div>
+        <div id="midnight-timer" style="
+            font-size:1rem; 
+            font-family:'JetBrains Mono',monospace; 
+            font-weight:700; 
+            color:var(--gold); 
+            letter-spacing:1.5px;
+            margin-top:4px;
+        ">--:--:--</div>
+        <div class="micro muted" style="font-size:0.45rem; margin-top:2px;">.By Mata.</div>
     </div>
 </div>
 
-    <div class="weekly-receiver-card" id="weekly-receiver-card" style="flex-shrink: 0; padding: 10px 12px; margin-bottom: 4px; min-height: 160px;">
+    <!-- ════════════════════════════════════════════════════════ -->
+    <!-- WEEKLY RECEIVER CARD                                   -->
+    <!-- ════════════════════════════════════════════════════════ -->
+    <div class="weekly-receiver-card" id="weekly-receiver-card" style="flex-shrink:0; padding:10px 12px; margin-bottom:4px; min-height:160px;">
         <div class="rec-orb rec-orb-1"></div>
         <div class="rec-orb rec-orb-2"></div>
         <div class="rec-orb rec-orb-3"></div>
-        
-        <div class="weekly-receiver-label" style="font-size: 0.5rem;">⭐ This Week's Receiver</div>
-        <div class="receiver-name-wrap" style="min-height: 36px;">
-            <div class="receiver-name" id="weekly-payee-name" style="font-size: 1.4rem; min-height: 36px;">—</div>
+        <div class="weekly-receiver-label" style="font-size:0.5rem;">⭐ This Week's Receiver</div>
+        <div class="receiver-name-wrap" style="min-height:36px;">
+            <div class="receiver-name" id="weekly-payee-name" style="font-size:1.4rem; min-height:36px;">—</div>
         </div>
-        
-        <div class="payout-date-section" style="padding: 4px 10px; margin: 2px 0;">
-            <div class="payout-date-label" style="font-size: 0.45rem;">📅 Next Payout Date</div>
-            <div class="payout-date-value" id="payout-exact-date" style="font-size: 0.75rem;">—</div>
+        <div class="payout-date-section" style="padding:4px 10px; margin:2px 0;">
+            <div class="payout-date-label" style="font-size:0.45rem;">📅 Next Payout Date</div>
+            <div class="payout-date-value" id="payout-exact-date" style="font-size:0.75rem;">—</div>
         </div>
-        
-        <div class="payout-countdown" style="padding: 2px 0; min-height: 28px;">
-            <span class="countdown-icon" style="font-size: 1rem;">⏳</span>
-            <span class="countdown-text" id="payout-countdown-text" style="font-size: 0.85rem;">Calculating…</span>
+        <div class="payout-countdown" style="padding:2px 0; min-height:28px;">
+            <span class="countdown-icon" style="font-size:1rem;">⏳</span>
+            <span class="countdown-text" id="payout-countdown-text" style="font-size:0.85rem;">Calculating…</span>
         </div>
-        
-        <div class="payout-progress-wrap" style="margin-top: 2px;">
-            <div class="payout-progress-track" style="height: 4px;">
-                <div class="payout-progress-fill" id="payout-progress-fill" style="transform: scaleX(0); transform-origin: left center;"></div>
+        <div class="payout-progress-wrap" style="margin-top:2px;">
+            <div class="payout-progress-track" style="height:4px;">
+                <div class="payout-progress-fill" id="payout-progress-fill" style="transform:scaleX(0); transform-origin:left center;"></div>
             </div>
-            <div class="payout-progress-label" id="payout-progress-label" style="font-size: 0.45rem;">0% complete</div>
+            <div class="payout-progress-label" id="payout-progress-label" style="font-size:0.45rem;">0% complete</div>
         </div>
-        
-        <div class="payout-rotation-info" id="payout-rotation-info" style="font-size: 0.5rem; margin-top: 4px; padding-top: 4px;"></div>
-    </div>
-
-       <!-- ════════════════════════════════════════════════════════ -->
-    <!-- MIDNIGHT CARD – Compact                                 -->
-    <!-- ════════════════════════════════════════════════════════ -->
-    <div class="card" id="midnight-card" style="flex-shrink: 0; padding: 6px 8px; margin-bottom: 3px; text-align: center;">
-        <div class="label" style="font-size: 0.5rem;">⏰ Next Debt Check</div>
-        <div id="midnight-timer" style="font-size: 0.8rem; font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--gold);">--:--:--</div>
-        <div class="micro muted" style="font-size: 0.45rem;">.By Mata.</div>
+        <div class="payout-rotation-info" id="payout-rotation-info" style="font-size:0.5rem; margin-top:4px; padding-top:4px;"></div>
     </div>
 
     <!-- ════════════════════════════════════════════════════════ -->
-    <!-- ANNIVERSARY CARD – Compact                             -->
+    <!-- CAROUSEL BANNER (bottom)                               -->
     <!-- ════════════════════════════════════════════════════════ -->
-    <div class="card" id="anniversary-card" style="flex-shrink: 0; padding: 6px 8px; margin-bottom: 3px; text-align: center;">
-        <div class="label" style="font-size: 0.5rem;">🎉 Profit Distribution</div>
-        <div id="anniversary-countdown" style="font-size: 0.7rem; font-weight: 700; color: var(--teal);">-- days</div>
-    </div>
-    <!-- ════════════════════════════════════════════════════════ -->
-    <!-- CAROUSEL BANNER – Fixed height, no layout shifts      -->
-    <!-- ════════════════════════════════════════════════════════ -->
-    <div class="notice-banner carousel-banner" id="main-carousel" style="flex-shrink: 0; margin-bottom: 4px; min-height: 60px; overflow: hidden;">
-        <div class="carousel-viewport" style="overflow: hidden;">
-            <div class="carousel-track" id="main-carousel-track" style="display: flex; transition: transform 0.6s ease;"></div>
+    <div class="notice-banner carousel-banner" id="main-carousel" style="flex-shrink:0; margin-bottom:4px; min-height:60px; overflow:hidden;">
+        <div class="carousel-viewport" style="overflow:hidden;">
+            <div class="carousel-track" id="main-carousel-track" style="display:flex; transition:transform 0.6s ease;"></div>
         </div>
-        <div class="carousel-dots-wrap" id="main-carousel-dots" style="padding: 4px 0;"></div>
+        <div class="carousel-dots-wrap" id="main-carousel-dots" style="padding:4px 0;"></div>
     </div>
 </div>
 
@@ -4795,34 +4831,41 @@ const THEME_PALETTES={
 // ─── Anniversary countdown ────────────────────────────────────
 function getDaysUntilProfitDistribution() {
     if (!settings || !settings.groupStartDate) return null;
-    var start = new Date(settings.groupStartDate);
+    const start = new Date(settings.groupStartDate);
     if (isNaN(start.getTime())) return null;
-    var today = new Date();
+    const today = new Date();
     today.setHours(0, 0, 0, 0);
-    var currentYear = today.getFullYear();
-    var anniversaryThisYear = new Date(currentYear, start.getMonth(), start.getDate());
+    const currentYear = today.getFullYear();
+    let anniversaryThisYear = new Date(currentYear, start.getMonth(), start.getDate());
     if (anniversaryThisYear < today) {
         anniversaryThisYear = new Date(currentYear + 1, start.getMonth(), start.getDate());
     }
-    var diffTime = anniversaryThisYear - today;
-    var diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const diffTime = anniversaryThisYear - today;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays;
 }
 
 function updateAnniversaryCountdown() {
-    var el = document.getElementById('anniversary-countdown');
-    if (!el) return;
-    var days = getDaysUntilProfitDistribution();
-    var newText;
+    const badge = document.getElementById('anniversary-badge');
+    if (!badge) return;
+    
+    const days = getDaysUntilProfitDistribution();
+    let text;
     if (days === null) {
-        newText = '-- days';
+        text = '--';
     } else if (days === 0) {
-        newText = '🎉 Today! Profit distribution day!';
+        text = '🎉';
     } else {
-        newText = days + ' day' + (days !== 1 ? 's' : '');
+        text = days.toString();
     }
-    if (el.textContent !== newText) {
-        el.textContent = newText;
+    
+    if (badge.textContent !== text) {
+        badge.textContent = text;
+        // Auto‑adjust width for 2‑4 digits
+        const len = text.length;
+        if (len <= 2) badge.style.minWidth = '24px';
+        else if (len === 3) badge.style.minWidth = '34px';
+        else badge.style.minWidth = '44px';
     }
 }
 
@@ -4891,20 +4934,20 @@ function getDailyStatusForDate(member, dateTimestamp) {
 }
 // Update countdown timer on home page
 function updateMidnightTimer() {
-    var timerEl = document.getElementById('midnight-timer');
+    const timerEl = document.getElementById('midnight-timer');
     if (!timerEl) return;
-    var now = Date.now();
-    var next = getNextMidnight();
-    var diff = next - now;
-    var newText;
+    const now = Date.now();
+    const next = getNextMidnight();
+    const diff = next - now;
+    let newText;
     if (diff <= 0) {
         newText = '00:00:00';
     } else {
-        var hours = Math.floor(diff / 3600000);
-        var minutes = Math.floor((diff % 3600000) / 60000);
-        var seconds = Math.floor((diff % 60000) / 1000);
-        newText = hours.toString().padStart(2,'0') + ':' + 
-                  minutes.toString().padStart(2,'0') + ':' + 
+        const hours = Math.floor(diff / 3600000);
+        const minutes = Math.floor((diff % 3600000) / 60000);
+        const seconds = Math.floor((diff % 60000) / 1000);
+        newText = hours.toString().padStart(2,'0') + ':' +
+                  minutes.toString().padStart(2,'0') + ':' +
                   seconds.toString().padStart(2,'0');
     }
     if (timerEl.textContent !== newText) {
@@ -5158,22 +5201,48 @@ function updateReceiverDisplay() {
     if (infoEl) {
         const total = order.length;
         infoEl.textContent = '⭐ Current Receiver · #' + (currentIdx + 1) + ' of ' + total;}}
-var _homeCache = {
-    dateEl: null,
-    textEl: null,
-    fillEl: null,
-    labelEl: null,
-    lastDate: '',
-    lastText: '',
-    lastProgress: 0,
-    lastLabel: ''};
+// ─── Cache DOM elements once ────────────────────────────────
+const homeCache = {
+  weeklyTotal: null,
+  available: null,
+  receiverName: null,
+  rotationInfo: null,
+  payoutDate: null,
+  payoutText: null,
+  payoutFill: null,
+  payoutLabel: null,
+  midnightTimer: null,
+  anniversary: null,
+  lastValues: {
+    weeklyTotal: '',
+    available: '',
+    receiverName: '',
+    rotationInfo: '',
+    payoutDate: '',
+    payoutText: '',
+    payoutProgress: 0,
+    payoutLabel: '',
+    midnight: '',
+    anniversary: ''
+  }
+};
+
 function getHomeElements() {
-    if (!_homeCache.dateEl) {
-        _homeCache.dateEl = document.getElementById('payout-exact-date');
-        _homeCache.textEl = document.getElementById('payout-countdown-text');
-        _homeCache.fillEl = document.getElementById('payout-progress-fill');
-        _homeCache.labelEl = document.getElementById('payout-progress-label');}
-    return _homeCache;}
+  if (!homeCache.weeklyTotal) {
+    homeCache.weeklyTotal = document.getElementById('total-weekly-display');
+    homeCache.available = document.getElementById('available-display');
+    homeCache.receiverName = document.getElementById('weekly-payee-name');
+    homeCache.rotationInfo = document.getElementById('payout-rotation-info');
+    homeCache.payoutDate = document.getElementById('payout-exact-date');
+    homeCache.payoutText = document.getElementById('payout-countdown-text');
+    homeCache.payoutFill = document.getElementById('payout-progress-fill');
+    homeCache.payoutLabel = document.getElementById('payout-progress-label');
+    homeCache.midnightTimer = document.getElementById('midnight-timer');
+    homeCache.anniversary = document.getElementById('anniversary-countdown');
+  }
+  return homeCache;
+}
+
 function updatePayoutDateAndCountdown() {
     var els = getHomeElements();
     var dateEl = els.dateEl, textEl = els.textEl, fillEl = els.fillEl, labelEl = els.labelEl;
@@ -5202,44 +5271,116 @@ function updatePayoutDateAndCountdown() {
         _homeCache.lastProgress = newProgress;}
     if (labelEl.textContent !== countdown.label) {
         labelEl.textContent = countdown.label;}}
-var _rafId = null;
-var _homeUpdateInterval = 5000; 
+// ─── Single home timer ──────────────────────────────────────
+let _homeRafId = null;
+let _homeLastRun = 0;
+const HOME_UPDATE_INTERVAL = 5000; // 5 seconds
+
 function startHomeUpdates() {
-    stopHomeUpdates(); 
-    if (typeof updateHomeUI === 'function') updateHomeUI();
-    var lastRun = 0;
-    function tick(timestamp) {
-        if (!lastRun) lastRun = timestamp;
-        if (timestamp - lastRun >= _homeUpdateInterval) {
-            if (!document.hidden && currentScreen === 'home') {
-                if (typeof updatePayoutDateAndCountdown === 'function') {
-                   updatePayoutDateAndCountdown();}
-                if (typeof updateMidnightTimer === 'function') {
-                    updateMidnightTimer();}
-                if (typeof updateAnniversaryCountdown === 'function') {
-                    updateAnniversaryCountdown();}
-                var order = (rotation && rotation.order) || [];
-                if (order.length) {
-                    var idx = (rotation.currentIndex || 0);
-                    var member = members.find(function(m) { return m.id === order[idx]; });
-                    if (member && currentTypingName !== member.name) {
-                        currentTypingName = '';
-                        receiverCharIndex = 0;
-                        if (typeof typeReceiverName === 'function') {
-                            typeReceiverName(member.name);}}}}
-            lastRun = timestamp;}
-        _rafId = requestAnimationFrame(tick);}
-    _rafId = requestAnimationFrame(tick);}
+  stopHomeUpdates();
+
+  // Immediate first update (no delay)
+  updateHomeUI();
+
+  _homeLastRun = performance.now();
+
+  function tick(timestamp) {
+    if (!_homeLastRun) _homeLastRun = timestamp;
+    if (timestamp - _homeLastRun >= HOME_UPDATE_INTERVAL) {
+      // Only update if tab is visible and we're on the home screen
+      if (!document.hidden && currentScreen === 'home') {
+        // Only update the dynamic parts (countdowns, progress)
+        const els = getHomeElements();
+        if (els.payoutDate || els.payoutText || els.payoutFill || els.payoutLabel) {
+          const nextPayout = getNextPayoutDate();
+          const countdown = getPayoutCountdown(Date.now(), nextPayout);
+          const cache = homeCache.lastValues;
+
+          // Payout date
+          if (els.payoutDate) {
+            let dateStr = '—';
+            if (nextPayout) {
+              try {
+                dateStr = new Date(nextPayout).toLocaleDateString('en-UG', {
+                  weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+                });
+              } catch (e) { dateStr = '—'; }
+            }
+            if (cache.payoutDate !== dateStr) {
+              els.payoutDate.textContent = dateStr;
+              cache.payoutDate = dateStr;
+            }
+          }
+
+          // Countdown text
+          if (els.payoutText && cache.payoutText !== countdown.text) {
+            els.payoutText.textContent = countdown.text;
+            els.payoutText.className = 'countdown-text ' + countdown.className;
+            cache.payoutText = countdown.text;
+          }
+
+          // Progress
+          const progress = Math.round(countdown.progress);
+          if (Math.abs(progress - cache.payoutProgress) > 0.5) {
+            els.payoutFill.style.transform = 'scaleX(' + (progress / 100) + ')';
+            cache.payoutProgress = progress;
+          }
+
+          if (els.payoutLabel && cache.payoutLabel !== countdown.label) {
+            els.payoutLabel.textContent = countdown.label;
+            cache.payoutLabel = countdown.label;
+          }
+        }
+
+        // Midnight timer
+        const timerEl = document.getElementById('midnight-timer');
+        if (timerEl) {
+          const now = Date.now();
+          const next = getNextMidnight();
+          const diff = next - now;
+          let text = '00:00:00';
+          if (diff > 0) {
+            const hours = Math.floor(diff / 3600000);
+            const minutes = Math.floor((diff % 3600000) / 60000);
+            const seconds = Math.floor((diff % 60000) / 1000);
+            text = hours.toString().padStart(2,'0') + ':' +
+                   minutes.toString().padStart(2,'0') + ':' +
+                   seconds.toString().padStart(2,'0');
+          }
+          if (homeCache.lastValues.midnight !== text) {
+            timerEl.textContent = text;
+            homeCache.lastValues.midnight = text;
+          }
+        }
+
+        // Anniversary
+        const annEl = document.getElementById('anniversary-countdown');
+        if (annEl) {
+          const days = getDaysUntilProfitDistribution();
+          let text = '-- days';
+          if (days === 0) text = '🎉 Today! Profit distribution day!';
+          else if (days !== null && days > 0) text = days + ' day' + (days !== 1 ? 's' : '');
+          if (homeCache.lastValues.anniversary !== text) {
+            annEl.textContent = text;
+            homeCache.lastValues.anniversary = text;
+          }
+        }
+      }
+      _homeLastRun = timestamp;
+    }
+    _homeRafId = requestAnimationFrame(tick);
+  }
+
+  _homeRafId = requestAnimationFrame(tick);
+}
+
 function stopHomeUpdates() {
-    if (_rafId) {
-        cancelAnimationFrame(_rafId);
-        _rafId = null;}
-    if (typeof receiverTypingTimer !== 'undefined' && receiverTypingTimer) {
-        clearTimeout(receiverTypingTimer);
-        receiverTypingTimer = null;}
-    if (typeof _homeTimer !== 'undefined' && _homeTimer) {
-        clearInterval(_homeTimer);
-        _homeTimer = null;}}
+  if (_homeRafId) {
+    cancelAnimationFrame(_homeRafId);
+    _homeRafId = null;
+  }
+  _homeLastRun = 0;
+}
 
 function isLedgerActive() {
   if (currentScreen === 'ledger') return true;
@@ -6997,147 +7138,158 @@ if (rotation.order && rotation.order.length) {
 }
 
 function updateHomeUI() {
+  const els = getHomeElements();
+  const cache = homeCache.lastValues;
+
   // ---- Weekly Total ----
-  const weeklyTotalEl = document.getElementById('total-weekly-display');
-  if (weeklyTotalEl) {
+  if (els.weeklyTotal) {
     const weeklyTotal = computeTotalWeekly() || 0;
-    weeklyTotalEl.innerText = 'UGX ' + weeklyTotal.toLocaleString();
+    const val = 'UGX ' + weeklyTotal.toLocaleString();
+    if (cache.weeklyTotal !== val) {
+      els.weeklyTotal.innerText = val;
+      cache.weeklyTotal = val;
+    }
   }
-  if (currentUser && currentUser.isAdmin) {
-  checkPayoutReminders();
-}
-    // ---- Available (Profit Pool) ----
-  const availableEl = document.getElementById('available-display');
-  if (availableEl) {
+
+  // ---- Available (Profit Pool) ----
+  if (els.available) {
     const profitAmount = groupProfit || 0;
-    availableEl.innerText = 'UGX ' + profitAmount.toLocaleString();
-    availableEl.className = 'ss-val ' + (profitAmount < 0 ? 'sv-red' : 'sv-teal');
-    availableEl.style.color = profitAmount < 0 ? 'var(--red)' : '';
+    const val = 'UGX ' + profitAmount.toLocaleString();
+    const cls = profitAmount < 0 ? 'ss-val sv-red' : 'ss-val sv-teal';
+    if (cache.available !== val || els.available.className !== cls) {
+      els.available.innerText = val;
+      els.available.className = cls;
+      els.available.style.color = profitAmount < 0 ? 'var(--red)' : '';
+      cache.available = val;
+    }
   }
-  // ---- Receiver display (name + rotation info) ----
-  if (typeof updateReceiverDisplay === 'function') {
-    updateReceiverDisplay();
-  } else {
-    // fallback: set name and info manually
-    const nameEl = document.getElementById('weekly-payee-name');
-    const infoEl = document.getElementById('payout-rotation-info');
+
+  // ---- Receiver Name ----
+  if (els.receiverName) {
     const order = (rotation && rotation.order) || [];
     if (order.length) {
       const idx = (rotation.currentIndex || 0);
       const member = members.find(m => m.id === order[idx]);
-      if (nameEl) nameEl.textContent = member ? member.name : '—';
-      if (infoEl) infoEl.textContent = '⭐ Current Receiver · #' + (idx + 1) + ' of ' + order.length;
-    } else {
-      if (nameEl) nameEl.textContent = '—';
-      if (infoEl) infoEl.textContent = 'No active members';
-    }
-  }
-
-  // ---- Payout countdown and progress bar ----
-  if (typeof updatePayoutDateAndCountdown === 'function') {
-    updatePayoutDateAndCountdown();
-  } else {
-    // fallback: set placeholder values
-    const dateEl = document.getElementById('payout-exact-date');
-    const textEl = document.getElementById('payout-countdown-text');
-    const fillEl = document.getElementById('payout-progress-fill');
-    const labelEl = document.getElementById('payout-progress-label');
-    if (dateEl) dateEl.textContent = '—';
-    if (textEl) textEl.textContent = '⏳ Calculating…';
-    if (fillEl) fillEl.style.transform = 'scaleX(0)';
-    if (labelEl) labelEl.textContent = '0% complete';
-  }
-
-  // ---- Anniversary countdown ----
-  if (typeof updateAnniversaryCountdown === 'function') {
-    updateAnniversaryCountdown();
-  } else {
-    const el = document.getElementById('anniversary-countdown');
-    if (el) el.textContent = '-- days';
-  }
-
-  // ---- Advance rotation button (admin only) ----
-  if (currentUser && currentUser.isAdmin) {
-    if (!document.getElementById('home-advance-btn')) {
-      const receiverCard2 = document.querySelector('.weekly-receiver-card');
-      if (receiverCard2 && !receiverCard2.querySelector('.advance-btn')) {
-        const btn = document.createElement('button');
-        btn.id = 'home-advance-btn';
-        btn.className = 'btn btn-sm btn-amber';
-        btn.style.marginTop = '8px';
-        btn.innerHTML = '⏩ Advance Rotation (Admin only)';
-        btn.onclick = function() {
-          if (currentUser && currentUser.isAdmin) advanceRotation();
-          else toast('Admin only', '#ef4444');
-        };
-        receiverCard2.appendChild(btn);
+      const name = member ? member.name : '—';
+      if (cache.receiverName !== name) {
+        els.receiverName.textContent = name;
+        cache.receiverName = name;
       }
+    } else if (cache.receiverName !== '—') {
+      els.receiverName.textContent = '—';
+      cache.receiverName = '—';
     }
   }
 
-  // ---- Check payout overdue (admin) ----
+  // ---- Rotation Info ----
+  if (els.rotationInfo) {
+    const order = (rotation && rotation.order) || [];
+    let info = '';
+    if (order.length) {
+      const idx = (rotation.currentIndex || 0);
+      info = '⭐ Current Receiver · #' + (idx + 1) + ' of ' + order.length;
+    } else {
+      info = 'No active members';
+    }
+    if (cache.rotationInfo !== info) {
+      els.rotationInfo.textContent = info;
+      cache.rotationInfo = info;
+    }
+  }
+
+  // ---- Payout Date ----
+  if (els.payoutDate) {
+    const nextPayout = getNextPayoutDate();
+    let dateStr = '—';
+    if (nextPayout) {
+      try {
+        dateStr = new Date(nextPayout).toLocaleDateString('en-UG', {
+          weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+        });
+      } catch (e) { dateStr = '—'; }
+    }
+    if (cache.payoutDate !== dateStr) {
+      els.payoutDate.textContent = dateStr;
+      cache.payoutDate = dateStr;
+    }
+  }
+
+  // ---- Payout Countdown & Progress ----
+  if (els.payoutText && els.payoutFill && els.payoutLabel) {
+    const nextPayout = getNextPayoutDate();
+    const countdown = getPayoutCountdown(Date.now(), nextPayout);
+    if (cache.payoutText !== countdown.text) {
+      els.payoutText.textContent = countdown.text;
+      els.payoutText.className = 'countdown-text ' + countdown.className;
+      cache.payoutText = countdown.text;
+    }
+    const progress = Math.round(countdown.progress);
+    if (Math.abs(progress - cache.payoutProgress) > 0.5) {
+      els.payoutFill.style.transform = 'scaleX(' + (progress / 100) + ')';
+      cache.payoutProgress = progress;
+    }
+    if (cache.payoutLabel !== countdown.label) {
+      els.payoutLabel.textContent = countdown.label;
+      cache.payoutLabel = countdown.label;
+    }
+  }
+
+  // ---- Midnight Timer ----
+  if (els.midnightTimer) {
+    const now = Date.now();
+    const next = getNextMidnight();
+    const diff = next - now;
+    let text = '00:00:00';
+    if (diff > 0) {
+      const hours = Math.floor(diff / 3600000);
+      const minutes = Math.floor((diff % 3600000) / 60000);
+      const seconds = Math.floor((diff % 60000) / 1000);
+      text = hours.toString().padStart(2,'0') + ':' +
+             minutes.toString().padStart(2,'0') + ':' +
+             seconds.toString().padStart(2,'0');
+    }
+    if (cache.midnight !== text) {
+      els.midnightTimer.textContent = text;
+      cache.midnight = text;
+    }
+  }
+
+  // ---- Anniversary Countdown ----
+  if (els.anniversary) {
+    const days = getDaysUntilProfitDistribution();
+    let text = '-- days';
+    if (days === 0) text = '🎉 Today! Profit distribution day!';
+    else if (days !== null && days > 0) text = days + ' day' + (days !== 1 ? 's' : '');
+    if (cache.anniversary !== text) {
+      els.anniversary.textContent = text;
+      cache.anniversary = text;
+    }
+  }
+
+  // ---- Pending deposit warning (only if needed) ----
+  if (typeof updatePendingDepositWarning === 'function') {
+    updatePendingDepositWarning();
+  }
+
+  // ---- Check payout overdue (admin only, throttled) ----
   if (currentUser && currentUser.isAdmin && typeof checkPayoutOverdue === 'function') {
     checkPayoutOverdue();
   }
 
-  // ---- Home week progress (if feature exists) ----
+  // ---- Home week progress (if exists) ----
   if (typeof renderHomeWeekProgress === 'function') {
     renderHomeWeekProgress();
-  }renderMemberOfTheMonth();
+  }// ---- Render carousel (if not already rendered) ----
+if (document.getElementById('main-carousel-track') && document.getElementById('main-carousel-track').children.length === 0) {
+  renderMainCarousel();
 }
-// ─── Reorganise home tab for better mobile UX ──────────────
-function reorganizeHomeTab() {
-  const homeTab = document.getElementById('t-home');
-  if (!homeTab) return;
 
-  // Get existing elements
-  const statsStrip = homeTab.querySelector('.stats-strip');
-  const receiverCard = homeTab.querySelector('.weekly-receiver-card');
-  const carousel = homeTab.querySelector('.notice-banner.carousel-banner');
-  const midnightCard = document.getElementById('midnight-card');
-  const anniversaryCard = document.getElementById('anniversary-card');
-  const pendingList = document.getElementById('pending-deposit-list');
-  const homeWeekProgress = document.getElementById('home-weekly-progress');
-
-  if (homeTab.dataset.reordered === 'true') return;
-  homeTab.dataset.reordered = 'true';
-  const heroSection = document.createElement('div');
-  heroSection.style.cssText = 'flex-shrink:0; margin-bottom:4px;';
-
-  // Move receiver card into hero
-  if (receiverCard) {
-    receiverCard.style.marginBottom = '2px';
-    heroSection.appendChild(receiverCard);
-  }
-
-  const loanTurn = document.getElementById('loan-turn-container');
-  if (loanTurn) heroSection.appendChild(loanTurn);
-
-  homeTab.insertBefore(heroSection, homeTab.firstChild);
-
-  if (statsStrip) {
-    statsStrip.style.marginBottom = '4px';
-    homeTab.insertBefore(statsStrip, homeTab.firstChild.nextSibling);
-  }
-
-  // Then carousel
-  if (carousel) {
-    carousel.style.marginBottom = '4px';
-    homeTab.insertBefore(carousel, statsStrip.nextSibling);
-  }
-
-  const cardContainer = document.createElement('div');
-  cardContainer.style.cssText = 'flex-shrink:0; display:flex; flex-direction:column; gap:4px;';
-  if (midnightCard) cardContainer.appendChild(midnightCard);
-  if (anniversaryCard) cardContainer.appendChild(anniversaryCard);
-  if (pendingList) cardContainer.appendChild(pendingList);
-  if (homeWeekProgress) cardContainer.appendChild(homeWeekProgress);
-
-  homeTab.appendChild(cardContainer);
-  homeTab.style.display = 'flex';
-  homeTab.style.flexDirection = 'column';
-  homeTab.style.overflowY = 'auto'; // allow scroll if needed
+// At the end of updateHomeUI(), after existing updates:
+updateAnniversaryCountdown();
+updateMidnightTimer();
+renderMemberOfTheMonth();  // this will fill the motm-container
 }
+
 // ==========================================
 // UPDATE ACCOUNT BALANCES - WITH PREPAID
 // ==========================================
@@ -7627,30 +7779,30 @@ function renderMainCarousel() {
   if (!track || !dots) return;
 
   let slides = [];
-  
-  // Use custom notices from Firebase if any
+
+  // 1. Try custom notices from Firebase
   if (mainCarouselNotifs && mainCarouselNotifs.length) {
     slides = mainCarouselNotifs;
   }
-  // Otherwise use the notice from settings
+  // 2. Otherwise use the notice from settings
   else if (settings.noticeText && settings.noticeText.trim() !== '') {
     slides = [{ text: settings.noticeText, imageData: settings.noticeImageData || '' }];
   }
-  // FINAL FALLBACK – hardcoded default notice
+  // 3. Ultimate fallback – hardcoded default
   else {
-    slides = [{ 
-      text: "🌾 Welcome to Harvest Trust Finance! 🌾\nSave daily, grow together, and prosper.", 
-      imageData: "" 
+    slides = [{
+      text: "🌾 Welcome to Harvest Trust Finance! 🌾\nSave daily, grow together, and prosper.",
+      imageData: ""
     }];
   }
 
-  // Build carousel HTML
+  // Build carousel HTML (with a fallback if slides empty)
   track.innerHTML = slides.map(s => `
     <div class="c-slide">
       <div>
         <div class="notice-title">📢 NOTICE</div>
         <div class="notice-content">${escapeHtml(s.text)}</div>
-        ${s.imageData ? `<img src="${s.imageData}" class="notice-image">` : ''}
+        ${s.imageData ? `<img src="${s.imageData}" class="notice-image" onerror="this.style.display='none'">` : ''}
       </div>
     </div>
   `).join('');
@@ -7660,7 +7812,17 @@ function renderMainCarousel() {
 
   mainCarouselIdx = 0;
   updateMainCarouselPos();
-  startMainCarouselTimer();
+
+  // Ensure the carousel is visible
+  const banner = document.getElementById('main-carousel');
+  if (banner) banner.style.display = 'block';
+
+  // Start auto‑play if more than 1 slide
+  if (slides.length > 1) {
+    startMainCarouselTimer();
+  } else {
+    if (mainCarouselTimer) clearInterval(mainCarouselTimer);
+  }
 }
 function startMainCarouselTimer(){
   if(mainCarouselTimer)clearInterval(mainCarouselTimer);
@@ -8347,11 +8509,6 @@ function showPendingScreen(m){
   setTimeout(()=>toast(t('pending_title'),'#f59e0b'),300);
 }
 
-// ==========================================
-// UPDATE PREVIEW - WITH PREPAID DISPLAY
-// ==========================================
-
-// Add this to your updateTxPreview function
 function showPrepaidInPreview(member, remaining, previewEl) {
   const prepaidBalance = memberPrepaid[member.phone] || 0;
   if (prepaidBalance > 0) {
@@ -8468,6 +8625,11 @@ if (currentUser && !currentUser.isAdmin) {
     if (typeof hideTabLoading === 'function') hideTabLoading();
   }reorganizeHomeTab();
 }
+// Inside showMainApp(), after the app is shown:
+setTimeout(function() {
+  renderMainCarousel();
+  renderMemberOfTheMonth();
+}, 300);
 // 10 group-relevant questions
 const securityQuestions = [
   { text: "Why do you want to join this savings group?", required: true, type: "textarea" },
@@ -21954,58 +22116,45 @@ function computeMemberOfTheMonth() {
 }
 
 function renderMemberOfTheMonth() {
-  // Show on home tab
-  const homeContainer = document.getElementById('t-home');
-  if (!homeContainer) return;
-  // Remove old badge if exists
-  const oldBadge = document.getElementById('motm-badge');
-  if (oldBadge) oldBadge.remove();
+    const container = document.getElementById('motm-container');
+    if (!container) return;
 
-  const winner = computeMemberOfTheMonth();
-  if (!winner) return;
+    container.innerHTML = '';
+    const winner = computeMemberOfTheMonth();
+    if (!winner) {
+        container.style.display = 'none';
+        return;
+    }
+    if (!currentUser || (currentUser.id !== winner.member.id && !currentUser.isAdmin)) {
+        container.style.display = 'none';
+        return;
+    }
+    container.style.display = 'block';
+    const isCurrentUser = currentUser.id === winner.member.id;
+    const icon = isCurrentUser ? '👑' : '🏆';
+    const title = isCurrentUser ? 'You are Member of the Month!' : `🏆 Member of the Month: ${escapeHtml(winner.member.name)}`;
+    const subText = isCurrentUser
+        ? `Top saver this month: ${money(winner.deposits)} over ${winner.consistency} days.`
+        : `Deposits: ${money(winner.deposits)} · Consistency: ${winner.consistency} days`;
 
-  // Only show if current user is the winner, or admin
-  if (!currentUser || (currentUser.id !== winner.member.id && !currentUser.isAdmin)) return;
-
-  const badge = document.createElement('div');
-  badge.id = 'motm-badge';
-  badge.style.cssText = `
-    background: linear-gradient(135deg, rgba(245,158,11,0.15), rgba(6,182,212,0.08));
-    border: 2px solid var(--gold);
-    border-radius: 16px;
-    padding: 10px 14px;
-    margin: 4px 0 8px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    animation: cardEnter 0.4s ease;
-    flex-shrink: 0;
-  `;
-  if (currentUser.id === winner.member.id) {
-    badge.innerHTML = `
-      <span style="font-size: 2rem;">👑</span>
-      <div>
-        <div style="font-weight: 800; color: var(--gold);">🏆 You are Member of the Month!</div>
-        <div class="micro muted">Top saver this month: ${money(winner.deposits)} over ${winner.consistency} days.</div>
-      </div>
+    container.innerHTML = `
+        <div style="
+            background: linear-gradient(135deg, rgba(245,158,11,0.15), rgba(6,182,212,0.08));
+            border: 2px solid var(--gold);
+            border-radius: 16px;
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            animation: cardEnter 0.4s ease;
+        ">
+            <span style="font-size: 2rem;">${icon}</span>
+            <div>
+                <div style="font-weight: 800; color: var(--gold); font-size: 0.9rem;">${title}</div>
+                <div class="micro muted" style="font-size: 0.7rem;">${subText}</div>
+            </div>
+        </div>
     `;
-  } else {
-    // Admin view
-    badge.innerHTML = `
-      <span style="font-size: 2rem;">👑</span>
-      <div>
-        <div style="font-weight: 800; color: var(--gold);">🏆 Member of the Month: ${escapeHtml(winner.member.name)}</div>
-        <div class="micro muted">Deposits: ${money(winner.deposits)} · Consistency: ${winner.consistency} days</div>
-      </div>
-    `;
-  }
-  // Insert at top of home tab, after stats strip or hero
-  const hero = homeContainer.querySelector('.weekly-receiver-card');
-  if (hero) {
-    homeContainer.insertBefore(badge, hero);
-  } else {
-    homeContainer.insertBefore(badge, homeContainer.firstChild);
-  }
 }
 // ══════════════════════════════════════════════
 // FEATURE 5 – Member Milestone Badges
