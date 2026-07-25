@@ -256,7 +256,19 @@
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-6px); }
 }
-
+/* ─── Streak Fire animation ─── */
+@keyframes flameFlicker {
+  0%, 100% { transform: scale(1); }
+  30% { transform: scale(1.1) rotate(-2deg); }
+  60% { transform: scale(0.95) rotate(2deg); }
+}
+#home-streak-fire span[style*="font-size:1.6rem"] {
+  animation: flameFlicker 1.2s ease-in-out infinite;
+}
+/* ─── Thermometer progress bar ─── */
+#group-thermometer .progress-fill {
+  transition: width 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
 /* ── Pulse Glow ── */
 @keyframes pulseGlow {
   0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0.2); }
@@ -4746,7 +4758,340 @@ function getPayoutCountdown(now, nextPayout) {
         label: Math.round(progress) + '% complete'
     };
 }
+// ═══════════════════════════════════════════════════════════════
+// FEATURE: BADGE COLLECTION + STREAK FIRE + GROUP THERMOMETER
+// ═══════════════════════════════════════════════════════════════
 
+// ─── Helper: Compute current streak for a member ────────────
+function getCurrentStreak(member) {
+  if (!member) return 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  let streak = 0;
+  let day = new Date(today);
+  // Check from today backwards until a missed day
+  while (true) {
+    const status = getWeekDayStatus(member, day);
+    if (status === 'paid') {
+      streak++;
+      day.setDate(day.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+
+// ─── Compute badges for a member ─────────────────────────────
+function computeBadges(member) {
+  if (!member) return [];
+  const badges = [];
+  const phone = member.phone;
+
+  // 1. First Deposit
+  const deposits = transactions.filter(tx => tx.memberPhone === phone && tx.type === 'deposit');
+  if (deposits.length > 0) {
+    badges.push({ id: 'first_deposit', label: '🥇 First Deposit', icon: '🥇', earned: true });
+  }
+
+  // 2. Consistent Saver (10+ deposits)
+  if (deposits.length >= 10) {
+    badges.push({ id: 'consistent_10', label: '💰 10 Deposits', icon: '💰', earned: true });
+  }
+  if (deposits.length >= 50) {
+    badges.push({ id: 'consistent_50', label: '💎 50 Deposits', icon: '💎', earned: true });
+  }
+  if (deposits.length >= 100) {
+    badges.push({ id: 'consistent_100', label: '🏆 100 Deposits', icon: '🏆', earned: true });
+  }
+
+  // 3. Streak badges
+  const streak = getCurrentStreak(member);
+  if (streak >= 7) badges.push({ id: 'streak_7', label: '🔥 7‑Day Streak', icon: '🔥', earned: true });
+  if (streak >= 14) badges.push({ id: 'streak_14', label: '🔥 14‑Day Streak', icon: '🔥', earned: true });
+  if (streak >= 30) badges.push({ id: 'streak_30', label: '🔥 30‑Day Streak', icon: '🔥', earned: true });
+
+  // 4. Loan repaid
+  const repaidLoans = loans.filter(l => l.memberId === member.id && l.repaid === true);
+  if (repaidLoans.length >= 1) badges.push({ id: 'loan_repaid', label: '✅ Loan Repaid', icon: '✅', earned: true });
+  if (repaidLoans.length >= 3) badges.push({ id: 'loan_repaid_3', label: '🏅 3 Loans Repaid', icon: '🏅', earned: true });
+
+  // 5. Referral
+  if (member.referralCount && member.referralCount >= 1) {
+    badges.push({ id: 'referral_1', label: '👥 First Referral', icon: '👥', earned: true });
+  }
+  if (member.referralCount >= 5) {
+    badges.push({ id: 'referral_5', label: '🌟 5 Referrals', icon: '🌟', earned: true });
+  }
+
+  // 6. Top Saver (monthly) – only if the member is top this month
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  const monthDeposits = transactions.filter(tx => tx.memberPhone === phone && tx.type === 'deposit' && tx.date >= monthStart);
+  const monthTotal = monthDeposits.reduce((sum, tx) => sum + tx.amount, 0);
+  const allMembers = members.filter(m => m.approved);
+  let isTop = true;
+  for (let m of allMembers) {
+    if (m.id === member.id) continue;
+    const mPhone = m.phone;
+    const mMonth = transactions.filter(tx => tx.memberPhone === mPhone && tx.type === 'deposit' && tx.date >= monthStart);
+    const mTotal = mMonth.reduce((sum, tx) => sum + tx.amount, 0);
+    if (mTotal > monthTotal) { isTop = false; break; }
+  }
+  if (isTop && monthTotal > 0) {
+    badges.push({ id: 'top_saver', label: '👑 Top Saver This Month', icon: '👑', earned: true });
+  }
+
+  // Ensure only unique badges (by id)
+  const seen = {};
+  return badges.filter(b => {
+    if (seen[b.id]) return false;
+    seen[b.id] = true;
+    return true;
+  });
+}
+
+// ─── Render badges in account tab ────────────────────────────
+function renderBadges() {
+  const container = document.getElementById('member-badges-row');
+  if (!container) return;
+  if (!currentUser || currentUser.isAdmin) {
+    container.style.display = 'none';
+    return;
+  }
+  const member = members.find(m => m.id === currentUser.id);
+  if (!member) return;
+  const badges = computeBadges(member);
+  if (!badges.length) {
+    container.style.display = 'none';
+    return;
+  }
+  container.style.display = 'flex';
+  container.innerHTML = badges.map(b =>
+    `<span class="mbadge mbadge-gold" style="animation-delay:0s;">${b.icon} ${b.label}</span>`
+  ).join('');
+}
+
+// ─── Streak Fire – Visual flame ──────────────────────────────
+function renderStreakFire() {
+  // Home tab
+  const homeContainer = document.getElementById('home-streak-fire');
+  if (!homeContainer) {
+    // Create container if missing (insert after stats or motm)
+    const homeTab = document.getElementById('t-home');
+    if (!homeTab) return;
+    const div = document.createElement('div');
+    div.id = 'home-streak-fire';
+    div.style.cssText = 'flex-shrink:0; margin:4px 0; text-align:center;';
+    const statsStrip = homeTab.querySelector('.stats-strip');
+    if (statsStrip) {
+      homeTab.insertBefore(div, statsStrip.nextSibling);
+    } else {
+      homeTab.insertBefore(div, homeTab.firstChild);
+    }
+  }
+  const container = document.getElementById('home-streak-fire');
+  if (!container) return;
+
+  if (!currentUser || currentUser.isAdmin) {
+    container.innerHTML = '';
+    container.style.display = 'none';
+    return;
+  }
+  const member = members.find(m => m.id === currentUser.id);
+  if (!member) { container.style.display = 'none'; return; }
+
+  const streak = getCurrentStreak(member);
+  let flameSize = '';
+  let emoji = '';
+  let label = '';
+  if (streak === 0) {
+    flameSize = '💤';
+    label = 'Start your streak today!';
+  } else if (streak < 3) {
+    flameSize = '🔥';
+    label = streak + '‑day streak';
+  } else if (streak < 7) {
+    flameSize = '🔥🔥';
+    label = streak + '‑day streak!';
+  } else if (streak < 14) {
+    flameSize = '🔥🔥🔥';
+    label = streak + '‑day streak! Keep going!';
+  } else {
+    flameSize = '🔥🔥🔥🔥';
+    label = streak + '‑day streak! 🔥 Legendary!';
+  }
+
+  // Color based on streak
+  let color = streak < 3 ? '#f59e0b' : streak < 7 ? '#f97316' : '#ef4444';
+
+  container.style.display = 'block';
+  container.innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:center; gap:6px; background:rgba(245,158,11,0.06); border-radius:30px; padding:4px 14px; border:1px solid rgba(245,158,11,0.12);">
+      <span style="font-size:1.6rem; line-height:1; color:${color}; filter:drop-shadow(0 2px 8px rgba(245,158,11,0.3));">${flameSize}</span>
+      <span style="font-weight:700; font-size:0.75rem; color:var(--t);">${label}</span>
+    </div>
+  `;
+}
+
+// ─── Group Savings Thermometer ──────────────────────────────
+function computeGroupSavingsProgress() {
+  const goal = (settings && settings.monthlySavingsGoal) ? settings.monthlySavingsGoal : 1000000; // default 1M UGX
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).getTime();
+  let totalSaved = 0;
+  transactions.forEach(tx => {
+    if (tx.type === 'deposit' && tx.date >= monthStart && tx.date <= monthEnd) {
+      totalSaved += tx.amount;
+    }
+  });
+  const percentage = Math.min(100, Math.round((totalSaved / goal) * 100));
+  return { totalSaved, goal, percentage };
+}
+
+function renderThermometer() {
+  const container = document.getElementById('group-thermometer');
+  if (!container) {
+    // Create container at top of home tab (after stats)
+    const homeTab = document.getElementById('t-home');
+    if (!homeTab) return;
+    const div = document.createElement('div');
+    div.id = 'group-thermometer';
+    div.style.cssText = 'flex-shrink:0; margin:4px 0;';
+    const statsStrip = homeTab.querySelector('.stats-strip');
+    if (statsStrip) {
+      homeTab.insertBefore(div, statsStrip.nextSibling);
+    } else {
+      homeTab.insertBefore(div, homeTab.firstChild);
+    }
+  }
+  const el = document.getElementById('group-thermometer');
+  if (!el) return;
+
+  const { totalSaved, goal, percentage } = computeGroupSavingsProgress();
+  const displayGoal = goal >= 1000000 ? (goal / 1000000).toFixed(1) + 'M' : goal.toLocaleString();
+
+  el.innerHTML = `
+    <div style="background:rgba(255,255,255,0.04); border-radius:12px; padding:8px 12px; border:1px solid rgba(255,255,255,0.06);">
+      <div style="display:flex; justify-content:space-between; font-size:0.6rem; color:var(--t3); margin-bottom:2px;">
+        <span>📊 Group Savings Goal</span>
+        <span>UGX ${totalSaved.toLocaleString()} / UGX ${displayGoal}</span>
+      </div>
+      <div style="background:rgba(255,255,255,0.08); border-radius:20px; height:6px; overflow:hidden; position:relative;">
+        <div style="width:${percentage}%; height:100%; background:linear-gradient(90deg, #f59e0b, #06b6d4); border-radius:20px; transition:width 0.8s ease;"></div>
+      </div>
+      <div style="font-size:0.5rem; color:var(--t3); text-align:right; margin-top:2px;">${percentage}% complete</div>
+    </div>
+  `;
+}
+
+// ─── Admin: Set monthly savings goal (add to settings modal) ──
+// We'll add a field in the settings modal dynamically.
+// This function adds the input if not present.
+function addSavingsGoalToSettings() {
+  const settingsModal = document.getElementById('ov-settings');
+  if (!settingsModal) return;
+  // Find the group settings card
+  const card = settingsModal.querySelector('.card');
+  if (!card) return;
+  // Check if already added
+  if (card.querySelector('#set-monthly-goal')) return;
+
+  const div = document.createElement('div');
+  div.className = 'fgrp';
+  div.innerHTML = `
+    <label class="flbl">Monthly Savings Goal (UGX)</label>
+    <input type="number" id="set-monthly-goal" class="inp" value="${settings.monthlySavingsGoal || 1000000}" step="10000">
+    <div class="micro">The group's monthly target – used for the thermometer.</div>
+  `;
+  // Insert before the last button (Save Settings)
+  const saveBtn = card.querySelector('.btn-gold');
+  if (saveBtn) {
+    card.insertBefore(div, saveBtn);
+  } else {
+    card.appendChild(div);
+  }
+}
+
+// ─── Save goal when settings are saved ──────────────────────
+// We need to patch doSaveSettings to include monthlySavingsGoal
+(function() {
+  const original = window.doSaveSettings;
+  window.doSaveSettings = function() {
+    // Call original
+    if (typeof original === 'function') original();
+
+    // Then add our field
+    const goalInput = document.getElementById('set-monthly-goal');
+    if (goalInput) {
+      const goal = parseInt(goalInput.value) || 1000000;
+      settings.monthlySavingsGoal = goal;
+      db.ref('settings/monthlySavingsGoal').set(goal);
+    }
+  };
+})();
+
+// ─── Hook into existing UI updates ──────────────────────────
+// Patch updateHomeUI to include thermometer and streak fire
+(function() {
+  const origUpdateHomeUI = window.updateHomeUI;
+  window.updateHomeUI = function() {
+    if (typeof origUpdateHomeUI === 'function') origUpdateHomeUI();
+    // Now add our features
+    renderThermometer();
+    renderStreakFire();
+    // Also update badges (they are in account tab, but we can call here for refresh)
+    renderBadges();
+  };
+
+  // Patch updateAccountUI to include badges
+  const origUpdateAccountUI = window.updateAccountUI;
+  window.updateAccountUI = function() {
+    if (typeof origUpdateAccountUI === 'function') origUpdateAccountUI();
+    renderBadges();
+  };
+
+  // Ensure settings modal gets our field when opened
+  const origLoadSettings = window.loadSettings;
+  window.loadSettings = function() {
+    if (typeof origLoadSettings === 'function') origLoadSettings();
+    setTimeout(addSavingsGoalToSettings, 100);
+  };
+
+  // Also when refreshLiveViews is called
+  const origRefreshLiveViews = window.refreshLiveViews;
+  window.refreshLiveViews = function(reason) {
+    if (typeof origRefreshLiveViews === 'function') origRefreshLiveViews(reason);
+    if (currentScreen === 'home') {
+      renderThermometer();
+      renderStreakFire();
+    }
+    if (currentScreen === 'account') {
+      renderBadges();
+    }
+  };
+})();
+
+// ─── On login, render everything ─────────────────────────────
+// Also call when data loads
+(function() {
+  // After data is loaded, run once
+  const interval = setInterval(function() {
+    if (members.length && transactions.length && currentUser) {
+      clearInterval(interval);
+      setTimeout(function() {
+        renderThermometer();
+        renderStreakFire();
+        renderBadges();
+        // Add goal field to settings after modal is built
+        setTimeout(addSavingsGoalToSettings, 500);
+      }, 300);
+    }
+  }, 1000);
+})();
+
+console.log('✅ Badges, Streak Fire, Thermometer loaded.');
 function getCurrentLoadingMessage() {
   for (const key in LOADING_STATE) {
     if (!LOADING_STATE[key]) {
@@ -13995,23 +14340,29 @@ window.showTransactionReceiptModal = function(
         btns.forEach(b => { b.disabled = !enabled; b.style.opacity = enabled ? '1' : '0.6'; });
     }
 
-    // ── WhatsApp: save first, then send image ──
+    // ── Helper to save if needed ──
+    async function ensureSaved() {
+        if (typeof onSave === 'function') {
+            const success = await onSave();
+            if (!success) {
+                toast('Failed to save transaction', '#ef4444');
+                return false;
+            }
+            return true;
+        }
+        return true; // already saved or not preview
+    }
+
+    // ── WhatsApp ──
     btnWhatsApp.addEventListener('click', async function() {
         if (processing) return;
         processing = true;
         setButtonsEnabled(false);
         try {
-            // 1. Save the transaction if it hasn't been saved yet (onSave provided)
-            if (typeof onSave === 'function') {
-                const success = await onSave();
-                if (!success) {
-                    toast('Failed to save transaction', '#ef4444');
-                    processing = false;
-                    setButtonsEnabled(true);
-                    return;
-                }
-            }
-            // 2. Generate image blob
+            // 1. Save the transaction (if preview)
+            if (!await ensureSaved()) { processing = false; setButtonsEnabled(true); return; }
+
+            // 2. Generate image
             const blob = await getReceiptBlob();
             if (!blob) { processing = false; setButtonsEnabled(true); return; }
 
@@ -14020,7 +14371,7 @@ window.showTransactionReceiptModal = function(
             if (formattedPhone.startsWith('0')) formattedPhone = '256' + formattedPhone.slice(1);
             if (!formattedPhone.startsWith('256')) formattedPhone = '256' + formattedPhone;
 
-            // Try native share (mobile) with image
+            // Try native share (mobile)
             if (navigator.share) {
                 try {
                     const file = new File([blob], 'receipt.png', { type: 'image/png' });
@@ -14031,8 +14382,7 @@ window.showTransactionReceiptModal = function(
                     });
                     toast('✅ Shared!', '#10b981');
                     closeModal(() => { if (onConfirmSend) onConfirmSend(); });
-                    processing = false;
-                    setButtonsEnabled(true);
+                    processing = false; setButtonsEnabled(true);
                     return;
                 } catch (e) {
                     if (e.name !== 'AbortError') console.warn('Share fallback', e);
@@ -14065,17 +14415,19 @@ window.showTransactionReceiptModal = function(
         }
     });
 
-    // ── Copy Image ──
+    // ── Copy Image (PC) ──
     btnCopy.addEventListener('click', async function() {
         if (processing) return;
         processing = true;
         setButtonsEnabled(false);
         try {
+            if (!await ensureSaved()) { processing = false; setButtonsEnabled(true); return; }
+
             const blob = await getReceiptBlob();
             if (!blob) { processing = false; setButtonsEnabled(true); return; }
             try {
                 await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-                toast('📋 Copied!', '#06b6d4');
+                toast('📋 Image copied to clipboard!', '#06b6d4');
             } catch {
                 const dataUrl = await renderElementToImage(receiptElement);
                 if (!dataUrl) { toast('Failed', '#ef4444'); return; }
@@ -14095,21 +14447,13 @@ window.showTransactionReceiptModal = function(
         }
     });
 
-    // ── Save Only ──
+    // ── Save Without Sharing ──
     btnSave.addEventListener('click', async function() {
         if (processing) return;
         processing = true;
         setButtonsEnabled(false);
         try {
-            if (typeof onSave === 'function') {
-                const success = await onSave();
-                if (!success) {
-                    toast('Failed to save', '#ef4444');
-                    processing = false;
-                    setButtonsEnabled(true);
-                    return;
-                }
-            }
+            if (!await ensureSaved()) { processing = false; setButtonsEnabled(true); return; }
             closeModal(() => {
                 if (onConfirmNoSend) onConfirmNoSend();
                 toast('✅ Saved', '#10b981');
@@ -14133,7 +14477,9 @@ window.showTransactionReceiptModal = function(
 
     function closeModal(callback) {
         modal.classList.remove('on');
-        setTimeout(() => { modal.remove(); if (callback) callback(); }, 300);}};
+        setTimeout(() => { modal.remove(); if (callback) callback(); }, 300);
+    }
+};
         
 function generateSimpleReceiptFallback(member, txType, amount, description, accountBalance, appBalance, projectedRemainingLoan, prepaidBalance) {
   try {
@@ -14391,13 +14737,16 @@ window.showDebtReceiptModal = function(
         btns.forEach(b => { b.disabled = !enabled; b.style.opacity = enabled ? '1' : '0.6'; });
     }
 
+    // For debt, the transaction is already saved when this modal is shown (in preview it's shown before saving).
+    // However, we can still handle the case where we need to save (e.g., if called from preview).
+    // We'll assume the caller passes onSave if needed, but here we'll just share/copy.
+
+    // ── WhatsApp ──
     btnWhatsApp.addEventListener('click', async function() {
         if (processing) return;
         processing = true;
         setButtonsEnabled(false);
         try {
-            // The debt is already saved by the caller (executeDebtAssignment)
-            // We just generate image and share
             const blob = await getReceiptBlob();
             if (!blob) { processing = false; setButtonsEnabled(true); return; }
 
@@ -14416,8 +14765,7 @@ window.showDebtReceiptModal = function(
                     });
                     toast('✅ Shared!', '#10b981');
                     closeModal(() => { if (onConfirmSend) onConfirmSend(); });
-                    processing = false;
-                    setButtonsEnabled(true);
+                    processing = false; setButtonsEnabled(true);
                     return;
                 } catch (e) {
                     if (e.name !== 'AbortError') console.warn(e);
@@ -14444,6 +14792,7 @@ window.showDebtReceiptModal = function(
         }
     });
 
+    // ── Copy Image (PC) ──
     btnCopy.addEventListener('click', async function() {
         if (processing) return;
         processing = true;
@@ -14473,6 +14822,7 @@ window.showDebtReceiptModal = function(
         }
     });
 
+    // ── Save Without Sharing ──
     btnSave.addEventListener('click', function() {
         if (processing) return;
         processing = true;
@@ -14485,6 +14835,7 @@ window.showDebtReceiptModal = function(
         });
     });
 
+    // ── Cancel ──
     btnCancel.addEventListener('click', function() {
         if (processing) return;
         closeModal(() => {
