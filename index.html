@@ -3739,23 +3739,41 @@ setTimeout(function(){
     <button class="btn btn-sec btn-full" style="margin-top:12px" onclick="closeOv('ov-apps')">Close</button>
   </div>
 </div>
-<!-- ========================================== -->
-<!-- ASSIGN DEBT MODAL - CHECK THIS HTML       -->
-<!-- ========================================== -->
-
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- ASSIGN DEBT MODAL – WITH DATE/TIME PICKER                 -->
+<!-- ════════════════════════════════════════════════════════════ -->
 <div class="ov" id="ov-assign-debt" onclick="maybeClose(event,'ov-assign-debt')">
-  <div class="bs">
+  <div class="bs" style="max-width:500px; max-height:90vh; overflow-y:auto;">
     <div class="bs-title">🧾 Assign Debt (as Loan)</div>
+
+    <!-- ─── Member Selection (multi-select) ─── -->
     <div class="fgrp">
-      <label class="flbl">Member</label>
-      <select id="debt-member" class="inp" onchange="updateDebtPreview()">
-        <option value="">Select member</option>
-      </select>
+      <label class="flbl">Members</label>
+      <button type="button" class="btn btn-sm btn-sec" onclick="toggleMemberList('debt')" style="width:100%; text-align:left; padding:6px 12px;">
+        📋 Select Member(s) <span id="debt-selected-count" style="float:right; color:var(--gold);">0 selected</span>
+      </button>
+      <div id="debt-member-list" style="display:none; max-height:120px; overflow-y:auto; border:1px solid var(--br); border-radius:8px; padding:6px; margin-top:6px; background:rgba(255,255,255,0.03);">
+        <!-- populated by JavaScript -->
+      </div>
     </div>
-    
-    <!-- ===== PREVIEW DIV - Make sure this exists ===== -->
+
+    <!-- ─── Date & Time Picker (for previous days) ─── -->
+    <div style="background:rgba(6,182,212,0.06); border-radius:10px; padding:10px 12px; margin-bottom:12px; border:1px solid rgba(6,182,212,0.12);">
+      <div style="font-size:0.6rem; font-weight:700; color:var(--teal); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px;">📅 Debt Date & Time</div>
+      <div style="display:flex; gap:8px;">
+        <input type="date" id="debt-date" class="inp" style="flex:1; padding:6px 10px; font-size:0.75rem;">
+        <input type="time" id="debt-time" class="inp" style="flex:1; padding:6px 10px; font-size:0.75rem;">
+      </div>
+      <div style="display:flex; align-items:center; gap:8px; margin-top:4px;">
+        <button class="btn btn-sm btn-teal" onclick="setDebtToNow()" style="padding:3px 12px; font-size:0.6rem;">📌 Set to Now</button>
+        <div class="micro muted" style="font-size:0.55rem;">Uses Firebase server time – can be past or future</div>
+      </div>
+    </div>
+
+    <!-- ─── Preview ─── -->
     <div id="debt-preview" class="hint-box" style="display: none;"></div>
-    
+
+    <!-- ─── Amount & Interest ─── -->
     <div class="fgrp">
       <label class="flbl">Principal Amount (UGX)</label>
       <input type="number" id="debt-amount" class="inp" placeholder="Amount" oninput="updateDebtPreview()">
@@ -3764,14 +3782,20 @@ setTimeout(function(){
       <label class="flbl">Interest Rate (%)</label>
       <input type="number" id="debt-interest" class="inp" step="0.5" value="5" oninput="updateDebtPreview()">
     </div>
+
+    <!-- ─── Due Date ─── -->
     <div class="fgrp">
       <label class="flbl">Due Date</label>
       <input type="date" id="debt-due-date" class="inp">
     </div>
+
+    <!-- ─── Reason ─── -->
     <div class="fgrp">
       <label class="flbl">Reason (optional)</label>
       <input type="text" id="debt-reason" class="inp" placeholder="Reason">
     </div>
+
+    <!-- ─── Buttons ─── -->
     <button class="btn btn-red btn-full" onclick="assignDebtAsLoan()">🧾 Assign Debt</button>
     <button class="btn btn-sec btn-full" onclick="closeOv('ov-assign-debt')">Cancel</button>
   </div>
@@ -3803,203 +3827,15 @@ setTimeout(function(){
 </div>
 <div class="ov" id="ov-add-mbr" onclick="maybeClose(event,'ov-add-mbr')"><div class="bs"><div class="bs-title">👤 Add Member</div><div class="fgrp"><label class="flbl">Full Name</label><input type="text" id="mbr-name" class="inp" placeholder="Full Name"></div><div class="fgrp"><label class="flbl">Phone</label><input type="tel" id="mbr-phone" class="inp" placeholder="Phone number"></div><div class="fgrp"><label class="flbl">Password (optional)</label><input type="password" id="mbr-pw" class="inp" placeholder="Default: last 4 digits of phone"></div><div class="fgrp"><label class="flbl">Join Date</label><input type="date" id="mbr-join" class="inp"></div><div class="drag-zone" id="mbr-photo-zone" onclick="document.getElementById('mbr-photo-input').click()"><span>📸 Tap to upload photo (optional)</span><input type="file" id="mbr-photo-input" accept="image/*" style="display:none" onchange="handlePhotoInput(this,'mbr-photo-preview','mbr-photo-data')"><img id="mbr-photo-preview" class="image-preview" style="display:none"></div><input type="hidden" id="mbr-photo-data"><button class="btn btn-gold btn-full" onclick="addMember()">✅ Add Member</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-add-mbr')">Cancel</button></div></div>
 <div class="ov" id="ov-edit-member" onclick="maybeClose(event,'ov-edit-member')"><div class="bs"><div class="bs-title">✏️ Edit Member</div><input type="hidden" id="edit-member-id"><div class="fgrp"><label class="flbl">Full Name</label><input type="text" id="edit-mbr-name" class="inp" placeholder="Full Name"></div><div class="fgrp"><label class="flbl">Phone</label><input type="tel" id="edit-mbr-phone" class="inp" placeholder="Phone"></div><div class="drag-zone" id="edit-photo-zone" onclick="document.getElementById('edit-photo-input').click()"><span>📸 Tap to change photo</span><input type="file" id="edit-photo-input" accept="image/*" style="display:none" onchange="handlePhotoInput(this,'edit-photo-preview','edit-mbr-photo')"><img id="edit-photo-preview" class="image-preview" style="display:none"></div><input type="hidden" id="edit-mbr-photo"><div class="fgrp"><label class="flbl">Join Date</label><input type="date" id="edit-mbr-join" class="inp"></div><button class="btn btn-gold btn-full" onclick="updateMember()">💾 Save Changes</button><button class="btn btn-sec btn-full" onclick="closeOv('ov-edit-member')">Cancel</button></div></div>
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- SETTINGS MODAL – DASHBOARD + PANELS                       -->
+<!-- ════════════════════════════════════════════════════════════ -->
 <div class="ov" id="ov-settings" onclick="maybeClose(event,'ov-settings')">
-  <div class="bs">
-    <div class="bs-title">⚙️ Group Settings</div>
-    <!-- ========================================== -->
-<!-- STEP 1: Add this inside your settings modal -->
-<!-- Find <div class="bs"> in ov-settings and paste this inside -->
-<!-- ========================================== -->
-
-<div class="card" style="margin-top: 12px; border: 2px solid var(--br);">
-  <div class="sec-h">🔧 Maintenance Mode</div>
-  
-  <!-- Status Display -->
-  <div id="maintenance-status-display" style="display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 12px; margin-bottom: 12px; background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2);">
-    <span id="maintenance-status-icon" style="font-size: 1.5rem;">🟢</span>
-    <div>
-      <div id="maintenance-status-text" style="font-weight: 700; color: var(--green);">System Live</div>
-      <div class="micro muted">All members can access the app normally</div>
+  <div class="bs" style="max-width:600px; max-height:90vh; overflow-y:auto; padding:16px 20px;">
+    <!-- Container where content will be swapped -->
+    <div id="settings-content">
+      <!-- Initial menu (grid of buttons) will be rendered by JavaScript -->
     </div>
-  </div>
-  
-  <div class="fgrp">
-    <label style="display: flex; align-items: center; gap: 12px; cursor: pointer;">
-      <input type="checkbox" id="set-maintenance-mode" onchange="toggleMaintenanceMode()" style="width: 20px; height: 20px; accent-color: var(--gold);">
-      <span style="font-weight: 600;">Enable Maintenance Mode</span>
-    </label>
-    <div class="micro muted" style="margin-top: 4px;">When enabled, members will see a maintenance message and cannot log in. Admin can still access the panel.</div>
-  </div>
-  
-  <!-- Maintenance Type Selection -->
-  <div class="fgrp">
-    <label class="flbl">Maintenance Display Type</label>
-    <select id="set-maintenance-type" class="inp" onchange="toggleMaintenanceType()">
-      <option value="static">Static Message</option>
-      <option value="countdown">Countdown Timer</option>
-    </select>
-  </div>
-  
-  <!-- Static Message (always visible) -->
-  <div class="fgrp" id="maintenance-message-group">
-    <label class="flbl">Maintenance Message</label>
-    <textarea id="set-maintenance-message" class="inp" rows="4" placeholder="Enter message to show to members during maintenance...">🛠️ We're currently performing scheduled maintenance to improve your experience.
-
-Our developers are working hard to fix issues and add new features. 
-
-⏰ We'll be back soon!
-
-Thank you for your patience and understanding. 🙏
-
-— Harvest Trust Finance Team</textarea>
-    <div class="micro muted">This message will be shown to all members when they try to login during maintenance.</div>
-  </div>
-  
-  <!-- Countdown Timer Settings (hidden by default) -->
-  <div id="maintenance-countdown-group" style="display: none; padding-top: 12px; border-top: 1px solid var(--br);">
-    <div class="fgrp">
-      <label class="flbl">Duration (minutes)</label>
-      <input type="number" id="set-maintenance-duration" class="inp" min="1" max="1440" value="30" step="5">
-      <div class="micro muted">Set the number of minutes the maintenance will last. Members will see a countdown.</div>
-    </div>
-    <div class="fgrp">
-      <label class="flbl">End Time (optional override)</label>
-      <input type="datetime-local" id="set-maintenance-endtime" class="inp">
-      <div class="micro muted">If set, this overrides the duration. The maintenance will end at this exact time.</div>
-    </div>
-  </div>
-  
-  <!-- Emergency Exit Button -->
-  <div id="maintenance-exit-container" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--br);">
-    <button class="btn btn-red btn-full" onclick="exitMaintenanceMode()" style="font-size: 1rem; padding: 14px;">
-      🚪 Exit Maintenance Mode Now
-    </button>
-    <div class="micro muted" style="text-align: center; margin-top: 6px;">This will immediately restore full access to all members</div>
-  </div>
-</div>
-    <div class="fgrp">
-      <label class="flbl">Group Name</label>
-      <input type="text" id="set-groupname" class="inp" placeholder="Group Name">
-    </div>
-    <div class="fgrp">
-      <label class="flbl">Daily Amount</label>
-      <input type="number" id="set-daily" class="inp">
-    </div>
-    <div class="fgrp">
-      <label class="flbl">Welfare Deduction</label>
-      <input type="number" id="set-welfare-amount" class="inp">
-    </div>
-    <div class="fgrp">
-      <label class="flbl">Fine Contribution</label>
-      <input type="number" id="set-fine-contribution" class="inp">
-    </div>
-    <div class="fgrp">
-      <label class="flbl">Default Fine</label>
-      <input type="number" id="set-fine" class="inp">
-    </div>
-    <div class="fgrp">
-      <label class="flbl">Penalty Interest Rate (%)</label>
-      <input type="number" id="set-penalty-interest" class="inp" step="0.5" value="5">
-      <div class="micro">Applied at midnight when a member misses a daily deposit (added on top of daily amount + welfare).</div>
-    </div>
-    <div class="fgrp">
-  <label class="flbl">Referral Bonus (UGX)</label>
-  <input type="number" id="set-referral-bonus" class="inp" value="10000" step="1000">
-  <div class="micro">Amount a member receives when their referral is approved <strong>and</strong> the bonus is cleared by admin.</div>
-</div>
-    <div class="fgrp">
-      <label class="flbl">Group Start Date (anniversary)</label>
-      <input type="date" id="groupStartDate" class="inp" value="">
-    </div>
-    <div class="fgrp">
-      <label class="flbl">WhatsApp Link</label>
-      <input type="url" id="set-whatsapp" class="inp" placeholder="https://chat.whatsapp.com/...">
-    </div>
-    <div class="fgrp">
-      <label class="flbl">Signup Fee (UGX)</label>
-      <input type="number" id="set-signup-fee" class="inp" value="0" step="1000">
-      <div class="micro">New members will pay this fee once upon approval. Fee is added as debt and must be cleared before login.</div>
-    </div>
-    <div class="fgrp">
-      <label class="flbl">Theme Mode</label>
-      <select id="set-theme-mode" class="inp" onchange="previewAdminTheme()">
-        <option value="light">Light</option>
-        <option value="dark">Dark</option>
-      </select>
-    </div>
-    <div class="fgrp">
-      <label class="flbl">Theme Color</label>
-      <select id="set-theme-color" class="inp" onchange="previewAdminTheme()"></select>
-      <div class="theme-note">Admin can choose from 14 color styles. Saving updates all members live.</div>
-    </div>
-    <div class="theme-preview">
-      <div class="theme-dot"></div>
-      <div class="theme-preview-text">
-        <strong id="theme-preview-name">Facebook Blue</strong><br>
-        <span>Live color preview for buttons, header, navigation and cards.</span>
-      </div>
-    </div>
-    <div class="fgrp">
-      <label class="flbl">Group Banner</label>
-      <div class="drag-zone" onclick="document.getElementById('banner-file-input').click()">
-        <span>🖼️ Tap to upload banner image</span>
-        <input type="file" id="banner-file-input" accept="image/*" style="display:none" onchange="handlePhotoInput(this,'banner-preview','set-banner-url')">
-        <img id="banner-preview" class="image-preview" style="display:none">
-      </div>
-      <input type="hidden" id="set-banner-url">
-    </div>
-    <button class="btn btn-gold btn-full" onclick="doSaveSettings()">💾 Save Settings</button>
-    <button class="btn btn-sec btn-full" onclick="closeOv('ov-settings')">Cancel</button>
-  </div>
-  <div class="card">
-    <div class="sec-h">🔑 Admin Password</div>
-    <div class="fgrp">
-      <label class="flbl">Current Password</label>
-      <input type="password" id="admin-current-pwd" class="inp">
-    </div>
-    <div class="fgrp">
-      <label class="flbl">New Password</label>
-      <input type="password" id="admin-new-pwd" class="inp">
-    </div>
-    <div class="fgrp">
-      <label class="flbl">Confirm New Password</label>
-      <input type="password" id="admin-confirm-pwd" class="inp">
-    </div>
-    <button class="btn btn-gold btn-full" onclick="changeAdminPassword()">Change Password</button>
-  </div>
-</div>
-
-<div class="ov" id="ov-loan-settings" onclick="maybeClose(event,'ov-loan-settings')">
-  <div class="bs">
-    <div class="bs-title">⚙️ Loan Settings</div>
-    <div class="fgrp">
-      <label class="flbl">Interest Rate (%)</label>
-      <input type="number" id="loan-interest-rate" class="inp" step="0.5" min="0" value="5">
-    </div>
-    <div class="fgrp">
-  <label class="flbl">Extra Interest Per Week (%)</label>
-  <input type="number" id="loan-extra-weekly" class="inp" step="0.5" min="0" value="2">
-  <div class="micro">Additional percentage for each extra week beyond the first week.</div>
-</div>
-    <div class="fgrp">
-      <label class="flbl">Max Loan (% of Profit Pool)</label>
-      <input type="number" id="loan-max-percent" class="inp" step="1" min="1" max="100" value="50">
-    </div>
-    <div class="fgrp">
-      <label class="flbl">Discipline Multiplier (x total deposits)</label>
-      <input type="number" id="discipline-multiplier" class="inp" step="0.1" min="0" value="1.5">
-      <div class="micro" style="margin-top:4px;">Example: 1.5 = borrow up to 150% of total deposits</div>
-    </div>
-    <div class="fgrp">
-      <label class="flbl">Default Loan Period (days)</label>
-      <input type="number" id="loan-days" class="inp" step="1" min="1" value="30">
-    </div>
-    <div class="fgrp">
-      <label class="flbl">Overdue Penalty (%)</label>
-      <input type="number" id="loan-penalty" class="inp" step="0.5" min="0" value="2">
-    </div>
-    <button class="btn btn-gold btn-full" onclick="saveLoanSettings()">💾 Save Settings</button>
-    <button class="btn btn-sec btn-full" onclick="closeOv('ov-loan-settings')">Cancel</button>
   </div>
 </div>
 <div class="ov" id="ov-loan-request" onclick="maybeClose(event,'ov-loan-request')">
@@ -4708,8 +4544,8 @@ function getNextPayoutDate() {
     if (rotation && rotation.payoutEndDate) {
         return rotation.payoutEndDate;
     }
-    // 2. Compute from last payout (or fallback to today + 7 days)
-    var last = getLastPayoutDate();
+    // 2. Compute from last payout (or fallback)
+    const last = getLastPayoutDate();
     if (last) {
         return last + (7 * 24 * 60 * 60 * 1000);
     }
@@ -5014,24 +4850,6 @@ function addSavingsGoalToSettings() {
   }
 }
 
-// ─── Save goal when settings are saved ──────────────────────
-// We need to patch doSaveSettings to include monthlySavingsGoal
-(function() {
-  const original = window.doSaveSettings;
-  window.doSaveSettings = function() {
-    // Call original
-    if (typeof original === 'function') original();
-
-    // Then add our field
-    const goalInput = document.getElementById('set-monthly-goal');
-    if (goalInput) {
-      const goal = parseInt(goalInput.value) || 1000000;
-      settings.monthlySavingsGoal = goal;
-      db.ref('settings/monthlySavingsGoal').set(goal);
-    }
-  };
-})();
-
 // ─── Hook into existing UI updates ──────────────────────────
 // Patch updateHomeUI to include thermometer and streak fire
 (function() {
@@ -5249,12 +5067,18 @@ function getTodayStatus(member) {
   return { deficit, surplus, paidDaily, welfarePaid, requiredPerDay, prepaidUsed, newPrepaid, totalAvailable, totalRequired };
 }
 
-// ─── Midnight timer (debt check) ─────────────────────────────
 function getNextMidnight() {
-    var now = new Date();
-    var midnight = new Date(now);
-    midnight.setHours(24, 0, 0, 0);
-    return midnight.getTime();
+    const now = new Date();
+    // Get scheduled time from settings (default 23:00)
+    const timeStr = settings.debtCheckTime || '23:00';
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    const target = new Date(now);
+    target.setHours(hours, minutes, 0, 0);
+    // If the target time has already passed today, schedule for tomorrow
+    if (target <= now) {
+        target.setDate(target.getDate() + 1);
+    }
+    return target.getTime();
 }
 function getDailyStatusForDate(member, dateTimestamp) {
   const dayStart = new Date(dateTimestamp);
@@ -5312,106 +5136,299 @@ async function reloadAllData() {
   computePots();
   refreshUI();
 }
-// Check if midnight has passed and we haven't processed today yet
-let lastProcessedDate = null;
+window.assignDebtAsLoan = async function() {
+  const selectedMembers = getCheckedMembers('debt');
+  const principal = parseFloat(document.getElementById('debt-amount')?.value);
+  const interestRate = parseFloat(document.getElementById('debt-interest')?.value);
+  const dueDateStr = document.getElementById('debt-due-date')?.value;
+  const reason = document.getElementById('debt-reason')?.value || 'Admin assigned debt';
+  const debtDate = getDebtTimestamp(); // uses date/time picker
 
-async function checkAndAssignDebts() {
-  const todayStart = getTodayStart();
-  const todayDateStr = new Date(todayStart).toISOString().slice(0, 10);
-  if (lastProcessedDate === todayDateStr) return;
+  if (!selectedMembers.length) { toast('Select at least one member', '#ef4444'); return; }
+  if (!principal || principal <= 0) { toast('Enter valid amount', '#ef4444'); return; }
+  if (isNaN(interestRate) || interestRate < 0) { toast('Enter valid interest rate', '#ef4444'); return; }
+  if (!dueDateStr) { toast('Select due date', '#ef4444'); return; }
 
-  const now = Date.now();
-  if (now < getNextMidnight() - 5000) return;
+  const dueDate = new Date(dueDateStr).getTime();
+  const totalRepayPerMember = Math.floor(principal * (1 + interestRate / 100));
 
-  console.log("Midnight passed – assigning missed day to loan balance for", todayDateStr);
-
-  const activeMembers = members.filter(m => m.approved);
-  const interestRate = (settings.penaltyInterestRate || 5) / 100;
-  const writes = [];
-
-  for (const member of activeMembers) {
-    const { deficit } = getTodayStatus(member);
-    if (deficit > 0) {
-      writes.push(db.ref('transactions').push({
-        memberPhone: member.phone,
-        memberName: member.name,
-        type: 'loan_adjustment',   // instead of 'debt'
-        amount: deficit,
-        receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
-        description: `Missed daily saving (${money(deficit)}) – added to loan balance`,
-        date: Date.now(),
-        autoMidnight: true
-      }));
-      const interestAmount = Math.round(deficit * interestRate);
-      if (interestAmount > 0) {
-        writes.push(db.ref('transactions').push({
-          memberPhone: member.phone,
-          memberName: member.name,
-          type: 'fine',
-          amount: interestAmount,
-          receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
-          description: `Penalty interest (${settings.penaltyInterestRate}%) on missed saving for ${todayDateStr}`,
-          date: Date.now() + 1,
-          autoMidnight: true
-        }));
-      }
+  // Show grouped receipt
+  showBulkDebtReceipt(selectedMembers, principal, interestRate, totalRepayPerMember, dueDate, reason, async function() {
+    let success = 0;
+    for (const member of selectedMembers) {
+      try {
+        await executeDebtAssignment(member, principal, interestRate, dueDate, reason, debtDate);
+        success++;
+      } catch (err) { console.error(err); }
     }
-  }
-
-  if (writes.length) {
-    await Promise.all(writes);
-    toast(`${writes.length} member(s) had missed savings added to loan balance`, '#f59e0b');
-    const txSnap = await db.ref('transactions').once('value');
-    transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
-    const loansSnap = await db.ref('loans').once('value');
-    loans = loansSnap.val() ? Object.entries(loansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
-    computePots();
+    toast(`Debt assigned to ${success}/${selectedMembers.length} members`, success > 0 ? '#10b981' : '#ef4444');
+    await reloadAllData();
     refreshUI();
-  } else {
-    console.log("All members covered – no missed savings.");
-  }
-
-  lastProcessedDate = todayDateStr;
-  localStorage.setItem('lastDebtProcessDate', lastProcessedDate);
+    closeOv('ov-assign-debt');
+  });
+};
+// ─── Set debt date/time to now ─────────────────────────────
+function setDebtToNow() {
+    const now = new Date();
+    document.getElementById('debt-date').value = now.toISOString().slice(0, 10);
+    document.getElementById('debt-time').value = now.toTimeString().slice(0, 5);
 }
 
-function getTodaysDepositStatus() {
-  const todayStart = new Date().setHours(0, 0, 0, 0);
-  const todayEnd = todayStart + 86400000 - 1;
-  const hasActionToday = new Set();
+// ─── Get combined timestamp for debt ──────────────────────
+function getDebtTimestamp() {
+    const dateStr = document.getElementById('debt-date').value;
+    const timeStr = document.getElementById('debt-time').value;
+    if (!dateStr || !timeStr) return Date.now();
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    return new Date(year, month - 1, day, hours, minutes).getTime();
+}
+function renderDebtLogs() {
+    const container = document.getElementById('admin-debt-logs');
+    if (!container) return;
 
-  transactions.forEach(tx => {
-    if (tx.date >= todayStart && tx.date <= todayEnd && tx.memberPhone) {
-      hasActionToday.add(tx.memberPhone);
+    db.ref('notifications/admin_debt_logs').orderByChild('timestamp').limitToLast(20).once('value', snap => {
+        const logs = snap.val() ? Object.entries(snap.val()).map(([key, val]) => ({ ...val, key })) : [];
+        if (!logs.length) {
+            container.innerHTML = '<div class="muted" style="padding:8px;">No debt assignment logs</div>';
+            return;
+        }
+        let html = `<div style="max-height:300px; overflow-y:auto; margin-bottom:8px;">
+            <div style="font-size:0.7rem; font-weight:700; color:var(--t3); margin-bottom:4px;">📋 Recent Debt Assignments</div>`;
+        logs.reverse().forEach(log => {
+            const membersList = log.members.map(m => `${m.name} (${money(m.amount)})`).join(', ');
+            html += `
+                <div style="background:${log.read ? 'rgba(255,255,255,0.03)' : 'rgba(245,158,11,0.08)'}; border:1px solid ${log.read ? 'rgba(255,255,255,0.06)' : 'rgba(245,158,11,0.2)'}; border-radius:8px; padding:8px 10px; margin-bottom:4px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <div style="font-size:0.75rem; font-weight:600;">📅 ${log.date} – ${log.count} member(s)</div>
+                            <div class="micro muted" style="font-size:0.6rem;">${membersList}</div>
+                        </div>
+                        <div style="display:flex; gap:4px;">
+                            ${!log.read ? `<button class="btn btn-sm btn-teal" onclick="markDebtLogRead('${log.key}')" style="padding:2px 8px; font-size:0.55rem;">✓ Mark Read</button>` : ''}
+                            <button class="btn btn-sm btn-red" onclick="deleteDebtLog('${log.key}')" style="padding:2px 8px; font-size:0.55rem;">🗑️</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        html += `</div>`;
+        container.innerHTML = html;
+    });
+}
+
+window.markDebtLogRead = async function(key) {
+    await db.ref('notifications/admin_debt_logs/' + key + '/read').set(true);
+    renderDebtLogs();
+};
+
+window.deleteDebtLog = async function(key) {
+    if (!confirm('Delete this log?')) return;
+    await db.ref('notifications/admin_debt_logs/' + key).remove();
+    renderDebtLogs();
+};
+// ─── Midnight Debt Processing (NEW) ────────────────────────
+
+let lastProcessedDate = null;
+
+// ─── Process pending debts at midnight ──────────────────────
+async function processPendingDebts() {
+    const todayStart = getTodayStart();
+    const todayDateStr = new Date(todayStart).toISOString().slice(0, 10);
+    if (settings.autoDebtEnabled === false) {
+    console.log('Auto debt check is disabled by admin.');
+    return;
+}
+    if (lastProcessedDate === todayDateStr) return;
+    if (Date.now() < getNextMidnight() - 5000) return;
+
+    console.log("🔔 Midnight – processing pending debts for", todayDateStr);
+
+    const activeMembers = members.filter(m => m.approved);
+    const dailyAmount = settings.dailyAmount || 2500;
+    const welfareAmount = settings.welfareAmount || 500;
+    const requiredPerDay = dailyAmount + welfareAmount;
+    const writes = [];
+    const affectedMembers = [];
+
+    for (const member of activeMembers) {
+        const { deficit } = getTodayStatus(member);
+        if (deficit > 0) {
+            const amount = Math.min(deficit, requiredPerDay);
+            writes.push(db.ref('transactions').push({
+                memberPhone: member.phone,
+                memberName: member.name,
+                type: 'loan_adjustment',
+                amount: amount,
+                receiptNumber: generateReceiptNumber(),
+                description: `Missed daily saving (${money(amount)}) – auto-debt`,
+                date: Date.now(),
+                autoMidnight: true
+            }));
+            affectedMembers.push({ name: member.name, phone: member.phone, amount: amount });
+        }
     }
-  });
 
-  const allMembers = members.filter(m => m.approved);
-  const noAction = allMembers.filter(m => !hasActionToday.has(m.phone));
-  return { notDeposited: noAction, allCount: allMembers.length, depositedCount: hasActionToday.size };
+    // Apply penalty interest
+    const interestRate = (settings.penaltyInterestRate || 5) / 100;
+    for (const member of activeMembers) {
+        const { deficit } = getTodayStatus(member);
+        if (deficit > 0) {
+            const interestAmount = Math.round(deficit * interestRate);
+            if (interestAmount > 0) {
+                writes.push(db.ref('transactions').push({
+                    memberPhone: member.phone,
+                    memberName: member.name,
+                    type: 'fine',
+                    amount: interestAmount,
+                    receiptNumber: generateReceiptNumber(),
+                    description: `Penalty interest (${settings.penaltyInterestRate}%) on missed saving`,
+                    date: Date.now() + 1,
+                    autoMidnight: true
+                }));
+            }
+        }
+    }
+
+    if (writes.length) {
+        await Promise.all(writes);
+        await createAdminDebtLog(affectedMembers, todayDateStr);
+        toast(`💰 ${affectedMembers.length} member(s) had missed savings added to loan balance`, '#f59e0b');
+        // Reload data to refresh UI
+        await reloadAllData();
+        refreshUI();
+    } else {
+        console.log("✅ All members covered – no debts assigned.");
+    }
+
+    lastProcessedDate = todayDateStr;
+    localStorage.setItem('lastDebtProcessDate', lastProcessedDate);
+}
+
+// ─── Create admin log for debt assignment ──────────────────
+async function createAdminDebtLog(affectedMembers, dateStr) {
+    if (!affectedMembers.length) return;
+
+    const logEntry = {
+        id: Date.now(),
+        date: dateStr,
+        timestamp: Date.now(),
+        members: affectedMembers,
+        count: affectedMembers.length,
+        read: false,
+        type: 'debt_assignment'
+    };
+
+    const notifRef = db.ref('notifications/admin_debt_logs').push();
+    await notifRef.set(logEntry);
+
+    // Also add a concise notification for the admin bell
+    const summary = affectedMembers.map(m => `${m.name} (UGX ${m.amount.toLocaleString()})`).join(', ');
+    await db.ref('notifications/admin').push({
+        id: Date.now(),
+        text: `🔔 Debt assigned to ${affectedMembers.length} member(s): ${summary}`,
+        date: Date.now(),
+        read: false,
+        type: 'debt_assignment',
+        logId: notifRef.key
+    });
+
+    return notifRef.key;
+}
+
+// ─── Admin: View debt logs ──────────────────────────────────
+function renderDebtLogs() {
+    const container = document.getElementById('admin-debt-logs');
+    if (!container) return;
+
+    db.ref('notifications/admin_debt_logs').orderByChild('timestamp').limitToLast(20).once('value', snap => {
+        const logs = snap.val() ? Object.entries(snap.val()).map(([key, val]) => ({ ...val, key })) : [];
+        if (!logs.length) {
+            container.innerHTML = '<div class="muted" style="padding:8px;">No debt assignment logs</div>';
+            return;
+        }
+
+        let html = `<div style="max-height:300px; overflow-y:auto; margin-bottom:8px;">
+            <div style="font-size:0.7rem; font-weight:700; color:var(--t3); margin-bottom:4px;">📋 Recent Debt Assignments</div>`;
+
+        logs.reverse().forEach(log => {
+            const membersList = log.members.map(m => `${m.name} (${money(m.amount)})`).join(', ');
+            html += `
+                <div style="background:${log.read ? 'rgba(255,255,255,0.03)' : 'rgba(245,158,11,0.08)'}; border:1px solid ${log.read ? 'rgba(255,255,255,0.06)' : 'rgba(245,158,11,0.2)'}; border-radius:8px; padding:8px 10px; margin-bottom:4px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <div style="font-size:0.75rem; font-weight:600;">📅 ${log.date} – ${log.count} member(s)</div>
+                            <div class="micro muted" style="font-size:0.6rem;">${membersList}</div>
+                        </div>
+                        <div style="display:flex; gap:4px;">
+                            ${!log.read ? `<button class="btn btn-sm btn-teal" onclick="markDebtLogRead('${log.key}')" style="padding:2px 8px; font-size:0.55rem;">✓ Mark Read</button>` : ''}
+                            <button class="btn btn-sm btn-red" onclick="deleteDebtLog('${log.key}')" style="padding:2px 8px; font-size:0.55rem;">🗑️</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        html += `</div>`;
+        container.innerHTML = html;
+    });
+}
+
+// ─── Mark debt log as read ─────────────────────────────────
+window.markDebtLogRead = async function(key) {
+    await db.ref('notifications/admin_debt_logs/' + key + '/read').set(true);
+    renderDebtLogs();
+};
+
+// ─── Delete debt log ────────────────────────────────────────
+window.deleteDebtLog = async function(key) {
+    if (!confirm('Delete this log?')) return;
+    await db.ref('notifications/admin_debt_logs/' + key).remove();
+    renderDebtLogs();
+};
+
+function startMidnightChecker() {
+    lastProcessedDate = localStorage.getItem('lastDebtProcessDate');
+    // Update the midnight timer every second
+    setInterval(updateMidnightTimer, 1000);
+    // Check for pending debts every minute
+    setInterval(processPendingDebts, 60000);
+    // Check for the warning every 10 seconds (more responsive)
+    setInterval(checkDebtCheckWarning, 10000);
+    // Run once on load
+    setTimeout(processPendingDebts, 5000);
+    setTimeout(checkDebtCheckWarning, 2000);
+}
+
+// ─── Helper functions (already exist, keep them) ──────────
+function getTodaysDepositStatus() {
+    const todayStart = new Date().setHours(0, 0, 0, 0);
+    const todayEnd = todayStart + 86400000 - 1;
+    const hasActionToday = new Set();
+    transactions.forEach(tx => {
+        if (tx.date >= todayStart && tx.date <= todayEnd && tx.memberPhone) {
+            hasActionToday.add(tx.memberPhone);
+        }
+    });
+    const allMembers = members.filter(m => m.approved);
+    const noAction = allMembers.filter(m => !hasActionToday.has(m.phone));
+    return { notDeposited: noAction, allCount: allMembers.length, depositedCount: hasActionToday.size };
 }
 
 function getTodayDeficit(member) {
-  const todayStart = new Date().setHours(0, 0, 0, 0);
-  const dailyAmount = settings.dailyAmount || 2000;
-  const welfareAmount = settings.welfareAmount || 500;
-  const requiredPerDay = dailyAmount + welfareAmount;
-  let paidDaily = 0;
-  let welfarePaid = false;
-  transactions.forEach(tx => {
-    if (tx.memberPhone === member.phone && tx.date >= todayStart && tx.date < todayStart + 86400000) {
-      if (tx.type === 'deposit') paidDaily += tx.amount;
-      if (tx.type === 'welfare') welfarePaid = true;
-    }
-  });
-  const welfareNeeded = welfarePaid ? 0 : welfareAmount;
-  const deficit = Math.max(0, (dailyAmount + welfareNeeded) - paidDaily);
-  return deficit;}
-function startMidnightChecker() {
-  lastProcessedDate = localStorage.getItem('lastDebtProcessDate');
-  setInterval(updateMidnightTimer, 1000);
-  setInterval(checkAndAssignDebts, 60000);
-  setTimeout(checkAndAssignDebts, 5000);
+    const todayStart = new Date().setHours(0, 0, 0, 0);
+    const dailyAmount = settings.dailyAmount || 2000;
+    const welfareAmount = settings.welfareAmount || 500;
+    const requiredPerDay = dailyAmount + welfareAmount;
+    let paidDaily = 0;
+    let welfarePaid = false;
+    transactions.forEach(tx => {
+        if (tx.memberPhone === member.phone && tx.date >= todayStart && tx.date < todayStart + 86400000) {
+            if (tx.type === 'deposit') paidDaily += tx.amount;
+            if (tx.type === 'welfare') welfarePaid = true;
+        }
+    });
+    const welfareNeeded = welfarePaid ? 0 : welfareAmount;
+    return Math.max(0, (dailyAmount + welfareNeeded) - paidDaily);
 }
 function getThemePalette(key){return THEME_PALETTES[key]||THEME_PALETTES.facebook;}
 function buildThemeOptions(){return Object.entries(THEME_PALETTES).map(([key,p])=>'<option value="'+key+'">'+p.name+'</option>').join('');}
@@ -5508,7 +5525,20 @@ function loadChatCache(userId) {
     return null;
   }
 }
-
+function updateDebtCheckCountdown() {
+    const el = document.getElementById('debt-countdown-indicator');
+    if (!el) return;
+    const now = Date.now();
+    const nextRun = getNextMidnight();
+    const diff = nextRun - now;
+    if (diff <= 0) {
+        el.textContent = '🔔 Running soon...';
+        return;
+    }
+    const hours = Math.floor(diff / 3600000);
+    const minutes = Math.floor((diff % 3600000) / 60000);
+    el.textContent = `⏳ Debt check in ${hours}h ${minutes}m`;
+}
 // ──────────────────────────────────────────────────────────────
 // RECEIVER DISPLAY – Updates name + rotation info
 // ──────────────────────────────────────────────────────────────
@@ -6053,6 +6083,40 @@ async function checkAndAdvanceLoanRotation(memberPhone) {
   }
   
   return false;
+}
+// ─── Debt Check Warning ──────────────────────────────────
+let _debtWarningShownToday = false;
+
+function checkDebtCheckWarning() {
+    // Only for admin users
+    if (!currentUser || !currentUser.isAdmin) return;
+    // Check if auto debt is enabled
+    if (settings.autoDebtEnabled === false) return;
+
+    const now = Date.now();
+    const nextRun = getNextMidnight();
+    const diff = nextRun - now;
+    const warningMinutes = settings.debtWarningMinutes || 10;
+    const warningMs = warningMinutes * 60 * 1000;
+
+    // If we are within the warning window and haven't shown it today
+    if (diff <= warningMs && diff > 0) {
+        // Check if we already showed today
+        const todayStr = new Date(now).toISOString().slice(0,10);
+        const lastShown = localStorage.getItem('htf_debt_warning_shown_date');
+        if (lastShown !== todayStr) {
+            const minutesLeft = Math.ceil(diff / (60 * 1000));
+            toast(`⏰ Debt check will run in ${minutesLeft} minute(s)!`, '#f59e0b');
+            // Send a local notification if permission is granted
+            sendLocalNotification('⏰ Debt Check Reminder', `Auto debt assignment will run in ${minutesLeft} minutes.`);
+            localStorage.setItem('htf_debt_warning_shown_date', todayStr);
+            _debtWarningShownToday = true;
+        }
+    } else if (diff <= 0) {
+        // Reset the warning after the check runs
+        localStorage.removeItem('htf_debt_warning_shown_date');
+        _debtWarningShownToday = false;
+    }
 }
 // ==========================================
 // LATE PAYMENT REMINDER - APPLICATION LOANS ONLY
@@ -8968,7 +9032,7 @@ if (currentUser && !currentUser.isAdmin) {
     }
     setAdminDoorVisibility();
     if (typeof hideTabLoading === 'function') hideTabLoading();
-  }reorganizeHomeTab();
+  }
 }
 // Inside showMainApp(), after the app is shown:
 setTimeout(function() {
@@ -12472,100 +12536,19 @@ function renderAdminTab() {
   const c = document.getElementById('admin-content');
   if (!c) return;
 
-  // Add Back button
+  // ─── Back button ──────────────────────────────────────────
   if (!c.querySelector('.admin-back-btn')) {
     const backBtn = document.createElement('div');
     backBtn.className = 'admin-back-btn';
     backBtn.innerHTML = '← Back to Admin Menu';
-    backBtn.onclick = () => {
+    backBtn.onclick = function() {
       adminShowGrid = true;
       showAdminGrid();
     };
     c.insertBefore(backBtn, c.firstChild);
   }
 
-  const pendingLoans = loans.filter(l => l.status === 'pending');
-  
-   // Active loans – filter out zero balance
-  const activeByMember = {};
-  loans.forEach(l => {
-    if (l.status === 'approved' && !l.repaid) {
-      const memberExists = members.some(m => m.id === l.memberId && m.approved !== false);
-      if (!memberExists) return;
-      if (!activeByMember[l.memberId]) {
-        activeByMember[l.memberId] = {
-          memberName: l.memberName,
-          memberPhone: l.memberPhone,
-          member: members.find(m => m.id === l.memberId),
-          totalPrincipal: 0,
-          totalRepay: 0,
-          weightedInterest: 0,
-          count: 0,
-          dueDate: 0,
-          loans: [],
-          appLoanCount: 0,
-          assignedLoanCount: 0,
-          appLoanBalance: 0,
-          assignedLoanBalance: 0,
-          isOverdue: false,
-          daysOverdue: 0,
-          overdueAppLoan: null
-        };
-      }
-      activeByMember[l.memberId].totalPrincipal += l.amount;
-      activeByMember[l.memberId].totalRepay += l.totalRepay;
-      activeByMember[l.memberId].weightedInterest += l.amount * (l.interestRate || 0);
-      activeByMember[l.memberId].count++;
-      if (l.dueDate > activeByMember[l.memberId].dueDate) activeByMember[l.memberId].dueDate = l.dueDate;
-      activeByMember[l.memberId].loans.push(l);
-      
-      if (l.loanQuestions && l.loanQuestions.length > 0) {
-        activeByMember[l.memberId].appLoanCount++;
-        activeByMember[l.memberId].appLoanBalance += (l.totalRepay - (l.repaidAmount || 0));
-        if (l.dueDate && l.dueDate < Date.now()) {
-          const daysOverdue = Math.floor((Date.now() - l.dueDate) / (1000 * 60 * 60 * 24));
-          if (daysOverdue > activeByMember[l.memberId].daysOverdue) {
-            activeByMember[l.memberId].daysOverdue = daysOverdue;
-            activeByMember[l.memberId].isOverdue = true;
-            activeByMember[l.memberId].overdueAppLoan = l;
-          }
-        }
-      } else {
-        activeByMember[l.memberId].assignedLoanCount++;
-        activeByMember[l.memberId].assignedLoanBalance += (l.totalRepay - (l.repaidAmount || 0));
-      }
-    }
-  });
-
-  // Filter out members with zero loan balance
-  let entries = Object.entries(activeByMember);
-  entries = entries.filter(([memberId, data]) => {
-    const totalBalance = memberLoans[data.memberPhone] || 0;
-    return totalBalance > 0;
-  });
-
-  // ===== HELPER FUNCTIONS =====
-  function getMemberDebt(phone) { return memberDebts[phone] || 0; }
-  function getMemberLoan(phone) { return memberLoans[phone] || 0; }
-  function getMemberAppLoan(phone) {
-  return memberApplicationLoans[phone] || 0;
-}
-
-function getMemberAssignedLoan(phone) {
-  return memberAssignedLoans[phone] || 0;
-}
-
-function getMemberPrepaid(phone) {
-  return memberPrepaid[phone] || 0;
-}
-
-  
-  function getAvatarColor(name) { 
-    const colors = ['#f59e0b', '#10b981', '#06b6d4', '#8b5cf6', '#ef4444', '#ec4899', '#f97316', '#6366f1'];
-    return colors[(name || '').charCodeAt(0) % colors.length];
-  }
-
-  // ===== OVERDUE APPLICATION LOANS =====
+  // ─── Compute overdue application loans (for warnings) ───
   const overdueWithDays = loans.filter(l => 
     l.status === 'approved' && 
     !l.repaid && 
@@ -12578,11 +12561,8 @@ function getMemberPrepaid(phone) {
     daysOverdue: Math.floor((Date.now() - l.dueDate) / (1000 * 60 * 60 * 24))
   }));
 
-  const hasOverdueAppLoans = overdueWithDays.length > 0;
-
-  // ===== GLOBAL WARNINGS HTML (USED IN ALL TABS) =====
   let warningsHtml = '';
-  if (hasOverdueAppLoans) {
+  if (overdueWithDays.length) {
     warningsHtml = `
       <div style="
         background: linear-gradient(135deg, rgba(239,68,68,0.12), rgba(245,158,11,0.08));
@@ -12616,27 +12596,23 @@ function getMemberPrepaid(phone) {
     `;
   }
 
-  // ============================================
-  // SAVINGS TAB
-  // ============================================
-  if (currentAdminTab === 'savings') {
-    // Get today's deposit status
-    function getTodaysDepositStatus() {
-      const todayStart = new Date().setHours(0, 0, 0, 0);
-      const todayEnd = todayStart + 86400000 - 1;
-      const hasActionToday = new Set();
-      transactions.forEach(tx => {
-        if (tx.date >= todayStart && tx.date <= todayEnd && tx.memberPhone) {
-          hasActionToday.add(tx.memberPhone);
-        }
-      });
-      const allMembers = members.filter(m => m.approved);
-      const noAction = allMembers.filter(m => !hasActionToday.has(m.phone));
-      return { notDeposited: noAction, allCount: allMembers.length, depositedCount: hasActionToday.size };
+  // ─── Polls Tab ────────────────────────────────────────────
+  if (currentAdminTab === 'polls') {
+    document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+    const pollTab = document.querySelector('.admin-tab[data-tab="polls"]');
+    if (pollTab) pollTab.classList.add('active');
+    if (typeof renderAdminPollsTab === 'function') {
+      renderAdminPollsTab();
+    } else {
+      c.innerHTML = '<div class="empty-state">Polls manager not loaded. Please refresh.</div>';
     }
+    return;
+  }
 
-    const { notDeposited, allCount, depositedCount } = getTodaysDepositStatus();
-    
+  // ─── Savings Tab ──────────────────────────────────────────
+  if (currentAdminTab === 'savings') {
+    const { notDeposited, allCount } = getTodaysDepositStatus();
+
     let pendingActivityHtml = '';
     if (notDeposited.length === 0) {
       pendingActivityHtml = `
@@ -12659,11 +12635,11 @@ function getMemberPrepaid(phone) {
       `;
     }
 
-    // Financial Summary - Compact Cards
+    // Financial summary
     const financialSummaryHtml = `
       <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px;">
         <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px; text-align: center;">
-          <div style="font-size: 0.6rem; color: var(--t3); text-transform: uppercase; letter-spacing: 0.5px;">Group Deposits</div>
+          <div style="font-size: 0.6rem; color: var(--t3); text-transform: uppercase; letter-spacing: 0.5px;">Admin Balance</div>
           <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; font-weight: 700; color: ${cashFromDeposits < 0 ? 'var(--red)' : 'var(--teal)'};">${money(cashFromDeposits)}</div>
         </div>
         <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px; text-align: center;">
@@ -12672,12 +12648,13 @@ function getMemberPrepaid(phone) {
         </div>
         <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px; text-align: center;">
           <div style="font-size: 0.6rem; color: var(--t3); text-transform: uppercase; letter-spacing: 0.5px;">Pending Loans</div>
-          <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; font-weight: 700; color: var(--gold);">${pendingLoans.length}</div>
+          <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; font-weight: 700; color: var(--gold);">${loans.filter(l => l.status === 'pending').length}</div>
         </div>
       </div>
     `;
 
     // Pending loans
+    const pendingLoans = loans.filter(l => l.status === 'pending');
     let pendingLoansHtml = '';
     if (pendingLoans.length) {
       pendingLoansHtml = `
@@ -12705,108 +12682,97 @@ function getMemberPrepaid(phone) {
       `;
     }
 
-    // Active Loans - Professional Cards
+    // Active loans (simplified)
+    const activeByMember = {};
+    loans.forEach(l => {
+      if (l.status === 'approved' && !l.repaid) {
+        const memberExists = members.some(m => m.id === l.memberId && m.approved !== false);
+        if (!memberExists) return;
+        if (!activeByMember[l.memberId]) {
+          activeByMember[l.memberId] = {
+            memberName: l.memberName,
+            memberPhone: l.memberPhone,
+            member: members.find(m => m.id === l.memberId),
+            totalPrincipal: 0, totalRepay: 0, count: 0, loans: [],
+            appLoanCount: 0, assignedLoanCount: 0,
+            appLoanBalance: 0, assignedLoanBalance: 0,
+            isOverdue: false, daysOverdue: 0
+          };
+        }
+        activeByMember[l.memberId].totalPrincipal += l.amount;
+        activeByMember[l.memberId].totalRepay += l.totalRepay;
+        activeByMember[l.memberId].count++;
+        activeByMember[l.memberId].loans.push(l);
+        if (l.loanQuestions && l.loanQuestions.length > 0) {
+          activeByMember[l.memberId].appLoanCount++;
+          activeByMember[l.memberId].appLoanBalance += (l.totalRepay - (l.repaidAmount || 0));
+          if (l.dueDate && l.dueDate < Date.now()) {
+            const daysOverdue = Math.floor((Date.now() - l.dueDate) / (1000*60*60*24));
+            if (daysOverdue > activeByMember[l.memberId].daysOverdue) {
+              activeByMember[l.memberId].daysOverdue = daysOverdue;
+              activeByMember[l.memberId].isOverdue = true;
+            }
+          }
+        } else {
+          activeByMember[l.memberId].assignedLoanCount++;
+          activeByMember[l.memberId].assignedLoanBalance += (l.totalRepay - (l.repaidAmount || 0));
+        }
+      }
+    });
+
+    let entries = Object.entries(activeByMember);
+    entries = entries.filter(([memberId, data]) => {
+      const totalBalance = memberLoans[data.memberPhone] || 0;
+      return totalBalance > 0;
+    });
+
     let activeLoansHtml = '';
-    // ===== ACTIVE LOANS – SIMPLIFIED (no badges) =====
-if (entries.length) {
-  activeLoansHtml = `
-    <div id="activeLoansContainer" style="display: none;">
-      <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-          <span style="font-size: 0.75rem; font-weight: 700; color: var(--t2);">💳 Active Loans</span>
-          <span class="pill-badge pill-green">${entries.length} members</span>
-        </div>
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px;">
-          ${entries.map(([memberId, data]) => {
-            const member = data.member;
-            const totalBalance = getMemberLoan(data.memberPhone) || 0;
-            const paid = Math.max(0, data.totalRepay - totalBalance);
-            const isOverdue = data.isOverdue;
-            const daysOverdue = data.daysOverdue;
-            const avatarColor = getAvatarColor(data.memberName);
-            const initials = data.memberName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-            
-            return `
-              <div style="
-                background: rgba(255,255,255,0.04);
-                border: 1px solid ${isOverdue ? 'var(--red)' : 'var(--br)'};
-                border-radius: 12px;
-                padding: 12px;
-                cursor: pointer;
-                transition: all 0.2s ease;
-                position: relative;
-                ${isOverdue ? 'animation: pulse 2s infinite;' : ''}
-              "
-              onclick="showMemberLoanDetails('${memberId}')"
-              onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='var(--sh)';"
-              onmouseout="this.style.transform='none'; this.style.boxShadow='none';"
-              >
-                ${isOverdue ? `
-                  <div style="
-                    position: absolute;
-                    top: -6px;
-                    right: -6px;
-                    background: var(--red);
-                    color: white;
-                    font-size: 0.5rem;
-                    font-weight: 800;
-                    padding: 2px 8px;
-                    border-radius: 10px;
-                    animation: pulse 1.5s infinite;
-                  ">
-                    ${daysOverdue}d overdue
-                  </div>
-                ` : ''}
-                
-                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                  <div style="
-                    width: 38px;
-                    height: 38px;
-                    border-radius: 50%;
-                    background: linear-gradient(135deg, ${avatarColor}, ${avatarColor}cc);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-size: 0.85rem;
-                    font-weight: 800;
-                    color: white;
-                    flex-shrink: 0;
-                  ">
-                    ${initials || '?'}
-                  </div>
-                  <div style="flex: 1; min-width: 0;">
-                    <div style="font-size: 0.8rem; font-weight: 700; color: var(--t); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                      ${escapeHtml(data.memberName)}
+    if (entries.length) {
+      activeLoansHtml = `
+        <div id="activeLoansContainer" style="display: none;">
+          <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <span style="font-size: 0.75rem; font-weight: 700; color: var(--t2);">💳 Active Loans</span>
+              <span class="pill-badge pill-green">${entries.length} members</span>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px;">
+              ${entries.map(([memberId, data]) => {
+                const member = data.member;
+                const totalBalance = memberLoans[data.memberPhone] || 0;
+                const paid = Math.max(0, data.totalRepay - totalBalance);
+                const isOverdue = data.isOverdue;
+                const daysOverdue = data.daysOverdue;
+                const avatarColor = getAvatarColor(data.memberName);
+                const initials = data.memberName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+                return `
+                  <div style="background: rgba(255,255,255,0.04); border: 1px solid ${isOverdue ? 'var(--red)' : 'var(--br)'}; border-radius: 12px; padding: 12px; cursor: pointer; transition: all 0.2s ease; position: relative; ${isOverdue ? 'animation: pulse 2s infinite;' : ''}"
+                    onclick="showMemberLoanDetails('${memberId}')"
+                    onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='var(--sh)';"
+                    onmouseout="this.style.transform='none'; this.style.boxShadow='none';"
+                  >
+                    ${isOverdue ? `<div style="position: absolute; top: -6px; right: -6px; background: var(--red); color: white; font-size: 0.5rem; font-weight: 800; padding: 2px 8px; border-radius: 10px; animation: pulse 1.5s infinite;">${daysOverdue}d overdue</div>` : ''}
+                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                      <div style="width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg, ${avatarColor}, ${avatarColor}cc); display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: 800; color: white; flex-shrink: 0;">${initials || '?'}</div>
+                      <div style="flex: 1; min-width: 0;"><div style="font-size: 0.8rem; font-weight: 700; color: var(--t); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(data.memberName)}</div><div style="font-size: 0.55rem; color: var(--t3);">${data.count} loan(s)</div></div>
                     </div>
-                    <div style="font-size: 0.55rem; color: var(--t3);">${data.count} loan(s)</div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; font-size: 0.65rem;">
+                      <div style="color: var(--t3);">Total</div><div style="font-weight: 600; text-align: right; color: var(--gold);">${money(data.totalRepay)}</div>
+                      <div style="color: var(--t3);">Paid</div><div style="font-weight: 600; text-align: right; color: var(--green);">${money(paid)}</div>
+                      <div style="color: var(--t3);">Balance</div><div style="font-weight: 600; text-align: right; color: ${totalBalance > 0 ? 'var(--red)' : 'var(--green)'};">${money(totalBalance)}</div>
+                    </div>
+                    <div style="text-align: center; margin-top: 8px; font-size: 0.5rem; color: var(--t3);">👆 Click for details</div>
                   </div>
-                </div>
-                
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; font-size: 0.65rem;">
-                  <div style="color: var(--t3);">Total</div>
-                  <div style="font-weight: 600; text-align: right; color: var(--gold);">${money(data.totalRepay)}</div>
-                  <div style="color: var(--t3);">Paid</div>
-                  <div style="font-weight: 600; text-align: right; color: var(--green);">${money(paid)}</div>
-                  <div style="color: var(--t3);">Balance</div>
-                  <div style="font-weight: 600; text-align: right; color: ${totalBalance > 0 ? 'var(--red)' : 'var(--green)'};">${money(totalBalance)}</div>
-                </div>
-                
-                <!-- No 📋 or 🧾 badges anymore -->
-                
-                <div style="text-align: center; margin-top: 8px; font-size: 0.5rem; color: var(--t3);">
-                  👆 Click for details
-                </div>
-              </div>
-            `;
-          }).join('')}
+                `;
+              }).join('')}
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
-    <button class="btn btn-purple btn-full" onclick="toggleActiveLoans()" style="margin-top: 8px; padding: 8px; font-size: 0.75rem;">
-      📋 Show Active Loans
-    </button>
-  `;
-}
+        <button class="btn btn-purple btn-full" onclick="toggleActiveLoans()" style="margin-top: 8px; padding: 8px; font-size: 0.75rem;">📋 Show Active Loans</button>
+      `;
+    }
+
+    // Debt logs
+    const debtLogsHtml = `<div id="admin-debt-logs" style="margin-top:12px;"></div>`;
 
     c.innerHTML = `
       ${warningsHtml}
@@ -12814,13 +12780,14 @@ if (entries.length) {
       ${pendingActivityHtml}
       ${pendingLoansHtml}
       ${activeLoansHtml}
+      ${debtLogsHtml}
     `;
+
+    setTimeout(renderDebtLogs, 200);
     return;
   }
 
-  // ============================================
-  // NOTICE TAB
-  // ============================================
+  // ─── Notice Tab ────────────────────────────────────────────
   else if (currentAdminTab === 'notice') {
     const carouselHtml = `
       ${warningsHtml}
@@ -12849,9 +12816,7 @@ if (entries.length) {
     return;
   }
 
-  // ============================================
-  // HARVEST TAB
-  // ============================================
+  // ─── Harvest Tab ───────────────────────────────────────────
   else if (currentAdminTab === 'harvest') {
     const rotationList = loanRotationOrder.length ? loanRotationOrder : rotation.order;
     let currentReceiver = 'None';
@@ -12875,33 +12840,18 @@ if (entries.length) {
       <div class="card">
         <div class="sec-h">📊 Current Status</div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-          <div>
-            <div class="micro muted">Current Loan Receiver</div>
-            <div style="font-weight: 700; font-size: 1.1rem; color: var(--gold);">${escapeHtml(currentReceiver)}</div>
-          </div>
-          <div>
-            <div class="micro muted">Members in Rotation</div>
-            <div style="font-weight: 700; font-size: 1.1rem; color: var(--teal);">${rotationList.length}</div>
-          </div>
-          <div>
-            <div class="micro muted">Group Deposits</div>
-            <div style="font-weight: 700; font-size: 1.1rem; color: ${cashFromDeposits < 0 ? 'var(--red)' : 'var(--green)'};">${money(cashFromDeposits)}</div>
-          </div>
-          <div>
-            <div class="micro muted">Profit Pool</div>
-            <div style="font-weight: 700; font-size: 1.1rem; color: ${groupProfit < 0 ? 'var(--red)' : 'var(--green)'};">${money(groupProfit)}</div>
-          </div>
+          <div><div class="micro muted">Current Loan Receiver</div><div style="font-weight: 700; font-size: 1.1rem; color: var(--gold);">${escapeHtml(currentReceiver)}</div></div>
+          <div><div class="micro muted">Members in Rotation</div><div style="font-weight: 700; font-size: 1.1rem; color: var(--teal);">${rotationList.length}</div></div>
+          <div><div class="micro muted">Admin Balance</div><div style="font-weight: 700; font-size: 1.1rem; color: ${cashFromDeposits < 0 ? 'var(--red)' : 'var(--green)'};">${money(cashFromDeposits)}</div></div>
+          <div><div class="micro muted">Profit Pool</div><div style="font-weight: 700; font-size: 1.1rem; color: ${groupProfit < 0 ? 'var(--red)' : 'var(--green)'};">${money(groupProfit)}</div></div>
         </div>
       </div>
     `;
     return;
   }
 
-  // ============================================
-  // USERS TAB
-  // ============================================
+  // ─── Users Tab ─────────────────────────────────────────────
   else if (currentAdminTab === 'users') {
-    // Count pending applications
     let pendingCount = 0;
     if (db) {
       db.ref('applications').orderByChild('status').equalTo('pending').once('value', snap => {
@@ -12924,10 +12874,6 @@ if (entries.length) {
         <div class="card">
           <div class="sec-h" style="display: flex; justify-content: space-between; align-items: center;">
             <span>👥 All Members <span class="pill-badge pill-green">${members.length}</span></span>
-            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <button class="btn btn-sm btn-amber" onclick="openMultiAssignDebt()">💰 Assign Debt</button>
-              <button class="btn btn-sm btn-teal" onclick="openMultiAddTransaction()">➕ Add Transaction</button>
-            </div>
           </div>
           <div id="admin-members-list"></div>
         </div>
@@ -12950,13 +12896,9 @@ if (entries.length) {
     return;
   }
 
-  // ============================================
-  // FINES TAB
-  // ============================================
+  // ─── Fines Tab ─────────────────────────────────────────────
   else if (currentAdminTab === 'fines') {
-    let totalFines = 0;
-    let totalDebts = 0;
-    let totalLoans = 0;
+    let totalFines = 0, totalDebts = 0, totalLoans = 0;
     transactions.forEach(tx => {
       if (tx.type === 'fine') totalFines += tx.amount;
       if (tx.type === 'debt') totalDebts += tx.amount;
@@ -12971,16 +12913,13 @@ if (entries.length) {
         <div class="sec-h">⚡ Fines & Finances</div>
         <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px;">
           <div style="background: rgba(245,158,11,0.1); border-radius: 12px; padding: 12px; text-align: center;">
-            <div class="micro muted">Total Fines</div>
-            <div style="font-weight: 700; font-size: 1.1rem; color: var(--gold);">${money(totalFines)}</div>
+            <div class="micro muted">Total Fines</div><div style="font-weight: 700; font-size: 1.1rem; color: var(--gold);">${money(totalFines)}</div>
           </div>
           <div style="background: rgba(239,68,68,0.1); border-radius: 12px; padding: 12px; text-align: center;">
-            <div class="micro muted">Outstanding Debts</div>
-            <div style="font-weight: 700; font-size: 1.1rem; color: var(--red);">${money(totalDebts)}</div>
+            <div class="micro muted">Outstanding Debts</div><div style="font-weight: 700; font-size: 1.1rem; color: var(--red);">${money(totalDebts)}</div>
           </div>
           <div style="background: rgba(6,182,212,0.1); border-radius: 12px; padding: 12px; text-align: center;">
-            <div class="micro muted">Outstanding Loans</div>
-            <div style="font-weight: 700; font-size: 1.1rem; color: var(--teal);">${money(totalLoans)}</div>
+            <div class="micro muted">Outstanding Loans</div><div style="font-weight: 700; font-size: 1.1rem; color: var(--teal);">${money(totalLoans)}</div>
           </div>
         </div>
         <button class="btn btn-amber btn-full" onclick="openOv('ov-add-fine');populateMemberDropdowns()">⚡ Apply Fine</button>
@@ -12991,15 +12930,13 @@ if (entries.length) {
     return;
   }
 
-  // ============================================
-  // SETTINGS TAB
-  // ============================================
+  // ─── Settings Tab ──────────────────────────────────────────
   else if (currentAdminTab === 'settings') {
     c.innerHTML = `
       ${warningsHtml}
       <div class="card">
         <div class="sec-h">⚙️ Configuration</div>
-        <button class="btn btn-gold btn-full" onclick="openOv('ov-settings');loadSettings()">⚙️ Group Settings</button>
+        <button class="btn btn-gold btn-full" onclick="openSettingsModal()">⚙️ Group Settings</button>
         <button class="btn btn-purple btn-full" onclick="openEditTermsModal()">📝 Edit Terms</button>
         <button class="btn btn-amber btn-full" onclick="openOv('ov-loan-settings');loadLoanSettings()">💰 Loan Settings</button>
         <button class="btn btn-teal btn-full" onclick="generateGroupReport()">📊 Group Report</button>
@@ -13016,10 +12953,9 @@ if (entries.length) {
     return;
   }
 
-  // Fallback
+  // ─── Fallback ──────────────────────────────────────────────
   c.innerHTML = '<div class="empty-state">Select a tab above</div>';
 }
-
 
 function truncateText(text, maxLength) {
   if (!text) return '';
@@ -13120,34 +13056,6 @@ function getSingleMemberDailyStatus(member, dateTimestamp) {
     surplus,
     status
   };
-}
-function openMultiAssignDebt() {
-  const selected = getSelectedMembers();
-  if (selected.length === 0) {
-    toast('No members selected', '#ef4444');
-    return;
-  }
-  window._multiSelectedMembers = selected;
-  // Use simple prompt modal (since showModal may not exist)
-  const amount = prompt(`Enter debt amount (UGX) for ${selected.length} member(s):`);
-  if (!amount || isNaN(amount)) return;
-  const interest = prompt('Interest rate (%)', '5');
-  if (interest === null) return;
-  const dueDate = prompt('Due date (YYYY-MM-DD):');
-  if (!dueDate) return;
-  const reason = prompt('Reason (optional):') || 'Admin assigned debt';
-  
-  requirePasswordConfirmation(async () => {
-    let success = 0;
-    for (const member of selected) {
-      try {
-        await assignDebtToSingleMember(member, parseFloat(amount), parseFloat(interest), new Date(dueDate).getTime(), reason);
-        success++;
-      } catch (err) { console.error(err); }
-    }
-    toast(`Debt assigned to ${success}/${selected.length} members`, success > 0 ? '#10b981' : '#ef4444');
-    refreshUI();
-  }, 'Assign Multiple Debts');
 }
 
 async function assignDebtToSingleMember(member, principal, interestRate, dueDate, reason) {
@@ -13569,22 +13477,22 @@ window.advanceRotation = function() {
     toast('No rotation order set', '#ef4444');
     return;
   }
-  
+
   const currentIdx = rotation.currentIndex || 0;
   const total = rotation.order.length;
   const nextIdx = (currentIdx + 1) % total;
-  
+
   const nextMember = members.find(m => m.id === rotation.order[nextIdx]);
   document.getElementById('advance-next-receiver').innerText = nextMember ? nextMember.name : 'Unknown';
-  
+
   // Set default dates: start = today, end = today + 7 days
   const today = new Date();
   const endDate = new Date(today);
   endDate.setDate(endDate.getDate() + 7);
-  
+
   document.getElementById('advance-start-date').value = today.toISOString().split('T')[0];
   document.getElementById('advance-end-date').value = endDate.toISOString().split('T')[0];
-  
+
   openOv('ov-advance-rotation');
 };
 // ==========================================
@@ -13637,7 +13545,106 @@ window.populateMemberDropdowns = function() {
   // Initial preview if member is already selected
   setTimeout(updateDebtPreview, 100);
 };
+window.saveSettingsSection = async function(section) {
+    const updates = {};
 
+    switch(section) {
+        case 'general':
+            updates.groupName = document.getElementById('set-groupname').value;
+            updates.groupStartDate = document.getElementById('groupStartDate').value;
+            updates.whatsappLink = document.getElementById('set-whatsapp').value;
+            updates.bannerData = document.getElementById('set-banner-url').value;
+            break;
+
+        case 'financial':
+            updates.dailyAmount = +document.getElementById('set-daily').value;
+            updates.welfareAmount = +document.getElementById('set-welfare-amount').value;
+            updates.fineContribution = +document.getElementById('set-fine-contribution').value;
+            updates.fineAmount = +document.getElementById('set-fine').value;
+            updates.penaltyInterestRate = parseFloat(document.getElementById('set-penalty-interest').value) || 5;
+            updates.signupFee = parseInt(document.getElementById('set-signup-fee').value) || 0;
+            break;
+
+        case 'loan':
+            updates.loanInterestRate = parseFloat(document.getElementById('set-loan-interest').value) || 5;
+            updates.extraWeeklyInterest = parseFloat(document.getElementById('set-loan-extra-weekly').value) || 2;
+            updates.loanMaxPercent = parseFloat(document.getElementById('set-loan-max-percent').value) || 50;
+            updates.disciplineMultiplier = parseFloat(document.getElementById('set-discipline-multiplier').value) || 1.5;
+            updates.loanPeriodDays = parseInt(document.getElementById('set-loan-days').value) || 30;
+            updates.loanOverduePenalty = parseFloat(document.getElementById('set-loan-penalty').value) || 2;
+            loanSettings.interestRate = updates.loanInterestRate;
+            loanSettings.extraWeeklyInterest = updates.extraWeeklyInterest;
+            loanSettings.maxLoanPercent = updates.loanMaxPercent;
+            loanSettings.disciplineMultiplier = updates.disciplineMultiplier;
+            loanSettings.loanPeriodDays = updates.loanPeriodDays;
+            loanSettings.overduePenalty = updates.loanOverduePenalty;
+            await db.ref('loanSettings').set(loanSettings);
+            break;
+
+        case 'referral':
+            updates.referralBonusAmount = parseInt(document.getElementById('set-referral-bonus').value) || 0;
+            break;
+
+        case 'theme':
+            updates.themeMode = document.getElementById('set-theme-mode').value;
+            updates.themeColor = document.getElementById('set-theme-color').value;
+            settings.themeMode = updates.themeMode;
+            settings.themeColor = updates.themeColor;
+            applyAppTheme();
+            break;
+
+        case 'maintenance':
+            updates.maintenanceMode = document.getElementById('set-maintenance-mode').checked;
+            updates.maintenanceMessage = document.getElementById('set-maintenance-message').value;
+            updates.maintenanceType = document.getElementById('set-maintenance-type').value;
+            updates.maintenanceDuration = parseInt(document.getElementById('set-maintenance-duration').value) || 30;
+            const endTimeInput = document.getElementById('set-maintenance-endtime');
+            updates.maintenanceEndTime = endTimeInput.value ? new Date(endTimeInput.value).getTime() : null;
+            settings.maintenanceMode = updates.maintenanceMode;
+            settings.maintenanceMessage = updates.maintenanceMessage;
+            settings.maintenanceType = updates.maintenanceType;
+            settings.maintenanceDuration = updates.maintenanceDuration;
+            settings.maintenanceEndTime = updates.maintenanceEndTime;
+            if (updates.maintenanceMode) showMaintenanceOverlay(); else hideMaintenanceOverlay();
+            updateMaintenanceBadge();
+            break;
+        case 'scheduler':
+  updates.autoDebtEnabled = document.getElementById('set-auto-debt-enabled').checked;
+  updates.debtCheckTime = document.getElementById('set-debt-check-time').value || '23:00';
+  updates.debtWarningMinutes = parseInt(document.getElementById('set-debt-warning-minutes').value) || 10;
+  // Save to settings
+  settings.autoDebtEnabled = updates.autoDebtEnabled;
+  settings.debtCheckTime = updates.debtCheckTime;
+  settings.debtWarningMinutes = updates.debtWarningMinutes;
+  // Reset the warning flag so it can trigger again
+  localStorage.removeItem('htf_debt_warning_shown_today');
+  break;
+
+        case 'monthly_goal':
+            updates.monthlySavingsGoal = parseInt(document.getElementById('set-monthly-goal').value) || 1000000;
+            settings.monthlySavingsGoal = updates.monthlySavingsGoal;
+            renderThermometer(); // refresh the home screen thermometer
+            break;
+
+        default:
+            toast('Unknown section', '#ef4444');
+            return;
+    }
+
+    if (Object.keys(updates).length) {
+        try {
+            await db.ref('settings').update(updates);
+            Object.assign(settings, updates);
+            toast(`✅ ${section} settings saved!`, '#10b981');
+            if (section === 'theme') applyAppTheme();
+            if (section === 'maintenance') updateMaintenanceUI();
+            applySettings();
+        } catch (err) {
+            console.error(err);
+            toast('❌ Failed to save', '#ef4444');
+        }
+    }
+};
 window.saveSavingsSettings=function(){settings.dailyAmount=+document.getElementById('admin-daily').value;settings.welfareAmount=+document.getElementById('admin-welfare').value;settings.fineContribution=+document.getElementById('admin-finecontrib').value;settings.fineAmount=+document.getElementById('admin-fine').value;db.ref('settings').update({dailyAmount:settings.dailyAmount,welfareAmount:settings.welfareAmount,fineContribution:settings.fineContribution,fineAmount:settings.fineAmount});toast(t('save_rates'),'#10b981');renderAdminTab();updateHomeUI();};
 window.updateNotice = function() {
   const noticeText = document.getElementById('admin-notice-text').value.trim();
@@ -13974,42 +13981,6 @@ window.addGroupTransaction = async function() {
   document.getElementById('group-tx-amount').value = '';
   document.getElementById('group-tx-desc').value = '';
   document.getElementById('group-tx-preview').style.display = 'none';
-};
-window.assignDebtAsLoan = function() {
-  const phone = document.getElementById('debt-member')?.value;
-  const principal = parseFloat(document.getElementById('debt-amount')?.value);
-  const interestRate = parseFloat(document.getElementById('debt-interest')?.value);
-  const dueDateStr = document.getElementById('debt-due-date')?.value;
-  const reason = document.getElementById('debt-reason')?.value || 'Admin assigned debt';
-
-  if (!phone) { toast('Select a member', '#ef4444'); return; }
-  const member = members.find(m => m.phone === phone);
-  if (!member) { toast('Member not found', '#ef4444'); return; }
-  if (!principal || principal <= 0) { toast('Enter valid amount', '#ef4444'); return; }
-  if (isNaN(interestRate) || interestRate < 0) { toast('Enter valid interest rate', '#ef4444'); return; }
-  if (!dueDateStr) { toast('Select due date', '#ef4444'); return; }
-
-  const dueDate = new Date(dueDateStr).getTime();
-  const totalRepay = Math.floor(principal * (1 + interestRate / 100));
-  const interest = totalRepay - principal;
-
-  // Show receipt modal – the actual saving happens in the callbacks
-  showDebtReceiptModal(
-    member, principal, interestRate, interest, totalRepay, reason, dueDate,
-    async () => { // Confirm & Send
-      await executeDebtAssignment(member, principal, interestRate, interest, totalRepay, reason, dueDate);
-      await reloadAllData();
-      toast(`✅ Debt of ${money(principal)} assigned to ${member.name}`, '#10b981');
-      closeOv('ov-assign-debt');
-    },
-    async () => { // Confirm & Don't Send (same action)
-      await executeDebtAssignment(member, principal, interestRate, interest, totalRepay, reason, dueDate);
-      await reloadAllData();
-      toast(`✅ Debt of ${money(principal)} assigned to ${member.name}`, '#10b981');
-      closeOv('ov-assign-debt');
-    },
-    () => { toast('Cancelled.', '#f59e0b'); closeOv('ov-assign-debt'); }
-  );
 };
 
 async function executeDebtAssignment(member, principal, interestRate, interest, totalRepay, reason, dueDate) {
@@ -15467,56 +15438,51 @@ window.loadMarkPaidInfo = function() {
 window.confirmAdvanceRotation = function() {
   const startDateInput = document.getElementById('advance-start-date');
   const endDateInput = document.getElementById('advance-end-date');
-  
+
   const startDate = startDateInput.value;
   const endDate = endDateInput.value;
-  
+
   if (!startDate || !endDate) {
     toast('Please select both start and end dates.', '#ef4444');
     return;
   }
-  
-  // Validate: end date must be after start date
   if (new Date(endDate) <= new Date(startDate)) {
     toast('End date must be after start date.', '#ef4444');
     return;
   }
-  
-  // Calculate the new index
+
   const order = rotation.order;
   const total = order.length;
   if (total === 0) {
     toast('No members in rotation', '#ef4444');
     return;
   }
-  
+
   const newIdx = (rotation.currentIndex + 1) % total;
-  
-  // Prepare the update object
+
   const updateData = {
     currentIndex: newIdx,
     payoutStartDate: new Date(startDate).getTime(),
     payoutEndDate: new Date(endDate).getTime(),
     advancedAt: Date.now()
   };
-  
-  // Update in Firebase
+
   db.ref('rotation').update(updateData)
     .then(() => {
-      // Update local rotation object
       rotation.currentIndex = newIdx;
       rotation.payoutStartDate = updateData.payoutStartDate;
       rotation.payoutEndDate = updateData.payoutEndDate;
-      
+
       toast(`Rotation advanced to ${members.find(m => m.id === order[newIdx])?.name || 'next member'}`, '#10b981');
       closeOv('ov-advance-rotation');
-      updateHomeUI(); // refresh the receiver display
+      updateHomeUI(); // refresh the receiver display and countdown
     })
     .catch(err => {
       console.error(err);
       toast('Failed to advance rotation', '#ef4444');
     });
 };
+
 window.confirmMarkPaid = function() {
   const idx = rotation.currentIndex || 0;
   const beneId = rotation.order?.[idx];
@@ -15548,34 +15514,69 @@ window.confirmMarkPaid = function() {
   );
 };
 async function executeWeeklyPayout(beneficiary, weeklyGross, loan, netPayout) {
+  // 1. Save the payout transaction
   const writes = [
     db.ref('transactions').push({
-      memberPhone: beneficiary.phone, memberName: beneficiary.name,
-      type: 'payout', amount: netPayout,receiptNumber: generateReceiptNumber(), description: 'Weekly payout', date: Date.now()
+      memberPhone: beneficiary.phone,
+      memberName: beneficiary.name,
+      type: 'payout',
+      amount: netPayout,
+      receiptNumber: generateReceiptNumber(),
+      description: 'Weekly payout',
+      date: Date.now()
     })
   ];
-  
-  // ✅ Only clear loan – debt does not exist anymore
+
+  // 2. Clear any loan (if applicable)
   if (loan > 0) {
     writes.push(db.ref('transactions').push({
-      memberPhone: beneficiary.phone, memberName: beneficiary.name,
-      type: 'loan_repayment', amount: loan,receiptNumber: generateReceiptNumber(), description: 'Loan cleared on payout', date: Date.now() + 2
+      memberPhone: beneficiary.phone,
+      memberName: beneficiary.name,
+      type: 'loan_repayment',
+      amount: loan,
+      receiptNumber: generateReceiptNumber(),
+      description: 'Loan cleared on payout',
+      date: Date.now() + 2
     }));
   }
-  
+
   await Promise.all(writes);
-  const txSnap = await db.ref('transactions').once('value');
+
+  // 3. Refresh local data
+  const [txSnap, loansSnap] = await Promise.all([
+    db.ref('transactions').once('value'),
+    db.ref('loans').once('value')
+  ]);
   transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
-  const loansSnap = await db.ref('loans').once('value');
   loans = loansSnap.val() ? Object.entries(loansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
+
+  // 4. Advance rotation and set new payout dates
+  const order = rotation.order || [];
+  if (order.length) {
+    const newIndex = (rotation.currentIndex + 1) % order.length;
+    const now = Date.now();
+    const startDate = now;                          // payout starts now
+    const endDate = now + (7 * 24 * 60 * 60 * 1000); // 7 days later
+
+    await db.ref('rotation').update({
+      currentIndex: newIndex,
+      payoutStartDate: startDate,
+      payoutEndDate: endDate
+    });
+
+    // Update local rotation object
+    rotation.currentIndex = newIndex;
+    rotation.payoutStartDate = startDate;
+    rotation.payoutEndDate = endDate;
+  }
+
+  // 5. Recompute and refresh UI
   computePots();
   updateHomeUI();
   updateAccountBalances();
   if (isLedgerActive()) loadLedger('all');
   if (currentAdminTab === 'savings') renderAdminTab();
-  const nextIndex = (rotation.currentIndex + 1) % rotation.order.length;
-  await db.ref('rotation').update({ currentIndex: nextIndex });
-  rotation.currentIndex = nextIndex;
+
   toast('Payout completed! Loan cleared.', '#10b981');
 }
 
@@ -17864,69 +17865,7 @@ window.addMember = function() {
     toast(name + ' added! ✅', '#10b981');
   });
 };
-window.loadSettings = function() {
-  document.getElementById('set-groupname').value = settings.groupName || '';
-  document.getElementById('set-daily').value = settings.dailyAmount || 2500;
-  document.getElementById('set-welfare-amount').value = settings.welfareAmount || 0;
-  document.getElementById('set-fine-contribution').value = settings.fineContribution || 0;
-  document.getElementById('set-penalty-interest').value = settings.penaltyInterestRate || 5;
-  document.getElementById('set-fine').value = settings.fineAmount || 5000;
-  document.getElementById('set-referral-bonus').value = settings.referralBonusAmount || 10000;
-  document.getElementById('set-whatsapp').value = settings.whatsappLink || '';
-  document.getElementById('set-banner-url').value = settings.bannerData || '';
-  document.getElementById('set-signup-fee').value = settings.signupFee || 0;
-  
-  // === MAINTENANCE MODE SETTINGS ===
-  const maintenanceCheckbox = document.getElementById('set-maintenance-mode');
-  const maintenanceMessage = document.getElementById('set-maintenance-message');
-  const badge = document.getElementById('maintenance-status-badge');
-  
-  if (maintenanceCheckbox) {
-    maintenanceCheckbox.checked = settings.maintenanceMode === true;
-  }
-  
-  if (maintenanceMessage) {
-    maintenanceMessage.value = settings.maintenanceMessage || getMaintenanceMessage();
-  }
-  
-  if (badge) {
-    if (settings.maintenanceMode) {
-      badge.textContent = '🔴 Maintenance';
-      badge.style.background = 'rgba(239,68,68,0.15)';
-      badge.style.color = 'var(--red)';
-    } else {
-      badge.textContent = '🟢 Live';
-      badge.style.background = 'rgba(16,185,129,0.15)';
-      badge.style.color = 'var(--green)';
-    }
-  }
-  
-  // Show/hide maintenance message group
-  const messageGroup = document.getElementById('maintenance-message-group');
-  if (messageGroup) {
-    messageGroup.style.display = 'block'; // Always visible for editing
-  }
-  
-  // Rest of the settings...
-  var _re=document.getElementById('set-renewal-enabled');if(_re)_re.value=settings.renewalEnabled?'true':'false';
-  var _rf=document.getElementById('set-renewal-fee');if(_rf)_rf.value=settings.renewalFee||10000;
-  
-  const color = document.getElementById('set-theme-color');
-  if (color) { color.innerHTML = buildThemeOptions(); color.value = settings.themeColor || 'facebook'; }
-  
-  const mode = document.getElementById('set-theme-mode');
-  if (mode) mode.value = settings.themeMode === 'dark' ? 'dark' : 'light';
-  previewAdminTheme();
-  
-  if (settings.bannerData) {
-    const prev = document.getElementById('banner-preview');
-    if (prev) { prev.src = settings.bannerData; prev.style.display = 'block'; }
-  }
-  
-  // Update admin badge
-  updateMaintenanceBadge();
-  loadMaintenanceSettings();
-};
+
 window.previewAdminTheme=function(){
   const key=document.getElementById('set-theme-color')?.value||settings.themeColor||'facebook';
   const p=getThemePalette(key);
@@ -17935,6 +17874,96 @@ window.previewAdminTheme=function(){
   if(dot)dot.style.background='linear-gradient(135deg,'+p.primary+','+p.primary2+')';
   if(name)name.innerText=p.name;
 };
+function loadSettings() {
+    // Safe helper
+    const setVal = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.value = val;
+    };
+    const setCheck = (id, checked) => {
+        const el = document.getElementById(id);
+        if (el) el.checked = checked;
+    };
+    const setSelect = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.value = val;
+    };
+
+    // General
+    setVal('set-groupname', settings.groupName || '');
+    setVal('groupStartDate', settings.groupStartDate || '');
+    setVal('set-whatsapp', settings.whatsappLink || '');
+    setVal('set-banner-url', settings.bannerData || '');
+
+    // Financial
+    setVal('set-daily', settings.dailyAmount || 2500);
+    setVal('set-welfare-amount', settings.welfareAmount || 0);
+    setVal('set-fine-contribution', settings.fineContribution || 0);
+    setVal('set-fine', settings.fineAmount || 5000);
+    setVal('set-penalty-interest', settings.penaltyInterestRate || 5);
+    setVal('set-signup-fee', settings.signupFee || 0);
+
+    // Loan
+    setVal('set-loan-interest', loanSettings.interestRate || 5);
+    setVal('set-loan-extra-weekly', loanSettings.extraWeeklyInterest || 2);
+    setVal('set-loan-max-percent', loanSettings.maxLoanPercent || 50);
+    setVal('set-discipline-multiplier', loanSettings.disciplineMultiplier || 1.5);
+    setVal('set-loan-days', loanSettings.loanPeriodDays || 30);
+    setVal('set-loan-penalty', loanSettings.overduePenalty || 2);
+
+    // Referral
+    setVal('set-referral-bonus', settings.referralBonusAmount || 10000);
+
+    // Theme
+    setSelect('set-theme-mode', settings.themeMode === 'dark' ? 'dark' : 'light');
+    const color = document.getElementById('set-theme-color');
+    if (color) {
+        color.innerHTML = buildThemeOptions();
+        color.value = settings.themeColor || 'facebook';
+        previewAdminTheme();
+    }
+    // Scheduler
+setCheck('set-auto-debt-enabled', settings.autoDebtEnabled !== false); // default true
+setVal('set-debt-check-time', settings.debtCheckTime || '23:00');
+setVal('set-debt-warning-minutes', settings.debtWarningMinutes || 10);
+// Update status display
+const statusText = document.getElementById('scheduler-status-text');
+const statusIcon = document.getElementById('scheduler-status-icon');
+if (statusText) {
+  const enabled = settings.autoDebtEnabled !== false;
+  statusText.textContent = enabled ? `Next check will run at ${settings.debtCheckTime || '23:00'}` : 'Auto debt check is disabled.';
+  statusText.style.color = enabled ? 'var(--green)' : 'var(--t3)';
+}
+if (statusIcon) {
+  statusIcon.textContent = (settings.autoDebtEnabled !== false) ? '🟢' : '⏸️';
+}
+
+    // Maintenance
+    setCheck('set-maintenance-mode', settings.maintenanceMode === true);
+    setVal('set-maintenance-message', settings.maintenanceMessage || '');
+    setSelect('set-maintenance-type', settings.maintenanceType || 'static');
+    setVal('set-maintenance-duration', settings.maintenanceDuration || 30);
+    if (settings.maintenanceEndTime) {
+        const d = new Date(settings.maintenanceEndTime);
+        if (!isNaN(d.getTime())) {
+            const endTime = document.getElementById('set-maintenance-endtime');
+            if (endTime) endTime.value = d.toISOString().slice(0, 16);
+        }
+    }
+
+    // Monthly Goal
+    setVal('set-monthly-goal', settings.monthlySavingsGoal || 1000000);
+
+    // Banner preview
+    if (settings.bannerData) {
+        const prev = document.getElementById('banner-preview');
+        if (prev) { prev.src = settings.bannerData; prev.style.display = 'block'; }
+    }
+
+    // Update maintenance status
+    updateMaintenanceStatusUI();
+}
+
 window.loadLoanSettings = function() {
   document.getElementById('loan-interest-rate').value = loanSettings.interestRate || 5;
   document.getElementById('loan-max-percent').value = loanSettings.maxLoanPercent || 50;
@@ -17943,92 +17972,7 @@ window.loadLoanSettings = function() {
   document.getElementById('loan-penalty').value = loanSettings.overduePenalty || 2;
   document.getElementById('cover-interest-rate').value = loanSettings.coverInterestRate || 5;
 };
-window.doSaveSettings = function() {
-  settings.groupName = document.getElementById('set-groupname').value;
-  settings.groupStartDate = document.getElementById('groupStartDate').value;
-  settings.dailyAmount = +document.getElementById('set-daily').value;
-  settings.welfareAmount = +document.getElementById('set-welfare-amount').value;
-  settings.fineContribution = +document.getElementById('set-fine-contribution').value;
-  settings.fineAmount = +document.getElementById('set-fine').value;
-  settings.penaltyInterestRate = parseFloat(document.getElementById('set-penalty-interest').value) || 5;
-  settings.referralBonusAmount = parseInt(document.getElementById('set-referral-bonus').value) || 0;
-  settings.whatsappLink = document.getElementById('set-whatsapp').value;
-  settings.bannerData = document.getElementById('set-banner-url').value;
-  settings.themeMode = document.getElementById('set-theme-mode')?.value || 'light';
-  settings.themeColor = document.getElementById('set-theme-color')?.value || 'facebook';
-  settings.signupFee = parseInt(document.getElementById('set-signup-fee').value) || 0;
-  settings.renewalEnabled = document.getElementById('set-renewal-enabled')?.value === 'true';
-  settings.renewalFee = parseInt(document.getElementById('set-renewal-fee')?.value) || 0;
-  
-   // === MAINTENANCE MODE SETTINGS ===
-  const maintenanceCheckbox = document.getElementById('set-maintenance-mode');
-  const maintenanceMessage = document.getElementById('set-maintenance-message');
-  const typeSelect = document.getElementById('set-maintenance-type');
-  const durationInput = document.getElementById('set-maintenance-duration');
-  const endTimeInput = document.getElementById('set-maintenance-endtime');
 
-  if (maintenanceCheckbox) settings.maintenanceMode = maintenanceCheckbox.checked;
-  if (maintenanceMessage) settings.maintenanceMessage = maintenanceMessage.value;
-  if (typeSelect) settings.maintenanceType = typeSelect.value;
-  if (durationInput) settings.maintenanceDuration = parseInt(durationInput.value) || 30;
-
-  // Handle end time
-  if (endTimeInput && endTimeInput.value) {
-    const endDate = new Date(endTimeInput.value);
-    if (!isNaN(endDate.getTime())) {
-      settings.maintenanceEndTime = endDate.getTime();
-    } else {
-      settings.maintenanceEndTime = null;
-    }
-  } else {
-    settings.maintenanceEndTime = null;
-  }
-
-  // If maintenance is being enabled and countdown type is selected, set the end time if not already set
-  if (settings.maintenanceMode && settings.maintenanceType === 'countdown' && !settings.maintenanceEndTime) {
-    const duration = settings.maintenanceDuration || 30;
-    settings.maintenanceEndTime = Date.now() + duration * 60 * 1000;
-  }
-
-  // Apply and save to Firebase
-  applyAppTheme();
-  db.ref('settings').update({
-    groupName: settings.groupName,
-    groupStartDate: settings.groupStartDate,
-    dailyAmount: settings.dailyAmount,
-    welfareAmount: settings.welfareAmount,
-    fineContribution: settings.fineContribution,
-    fineAmount: settings.fineAmount,
-    penaltyInterestRate: settings.penaltyInterestRate,
-    referralBonusAmount: settings.referralBonusAmount,
-    whatsappLink: settings.whatsappLink,
-    bannerData: settings.bannerData,
-    themeMode: settings.themeMode,
-    themeColor: settings.themeColor,
-    signupFee: settings.signupFee,
-    renewalEnabled: settings.renewalEnabled,
-    renewalFee: settings.renewalFee,
-    maintenanceMode: settings.maintenanceMode,
-    maintenanceMessage: settings.maintenanceMessage,
-    maintenanceType: settings.maintenanceType,
-    maintenanceDuration: settings.maintenanceDuration,
-    maintenanceEndTime: settings.maintenanceEndTime
-  }).then(() => {
-    toast('Settings saved!', '#10b981');
-    closeOv('ov-settings');
-    applySettings();
-    updateMaintenanceBadge();
-    
-    if (settings.maintenanceMode) {
-      showMaintenanceOverlay();
-    } else {
-      hideMaintenanceOverlay();
-    }
-  }).catch(err => { 
-    console.error(err); 
-    toast('Failed to save settings', '#ef4444'); 
-  });
-}
 window.openEditTermsModal = function() {
   document.getElementById('edit-terms-content').value = settings.termsAndConditions || '';
   openOv('ov-edit-terms');
@@ -18231,7 +18175,240 @@ window.goTab = function(tab, btn) {
         hideTabLoading();
     }
 };
+// ─── Settings menu items ──────────────────────────────────
+const SETTINGS_MENU = [
+  { id: 'general', icon: '📋', label: 'General' },
+  { id: 'financial', icon: '💰', label: 'Financial' },
+  { id: 'loan', icon: '🏦', label: 'Loan' },
+  { id: 'referral', icon: '👥', label: 'Referral' },
+  { id: 'theme', icon: '🎨', label: 'Theme' },
+  { id: 'maintenance', icon: '🔧', label: 'Maintenance' },
+  { id: 'monthly_goal', icon: '🎯', label: 'Monthly Goal' },
+  { id: 'banner', icon: '🖼️', label: 'Banner' },
+  { id: 'security', icon: '🔑', label: 'Security' },
+   { id: 'scheduler', icon: '⏰', label: 'Scheduler' },
+];
 
+// ─── Show settings menu ──────────────────────────────────
+function showSettingsMenu() {
+  const container = document.getElementById('settings-content');
+  if (!container) return;
+  let html = `
+    <div class="bs-title" style="margin-bottom:12px;">⚙️ Settings</div>
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px;">
+  `;
+  SETTINGS_MENU.forEach(item => {
+    html += `
+      <div class="admin-grid-item" onclick="openSettingsPanel('${item.id}')" style="padding:12px 4px; border-radius:12px;">
+        <div style="font-size:1.6rem;">${item.icon}</div>
+        <div style="font-weight:600; font-size:0.75rem; margin-top:2px;">${item.label}</div>
+      </div>
+    `;
+  });
+  html += `</div>`;
+  html += `<button class="btn btn-sec btn-full" onclick="closeOv('ov-settings')" style="margin-top:12px;">✕ Close</button>`;
+  container.innerHTML = html;
+}
+
+// ─── Open a specific settings panel ──────────────────────
+function openSettingsPanel(panelId) {
+  const container = document.getElementById('settings-content');
+  if (!container) return;
+
+  // Load settings values into the fields
+  loadSettings();
+
+  let html = '';
+  let title = '';
+  let saveBtn = '';
+
+  switch(panelId) {
+    case 'general':
+      title = '📋 General';
+      html = `
+        <div class="fgrp"><label class="flbl">Group Name</label><input type="text" id="set-groupname" class="inp"></div>
+        <div class="fgrp"><label class="flbl">Start Date (Anniversary)</label><input type="date" id="groupStartDate" class="inp"></div>
+        <div class="fgrp"><label class="flbl">WhatsApp Link</label><input type="url" id="set-whatsapp" class="inp" placeholder="https://chat.whatsapp.com/..."></div>
+      `;
+      saveBtn = `<button class="btn btn-gold btn-full" onclick="saveSettingsSection('general'); showSettingsMenu();">💾 Save General</button>`;
+      break;
+
+    case 'financial':
+      title = '💰 Financial';
+      html = `
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <div class="fgrp"><label class="flbl">Daily Amount</label><input type="number" id="set-daily" class="inp"></div>
+          <div class="fgrp"><label class="flbl">Welfare</label><input type="number" id="set-welfare-amount" class="inp"></div>
+          <div class="fgrp"><label class="flbl">Fine Contribution</label><input type="number" id="set-fine-contribution" class="inp"></div>
+          <div class="fgrp"><label class="flbl">Default Fine</label><input type="number" id="set-fine" class="inp"></div>
+          <div class="fgrp"><label class="flbl">Penalty Interest %</label><input type="number" id="set-penalty-interest" class="inp" step="0.5"></div>
+          <div class="fgrp"><label class="flbl">Signup Fee</label><input type="number" id="set-signup-fee" class="inp"></div>
+        </div>
+      `;
+      saveBtn = `<button class="btn btn-gold btn-full" onclick="saveSettingsSection('financial'); showSettingsMenu();">💾 Save Financial</button>`;
+      break;
+
+    case 'loan':
+      title = '🏦 Loan Settings';
+      html = `
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+          <div class="fgrp"><label class="flbl">Interest Rate %</label><input type="number" id="set-loan-interest" class="inp" step="0.5"></div>
+          <div class="fgrp"><label class="flbl">Extra %/Week</label><input type="number" id="set-loan-extra-weekly" class="inp" step="0.5"></div>
+          <div class="fgrp"><label class="flbl">Max % of Pool</label><input type="number" id="set-loan-max-percent" class="inp"></div>
+          <div class="fgrp"><label class="flbl">Discipline Multiplier</label><input type="number" id="set-discipline-multiplier" class="inp" step="0.1"></div>
+          <div class="fgrp"><label class="flbl">Loan Period (days)</label><input type="number" id="set-loan-days" class="inp"></div>
+          <div class="fgrp"><label class="flbl">Overdue Penalty %</label><input type="number" id="set-loan-penalty" class="inp" step="0.5"></div>
+        </div>
+      `;
+      saveBtn = `<button class="btn btn-gold btn-full" onclick="saveSettingsSection('loan'); showSettingsMenu();">💾 Save Loan</button>`;
+      break;
+
+    case 'referral':
+      title = '👥 Referral';
+      html = `<div class="fgrp"><label class="flbl">Bonus Amount (UGX)</label><input type="number" id="set-referral-bonus" class="inp"></div>`;
+      saveBtn = `<button class="btn btn-gold btn-full" onclick="saveSettingsSection('referral'); showSettingsMenu();">💾 Save Referral</button>`;
+      break;
+
+    case 'theme':
+      title = '🎨 Theme';
+      html = `
+        <div class="fgrp">
+          <label class="flbl">Mode</label>
+          <select id="set-theme-mode" class="inp"><option value="light">Light</option><option value="dark">Dark</option></select>
+        </div>
+        <div class="fgrp">
+          <label class="flbl">Color</label>
+          <select id="set-theme-color" class="inp"></select>
+        </div>
+        <div class="theme-preview" style="display:flex; align-items:center; gap:8px; margin:8px 0;">
+          <div class="theme-dot"></div>
+          <span id="theme-preview-name" style="font-size:0.8rem; color:var(--t2);">Facebook Blue</span>
+        </div>
+      `;
+      saveBtn = `<button class="btn btn-gold btn-full" onclick="saveSettingsSection('theme'); showSettingsMenu();">💾 Save Theme</button>`;
+      break;
+
+    case 'maintenance':
+      title = '🔧 Maintenance';
+      html = `
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+          <input type="checkbox" id="set-maintenance-mode" style="width:18px; height:18px; accent-color:var(--gold);">
+          <label style="font-weight:600;">Enable Maintenance</label>
+          <span id="maintenance-status-icon" style="margin-left:auto;">🟢</span>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <select id="set-maintenance-type" class="inp" style="flex:1;"><option value="static">Static</option><option value="countdown">Countdown</option></select>
+          <input type="number" id="set-maintenance-duration" class="inp" placeholder="Min" style="flex:1;" min="1" value="30">
+        </div>
+        <div class="fgrp"><input type="datetime-local" id="set-maintenance-endtime" class="inp"></div>
+        <div class="fgrp"><textarea id="set-maintenance-message" class="inp" rows="2" placeholder="Maintenance message..."></textarea></div>
+      `;
+      saveBtn = `<button class="btn btn-red btn-full" onclick="saveSettingsSection('maintenance'); showSettingsMenu();">⚡ Apply Maintenance</button>`;
+      break;
+
+    case 'monthly_goal':
+      title = '🎯 Monthly Goal';
+      html = `
+        <div class="fgrp"><label class="flbl">Goal Amount (UGX)</label><input type="number" id="set-monthly-goal" class="inp"></div>
+        <div class="micro muted">Used for the thermometer on home screen.</div>
+      `;
+      saveBtn = `<button class="btn btn-gold btn-full" onclick="saveSettingsSection('monthly_goal'); showSettingsMenu();">💾 Save Goal</button>`;
+      break;
+
+    case 'banner':
+      title = '🖼️ Group Banner';
+      html = `
+        <div class="drag-zone" onclick="document.getElementById('banner-file-input').click()" style="padding:16px; text-align:center;">
+          <span>📸 Tap to upload banner image</span>
+          <input type="file" id="banner-file-input" accept="image/*" style="display:none" onchange="handlePhotoInput(this,'banner-preview','set-banner-url')">
+          <img id="banner-preview" class="image-preview" style="display:none; max-height:100px; margin-top:8px;">
+        </div>
+        <input type="hidden" id="set-banner-url">
+      `;
+      saveBtn = `<button class="btn btn-gold btn-full" onclick="saveSettingsSection('general'); showSettingsMenu();">💾 Save Banner</button>`;
+      break;
+    case 'scheduler':
+  title = '⏰ Debt Check Scheduler';
+  html = `
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+      <input type="checkbox" id="set-auto-debt-enabled" style="width:18px; height:18px; accent-color:var(--gold);">
+      <label style="font-weight:600;">Enable Auto Debt Check</label>
+    </div>
+    <div class="fgrp">
+      <label class="flbl">Time of Day</label>
+      <input type="time" id="set-debt-check-time" class="inp" step="60">
+      <div class="micro muted">The system will assign debts at this time daily.</div>
+    </div>
+    <div class="fgrp">
+      <label class="flbl">Warning Time (minutes before)</label>
+      <input type="number" id="set-debt-warning-minutes" class="inp" min="1" max="60" value="10">
+      <div class="micro muted">A toast notification will appear this many minutes before the debt check.</div>
+    </div>
+    <div id="scheduler-status" style="margin-top:8px; padding:6px 10px; border-radius:8px; background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.15);">
+      <span id="scheduler-status-icon">🟢</span>
+      <span id="scheduler-status-text" style="font-weight:600;">Next check will run at ${settings.debtCheckTime || '23:00'}</span>
+    </div>
+  `;
+  saveBtn = `<button class="btn btn-gold btn-full" onclick="saveSettingsSection('scheduler'); showSettingsMenu();">💾 Save Scheduler</button>`;
+  break;
+
+    case 'security':
+      title = '🔑 Admin Password';
+      html = `
+        <div class="fgrp"><label class="flbl">Current Password</label><input type="password" id="admin-current-pwd" class="inp"></div>
+        <div class="fgrp"><label class="flbl">New Password</label><input type="password" id="admin-new-pwd" class="inp"></div>
+        <div class="fgrp"><label class="flbl">Confirm New</label><input type="password" id="admin-confirm-pwd" class="inp"></div>
+      `;
+      saveBtn = `<button class="btn btn-red btn-full" onclick="changeAdminPassword(); showSettingsMenu();">🔑 Change Password</button>`;
+      break;
+
+    default:
+      showSettingsMenu();
+      return;
+  }
+
+  // Build the panel
+  container.innerHTML = `
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+      <button class="btn btn-sm btn-sec" onclick="showSettingsMenu()" style="padding:4px 10px;">‹ Back</button>
+      <div class="bs-title" style="margin:0; font-size:1rem;">${title}</div>
+    </div>
+    ${html}
+    ${saveBtn}
+  `;
+
+  // Load settings values (already done at start, but re‑populate)
+  loadSettings();
+  // If theme panel, populate color options and preview
+  if (panelId === 'theme') {
+    const colorSelect = document.getElementById('set-theme-color');
+    if (colorSelect) {
+      colorSelect.innerHTML = buildThemeOptions();
+      colorSelect.value = settings.themeColor || 'facebook';
+      previewAdminTheme();
+    }
+    // Update preview on change
+    colorSelect?.addEventListener('change', previewAdminTheme);
+  }
+  // If maintenance, update status icon
+  if (panelId === 'maintenance') {
+    updateMaintenanceStatusUI();
+  }
+  // If banner, show existing preview
+  if (panelId === 'banner' && settings.bannerData) {
+    const prev = document.getElementById('banner-preview');
+    if (prev) { prev.src = settings.bannerData; prev.style.display = 'block'; }
+  }
+}
+
+// ─── Override loadSettings to also populate banner preview ──
+// (already present in your code)
+
+// ─── Open settings modal ──────────────────────────────────
+window.openSettingsModal = function() {
+  openOv('ov-settings');
+  showSettingsMenu();
+};
 function showModal(content, title) {
   // Remove any existing modal overlay
   const existing = document.querySelector('.ov.custom-modal');
