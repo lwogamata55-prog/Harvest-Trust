@@ -6886,57 +6886,64 @@ window.showWeeklyPayoutReceiptModal = function(
     document.body.appendChild(modal);
 
     const receiptElement = modal.querySelector('#receipt-content');
-    const closeModal = (callback) => {
+
+    async function generateReceiptImage() {
+        const clone = receiptElement.cloneNode(true);
+        clone.style.position = 'absolute';
+        clone.style.top = '-9999px';
+        clone.style.left = '-9999px';
+        clone.style.boxShadow = 'none';
+        clone.style.transform = 'none';
+        clone.style.width = receiptElement.offsetWidth + 'px';
+        document.body.appendChild(clone);
+        await new Promise(r => setTimeout(r, 150));
+
+        try {
+            const canvas = await html2canvas(clone, {
+                scale: 2.5,
+                backgroundColor: '#ffffff',
+                logging: false,
+                useCORS: true,
+                allowTaint: true
+            });
+            document.body.removeChild(clone);
+            return canvas.toDataURL('image/png');
+        } catch (err) {
+            document.body.removeChild(clone);
+            console.error('html2canvas error:', err);
+            return null;
+        }
+    }
+
+    function closeModal(callback) {
         modal.classList.remove('on');
         setTimeout(() => { modal.remove(); if (callback) callback(); }, 300);
-    };
-
-    let _cachedBlob = null;
-    async function getReceiptBlob() {
-        if (_cachedBlob) return _cachedBlob;
-        const data = await renderElementToImage(receiptElement);
-        if (!data) { toast('Failed to generate receipt image', '#ef4444'); return null; }
-        _cachedBlob = await (await fetch(data)).blob();
-        return _cachedBlob;
     }
 
-    const btnWhatsApp = modal.querySelector('#payout-whatsapp');
-    const btnCopy = modal.querySelector('#payout-copy-pc');
-    const btnSave = modal.querySelector('#payout-save-only');
-    const btnCancel = modal.querySelector('#payout-cancel');
+    // ─── WhatsApp ──────────────────────────────────────────
+    document.getElementById('payout-whatsapp').addEventListener('click', async function() {
+        if (this.disabled) return;
+        this.disabled = true;
+        this.style.opacity = '0.6';
 
-    let processing = false;
-
-    function setButtonsEnabled(enabled) {
-        const btns = modal.querySelectorAll('.receipt-btn');
-        btns.forEach(b => { b.disabled = !enabled; });
-        btns.forEach(b => b.style.opacity = enabled ? '1' : '0.6');
-    }
-
-    btnWhatsApp.addEventListener('click', async function() {
-        if (processing) return;
-        processing = true;
-        setButtonsEnabled(false);
         try {
-            const blob = await getReceiptBlob();
-            if (!blob) return;
+            const dataUrl = await generateReceiptImage();
+            if (!dataUrl) { toast('Failed to generate image', '#ef4444'); this.disabled = false; this.style.opacity = '1'; return; }
+
             let phone = beneficiary?.phone || '';
             let formattedPhone = phone.replace(/\D/g, '');
             if (formattedPhone.startsWith('0')) formattedPhone = '256' + formattedPhone.slice(1);
             if (!formattedPhone.startsWith('256')) formattedPhone = '256' + formattedPhone;
 
             if (navigator.share) {
-                try {
-                    const file = new File([blob], 'payout_receipt.png', { type: 'image/png' });
-                    await navigator.share({ title: 'Payout Receipt', text: `Payout for ${beneficiary?.name}`, files: [file] });
-                    toast('✅ Shared!', '#10b981');
-                    closeModal(() => { if (onConfirmShare) onConfirmShare(); });
-                    return;
-                } catch (e) { if (e.name !== 'AbortError') console.warn(e); else { processing = false; setButtonsEnabled(true); return; } }
+                const blob = await (await fetch(dataUrl)).blob();
+                const file = new File([blob], `payout_${receiptNumber}.png`, { type: 'image/png' });
+                await navigator.share({ title: 'Payout Receipt', text: `Payout receipt for ${beneficiary?.name}`, files: [file] });
+                toast('✅ Shared!', '#10b981');
+                closeModal(() => { if (onConfirmShare) onConfirmShare(); });
+                return;
             }
 
-            const dataUrl = await renderElementToImage(receiptElement);
-            if (!dataUrl) { toast('Failed', '#ef4444'); return; }
             const message = `🌾 *Harvest Trust Finance* 🌾\n\n📄 *Payout Receipt*\nBeneficiary: ${beneficiary?.name}\nAmount: UGX ${safeNet.toLocaleString()}\nReceipt #: ${receiptNumber}`;
             window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
             const a = document.createElement('a');
@@ -6949,61 +6956,88 @@ window.showWeeklyPayoutReceiptModal = function(
             console.error(err);
             toast('❌ Failed to share', '#ef4444');
         } finally {
-            processing = false;
-            setButtonsEnabled(true);
+            this.disabled = false;
+            this.style.opacity = '1';
         }
     });
 
-    btnCopy.addEventListener('click', async function() {
-        if (processing) return;
-        processing = true;
-        setButtonsEnabled(false);
+    // ─── Copy Image (PC) ──────────────────────────────────
+    document.getElementById('payout-copy-pc').addEventListener('click', async function() {
+        if (this.disabled) return;
+        this.disabled = true;
+        this.style.opacity = '0.6';
+
         try {
-            const blob = await getReceiptBlob();
-            if (!blob) return;
+            const dataUrl = await generateReceiptImage();
+            if (!dataUrl) { toast('Failed to generate image', '#ef4444'); this.disabled = false; this.style.opacity = '1'; return; }
+
+            const blob = await (await fetch(dataUrl)).blob();
             try {
                 await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-                toast('📋 Copied!', '#06b6d4');
-            } catch {
-                const dataUrl = await renderElementToImage(receiptElement);
-                if (!dataUrl) { toast('Failed', '#ef4444'); return; }
+                toast('📋 Image copied to clipboard!', '#06b6d4');
+                closeModal(() => { if (onConfirmShare) onConfirmShare(); });
+            } catch (clipErr) {
+                console.warn('Clipboard API failed:', clipErr);
+                toast('❌ Copy failed. Please use the "Save" button to download.', '#ef4444');
+                this.disabled = false;
+                this.style.opacity = '1';
+            }
+        } catch (err) {
+            console.error('Copy error:', err);
+            toast('❌ Copy failed. Please use the "Save" button.', '#ef4444');
+        } finally {
+            if (modal.parentNode) {
+                this.disabled = false;
+                this.style.opacity = '1';
+            }
+        }
+    });
+
+    // ─── Save Without Sharing ──────────────────────────────
+    document.getElementById('payout-save-only').addEventListener('click', async function() {
+        if (this.disabled) return;
+        this.disabled = true;
+        this.style.opacity = '0.6';
+
+        try {
+            const dataUrl = await generateReceiptImage();
+            if (dataUrl) {
                 const a = document.createElement('a');
                 a.href = dataUrl;
                 a.download = `payout_${receiptNumber}.png`;
                 a.click();
-                toast('📸 Downloaded', '#f59e0b');
+                toast('💾 Saved', '#10b981');
+            } else {
+                toast('Failed to generate image', '#ef4444');
             }
-            closeModal(() => { if (onConfirmShare) onConfirmShare(); });
+            closeModal(() => { if (onConfirmNoShare) onConfirmNoShare(); });
         } catch (err) {
             console.error(err);
-            toast('❌ Failed to copy', '#ef4444');
+            toast('❌ Error saving', '#ef4444');
         } finally {
-            processing = false;
-            setButtonsEnabled(true);
+            this.disabled = false;
+            this.style.opacity = '1';
         }
     });
 
-    btnSave.addEventListener('click', function() {
-        if (processing) return;
-        processing = true;
-        setButtonsEnabled(false);
-        closeModal(() => {
-            if (onConfirmNoShare) onConfirmNoShare();
-            toast('✅ Saved', '#10b981');
-            processing = false;
-            setButtonsEnabled(true);
-        });
-    });
-
-    btnCancel.addEventListener('click', function() {
-        if (processing) return;
+    // ─── Cancel ────────────────────────────────────────────
+    document.getElementById('payout-cancel').addEventListener('click', function() {
+        if (this.disabled) return;
         closeModal(() => {
             if (onCancel) onCancel();
             toast('Cancelled', '#ff0000');
         });
     });
-};
 
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+            closeModal(() => {
+                if (onCancel) onCancel();
+                toast('Cancelled', '#ff0000');
+            });
+        }
+    });
+};
 async function updateLoanRepaidStatus(phone) {
   console.log(`updateLoanRepaidStatus called for phone ${phone}`);
   const member = members.find(m => m.phone === phone);
@@ -14356,7 +14390,6 @@ window.addTransactionWithPreview = async function() {
             const requiredPerDay = dailyAmount + welfareAmount;
             const skipExisting = document.getElementById('tx-cover-override').checked;
 
-            // Build assignments: for each member, for each date, if not already paid
             let writes = [];
             let totalDays = 0;
             for (const member of selectedMembers) {
@@ -14364,9 +14397,6 @@ window.addTransactionWithPreview = async function() {
                     const hasDeposit = skipExisting ? memberHasDepositOnDate(member, dateObj) : false;
                     if (!hasDeposit) {
                         totalDays++;
-                        // Create a deposit transaction for that day
-                        // Split into daily + welfare (or you can just deposit the whole amount)
-                        // We'll use the original deposit logic: daily + welfare
                         writes.push(db.ref('transactions').push({
                             memberPhone: member.phone,
                             memberName: member.name,
@@ -14378,7 +14408,6 @@ window.addTransactionWithPreview = async function() {
                             isDailySavings: true,
                             isCovered: true
                         }));
-                        // Also add welfare for that day
                         writes.push(db.ref('transactions').push({
                             memberPhone: member.phone,
                             memberName: member.name,
@@ -14399,7 +14428,6 @@ window.addTransactionWithPreview = async function() {
                 return;
             }
 
-            // Confirm with admin
             if (!confirm(`Cover ${totalDays} day(s) for ${selectedMembers.length} member(s)?`)) return;
 
             await Promise.all(writes);
@@ -14417,16 +14445,42 @@ window.addTransactionWithPreview = async function() {
             }
 
             if (type === 'deposit') {
-                // Use the existing deposit logic for each member
-                let allWrites = [];
-                for (const member of selectedMembers) {
-                    const depositTxs = await processDepositWithFutureDays(member, amount, Date.now(), desc || 'Manual deposit');
-                    allWrites = allWrites.concat(depositTxs.map(tx => db.ref('transactions').push(tx)));
-                }
-                await Promise.all(allWrites);
-                toast(`Deposit saved for ${selectedMembers.length} member(s)!`, '#10b981');
+                // ─── For deposits, show the receipt modal with 4 buttons ───
+                // We'll show the receipt for the FIRST selected member only
+                // (or you can loop, but receipt is per member)
+                // For simplicity, we show receipt for the first member
+                // but save for all members when the receipt action is taken
+
+                const member = selectedMembers[0]; // first member for preview
+                const onSave = async () => {
+                    // Save deposit for ALL selected members
+                    let allWrites = [];
+                    for (const m of selectedMembers) {
+                        const depositTxs = await processDepositWithFutureDays(m, amount, Date.now(), desc || 'Manual deposit');
+                        allWrites = allWrites.concat(depositTxs.map(tx => db.ref('transactions').push(tx)));
+                    }
+                    await Promise.all(allWrites);
+                    await reloadAllData();
+                    refreshUI();
+                    return true;
+                };
+
+                // Compute projected loan balance after deposit for preview
+                const projectedLoan = await calculateProjectedLoanBalanceAfterDeposit(member, amount);
+
+                showTransactionReceiptModal(
+                    member,
+                    type,
+                    amount,
+                    desc,
+                    null, null, null, null,
+                    true, // isPreview
+                    null, // projectedPrepaidDate
+                    projectedLoan,
+                    onSave
+                );
             } else {
-                // Other transaction types
+                // ─── Other transaction types (fine, welfare, expense) ───
                 let writes = [];
                 for (const member of selectedMembers) {
                     writes.push(db.ref('transactions').push({
@@ -14441,10 +14495,10 @@ window.addTransactionWithPreview = async function() {
                 }
                 await Promise.all(writes);
                 toast(`${type} recorded for ${selectedMembers.length} member(s)!`, '#10b981');
+                await reloadAllData();
+                refreshUI();
+                closeOv('ov-add-tx');
             }
-            await reloadAllData();
-            refreshUI();
-            closeOv('ov-add-tx');
         }
     } catch (err) {
         console.error(err);
@@ -14837,10 +14891,10 @@ window.showTransactionReceiptModal = function(
         <div class="bs" style="max-width:420px;padding:0;overflow:hidden;border-radius:24px 24px 0 0;display:flex;flex-direction:column;max-height:90vh;">
             <div style="background:#fff;padding:20px 24px 12px;overflow-y:auto;flex:1;min-height:0;">${receiptHTML}</div>
             <div style="background:#fff;padding:12px 20px 20px;display:flex;flex-direction:column;gap:8px;flex-shrink:0;border-top:1px solid #f3f4f6;">
-                <button id="receipt-whatsapp" class="receipt-btn" style="width:100%;padding:11px;border:none;border-radius:10px;background:#25D366;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">💬 Send on WhatsApp</button>
-                <button id="receipt-copy-pc" class="receipt-btn" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">📋 Copy Image (PC)</button>
-                <button id="receipt-save-only" class="receipt-btn" style="width:100%;padding:11px;border:none;border-radius:10px;background:#6d28d9;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">💾 Save Without Sharing</button>
-                <button id="receipt-cancel" class="receipt-btn" style="width:100%;padding:9px;border:1px solid #e5e7eb;border-radius:10px;background:transparent;color:#6b7280;font-size:0.8rem;font-weight:600;cursor:pointer;">✕ Cancel</button>
+                <button id="tx-whatsapp" class="receipt-btn" style="width:100%;padding:11px;border:none;border-radius:10px;background:#25D366;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">💬 Send on WhatsApp</button>
+                <button id="tx-copy-pc" class="receipt-btn" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">📋 Copy Image (PC)</button>
+                <button id="tx-save-only" class="receipt-btn" style="width:100%;padding:11px;border:none;border-radius:10px;background:#6d28d9;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">💾 Save Without Sharing</button>
+                <button id="tx-cancel" class="receipt-btn" style="width:100%;padding:9px;border:1px solid #e5e7eb;border-radius:10px;background:transparent;color:#6b7280;font-size:0.8rem;font-weight:600;cursor:pointer;">✕ Cancel</button>
             </div>
         </div>
     `;
@@ -14848,28 +14902,34 @@ window.showTransactionReceiptModal = function(
 
     const receiptElement = modal.querySelector('#receipt-content');
 
-    let _cachedBlob = null;
-    async function getReceiptBlob() {
-        if (_cachedBlob) return _cachedBlob;
-        const data = await renderElementToImage(receiptElement);
-        if (!data) { toast('Failed to generate receipt image', '#ef4444'); return null; }
-        _cachedBlob = await (await fetch(data)).blob();
-        return _cachedBlob;
+    async function generateReceiptImage() {
+        const clone = receiptElement.cloneNode(true);
+        clone.style.position = 'absolute';
+        clone.style.top = '-9999px';
+        clone.style.left = '-9999px';
+        clone.style.boxShadow = 'none';
+        clone.style.transform = 'none';
+        clone.style.width = receiptElement.offsetWidth + 'px';
+        document.body.appendChild(clone);
+        await new Promise(r => setTimeout(r, 150));
+
+        try {
+            const canvas = await html2canvas(clone, {
+                scale: 2.5,
+                backgroundColor: '#ffffff',
+                logging: false,
+                useCORS: true,
+                allowTaint: true
+            });
+            document.body.removeChild(clone);
+            return canvas.toDataURL('image/png');
+        } catch (err) {
+            document.body.removeChild(clone);
+            console.error('html2canvas error:', err);
+            return null;
+        }
     }
 
-    const btnWhatsApp = modal.querySelector('#receipt-whatsapp');
-    const btnCopy = modal.querySelector('#receipt-copy-pc');
-    const btnSave = modal.querySelector('#receipt-save-only');
-    const btnCancel = modal.querySelector('#receipt-cancel');
-
-    let processing = false;
-
-    function setButtonsEnabled(enabled) {
-        const btns = modal.querySelectorAll('.receipt-btn');
-        btns.forEach(b => { b.disabled = !enabled; b.style.opacity = enabled ? '1' : '0.6'; });
-    }
-
-    // ── Helper to save if needed ──
     async function ensureSaved() {
         if (typeof onSave === 'function') {
             const success = await onSave();
@@ -14879,165 +14939,138 @@ window.showTransactionReceiptModal = function(
             }
             return true;
         }
-        return true; // already saved or not preview
+        return true;
     }
 
-    // ── WhatsApp ──
-    btnWhatsApp.addEventListener('click', async function() {
-        if (processing) return;
-        processing = true;
-        setButtonsEnabled(false);
-        try {
-            // 1. Save the transaction (if preview)
-            if (!await ensureSaved()) { processing = false; setButtonsEnabled(true); return; }
+    function closeModal(callback) {
+        modal.classList.remove('on');
+        setTimeout(() => { modal.remove(); if (callback) callback(); }, 300);
+    }
 
-            // 2. Generate image
-            const blob = await getReceiptBlob();
-            if (!blob) { processing = false; setButtonsEnabled(true); return; }
+    // ─── WhatsApp ──────────────────────────────────────────
+    document.getElementById('tx-whatsapp').addEventListener('click', async function() {
+        if (this.disabled) return;
+        this.disabled = true;
+        this.style.opacity = '0.6';
+
+        try {
+            if (!await ensureSaved()) { this.disabled = false; this.style.opacity = '1'; return; }
+
+            const dataUrl = await generateReceiptImage();
+            if (!dataUrl) { toast('Failed to generate image', '#ef4444'); this.disabled = false; this.style.opacity = '1'; return; }
 
             let phone = member?.phone || '';
             let formattedPhone = phone.replace(/\D/g, '');
             if (formattedPhone.startsWith('0')) formattedPhone = '256' + formattedPhone.slice(1);
             if (!formattedPhone.startsWith('256')) formattedPhone = '256' + formattedPhone;
 
-            // Try native share (mobile)
             if (navigator.share) {
-                try {
-                    const file = new File([blob], 'receipt.png', { type: 'image/png' });
-                    await navigator.share({
-                        title: 'Receipt',
-                        text: `Receipt for ${member?.name}`,
-                        files: [file]
-                    });
-                    toast('✅ Shared!', '#10b981');
-                    closeModal(() => { if (onConfirmSend) onConfirmSend(); });
-                    processing = false; setButtonsEnabled(true);
-                    return;
-                } catch (e) {
-                    if (e.name !== 'AbortError') console.warn('Share fallback', e);
-                    else { processing = false; setButtonsEnabled(true); return; }
-                }
+                const blob = await (await fetch(dataUrl)).blob();
+                const file = new File([blob], `receipt_${receiptNumber}.png`, { type: 'image/png' });
+                await navigator.share({ title: 'Receipt', text: `Receipt for ${member?.name}`, files: [file] });
+                toast('✅ Shared!', '#10b981');
+                closeModal(() => { if (onConfirmSend) onConfirmSend(); });
+                return;
             }
 
-            // Fallback: open WhatsApp with message + download image
-            const dataUrl = await renderElementToImage(receiptElement);
-            if (!dataUrl) { toast('Failed to generate image', '#ef4444'); return; }
             const message = `🌾 *Harvest Trust Finance* 🌾\n\n📄 *Receipt*\nMember: ${member?.name}\nAmount: UGX ${safeAmount.toLocaleString()}\nDate: ${new Date().toLocaleString()}\nReceipt #: ${receiptNumber}`;
             window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
-
-            // Download image so user can attach it manually
             const a = document.createElement('a');
             a.href = dataUrl;
             a.download = `receipt_${receiptNumber}.png`;
-            document.body.appendChild(a);
             a.click();
-            document.body.removeChild(a);
-
             toast('💬 WhatsApp opened. Image downloaded – attach manually.', '#25D366');
             closeModal(() => { if (onConfirmSend) onConfirmSend(); });
         } catch (err) {
             console.error(err);
             toast('❌ Failed to share', '#ef4444');
         } finally {
-            processing = false;
-            setButtonsEnabled(true);
+            this.disabled = false;
+            this.style.opacity = '1';
         }
     });
 
-    // ── Copy Image (PC) ──
-   btnCopy.addEventListener('click', async function() {
-    if (processing) return;
-    processing = true;
-    setButtonsEnabled(false);
-    try {
-        // 1. Save the debt first
-        if (!await ensureSaved()) { 
-            processing = false; 
-            setButtonsEnabled(true); 
-            return; 
-        }
+    // ─── Copy Image (PC) ──────────────────────────────────
+    document.getElementById('tx-copy-pc').addEventListener('click', async function() {
+        if (this.disabled) return;
+        this.disabled = true;
+        this.style.opacity = '0.6';
 
-        // 2. Generate the receipt image
-        const blob = await getReceiptBlob();
-        if (!blob) { 
-            toast('Failed to generate receipt image', '#ef4444');
-            processing = false; 
-            setButtonsEnabled(true); 
-            return; 
-        }
-
-        // 3. Try to copy to clipboard
-        let copied = false;
         try {
-            await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-            toast('📋 Image copied to clipboard!', '#06b6d4');
-            copied = true;
-        } catch (clipErr) {
-            console.warn('Clipboard API failed, trying fallback download', clipErr);
-            // Fallback: download the image
-            const dataUrl = await renderElementToImage(receiptElement);
+            if (!await ensureSaved()) { this.disabled = false; this.style.opacity = '1'; return; }
+
+            const dataUrl = await generateReceiptImage();
+            if (!dataUrl) { toast('Failed to generate image', '#ef4444'); this.disabled = false; this.style.opacity = '1'; return; }
+
+            const blob = await (await fetch(dataUrl)).blob();
+            try {
+                await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+                toast('📋 Image copied to clipboard!', '#06b6d4');
+                closeModal(() => { if (onConfirmSend) onConfirmSend(); });
+            } catch (clipErr) {
+                console.warn('Clipboard API failed:', clipErr);
+                toast('❌ Copy failed. Please use the "Save" button to download.', '#ef4444');
+                this.disabled = false;
+                this.style.opacity = '1';
+            }
+        } catch (err) {
+            console.error('Copy error:', err);
+            toast('❌ Copy failed. Please use the "Save" button.', '#ef4444');
+        } finally {
+            if (modal.parentNode) {
+                this.disabled = false;
+                this.style.opacity = '1';
+            }
+        }
+    });
+
+    // ─── Save Without Sharing ──────────────────────────────
+    document.getElementById('tx-save-only').addEventListener('click', async function() {
+        if (this.disabled) return;
+        this.disabled = true;
+        this.style.opacity = '0.6';
+
+        try {
+            if (!await ensureSaved()) { this.disabled = false; this.style.opacity = '1'; return; }
+            const dataUrl = await generateReceiptImage();
             if (dataUrl) {
                 const a = document.createElement('a');
                 a.href = dataUrl;
-                a.download = `debt_${receiptNumber}.png`;
-                document.body.appendChild(a);
+                a.download = `receipt_${receiptNumber}.png`;
                 a.click();
-                document.body.removeChild(a);
-                toast('📸 Image downloaded – attach manually.', '#f59e0b');
-                copied = true;
+                toast('💾 Saved', '#10b981');
             } else {
-                toast('Failed to copy or download image', '#ef4444');
+                toast('Failed to generate image', '#ef4444');
             }
-        }
-
-        // 4. Close modal after action
-        if (copied) {
-            closeModal(() => {
-                if (typeof onConfirmSend === 'function') onConfirmSend();
-            });
-        }
-    } catch (err) {
-        console.error('Copy error:', err);
-        toast('❌ Failed to copy', '#ef4444');
-    } finally {
-        processing = false;
-        setButtonsEnabled(true);
-    }
-});
-
-    // ── Save Without Sharing ──
-    btnSave.addEventListener('click', async function() {
-        if (processing) return;
-        processing = true;
-        setButtonsEnabled(false);
-        try {
-            if (!await ensureSaved()) { processing = false; setButtonsEnabled(true); return; }
-            closeModal(() => {
-                if (onConfirmNoSend) onConfirmNoSend();
-                toast('✅ Saved', '#10b981');
-            });
+            closeModal(() => { if (onConfirmNoSend) onConfirmNoSend(); });
         } catch (err) {
             console.error(err);
             toast('❌ Error saving', '#ef4444');
-            processing = false;
-            setButtonsEnabled(true);
+        } finally {
+            this.disabled = false;
+            this.style.opacity = '1';
         }
     });
 
-    // ── Cancel ──
-    btnCancel.addEventListener('click', function() {
-        if (processing) return;
+    // ─── Cancel ────────────────────────────────────────────
+    document.getElementById('tx-cancel').addEventListener('click', function() {
+        if (this.disabled) return;
         closeModal(() => {
             if (onCancel) onCancel();
             toast('Cancelled', '#ff0000');
         });
     });
 
-    function closeModal(callback) {
-        modal.classList.remove('on');
-        setTimeout(() => { modal.remove(); if (callback) callback(); }, 300);
-    }
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+            closeModal(() => {
+                if (onCancel) onCancel();
+                toast('Cancelled', '#ff0000');
+            });
+        }
+    });
 };
+
         
 function generateSimpleReceiptFallback(member, txType, amount, description, accountBalance, appBalance, projectedRemainingLoan, prepaidBalance) {
   try {
@@ -16628,13 +16661,8 @@ function getMemberPaymentStatus(member) {
 // ==========================================
 
 window.updateDebtPreview = function() {
-    console.log('🔄 updateDebtPreview called');
-
     const previewDiv = document.getElementById('debt-preview');
-    if (!previewDiv) {
-        console.warn('⚠️ debt-preview element not found!');
-        return;
-    }
+    if (!previewDiv) return;
 
     const selectedMembers = getCheckedMembers('debt');
     if (!selectedMembers.length) {
@@ -16642,6 +16670,7 @@ window.updateDebtPreview = function() {
         return;
     }
 
+    // Read values from input fields
     const enteredAmount = parseFloat(document.getElementById('debt-amount')?.value) || 0;
     const interestRate = parseFloat(document.getElementById('debt-interest')?.value) || loanSettings.interestRate || 5;
     const interestAmount = Math.floor(enteredAmount * interestRate / 100);
@@ -16649,50 +16678,44 @@ window.updateDebtPreview = function() {
 
     // If only one member – detailed preview
     if (selectedMembers.length === 1) {
-    const member = selectedMembers[0];
-    const interest = totalRepayPerMember - principal;
-    showDebtReceiptModal(
-        member,
-        principal,
-        interestRate,
-        interest,
-        totalRepayPerMember,
-        reason,
-        dueDate,
-        // onConfirmSend – after save & send
-        async () => {
-            // Optional: any action after sending
-        },
-        // onConfirmNoSend – after save & close
-        async () => {
-            // Optional: any action after saving
-        },
-        // onCancel – no save
-        () => {
-            toast('Cancelled', '#ff0000');
-            closeOv('ov-assign-debt');
-        },
-        // onSave – saves the debt but does NOT close the modal
-        async () => {
-            await executeDebtAssignment(
-                member,
-                principal,
-                interestRate,
-                interest,
-                totalRepayPerMember,
-                reason,
-                dueDate,
-                Date.now()
-            );
-            toast(`✅ Debt assigned to ${member.name}`, '#10b981');
-            await reloadAllData();
-            refreshUI();
-            return true; // indicate success, but let the button handler close the modal
+        const member = selectedMembers[0];
+        const existingLoan = memberLoans[member.phone] || 0;
+        const newOverall = existingLoan + totalRepayPerMember;
+        const dailyAmount = settings.dailyAmount || 2000;
+        const welfareAmount = settings.welfareAmount || 500;
+        const requiredToday = dailyAmount + welfareAmount;
+        const todayStart = new Date().setHours(0, 0, 0, 0);
+        let paidDailyToday = 0;
+        transactions.forEach(tx => {
+            if (tx.memberPhone === member.phone && tx.type === 'deposit' && tx.date >= todayStart && tx.date < todayStart + 86400000) {
+                paidDailyToday += tx.amount;
+            }
+        });
+        let todayStatus = '✅ Covered';
+        let todayColor = 'var(--green)';
+        if (paidDailyToday < requiredToday) {
+            todayStatus = `⚠️ Short by ${money(requiredToday - paidDailyToday)}`;
+            todayColor = 'var(--gold)';
         }
-    );
-}
+        previewDiv.innerHTML = `
+            <div style="padding:12px; background:rgba(255,255,255,0.04); border-radius:12px; border:1px solid var(--br);">
+                <div style="font-weight:700; font-size:0.9rem; color:var(--gold); margin-bottom:6px;">🧾 Debt Preview – ${escapeHtml(member.name)}</div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px; font-size:0.8rem;">
+                    <span style="color:var(--t3);">Days Active</span><span>${getDaysActive(member)} days</span>
+                    <span style="color:var(--t3);">Today's Status</span><span style="color:${todayColor};">${todayStatus}</span>
+                    <span style="color:var(--t3);">🏦 Existing Loan</span><span>${money(existingLoan)}</span>
+                    <span style="color:var(--t3);">💰 Principal</span><span>${money(enteredAmount)}</span>
+                    <span style="color:var(--t3);">📈 Interest (${interestRate}%)</span><span>${money(interestAmount)}</span>
+                    <span style="color:var(--t3);">💸 Total to Repay</span><span style="font-weight:700; color:var(--red);">${money(totalRepayPerMember)}</span>
+                    <span style="color:var(--t3);">💰 New Overall Loan</span><span style="font-weight:700; color:var(--teal);">${money(newOverall)}</span>
+                </div>
+            </div>
+        `;
+        previewDiv.style.display = 'block';
+        return;
+    }
 
-    // Multiple members – grouped preview
+    // ─── Multiple members – grouped preview ──────────────
     const totalPrincipal = enteredAmount * selectedMembers.length;
     const totalInterest = interestAmount * selectedMembers.length;
     const totalRepayAll = totalRepayPerMember * selectedMembers.length;
@@ -16730,7 +16753,6 @@ window.updateDebtPreview = function() {
     `;
     previewDiv.style.display = 'block';
 };
-
 // ─── Populate member checkboxes for a given modal type ───
 function populateMemberCheckboxes(type) {
     const container = document.getElementById(type + '-member-list');
