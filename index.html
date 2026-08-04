@@ -4593,6 +4593,23 @@ let memberAssignedLoans = {};
 let memberPrepaid = {};  
 // ─── Translation helper (identity function) ──────────────
 function t(str) { return str; }
+
+// ─── Canvas roundRect polyfill (for older browsers) ──────────
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+    CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, radii) {
+        const r = typeof radii === 'number' ? radii : (radii || 0);
+        this.moveTo(x + r, y);
+        this.lineTo(x + w - r, y);
+        this.quadraticCurveTo(x + w, y, x + w, y + r);
+        this.lineTo(x + w, y + h - r);
+        this.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+        this.lineTo(x + r, y + h);
+        this.quadraticCurveTo(x, y + h, x, y + h - r);
+        this.lineTo(x, y + r);
+        this.quadraticCurveTo(x, y, x + r, y);
+        return this;
+    };
+}
 // ==========================================
 // LOADING MANAGER – tracks data readiness
 // ==========================================
@@ -5265,103 +5282,152 @@ window.assignDebtAsLoan = async function() {
     const dueDateStr = document.getElementById('debt-due-date')?.value;
     const reason = document.getElementById('debt-reason')?.value || 'Admin assigned debt';
 
-    if (!selectedMembers.length) { toast('Select at least one member', '#ef4444'); return; }
-    if (!dueDateStr) { toast('Select due date', '#ef4444'); return; }
+    if (!selectedMembers.length) {
+        toast('Select at least one member', '#ef4444');
+        return;
+    }
+    if (!dueDateStr) {
+        toast('Select due date', '#ef4444');
+        return;
+    }
     const dueDate = new Date(dueDateStr).getTime();
 
+    // ──────────────────────────────────────────────────────────
+    // 1. BULK DATE RANGE MODE
+    // ──────────────────────────────────────────────────────────
     if (isBulk) {
-        // ─── Bulk date range ───
-        const dailyAmount = settings.dailyAmount || 2500;
-        const welfareAmount = settings.welfareAmount || 500;
-        const requiredPerDay = dailyAmount + welfareAmount;
-        const startDate = document.getElementById('debt-bulk-start').value;
-        const endDate = document.getElementById('debt-bulk-end').value;
-        if (!startDate || !endDate) { toast('Select date range', '#ef4444'); return; }
-        if (new Date(endDate) < new Date(startDate)) { toast('End date must be after start', '#ef4444'); return; }
+    const startDate = document.getElementById('debt-bulk-start').value;
+    const endDate = document.getElementById('debt-bulk-end').value;
+    if (!startDate || !endDate) {
+        toast('Select date range', '#ef4444');
+        return;
+    }
+    if (new Date(endDate) < new Date(startDate)) {
+        toast('End date must be after start', '#ef4444');
+        return;
+    }
 
-        const dates = getDateRange(startDate, endDate);
-        const skipPaid = document.getElementById('debt-skip-paid').checked;
+    const dailyAmount = settings.dailyAmount || 2500;
+    const welfareAmount = settings.welfareAmount || 500;
+    const requiredPerDay = dailyAmount + welfareAmount;
+    const dates = getDateRange(startDate, endDate);
+    const skipPaid = document.getElementById('debt-skip-paid').checked;
+    const penaltyRate = (settings.penaltyInterestRate || 5) / 100;
 
-        const assignments = [];
-        for (const member of selectedMembers) {
-            for (const dateObj of dates) {
-                const paid = skipPaid ? memberPaidOnDate(member, dateObj) : false;
-                if (!paid) {
-                    assignments.push({
-                        member: member,
-                        date: dateObj,
-                        amount: requiredPerDay,
-                        interestRate: 0
-                    });
-                }
+    // Build per‑member assignments: each missed day
+    const memberAssignments = {};
+    for (const member of selectedMembers) {
+        memberAssignments[member.phone] = {
+            member: member,
+            dates: [],
+            totalPrincipal: 0
+        };
+        for (const dateObj of dates) {
+            const paid = skipPaid ? memberPaidOnDate(member, dateObj) : false;
+            if (!paid) {
+                memberAssignments[member.phone].dates.push(dateObj);
+                memberAssignments[member.phone].totalPrincipal += requiredPerDay;
             }
         }
+    }
 
-        if (!assignments.length) { toast('No days to assign – all members paid.', '#10b981'); return; }
+    // Filter out members with no missed days
+    const filteredAssignments = Object.values(memberAssignments).filter(a => a.dates.length > 0);
+    if (!filteredAssignments.length) {
+        toast('No days to assign – all members paid.', '#10b981');
+        return;
+    }
 
-        // Group by member
-        const memberTotals = {};
-        assignments.forEach(a => {
-            if (!memberTotals[a.member.phone]) memberTotals[a.member.phone] = { member: a.member, total: 0, dates: [] };
-            memberTotals[a.member.phone].total += a.amount;
-            memberTotals[a.member.phone].dates.push(a.date);
-        });
+    // Build memberTotals for receipt modal
+    const memberTotals = {};
+    filteredAssignments.forEach(a => {
+        memberTotals[a.member.phone] = {
+            member: a.member,
+            total: a.totalPrincipal,
+            dates: a.dates
+        };
+    });
 
-        // Confirm with admin (simple confirm)
-        if (!confirm(`Assign debts for ${Object.keys(memberTotals).length} members across ${dates.length} days?`)) return;
+    // Show confirmation modal
+    showBulkDateReceipt(memberTotals, dueDate, reason, async function() {
+        const writes = [];
 
-        // Process assignments
-        let writes = [];
-        for (const a of assignments) {
-            writes.push(db.ref('transactions').push({
-                memberPhone: a.member.phone,
-                memberName: a.member.name,
-                type: 'loan_adjustment',
-                amount: a.amount,
-                receiptNumber: generateReceiptNumber(),
-                description: `Missed saving (${a.date.toISOString().slice(0,10)}) – bulk debt`,
-                date: a.date.getTime(),
-                bulkDebt: true,
-                bulkDate: a.date.toISOString().slice(0,10)
-            }));
-        }
-
-        // Apply penalty interest (once per member total)
-        const penaltyRate = (settings.penaltyInterestRate || 5) / 100;
         for (const phone in memberTotals) {
-            const total = memberTotals[phone].total;
-            const interestAmount = Math.round(total * penaltyRate);
-            if (interestAmount > 0) {
-                const member = memberTotals[phone].member;
+            const data = memberTotals[phone];
+            const member = data.member;
+            const totalPrincipal = data.total;
+            const totalDays = data.dates.length;
+            const interestAmount = Math.round(totalPrincipal * penaltyRate);
+            const totalRepay = totalPrincipal + interestAmount;
+
+            // ─── 1. Create a loan record ────────────────
+            const loanRef = db.ref('loans').push();
+            const loanId = loanRef.key;
+            writes.push(loanRef.set({
+                id: loanId,
+                memberId: member.id,
+                memberName: member.name,
+                memberPhone: member.phone,
+                amount: totalPrincipal,
+                interestRate: penaltyRate * 100,
+                totalRepay: totalRepay,
+                reason: reason + ` (${totalDays} days)`,
+                status: 'approved',
+                requestedAt: Date.now(),
+                approvedAt: Date.now(),
+                dueDate: dueDate,
+                repaid: false,
+                penaltyApplied: false,
+                repaidAmount: 0,
+                loanQuestions: [],
+                weeks: 1,
+                isBulkDebt: true
+            }));
+
+            // ─── 2. For each missed day, create a loan_disbursement (deducts cash) ───
+            for (const dateObj of data.dates) {
                 writes.push(db.ref('transactions').push({
                     memberPhone: member.phone,
                     memberName: member.name,
-                    type: 'fine',
+                    type: 'loan_disbursement', // ✅ deducts cash per day
+                    amount: requiredPerDay,
+                    receiptNumber: generateReceiptNumber(),
+                    description: `Missed saving – ${dateObj.toISOString().slice(0,10)} (bulk)`,
+                    date: dateObj.getTime(),
+                    loanId: loanId,
+                    bulkDebt: true,
+                    bulkDate: dateObj.toISOString().slice(0,10)
+                }));
+            }
+
+            // ─── 3. Loan interest ────────────────────────
+            if (interestAmount > 0) {
+                writes.push(db.ref('transactions').push({
+                    memberPhone: member.phone,
+                    memberName: member.name,
+                    type: 'loan_interest',
                     amount: interestAmount,
                     receiptNumber: generateReceiptNumber(),
                     description: `Penalty interest (${settings.penaltyInterestRate}%) on bulk debt`,
-                    date: Date.now(),
+                    date: Date.now() + 1,
+                    loanId: loanId,
                     bulkDebt: true
                 }));
-                // Add interest to total for each member
-                memberTotals[phone].total += interestAmount;
             }
         }
 
         await Promise.all(writes);
 
-        // ─── Generate receipt images for each member ───
+        // ─── Generate receipt images ──────────────────
         const logMembers = [];
         for (const phone in memberTotals) {
             const data = memberTotals[phone];
-            const total = data.total;
-            // For bulk date range, we use interest rate 0 (penalty already applied separately)
-            // So we treat principal = total (including penalty)
+            const total = data.total + Math.round(data.total * penaltyRate);
             const receipt = await generateDebtReceiptImage(
                 data.member,
-                total, // principal (including penalty)
-                0,     // interest rate (already applied)
-                total, // total repay
+                data.total,
+                penaltyRate * 100,
+                total,
                 reason + ` (${data.dates.length} days)`,
                 dueDate
             );
@@ -5376,73 +5442,107 @@ window.assignDebtAsLoan = async function() {
             });
         }
 
-        // Create bulk log
+        // ─── Store in bulk debt log ──────────────────
         await createBulkDebtLogWithReceipts(
             logMembers,
             { start: startDate, end: endDate },
             dueDate,
             reason,
-            assignments.length
+            filteredAssignments.reduce((sum, a) => sum + a.dates.length, 0)
         );
 
-        toast(`✅ Debt assigned to ${Object.keys(memberTotals).length} members. Receipts stored.`, '#10b981');
+        toast(`✅ Bulk debt assigned – ${filteredAssignments.length} member(s), ${filteredAssignments.reduce((sum, a) => sum + a.dates.length, 0)} day(s)`, '#10b981');
         await reloadAllData();
         refreshUI();
         closeOv('ov-assign-debt');
+    });
+    return;
+}
+
+    // ──────────────────────────────────────────────────────────
+    // 2. REGULAR DEBT MODE (single principal, interest)
+    // ──────────────────────────────────────────────────────────
+    const principal = parseFloat(document.getElementById('debt-amount')?.value);
+    const interestRate = parseFloat(document.getElementById('debt-interest')?.value);
+    if (!principal || principal <= 0) {
+        toast('Enter valid amount', '#ef4444');
+        return;
+    }
+    if (isNaN(interestRate) || interestRate < 0) {
+        toast('Enter valid interest rate', '#ef4444');
+        return;
+    }
+    const totalRepayPerMember = Math.floor(principal * (1 + interestRate / 100));
+    const interest = totalRepayPerMember - principal;
+
+    // ─── 2A. Single member ──────────────────────────────────
+    if (selectedMembers.length === 1) {
+        const member = selectedMembers[0];
+        showDebtReceiptModal(
+            member,
+            principal,
+            interestRate,
+            interest,
+            totalRepayPerMember,
+            reason,
+            dueDate,
+            // onConfirmSend – after save & send
+            async () => {},
+            // onConfirmNoSend – after save & close
+            async () => {},
+            // onCancel – no save
+            () => {
+                toast('Cancelled', '#ff0000');
+                closeOv('ov-assign-debt');
+            },
+            // onSave – saves the debt
+            async () => {
+                await executeDebtAssignment(
+                    member,
+                    principal,
+                    interestRate,
+                    interest,
+                    totalRepayPerMember,
+                    reason,
+                    dueDate,
+                    Date.now()
+                );
+                toast(`✅ Debt assigned to ${member.name}`, '#10b981');
+                await reloadAllData();
+                refreshUI();
+                closeOv('ov-assign-debt');
+                return true;
+            }
+        );
         return;
     }
 
-    // ─── Single debt mode (original) ───
-    const principal = parseFloat(document.getElementById('debt-amount')?.value);
-    const interestRate = parseFloat(document.getElementById('debt-interest')?.value);
-    if (!principal || principal <= 0) { toast('Enter valid amount', '#ef4444'); return; }
-    if (isNaN(interestRate) || interestRate < 0) { toast('Enter valid interest rate', '#ef4444'); return; }
-    const totalRepayPerMember = Math.floor(principal * (1 + interestRate / 100));
-
-    // If only one member, use single receipt
-    if (selectedMembers.length === 1) {
-    const member = selectedMembers[0];
-    const interest = totalRepayPerMember - principal;
-    showDebtReceiptModal(
-        member,
-        principal,
-        interestRate,
-        interest,
-        totalRepayPerMember,
-        reason,
-        dueDate,
-        // onConfirmSend – after save & send
-        async () => {
-            // Optional: any action after sending (e.g., analytics)
-        },
-        // onConfirmNoSend – after save & close
-        async () => {
-            // Optional: any action after saving
-        },
-        // onCancel – no save
-        () => {
-            toast('Cancelled', '#ff0000');
-            closeOv('ov-assign-debt');
-        },
-        // ─── onSave – saves the debt but does NOT close ───
-        async () => {
-            await executeDebtAssignment(
-                member,
-                principal,
-                interestRate,
-                interest,
-                totalRepayPerMember,
-                reason,
-                dueDate,
-                Date.now()
-            );
-            // toast is handled by the button handler, not here
-            await reloadAllData();
-            refreshUI();
-            return true; // success
+    // ─── 2B. Multiple members ──────────────────────────────
+    // Show bulk debt receipt (grouped for admin)
+    showBulkDebtReceipt(selectedMembers, principal, interestRate, totalRepayPerMember, dueDate, reason, async function() {
+        let success = 0;
+        for (const member of selectedMembers) {
+            try {
+                await executeDebtAssignment(
+                    member,
+                    principal,
+                    interestRate,
+                    interest,
+                    totalRepayPerMember,
+                    reason,
+                    dueDate,
+                    Date.now()
+                );
+                success++;
+            } catch (err) {
+                console.error('Error assigning debt to', member.name, err);
+            }
         }
-    );
-}
+        toast(`Debt assigned to ${success}/${selectedMembers.length} members`, success > 0 ? '#10b981' : '#ef4444');
+        await reloadAllData();
+        refreshUI();
+        closeOv('ov-assign-debt');
+    });
 };
 // ─── Set debt date/time to now ─────────────────────────────
 function setDebtToNow() {
@@ -6025,7 +6125,7 @@ function computePots() {
       memberBalances[phone] = (memberBalances[phone] || 0) + a;
       cash += a;
     } else if (tx.type === 'loan_disbursement') {
-      cash += a;
+      cash -= a;
       memberLoans[phone] = (memberLoans[phone] || 0) + a;
       profit -= a;
       if (tx.loanId) {
@@ -8764,6 +8864,85 @@ function memberPaidOnDate(member, dateObj) {
     });
     return paid;
 }
+function showBulkDateReceipt(memberTotals, dueDate, reason, onConfirm) {
+    const modal = document.createElement('div');
+    modal.className = 'ov on receipt-modal-active';
+    modal.style.zIndex = '20020';
+    const receiptNumber = generateReceiptNumber();
+
+    const totalAmount = Object.values(memberTotals).reduce((sum, d) => sum + d.total, 0);
+    const totalDays = Object.values(memberTotals).reduce((sum, d) => sum + d.dates.length, 0);
+
+    const membersListHtml = Object.values(memberTotals).map(data => {
+        const days = data.dates.length;
+        const total = data.total;
+        return `<div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid #f3f4f6; font-size:0.8rem;">
+            <span>${escapeHtml(data.member.name)}</span>
+            <span>${days} day(s) – UGX ${total.toLocaleString()}</span>
+        </div>`;
+    }).join('');
+
+    modal.innerHTML = `
+        <div class="bs" style="max-width:460px;padding:0;overflow:hidden;border-radius:24px 24px 0 0;display:flex;flex-direction:column;max-height:90vh;">
+            <div style="background:#fff;padding:20px 24px 12px;overflow-y:auto;flex:1;min-height:0;">
+                <div style="max-width:360px;margin:0 auto;background:#ffffff;border-radius:24px;padding:24px 20px 20px;font-family:'DM Sans',sans-serif;text-align:center;color:#111827;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+                    <div style="font-size:1.1rem;font-weight:900;color:#111827;letter-spacing:-0.5px;">🌾 Harvest Trust Finance</div>
+                    <div style="width:40px;height:3px;background:#f59e0b;margin:8px auto 12px;border-radius:99px;"></div>
+                    <div style="font-size:1.8rem;font-weight:900;color:#ef4444;line-height:1.2;margin:8px 0;">UGX ${totalAmount.toLocaleString()}</div>
+                    <div style="font-size:0.75rem;color:#9ca3af;font-weight:600;margin-bottom:16px;">Bulk Date‑Range Debt</div>
+                    <div style="border-top:1px solid #f3f4f6;margin-bottom:14px;"></div>
+                    <div style="text-align:left;font-size:0.85rem;">
+                        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                            <span style="color:#6b7280;">Date Range</span>
+                            <span style="font-weight:600;">${document.getElementById('debt-bulk-start').value} – ${document.getElementById('debt-bulk-end').value}</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                            <span style="color:#6b7280;">Total Days</span>
+                            <span style="font-weight:600;">${totalDays}</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                            <span style="color:#6b7280;">Members</span>
+                            <span style="font-weight:600;">${Object.keys(memberTotals).length}</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                            <span style="color:#6b7280;">Due Date</span>
+                            <span style="font-weight:600;">${new Date(dueDate).toLocaleDateString()}</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                            <span style="color:#6b7280;">Reason</span>
+                            <span style="font-weight:600;">${escapeHtml(reason)}</span>
+                        </div>
+                        <div style="margin-top:12px;border-top:1px solid #f3f4f6;padding-top:8px;">
+                            <div style="font-weight:600;color:#6b7280;margin-bottom:4px;">Per Member Summary</div>
+                            ${membersListHtml}
+                        </div>
+                    </div>
+                    <div style="margin-top:16px;padding-top:12px;border-top:1px solid #f3f4f6;">
+                        <div style="font-size:0.85rem;font-weight:700;color:#1a202c;letter-spacing:0.5px;font-family:monospace;">
+                            Receipt #: ${receiptNumber}
+                        </div>
+                        <div style="font-size:0.5rem;color:#9ca3af;margin-top:4px;">${new Date().toLocaleString()}</div>
+                    </div>
+                </div>
+            </div>
+            <div style="background:#fff;padding:12px 20px 20px;display:flex;flex-direction:column;gap:8px;flex-shrink:0;border-top:1px solid #f3f4f6;">
+                <button id="bulk-date-confirm" class="receipt-btn" style="width:100%;padding:11px;border:none;border-radius:10px;background:#6d28d9;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;">✅ Confirm & Assign</button>
+                <button id="bulk-date-cancel" class="receipt-btn" style="width:100%;padding:9px;border:1px solid #e5e7eb;border-radius:10px;background:transparent;color:#6b7280;font-size:0.8rem;font-weight:600;cursor:pointer;">✕ Cancel</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    document.getElementById('bulk-date-confirm').onclick = function() {
+        modal.remove();
+        if (typeof onConfirm === 'function') onConfirm();
+    };
+    document.getElementById('bulk-date-cancel').onclick = function() {
+        modal.remove();
+        toast('Cancelled', '#ff0000');
+    };
+}
+
 function showBulkDebtReceipt(members, principal, interestRate, totalRepayPerMember, dueDate, reason, onConfirm) {
     const modal = document.createElement('div');
     modal.className = 'ov on receipt-modal-active';
@@ -8857,24 +9036,84 @@ function showBulkDebtReceipt(members, principal, interestRate, totalRepayPerMemb
         toast('Cancelled', '#ff0000');
     };
 }
-async function createBulkDebtLogWithReceipts(members, dateRange, dueDate, reason, totalDays) {
+
+// ─── Create bulk transaction log ──────────────────────────────
+async function createBulkTxLog(members, totalAmount, description) {
     const logEntry = {
         id: Date.now(),
         timestamp: Date.now(),
-        type: 'bulk_debt',
-        dateRange: dateRange,
-        totalDays: totalDays,
-        totalAmount: members.reduce((sum, m) => sum + m.amount, 0),
+        type: 'bulk_deposit',
+        totalAmount: totalAmount,
         memberCount: members.length,
-        dueDate: new Date(dueDate).toISOString().slice(0,10),
-        reason: reason,
+        description: description || 'Bulk deposit',
         members: members,
         receiptsSent: false,
         viewed: false
     };
+    const ref = db.ref('notifications/admin_bulk_tx_logs').push();
+    await ref.set(logEntry);
+    return ref.key;
+}
+async function createBulkDebtLog(memberTotals, dates, dueDate, reason) {
+    const logEntry = {
+        id: Date.now(),
+        timestamp: Date.now(),
+        type: 'bulk_debt',
+        dateRange: {
+            start: dates[0] ? dates[0].toISOString().slice(0,10) : '',
+            end: dates[dates.length-1] ? dates[dates.length-1].toISOString().slice(0,10) : ''
+        },
+        totalDays: Object.values(memberTotals).reduce((sum, d) => sum + d.dates.length, 0),
+        totalAmount: Object.values(memberTotals).reduce((sum, d) => sum + d.total, 0),
+        memberCount: Object.keys(memberTotals).length,
+        dueDate: new Date(dueDate).toISOString().slice(0,10),
+        reason: reason,
+        members: Object.values(memberTotals).map(d => ({
+            name: d.member.name,
+            phone: d.member.phone,
+            days: d.dates.length,
+            amount: d.total
+        })),
+        read: false,
+        receiptsSent: false
+    };
     const ref = db.ref('notifications/admin_bulk_debt_logs').push();
     await ref.set(logEntry);
     return ref.key;
+}
+function renderBulkTxLogs() {
+    const container = document.getElementById('admin-bulk-tx-logs');
+    if (!container) return;
+    db.ref('notifications/admin_bulk_tx_logs').orderByChild('timestamp').limitToLast(20).once('value', snap => {
+        const logs = snap.val() ? Object.entries(snap.val()).map(([key, val]) => ({ ...val, key })) : [];
+        if (!logs.length) {
+            container.innerHTML = '<div class="muted" style="padding:8px;">No bulk deposit logs</div>';
+            return;
+        }
+        let html = `<div style="max-height:300px; overflow-y:auto; margin-bottom:8px;">
+            <div style="font-size:0.7rem; font-weight:700; color:var(--teal); margin-bottom:4px;">💰 Bulk Deposits</div>`;
+        logs.reverse().forEach(log => {
+            const allSent = log.members.every(m => m.sent);
+            const status = allSent ? '✅ All sent' : `${log.members.filter(m => m.sent).length}/${log.members.length} sent`;
+            html += `
+                <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:8px; padding:8px 10px; margin-bottom:4px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <div style="font-size:0.75rem; font-weight:600;">📅 ${new Date(log.timestamp).toLocaleDateString()} – ${log.memberCount} members</div>
+                            <div class="micro muted" style="font-size:0.6rem;">Total: ${money(log.totalAmount)}</div>
+                            <div class="micro muted" style="font-size:0.55rem;">${status}</div>
+                        </div>
+                        <div style="display:flex; gap:4px; flex-wrap:wrap;">
+                            <button class="btn btn-sm btn-teal" onclick="showBulkTxReceipts('${log.key}')" style="padding:2px 8px; font-size:0.55rem;">📨 View Receipts</button>
+                            ${allSent ? `<button class="btn btn-sm btn-red" onclick="deleteBulkTxLog('${log.key}')" style="padding:2px 8px; font-size:0.55rem;">🗑️</button>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        html += `</div>`;
+        container.innerHTML = html;
+    });
 }
 function renderBulkDebtLogs() {
     const container = document.getElementById('admin-bulk-debt-logs');
@@ -8896,7 +9135,7 @@ function renderBulkDebtLogs() {
             const dateRangeLabel = log.dateRange ? `${log.dateRange.start} → ${log.dateRange.end}` : 'Single debt';
 
             html += `
-                <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:8px; padding:8px 10px; margin-bottom:4px;">
+                <div style="background:${log.read ? 'rgba(255,255,255,0.03)' : 'rgba(245,158,11,0.08)'}; border:1px solid ${log.read ? 'rgba(255,255,255,0.06)' : 'rgba(245,158,11,0.2)'}; border-radius:8px; padding:8px 10px; margin-bottom:4px;">
                     <div style="display:flex; justify-content:space-between; align-items:center;">
                         <div>
                             <div style="font-size:0.75rem; font-weight:600;">📅 ${dateRangeLabel} – ${log.memberCount} members</div>
@@ -8915,6 +9154,141 @@ function renderBulkDebtLogs() {
         container.innerHTML = html;
     });
 }
+
+function showBulkTxReceipts(logKey) {
+    db.ref('notifications/admin_bulk_tx_logs/' + logKey).once('value', async snap => {
+        const log = snap.val();
+        if (!log) { toast('Log not found', '#ef4444'); return; }
+        if (!log.viewed) {
+            await db.ref('notifications/admin_bulk_tx_logs/' + logKey + '/viewed').set(true);
+        }
+        const modal = document.createElement('div');
+        modal.className = 'ov on receipt-modal-active';
+        modal.style.zIndex = '20020';
+        let membersHtml = '';
+        log.members.forEach((member, index) => {
+            const sent = member.sent ? '✅' : '⏳';
+            membersHtml += `
+                <div style="background:${member.sent ? 'rgba(16,185,129,0.05)' : 'rgba(255,255,255,0.03)'}; border:1px solid ${member.sent ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.06)'}; border-radius:10px; padding:12px; margin-bottom:10px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <span style="font-weight:600;">${escapeHtml(member.name)}</span>
+                        <span style="font-size:0.7rem;">${sent}</span>
+                    </div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        ${!member.sent ? `
+                            <button class="btn btn-sm btn-green" onclick="sendTxReceiptToMember('${logKey}', ${index})" style="padding:2px 10px; font-size:0.6rem;">💬 Send</button>
+                            <button class="btn btn-sm btn-purple" onclick="copyTxReceiptToClipboard('${logKey}', ${index})" style="padding:2px 10px; font-size:0.6rem;">📋 Copy</button>
+                            <button class="btn btn-sm btn-amber" onclick="saveTxReceipt('${logKey}', ${index})" style="padding:2px 10px; font-size:0.6rem;">💾 Save</button>
+                            <button class="btn btn-sm btn-sec" onclick="markTxReceiptSent('${logKey}', ${index})" style="padding:2px 10px; font-size:0.6rem;">✓ Mark Sent</button>
+                        ` : '<span style="font-size:0.65rem; color:var(--green);">✅ Sent</span>'}
+                    </div>
+                    ${member.receiptImage ? `<img src="${member.receiptImage}" style="max-width:100%; max-height:200px; border-radius:8px; margin-top:6px; border:1px solid rgba(255,255,255,0.1);">` : '<div class="micro muted">No receipt image</div>'}
+                </div>
+            `;
+        });
+        const allSent = log.members.every(m => m.sent);
+        modal.innerHTML = `
+            <div class="bs" style="max-width:500px; max-height:90vh; overflow-y:auto; padding:16px 18px;">
+                <div class="bs-title" style="margin-bottom:8px;">📨 Bulk Deposit Receipts</div>
+                <div class="micro muted" style="margin-bottom:12px;">${log.memberCount} members · Total: ${money(log.totalAmount)}</div>
+                ${membersHtml}
+                ${allSent ? `<div style="text-align:center; padding:8px; background:rgba(16,185,129,0.1); border-radius:8px; margin-top:8px;">✅ All receipts sent or marked. You can close this.</div>` : ''}
+                <button class="btn btn-sec btn-full" onclick="this.closest('.ov').remove()" style="margin-top:12px;">✕ Close</button>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+    });
+}
+
+window.sendTxReceiptToMember = async function(logKey, memberIndex) {
+    const snap = await db.ref('notifications/admin_bulk_tx_logs/' + logKey).once('value');
+    const log = snap.val();
+    if (!log) { toast('Log not found', '#ef4444'); return; }
+    const member = log.members[memberIndex];
+    if (!member || member.sent) { toast('Already sent', '#f59e0b'); return; }
+    const imageData = member.receiptImage;
+    if (!imageData) { toast('No receipt image', '#ef4444'); return; }
+    try {
+        const blob = await (await fetch(imageData)).blob();
+        const file = new File([blob], `deposit_receipt_${member.receiptNumber}.png`, { type: 'image/png' });
+        let phone = member.phone.replace(/\s+/g, '').replace(/[()-]/g, '');
+        if (phone.startsWith('0')) phone = '+256' + phone.slice(1);
+        if (!phone.startsWith('+')) phone = '+' + phone;
+        if (navigator.share) {
+            await navigator.share({ title: 'Deposit Receipt', text: `Deposit receipt for ${member.name}`, files: [file] });
+            await markTxReceiptSent(logKey, memberIndex);
+            toast('✅ Shared!', '#10b981');
+            showBulkTxReceipts(logKey);
+            return;
+        }
+        const message = `🌾 *Harvest Trust Finance* 🌾\n\n📄 *Deposit Receipt*\nMember: ${member.name}\nAmount: UGX ${member.amount.toLocaleString()}\nReceipt #: ${member.receiptNumber}`;
+        window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+        const a = document.createElement('a');
+        a.href = imageData;
+        a.download = `deposit_receipt_${member.receiptNumber}.png`;
+        a.click();
+        await markTxReceiptSent(logKey, memberIndex);
+        toast('💬 WhatsApp opened. Image downloaded – attach manually.', '#25D366');
+        showBulkTxReceipts(logKey);
+    } catch (err) { console.error(err); toast('Failed to send', '#ef4444'); }
+};
+
+window.copyTxReceiptToClipboard = async function(logKey, memberIndex) {
+    const snap = await db.ref('notifications/admin_bulk_tx_logs/' + logKey).once('value');
+    const log = snap.val();
+    if (!log) { toast('Log not found', '#ef4444'); return; }
+    const member = log.members[memberIndex];
+    if (!member || member.sent) { toast('Already sent', '#f59e0b'); return; }
+    const imageData = member.receiptImage;
+    if (!imageData) { toast('No receipt image', '#ef4444'); return; }
+    try {
+        const blob = await (await fetch(imageData)).blob();
+        await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+        toast('📋 Copied!', '#06b6d4');
+        await markTxReceiptSent(logKey, memberIndex);
+        showBulkTxReceipts(logKey);
+    } catch (err) {
+        const a = document.createElement('a');
+        a.href = imageData;
+        a.download = `deposit_receipt_${member.receiptNumber}.png`;
+        a.click();
+        await markTxReceiptSent(logKey, memberIndex);
+        toast('📸 Downloaded', '#f59e0b');
+        showBulkTxReceipts(logKey);
+    }
+};
+
+window.saveTxReceipt = async function(logKey, memberIndex) {
+    const snap = await db.ref('notifications/admin_bulk_tx_logs/' + logKey).once('value');
+    const log = snap.val();
+    if (!log) { toast('Log not found', '#ef4444'); return; }
+    const member = log.members[memberIndex];
+    if (!member || member.sent) { toast('Already sent', '#f59e0b'); return; }
+    const a = document.createElement('a');
+    a.href = member.receiptImage;
+    a.download = `deposit_receipt_${member.receiptNumber}.png`;
+    a.click();
+    await markTxReceiptSent(logKey, memberIndex);
+    toast('💾 Saved', '#10b981');
+    showBulkTxReceipts(logKey);
+};
+
+window.markTxReceiptSent = async function(logKey, memberIndex) {
+    await db.ref(`notifications/admin_bulk_tx_logs/${logKey}/members/${memberIndex}/sent`).set(true);
+    const snap = await db.ref('notifications/admin_bulk_tx_logs/' + logKey).once('value');
+    const log = snap.val();
+    if (log && log.members.every(m => m.sent)) {
+        await db.ref('notifications/admin_bulk_tx_logs/' + logKey + '/receiptsSent').set(true);
+        renderBulkTxLogs();
+    }
+};
+
+window.deleteBulkTxLog = async function(key) {
+    if (!confirm('Delete this bulk deposit log?')) return;
+    await db.ref('notifications/admin_bulk_tx_logs/' + key).remove();
+    renderBulkTxLogs();
+};
 function showBulkReceipts(logKey) {
     db.ref('notifications/admin_bulk_debt_logs/' + logKey).once('value', async snap => {
         const log = snap.val();
@@ -13226,6 +13600,8 @@ function renderAdminTab() {
         <button class="btn btn-purple btn-full" onclick="toggleActiveLoans()" style="margin-top: 8px; padding: 8px; font-size: 0.75rem;">📋 Show Active Loans</button>
       `;
     }
+    // ─── Bulk Deposit Logs ─────────────────────────────────────
+const bulkTxLogsHtml = `<div id="admin-bulk-tx-logs" style="margin-top:12px;"></div>`;
     // ─── Bulk Debt Logs ──────────────────────────────────────────
 const bulkDebtLogsHtml = `<div id="admin-bulk-debt-logs" style="margin-top:12px;"></div>`;
 
@@ -13236,6 +13612,7 @@ const bulkDebtLogsHtml = `<div id="admin-bulk-debt-logs" style="margin-top:12px;
   ${activeLoansHtml}
   ${bulkDebtLogsHtml}
 `;
+setTimeout(renderBulkTxLogs, 200);
 setTimeout(renderBulkDebtLogs, 200);
     return;
   }
@@ -14371,8 +14748,10 @@ window.addTransactionWithPreview = async function() {
     }
 
     try {
+        // ──────────────────────────────────────────────────────
+        // 1. COVER PAST DAYS MODE
+        // ──────────────────────────────────────────────────────
         if (isCover) {
-            // ─── Cover past days mode ────────────────────────
             const startDate = document.getElementById('tx-cover-start').value;
             const endDate = document.getElementById('tx-cover-end').value;
             if (!startDate || !endDate) {
@@ -14390,6 +14769,7 @@ window.addTransactionWithPreview = async function() {
             const requiredPerDay = dailyAmount + welfareAmount;
             const skipExisting = document.getElementById('tx-cover-override').checked;
 
+            // Collect all writes (deposit + welfare for each day/member)
             let writes = [];
             let totalDays = 0;
             for (const member of selectedMembers) {
@@ -14397,6 +14777,7 @@ window.addTransactionWithPreview = async function() {
                     const hasDeposit = skipExisting ? memberHasDepositOnDate(member, dateObj) : false;
                     if (!hasDeposit) {
                         totalDays++;
+                        // Deposit
                         writes.push(db.ref('transactions').push({
                             memberPhone: member.phone,
                             memberName: member.name,
@@ -14408,6 +14789,7 @@ window.addTransactionWithPreview = async function() {
                             isDailySavings: true,
                             isCovered: true
                         }));
+                        // Welfare
                         writes.push(db.ref('transactions').push({
                             memberPhone: member.phone,
                             memberName: member.name,
@@ -14430,78 +14812,105 @@ window.addTransactionWithPreview = async function() {
 
             if (!confirm(`Cover ${totalDays} day(s) for ${selectedMembers.length} member(s)?`)) return;
 
+            // Save everything
             await Promise.all(writes);
             toast(`✅ Covered ${totalDays} day(s) for ${selectedMembers.length} member(s)`, '#10b981');
             await reloadAllData();
             refreshUI();
             closeOv('ov-add-tx');
-        } else {
-            // ─── Regular transaction mode ────────────────────
-            const type = document.getElementById('tx-type')?.value;
-            const amount = parseFloat(document.getElementById('tx-amount')?.value);
-            if (!type || !amount || amount <= 0) {
-                toast('Enter a valid amount and select type', '#ef4444');
-                return;
+            return;
+        }
+
+        // ──────────────────────────────────────────────────────
+        // 2. REGULAR TRANSACTION MODE
+        // ──────────────────────────────────────────────────────
+        const type = document.getElementById('tx-type')?.value;
+        const amount = parseFloat(document.getElementById('tx-amount')?.value);
+        if (!type || !amount || amount <= 0) {
+            toast('Enter a valid amount and select type', '#ef4444');
+            return;
+        }
+
+        // ─── 2A. Deposit (may be bulk or single) ────────────
+        if (type === 'deposit') {
+            // First, save the deposit(s)
+            let allWrites = [];
+            for (const m of selectedMembers) {
+                const depositTxs = await processDepositWithFutureDays(m, amount, Date.now(), desc || 'Manual deposit');
+                allWrites = allWrites.concat(depositTxs.map(tx => db.ref('transactions').push(tx)));
             }
+            await Promise.all(allWrites);
 
-            if (type === 'deposit') {
-                // ─── For deposits, show the receipt modal with 4 buttons ───
-                // We'll show the receipt for the FIRST selected member only
-                // (or you can loop, but receipt is per member)
-                // For simplicity, we show receipt for the first member
-                // but save for all members when the receipt action is taken
-
-                const member = selectedMembers[0]; // first member for preview
-                const onSave = async () => {
-                    // Save deposit for ALL selected members
-                    let allWrites = [];
-                    for (const m of selectedMembers) {
-                        const depositTxs = await processDepositWithFutureDays(m, amount, Date.now(), desc || 'Manual deposit');
-                        allWrites = allWrites.concat(depositTxs.map(tx => db.ref('transactions').push(tx)));
-                    }
-                    await Promise.all(allWrites);
-                    await reloadAllData();
-                    refreshUI();
-                    return true;
-                };
-
-                // Compute projected loan balance after deposit for preview
+            // ─── If only ONE member, show receipt modal ────
+            if (selectedMembers.length === 1) {
+                const member = selectedMembers[0];
+                // Compute projected loan balance after deposit (for preview)
                 const projectedLoan = await calculateProjectedLoanBalanceAfterDeposit(member, amount);
-
+                // We pass onSave as null because the transaction is already saved.
                 showTransactionReceiptModal(
                     member,
                     type,
                     amount,
                     desc,
                     null, null, null, null,
-                    true, // isPreview
-                    null, // projectedPrepaidDate
+                    false, // isPreview = false – already saved
+                    null,
                     projectedLoan,
-                    onSave
+                    null // no onSave needed
                 );
-            } else {
-                // ─── Other transaction types (fine, welfare, expense) ───
-                let writes = [];
-                for (const member of selectedMembers) {
-                    writes.push(db.ref('transactions').push({
-                        memberPhone: member.phone,
-                        memberName: member.name,
-                        type: type,
-                        amount: amount,
-                        receiptNumber: generateReceiptNumber(),
-                        description: desc || type,
-                        date: Date.now()
-                    }));
-                }
-                await Promise.all(writes);
-                toast(`${type} recorded for ${selectedMembers.length} member(s)!`, '#10b981');
                 await reloadAllData();
                 refreshUI();
                 closeOv('ov-add-tx');
+                return;
             }
+
+            // ─── MULTIPLE members – generate bulk deposit log ──
+            const logMembers = [];
+            for (const m of selectedMembers) {
+                const receiptNumber = generateReceiptNumber();
+                const receiptImage = await generateDepositReceiptImage(m, amount, desc || 'Deposit', receiptNumber);
+                logMembers.push({
+                    name: m.name,
+                    phone: m.phone,
+                    amount: amount,
+                    receiptImage: receiptImage,
+                    receiptNumber: receiptNumber,
+                    sent: false
+                });
+            }
+
+            // Create bulk log entry
+            await createBulkTxLog(logMembers, amount * selectedMembers.length, desc || 'Bulk deposit');
+
+            toast(`✅ Deposit saved for ${selectedMembers.length} member(s). Receipts stored in logs.`, '#10b981');
+            await reloadAllData();
+            refreshUI();
+            closeOv('ov-add-tx');
+            return;
         }
+
+        // ─── 2B. Other transaction types (fine, welfare, expense) ───
+        // These are saved directly (no receipt logs for now)
+        let writes = [];
+        for (const member of selectedMembers) {
+            writes.push(db.ref('transactions').push({
+                memberPhone: member.phone,
+                memberName: member.name,
+                type: type,
+                amount: amount,
+                receiptNumber: generateReceiptNumber(),
+                description: desc || type,
+                date: Date.now()
+            }));
+        }
+        await Promise.all(writes);
+        toast(`${type} recorded for ${selectedMembers.length} member(s)!`, '#10b981');
+        await reloadAllData();
+        refreshUI();
+        closeOv('ov-add-tx');
+
     } catch (err) {
-        console.error(err);
+        console.error('Transaction error:', err);
         toast('Transaction failed', '#ef4444');
     }
 };
@@ -15509,59 +15918,81 @@ document.getElementById('debt-copy-pc').addEventListener('click', async function
         }
     });
 };
-// ==========================================
-// DEBT ASSIGNMENT RECEIPT - PHONE STYLE
-// ==========================================
-async function generateDebtReceiptImage(member, principal, interestRate, totalRepay, reason, dueDate) {
-    const receiptNumber = generateReceiptNumber();
-    const dueDateLabel = new Date(dueDate).toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' });
-    const dateLabel = new Date().toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' });
-    const timeLabel = new Date().toLocaleTimeString('en-UG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    const interest = totalRepay - principal;
-
-    const html = `
-        <div id="debt-receipt-${receiptNumber}" style="max-width:360px;margin:0 auto;background:#ffffff;border-radius:24px;padding:24px 20px 20px;font-family:'DM Sans',sans-serif;text-align:center;color:#111827;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
-            <div style="font-size:1.1rem;font-weight:900;color:#111827;letter-spacing:-0.5px;">🌾 Harvest Trust Finance</div>
-            <div style="width:40px;height:3px;background:#f59e0b;margin:8px auto 12px;border-radius:99px;"></div>
-            <div style="font-size:2.8rem;font-weight:900;color:#ef4444;line-height:1.2;margin:8px 0;">UGX ${totalRepay.toLocaleString()}</div>
-            <div style="font-size:0.75rem;color:#9ca3af;font-weight:600;margin-bottom:16px;">Debt Assigned</div>
-            <div style="border-top:1px solid #f3f4f6;margin-bottom:14px;"></div>
-            <div style="text-align:left;font-size:0.85rem;">
-                <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-                    <span style="color:#6b7280;">Member</span>
-                    <span style="font-weight:600;">${escapeHtml(member.name)}</span>
-                </div>
-                <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-                    <span style="color:#6b7280;">Principal</span>
-                    <span style="font-weight:600;">UGX ${principal.toLocaleString()}</span>
-                </div>
-                <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-                    <span style="color:#6b7280;">Interest (${interestRate}%)</span>
-                    <span style="font-weight:600;">UGX ${interest.toLocaleString()}</span>
-                </div>
-                <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-                    <span style="color:#6b7280;">Total to Repay</span>
-                    <span style="font-weight:700;color:#ef4444;">UGX ${totalRepay.toLocaleString()}</span>
-                </div>
-                <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-                    <span style="color:#6b7280;">Due Date</span>
-                    <span style="font-weight:600;">${dueDateLabel}</span>
-                </div>
-                <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-                    <span style="color:#6b7280;">Reason</span>
-                    <span style="font-weight:600;">${escapeHtml(reason)}</span>
-                </div>
+function generateDepositReceiptHTML(member, amount, description, receiptNumber) {
+    const date = new Date();
+    const dateLabel = date.toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' });
+    const timeLabel = date.toLocaleTimeString('en-UG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const quote = getReceiptQuote(member);
+    return `
+    <div style="max-width:360px;margin:0 auto;background:#ffffff;border-radius:24px;padding:24px 20px 20px;font-family:'DM Sans',sans-serif;text-align:center;color:#111827;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+        <div style="font-size:1.1rem;font-weight:900;color:#111827;letter-spacing:-0.5px;">🌾 Harvest Trust Finance</div>
+        <div style="width:40px;height:3px;background:#f59e0b;margin:8px auto 12px;border-radius:99px;"></div>
+        <div style="font-size:2.8rem;font-weight:900;color:#16a34a;line-height:1.2;margin:8px 0;">UGX ${amount.toLocaleString()}</div>
+        <div style="font-size:0.75rem;color:#9ca3af;font-weight:600;margin-bottom:16px;">Deposit Successful</div>
+        <div style="border-top:1px solid #f3f4f6;margin-bottom:14px;"></div>
+        <div style="text-align:left;font-size:0.85rem;">
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                <span style="color:#6b7280;">Member</span>
+                <span style="font-weight:600;">${escapeHtml(member.name)}</span>
             </div>
-            <div style="margin-top:16px;padding-top:12px;border-top:1px solid #f3f4f6;">
-                <div style="font-size:0.85rem;font-weight:700;color:#1a202c;letter-spacing:0.5px;font-family:monospace;">
-                    Receipt #: ${receiptNumber}
-                </div>
-                <div style="font-size:0.5rem;color:#9ca3af;margin-top:4px;">${dateLabel}, ${timeLabel}</div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                <span style="color:#6b7280;">Payment Method</span>
+                <span style="font-weight:600;">Deposit</span>
             </div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                <span style="color:#6b7280;">Date & Time</span>
+                <span style="font-weight:600;">${dateLabel}, ${timeLabel}</span>
+            </div>
+            ${description ? `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;"><span style="color:#6b7280;">Note</span><span style="font-weight:600;">${escapeHtml(description)}</span></div>` : ''}
         </div>
+        <div style="margin-top:14px;padding:10px;background:#f7fafc;border-radius:8px;font-size:0.75rem;color:#4a5568;font-style:italic;border-left:3px solid #f59e0b;text-align:left;">
+            ${escapeHtml(quote)}
+        </div>
+        <div style="margin-top:16px;padding-top:12px;border-top:1px solid #f3f4f6;">
+            <div style="font-size:0.85rem;font-weight:700;color:#1a202c;letter-spacing:0.5px;font-family:monospace;">
+                Receipt #: ${receiptNumber}
+            </div>
+            <div style="font-size:0.5rem;color:#9ca3af;margin-top:4px;">${new Date().toLocaleString()}</div>
+        </div>
+    </div>
     `;
+}
 
-    // Render and capture with html2canvas
+// ─── Generate deposit receipt image ──────────────────────────
+async function generateDepositReceiptImage(member, amount, description, receiptNumber) {
+    const html = `
+    <div style="max-width:360px;margin:0 auto;background:#ffffff;border-radius:24px;padding:24px 20px 20px;font-family:'DM Sans',sans-serif;text-align:center;color:#111827;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+        <div style="font-size:1.1rem;font-weight:900;color:#111827;letter-spacing:-0.5px;">🌾 Harvest Trust Finance</div>
+        <div style="width:40px;height:3px;background:#f59e0b;margin:8px auto 12px;border-radius:99px;"></div>
+        <div style="font-size:2.8rem;font-weight:900;color:#16a34a;line-height:1.2;margin:8px 0;">UGX ${amount.toLocaleString()}</div>
+        <div style="font-size:0.75rem;color:#9ca3af;font-weight:600;margin-bottom:16px;">Deposit Successful</div>
+        <div style="border-top:1px solid #f3f4f6;margin-bottom:14px;"></div>
+        <div style="text-align:left;font-size:0.85rem;">
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                <span style="color:#6b7280;">Member</span>
+                <span style="font-weight:600;">${escapeHtml(member.name)}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                <span style="color:#6b7280;">Payment Method</span>
+                <span style="font-weight:600;">Deposit</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                <span style="color:#6b7280;">Date & Time</span>
+                <span style="font-weight:600;">${new Date().toLocaleDateString()}, ${new Date().toLocaleTimeString()}</span>
+            </div>
+            ${description ? `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;"><span style="color:#6b7280;">Note</span><span style="font-weight:600;">${escapeHtml(description)}</span></div>` : ''}
+        </div>
+        <div style="margin-top:14px;padding:10px;background:#f7fafc;border-radius:8px;font-size:0.75rem;color:#4a5568;font-style:italic;border-left:3px solid #f59e0b;text-align:left;">
+            ${escapeHtml(getReceiptQuote(member))}
+        </div>
+        <div style="margin-top:16px;padding-top:12px;border-top:1px solid #f3f4f6;">
+            <div style="font-size:0.85rem;font-weight:700;color:#1a202c;letter-spacing:0.5px;font-family:monospace;">
+                Receipt #: ${receiptNumber}
+            </div>
+            <div style="font-size:0.5rem;color:#9ca3af;margin-top:4px;">${new Date().toLocaleString()}</div>
+        </div>
+    </div>
+    `;
     const tempDiv = document.createElement('div');
     tempDiv.style.position = 'absolute';
     tempDiv.style.top = '-9999px';
@@ -15569,7 +16000,6 @@ async function generateDebtReceiptImage(member, principal, interestRate, totalRe
     tempDiv.innerHTML = html;
     document.body.appendChild(tempDiv);
     await new Promise(r => setTimeout(r, 150));
-
     try {
         const canvas = await html2canvas(tempDiv.firstChild, {
             scale: 2.5,
@@ -15578,13 +16008,201 @@ async function generateDebtReceiptImage(member, principal, interestRate, totalRe
             useCORS: true,
             allowTaint: true
         });
-        const dataUrl = canvas.toDataURL('image/png');
         document.body.removeChild(tempDiv);
-        return { imageData: dataUrl, receiptNumber };
+        return canvas.toDataURL('image/png');
     } catch (err) {
         document.body.removeChild(tempDiv);
-        console.error('Failed to generate receipt image:', err);
+        console.error('Deposit receipt error:', err);
         return null;
+    }
+}
+// ==========================================
+// DEBT ASSIGNMENT RECEIPT - PHONE STYLE
+// ==========================================
+async function generateDebtReceiptImage(member, principal, interestRate, totalRepay, reason, dueDate) {
+    try {
+        const receiptNumber = generateReceiptNumber();
+        const dueDateLabel = new Date(dueDate).toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' });
+        const dateLabel = new Date().toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' });
+        const timeLabel = new Date().toLocaleTimeString('en-UG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const interest = totalRepay - principal;
+
+        const html = `
+            <div id="debt-receipt-${receiptNumber}" style="max-width:360px;margin:0 auto;background:#ffffff;border-radius:24px;padding:24px 20px 20px;font-family:'DM Sans',sans-serif;text-align:center;color:#111827;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+                <div style="font-size:1.1rem;font-weight:900;color:#111827;letter-spacing:-0.5px;">🌾 Harvest Trust Finance</div>
+                <div style="width:40px;height:3px;background:#f59e0b;margin:8px auto 12px;border-radius:99px;"></div>
+                <div style="font-size:2.8rem;font-weight:900;color:#ef4444;line-height:1.2;margin:8px 0;">UGX ${totalRepay.toLocaleString()}</div>
+                <div style="font-size:0.75rem;color:#9ca3af;font-weight:600;margin-bottom:16px;">Debt Assigned</div>
+                <div style="border-top:1px solid #f3f4f6;margin-bottom:14px;"></div>
+                <div style="text-align:left;font-size:0.85rem;">
+                    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                        <span style="color:#6b7280;">Member</span>
+                        <span style="font-weight:600;">${escapeHtml(member.name)}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                        <span style="color:#6b7280;">Principal</span>
+                        <span style="font-weight:600;">UGX ${principal.toLocaleString()}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                        <span style="color:#6b7280;">Interest (${interestRate}%)</span>
+                        <span style="font-weight:600;">UGX ${interest.toLocaleString()}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                        <span style="color:#6b7280;">Total to Repay</span>
+                        <span style="font-weight:700;color:#ef4444;">UGX ${totalRepay.toLocaleString()}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                        <span style="color:#6b7280;">Due Date</span>
+                        <span style="font-weight:600;">${dueDateLabel}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                        <span style="color:#6b7280;">Reason</span>
+                        <span style="font-weight:600;">${escapeHtml(reason)}</span>
+                    </div>
+                </div>
+                <div style="margin-top:16px;padding-top:12px;border-top:1px solid #f3f4f6;">
+                    <div style="font-size:0.85rem;font-weight:700;color:#1a202c;letter-spacing:0.5px;font-family:monospace;">
+                        Receipt #: ${receiptNumber}
+                    </div>
+                    <div style="font-size:0.5rem;color:#9ca3af;margin-top:4px;">${dateLabel}, ${timeLabel}</div>
+                </div>
+            </div>
+        `;
+
+        // ─── Try html2canvas first ──────────────────────────
+        if (typeof html2canvas !== 'undefined') {
+            try {
+                const tempDiv = document.createElement('div');
+                tempDiv.style.position = 'absolute';
+                tempDiv.style.top = '-9999px';
+                tempDiv.style.left = '-9999px';
+                tempDiv.innerHTML = html;
+                document.body.appendChild(tempDiv);
+                await new Promise(r => setTimeout(r, 200));
+
+                const canvas = await html2canvas(tempDiv.firstChild, {
+                    scale: 2.5,
+                    backgroundColor: '#ffffff',
+                    logging: false,
+                    useCORS: true,
+                    allowTaint: true
+                });
+                document.body.removeChild(tempDiv);
+                return {
+                    imageData: canvas.toDataURL('image/png'),
+                    receiptNumber: receiptNumber
+                };
+            } catch (err) {
+                console.warn('html2canvas failed, falling back to canvas:', err);
+            }
+        }
+
+        // ─── Fallback: generate using canvas directly ──────
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 360;
+        canvas.height = 520;
+
+        // Background
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowColor = 'rgba(0,0,0,0.08)';
+        ctx.shadowBlur = 40;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 10;
+        ctx.beginPath();
+        ctx.roundRect(0, 0, canvas.width, canvas.height, 28);
+        ctx.fill();
+        ctx.shadowColor = 'transparent';
+
+        let y = 30;
+        const cx = canvas.width / 2;
+        const leftX = 24;
+
+        // Header
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#1a202c';
+        ctx.font = 'bold 14px -apple-system, sans-serif';
+        ctx.fillText('🌾 Harvest Trust Finance', cx, y);
+        y += 20;
+
+        ctx.fillStyle = '#f59e0b';
+        ctx.beginPath();
+        ctx.roundRect(cx - 20, y - 4, 40, 3, 2);
+        ctx.fill();
+        y += 16;
+
+        // Amount
+        ctx.fillStyle = '#ef4444';
+        ctx.font = 'bold 32px -apple-system, sans-serif';
+        ctx.fillText(`UGX ${totalRepay.toLocaleString()}`, cx, y + 8);
+        y += 30;
+
+        ctx.fillStyle = '#9ca3af';
+        ctx.font = '12px -apple-system, sans-serif';
+        ctx.fillText('Debt Assigned', cx, y);
+        y += 20;
+
+        ctx.strokeStyle = '#f3f4f6';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(leftX, y);
+        ctx.lineTo(canvas.width - leftX, y);
+        ctx.stroke();
+        y += 14;
+
+        // Details
+        const details = [
+            ['Member', member.name, '#111827'],
+            ['Principal', `UGX ${principal.toLocaleString()}`, '#111827'],
+            ['Interest', `UGX ${interest.toLocaleString()}`, '#111827'],
+            ['Total', `UGX ${totalRepay.toLocaleString()}`, '#ef4444'],
+            ['Due Date', dueDateLabel, '#111827'],
+            ['Reason', reason, '#6b7280']
+        ];
+
+        ctx.textAlign = 'left';
+        details.forEach(([label, value, color]) => {
+            ctx.fillStyle = '#9ca3af';
+            ctx.font = '10px -apple-system, sans-serif';
+            ctx.fillText(label, leftX, y);
+            ctx.textAlign = 'right';
+            ctx.fillStyle = color;
+            ctx.font = (label === 'Total' ? 'bold 12px' : '11px') + ' -apple-system, sans-serif';
+            ctx.fillText(value, canvas.width - leftX, y);
+            y += 20;
+        });
+
+        y += 6;
+        ctx.strokeStyle = '#f3f4f6';
+        ctx.beginPath();
+        ctx.moveTo(leftX, y);
+        ctx.lineTo(canvas.width - leftX, y);
+        ctx.stroke();
+        y += 14;
+
+        // Receipt number
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#1a202c';
+        ctx.font = 'bold 12px monospace';
+        ctx.fillText(`Receipt #: ${receiptNumber}`, cx, y);
+        y += 16;
+
+        ctx.fillStyle = '#9ca3af';
+        ctx.font = '9px -apple-system, sans-serif';
+        ctx.fillText(`${dateLabel}, ${timeLabel}`, cx, y);
+
+        return {
+            imageData: canvas.toDataURL('image/png'),
+            receiptNumber: receiptNumber
+        };
+
+    } catch (err) {
+        console.error('generateDebtReceiptImage error:', err);
+        // Return a minimal placeholder
+        return {
+            imageData: null,
+            receiptNumber: generateReceiptNumber()
+        };
     }
 }
 
@@ -23108,7 +23726,6 @@ window.openSavingsCalendar = function() {
         toast('Unable to open calendar', '#ef4444');
     }
 };
-
 
 window.calNavMonth = function(dir) {
   calViewMonth += dir;
