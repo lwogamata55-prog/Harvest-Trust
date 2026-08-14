@@ -12698,6 +12698,290 @@ window.rejectLoan=function(lid){
     if(currentAdminTab==='savings')renderAdminTab();
   });
 };
+function showLoanApprovalReceipt(member, loanData, schedule, onSend, onCopy, onSave, onCancel) {
+    if (document.querySelector('.receipt-modal-active')) {
+        toast('⚠️ Receipt already open', '#f59e0b');
+        return;
+    }
+
+    const safeAmount = Number(loanData.amount) || 0;
+    const safeRate = Number(loanData.interestRate) || 0;
+    const safeTotal = Number(loanData.totalRepay) || 0;
+    const receiptNumber = generateReceiptNumber();
+    const dueDateLabel = new Date(loanData.dueDate).toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' });
+    const dateLabel = new Date().toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' });
+    const timeLabel = new Date().toLocaleTimeString('en-UG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const quote = getReceiptQuote(member);
+
+    // Build schedule table rows
+    let scheduleRows = '';
+    if (schedule && schedule.length) {
+        schedule.forEach(w => {
+            scheduleRows += `
+                <tr style="border-bottom:1px solid #f3f4f6;">
+                    <td style="padding:4px; text-align:center;">${w.week}</td>
+                    <td style="padding:4px; text-align:center;">${new Date(w.dueDate).toLocaleDateString()}</td>
+                    <td style="padding:4px; text-align:right;">${money(w.principalPortion)}</td>
+                    <td style="padding:4px; text-align:right;">${money(w.interestPortion)}</td>
+                    <td style="padding:4px; text-align:right; font-weight:700;">${money(w.payment)}</td>
+                    <td style="padding:4px; text-align:right;">${money(w.remainingBalance)}</td>
+                </tr>
+            `;
+        });
+    }
+
+    function buildReceiptHTML() {
+        return `
+        <div id="receipt-content" style="max-width:420px;margin:0 auto;background:#ffffff;border-radius:24px;padding:24px 20px 20px;font-family:'DM Sans',sans-serif;text-align:center;color:#111827;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+            <!-- Header -->
+            <div style="font-size:1.1rem;font-weight:900;color:#111827;letter-spacing:-0.5px;">🌾 Harvest Trust Finance</div>
+            <div style="width:40px;height:3px;background:#f59e0b;margin:8px auto 12px;border-radius:99px;"></div>
+
+            <!-- BIG AMOUNT: Total Loan -->
+            <div style="font-size:2.8rem;font-weight:900;color:#6d28d9;line-height:1.2;margin:4px 0;">UGX ${safeTotal.toLocaleString()}</div>
+            <div style="font-size:0.75rem;color:#9ca3af;font-weight:600;margin-bottom:12px;">Loan Approved</div>
+
+            <div style="border-top:1px solid #f3f4f6;margin-bottom:12px;"></div>
+
+            <!-- Details (grid) -->
+            <div style="display:grid;grid-template-columns:140px 1fr;gap:8px 12px;text-align:left;font-size:0.85rem;">
+                <div style="color:#6b7280;font-weight:500;">Member</div>
+                <div style="font-weight:600;word-break:break-word;">${escapeHtml(member.name)}</div>
+
+                <div style="color:#6b7280;font-weight:500;">Phone</div>
+                <div style="font-weight:600;">${escapeHtml(member.phone)}</div>
+
+                <div style="color:#6b7280;font-weight:500;">Principal</div>
+                <div style="font-weight:600;">UGX ${safeAmount.toLocaleString()}</div>
+
+                <div style="color:#6b7280;font-weight:500;">Interest Rate</div>
+                <div style="font-weight:600;">${safeRate}%</div>
+
+                <div style="color:#6b7280;font-weight:500;">Interest Amount</div>
+                <div style="font-weight:600;">UGX ${(safeTotal - safeAmount).toLocaleString()}</div>
+
+                <div style="color:#6b7280;font-weight:700;">Total to Repay</div>
+                <div style="font-weight:900;color:#6d28d9;">UGX ${safeTotal.toLocaleString()}</div>
+
+                <div style="color:#6b7280;font-weight:500;">Due Date</div>
+                <div style="font-weight:600;">${dueDateLabel}</div>
+
+                <div style="color:#6b7280;font-weight:500;">Reason</div>
+                <div style="font-weight:600;">${escapeHtml(loanData.reason || 'N/A')}</div>
+            </div>
+
+            <!-- Repayment Schedule (if available) -->
+            ${scheduleRows ? `
+                <div style="margin-top:12px;border-top:1px solid #f3f4f6;padding-top:8px;">
+                    <div style="font-size:0.7rem;font-weight:700;color:#6b7280;text-align:left;margin-bottom:4px;">📅 Repayment Schedule</div>
+                    <div style="overflow-x:auto;max-height:200px;overflow-y:auto;border:1px solid #f3f4f6;border-radius:8px;padding:4px;">
+                        <table style="width:100%;font-size:0.65rem;border-collapse:collapse;">
+                            <thead style="background:#f7fafc;">
+                                <tr>
+                                    <th style="padding:4px;text-align:center;">Week</th>
+                                    <th style="padding:4px;text-align:center;">Due Date</th>
+                                    <th style="padding:4px;text-align:right;">Principal</th>
+                                    <th style="padding:4px;text-align:right;">Interest</th>
+                                    <th style="padding:4px;text-align:right;font-weight:700;">Payment</th>
+                                    <th style="padding:4px;text-align:right;">Balance</th>
+                                </tr>
+                            </thead>
+                            <tbody>${scheduleRows}</tbody>
+                        </table>
+                    </div>
+                </div>
+            ` : ''}
+
+            <!-- Quote -->
+            <div style="margin-top:12px;padding:8px 12px;background:#f7fafc;border-radius:8px;font-size:0.7rem;color:#4a5568;font-style:italic;border-left:3px solid #f59e0b;text-align:left;">
+                ${escapeHtml(quote)}
+            </div>
+
+            <!-- Footer -->
+            <div style="margin-top:12px;padding-top:10px;border-top:1px solid #f3f4f6;">
+                <div style="font-size:0.85rem;font-weight:700;color:#1a202c;letter-spacing:0.5px;font-family:monospace;">
+                    Receipt #: ${receiptNumber}
+                </div>
+                <div style="font-size:0.5rem;color:#9ca3af;margin-top:2px;">${dateLabel}, ${timeLabel}</div>
+            </div>
+        </div>
+        `;
+    }
+
+    // ─── Modal creation ──────────────────────────────────────
+    const receiptHTML = buildReceiptHTML();
+    const modal = document.createElement('div');
+    modal.className = 'ov on receipt-modal-active';
+    modal.style.zIndex = '20020';
+    modal.innerHTML = `
+        <div class="bs" style="max-width:480px;padding:0;overflow:hidden;border-radius:24px 24px 0 0;display:flex;flex-direction:column;max-height:90vh;">
+            <div style="background:#fff;padding:20px 24px 12px;overflow-y:auto;flex:1;min-height:0;">${receiptHTML}</div>
+            <div style="background:#fff;padding:12px 20px 20px;display:flex;flex-direction:column;gap:8px;flex-shrink:0;border-top:1px solid #f3f4f6;">
+                <button id="loan-whatsapp" class="receipt-btn" style="width:100%;padding:11px;border:none;border-radius:10px;background:#25D366;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">💬 Send on WhatsApp</button>
+                <button id="loan-copy-pc" class="receipt-btn" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">📋 Copy Image (PC)</button>
+                <button id="loan-save-only" class="receipt-btn" style="width:100%;padding:11px;border:none;border-radius:10px;background:#6d28d9;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">💾 Save Without Sharing</button>
+                <button id="loan-cancel" class="receipt-btn" style="width:100%;padding:9px;border:1px solid #e5e7eb;border-radius:10px;background:transparent;color:#6b7280;font-size:0.8rem;font-weight:600;cursor:pointer;">✕ Cancel</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    const receiptElement = modal.querySelector('#receipt-content');
+
+    // ─── Helper functions ────────────────────────────────────
+    async function generateReceiptImage() {
+        const clone = receiptElement.cloneNode(true);
+        clone.style.position = 'absolute';
+        clone.style.top = '-9999px';
+        clone.style.left = '-9999px';
+        clone.style.boxShadow = 'none';
+        clone.style.transform = 'none';
+        clone.style.width = receiptElement.offsetWidth + 'px';
+        document.body.appendChild(clone);
+        await new Promise(r => setTimeout(r, 150));
+
+        try {
+            const canvas = await html2canvas(clone, {
+                scale: 2.5,
+                backgroundColor: '#ffffff',
+                logging: false,
+                useCORS: true,
+                allowTaint: true
+            });
+            document.body.removeChild(clone);
+            return canvas.toDataURL('image/png');
+        } catch (err) {
+            document.body.removeChild(clone);
+            console.error('html2canvas error:', err);
+            return null;
+        }
+    }
+
+    function closeModal(callback) {
+        modal.classList.remove('on');
+        setTimeout(() => { modal.remove(); if (callback) callback(); }, 300);
+    }
+
+    // ─── Button handlers ──────────────────────────────────────
+    document.getElementById('loan-whatsapp').addEventListener('click', async function() {
+        if (this.disabled) return;
+        this.disabled = true;
+        this.style.opacity = '0.6';
+
+        try {
+            const dataUrl = await generateReceiptImage();
+            if (!dataUrl) { toast('Failed to generate image', '#ef4444'); this.disabled = false; this.style.opacity = '1'; return; }
+
+            let phone = member.phone || '';
+            let formattedPhone = phone.replace(/\D/g, '');
+            if (formattedPhone.startsWith('0')) formattedPhone = '256' + formattedPhone.slice(1);
+            if (!formattedPhone.startsWith('256')) formattedPhone = '256' + formattedPhone;
+
+            if (navigator.share) {
+                const blob = await (await fetch(dataUrl)).blob();
+                const file = new File([blob], `loan_${receiptNumber}.png`, { type: 'image/png' });
+                await navigator.share({
+                    title: 'Loan Approval Receipt',
+                    text: `Loan approved for ${member.name}`,
+                    files: [file]
+                });
+                toast('✅ Shared!', '#10b981');
+                closeModal(() => { if (onSend) onSend(); });
+                return;
+            }
+
+            const message = `🌾 *Harvest Trust Finance* 🌾\n\n📄 *Loan Approval Receipt*\nMember: ${member.name}\nAmount: UGX ${safeAmount.toLocaleString()}\nTotal Repay: UGX ${safeTotal.toLocaleString()}\nDue: ${dueDateLabel}\nReceipt #: ${receiptNumber}`;
+            window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
+            const a = document.createElement('a');
+            a.href = dataUrl;
+            a.download = `loan_${receiptNumber}.png`;
+            a.click();
+            toast('💬 WhatsApp opened. Image downloaded – attach manually.', '#25D366');
+            closeModal(() => { if (onSend) onSend(); });
+        } catch (err) {
+            console.error(err);
+            toast('❌ Failed to share', '#ef4444');
+        } finally {
+            this.disabled = false;
+            this.style.opacity = '1';
+        }
+    });
+
+    document.getElementById('loan-copy-pc').addEventListener('click', async function() {
+        if (this.disabled) return;
+        this.disabled = true;
+        this.style.opacity = '0.6';
+
+        try {
+            const dataUrl = await generateReceiptImage();
+            if (!dataUrl) { toast('Failed to generate image', '#ef4444'); this.disabled = false; this.style.opacity = '1'; return; }
+
+            const blob = await (await fetch(dataUrl)).blob();
+            try {
+                await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+                toast('📋 Image copied to clipboard!', '#06b6d4');
+                closeModal(() => { if (onCopy) onCopy(); });
+            } catch (clipErr) {
+                console.warn('Clipboard API failed:', clipErr);
+                toast('❌ Copy failed. Please use the "Save" button to download.', '#ef4444');
+                this.disabled = false;
+                this.style.opacity = '1';
+            }
+        } catch (err) {
+            console.error('Copy error:', err);
+            toast('❌ Copy failed. Please use the "Save" button.', '#ef4444');
+        } finally {
+            if (modal.parentNode) {
+                this.disabled = false;
+                this.style.opacity = '1';
+            }
+        }
+    });
+
+    document.getElementById('loan-save-only').addEventListener('click', async function() {
+        if (this.disabled) return;
+        this.disabled = true;
+        this.style.opacity = '0.6';
+
+        try {
+            const dataUrl = await generateReceiptImage();
+            if (dataUrl) {
+                const a = document.createElement('a');
+                a.href = dataUrl;
+                a.download = `loan_${receiptNumber}.png`;
+                a.click();
+                toast('💾 Saved', '#10b981');
+            } else {
+                toast('Failed to generate image', '#ef4444');
+            }
+            closeModal(() => { if (onSave) onSave(); });
+        } catch (err) {
+            console.error(err);
+            toast('❌ Error saving', '#ef4444');
+        } finally {
+            this.disabled = false;
+            this.style.opacity = '1';
+        }
+    });
+
+    document.getElementById('loan-cancel').addEventListener('click', function() {
+        if (this.disabled) return;
+        closeModal(() => {
+            if (onCancel) onCancel();
+            toast('Cancelled', '#ff0000');
+        });
+    });
+
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+            closeModal(() => {
+                if (onCancel) onCancel();
+                toast('Cancelled', '#ff0000');
+            });
+        }
+    });
+}
+
 // ─── Schedule payout reminders ──────────────────────────────
 function schedulePayoutReminder() {
   // Check once per day
@@ -16944,95 +17228,137 @@ async function executeWeeklyPayout(beneficiary, weeklyGross, deduction, netPayou
   toast(`Payout completed! ${deduction > 0 ? 'Deducted UGX ' + deduction.toLocaleString() + ' from debt.' : ''}`, '#10b981');
 }
 window.confirmApproveLoan = async function(loanId) {
-  const loan = loans.find(l => l.id === loanId);
-  if (!loan) return;
-  
-  // Check if member already has an active loan from application
-  const existingApplicationLoan = loans.some(l => 
-    l.memberId === loan.memberId && 
-    l.status === 'approved' && 
-    !l.repaid && 
-    l.loanQuestions && 
-    l.loanQuestions.length > 0
-  );
-  
-  if (existingApplicationLoan) {
-    toast('Member already has an active application loan. Please wait for it to be repaid.', '#ef4444');
-    closeOv('ov-approve-loan');
-    return;
-  }
-  
-  const approvedAmount = parseFloat(document.getElementById('approve-amount').value);
-  const interestRate = parseFloat(document.getElementById('approve-interest').value);
-  const dueDateStr = document.getElementById('approve-due-date').value;
-  if (!approvedAmount || approvedAmount <= 0) return toast('Enter valid amount', '#ef4444');
-  if (isNaN(interestRate) || interestRate < 0) return toast('Enter valid interest rate', '#ef4444');
-  if (!dueDateStr) return toast('Select due date', '#ef4444');
-  
-  computePots();
-  if (approvedAmount > groupProfit) {
-    toast('Insufficient profit pool to disburse this loan.', '#ef4444');
-    return;
-  }
-  
-  const dueDate = new Date(dueDateStr).getTime();
-  const principal = approvedAmount;
-  const weeks = loan.weeks || 1;
-  const extraWeekly = loanSettings.extraWeeklyInterest || 2;
-  const totalRate = interestRate + (weeks - 1) * extraWeekly;
-  const interest = Math.floor(principal * totalRate / 100);
-  const totalRepay = principal + interest;
-  
-  const schedule = generateRepaymentSchedule(principal, interestRate, weeks, Date.now());
-  
-  // Update the loan with approval details
-  await db.ref('loans/' + loanId).update({
-    amount: principal,
-    interestRate: totalRate,
-    totalRepay: totalRepay,
-    status: 'approved',
-    approvedAt: Date.now(),
-    dueDate: dueDate,
-    repaymentSchedule: schedule,
-    weeks: weeks,
-    repaid: false,
-    repaidAmount: 0
-  });
-  
-  // Create loan disbursement transaction with loanId reference
-  await db.ref('transactions').push({
-    memberPhone: loan.memberPhone,
-    memberName: loan.memberName,
-    type: 'loan_disbursement',
-    amount: principal,
-    receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
-    description: `Loan principal: UGX ${principal.toLocaleString()} (${totalRate}%)`,
-    date: Date.now(),
-    loanId: loanId // Link to specific loan
-  });
-  
-  // Create interest transaction
-  if (interest > 0) {
-    await db.ref('transactions').push({
-      memberPhone: loan.memberPhone,
-      memberName: loan.memberName,
-      type: 'loan_interest',
-      amount: interest,
-      receiptNumber: generateReceiptNumber(),   // <-- ADD THIS
-      description: `Interest on loan (${totalRate}%) - Loan ID: ${loanId}`,
-      date: Date.now() + 1,
-      loanId: loanId
+    const loan = loans.find(l => l.id === loanId);
+    if (!loan) return;
+
+    // Check for existing application loan
+    const existingApplicationLoan = loans.some(l =>
+        l.memberId === loan.memberId &&
+        l.status === 'approved' &&
+        !l.repaid &&
+        l.loanQuestions &&
+        l.loanQuestions.length > 0
+    );
+
+    if (existingApplicationLoan) {
+        toast('Member already has an active application loan. Please wait for it to be repaid.', '#ef4444');
+        closeOv('ov-approve-loan');
+        return;
+    }
+
+    const approvedAmount = parseFloat(document.getElementById('approve-amount').value);
+    const interestRate = parseFloat(document.getElementById('approve-interest').value);
+    const dueDateStr = document.getElementById('approve-due-date').value;
+    if (!approvedAmount || approvedAmount <= 0) return toast('Enter valid amount', '#ef4444');
+    if (isNaN(interestRate) || interestRate < 0) return toast('Enter valid interest rate', '#ef4444');
+    if (!dueDateStr) return toast('Select due date', '#ef4444');
+
+    computePots();
+    if (approvedAmount > groupProfit) {
+        toast('Insufficient profit pool to disburse this loan.', '#ef4444');
+        return;
+    }
+
+    const dueDate = new Date(dueDateStr).getTime();
+    const principal = approvedAmount;
+    const weeks = loan.weeks || 1;
+    const extraWeekly = loanSettings.extraWeeklyInterest || 2;
+    const totalRate = interestRate + (weeks - 1) * extraWeekly;
+    const interest = Math.floor(principal * totalRate / 100);
+    const totalRepay = principal + interest;
+
+    const schedule = generateRepaymentSchedule(principal, interestRate, weeks, Date.now());
+
+    // Update loan record
+    await db.ref('loans/' + loanId).update({
+        amount: principal,
+        interestRate: totalRate,
+        totalRepay: totalRepay,
+        status: 'approved',
+        approvedAt: Date.now(),
+        dueDate: dueDate,
+        repaymentSchedule: schedule,
+        weeks: weeks,
+        repaid: false,
+        repaidAmount: 0
     });
-  }
-  
-  toast(`Loan approved for ${loan.memberName}!`, '#10b981');
-  closeOv('ov-approve-loan');
-  computePots();
-  updateHomeUI();
-  if (currentScreen === 'admin' && adminUnlocked) renderAdminTab();
-  if (currentScreen === 'statistics') renderStatistics();
-  loadApplications();
+
+    // Create disbursement transaction
+    await db.ref('transactions').push({
+        memberPhone: loan.memberPhone,
+        memberName: loan.memberName,
+        type: 'loan_disbursement',
+        amount: principal,
+        receiptNumber: generateReceiptNumber(),
+        description: `Loan principal: UGX ${principal.toLocaleString()} (${totalRate}%)`,
+        date: Date.now(),
+        loanId: loanId
+    });
+
+    // Create interest transaction
+    if (interest > 0) {
+        await db.ref('transactions').push({
+            memberPhone: loan.memberPhone,
+            memberName: loan.memberName,
+            type: 'loan_interest',
+            amount: interest,
+            receiptNumber: generateReceiptNumber(),
+            description: `Interest on loan (${totalRate}%) - Loan ID: ${loanId}`,
+            date: Date.now() + 1,
+            loanId: loanId
+        });
+    }
+
+    // Get member object
+    const member = members.find(m => m.id === loan.memberId);
+    if (!member) {
+        toast('Member not found', '#ef4444');
+        closeOv('ov-approve-loan');
+        return;
+    }
+
+    // ─── Show receipt ────────────────────────────────────────
+    const loanData = {
+        amount: principal,
+        interestRate: totalRate,
+        totalRepay: totalRepay,
+        dueDate: dueDate,
+        reason: loan.reason || 'N/A'
+    };
+
+    showLoanApprovalReceipt(
+        member,
+        loanData,
+        schedule,
+        // onSend – after sending
+        () => {
+            // Optional: any post-send actions
+        },
+        // onCopy – after copying
+        () => {
+            // Optional: any post-copy actions
+        },
+        // onSave – after saving
+        () => {
+            // Optional: any post-save actions
+        },
+        // onCancel – cancelled
+        () => {
+            // Optional: after cancel
+        }
+    );
+
+    // Close the approval modal
+    closeOv('ov-approve-loan');
+
+    // Refresh data
+    computePots();
+    updateHomeUI();
+    if (currentScreen === 'admin' && adminUnlocked) renderAdminTab();
+    if (currentScreen === 'statistics') renderStatistics();
+    loadApplications();
 };
+
 
 window.changeAdminPassword = function() {
   const current = document.getElementById('admin-current-pwd').value;
@@ -19851,14 +20177,15 @@ function calculateYearEndAwards(year) {
     const startDate = new Date(year, 0, 1).getTime();
     const endDate = new Date(year, 11, 31, 23, 59, 59).getTime();
 
-    // Compute metrics for each member
+    // Compute metrics for all members
     const metrics = activeMembers.map(m => {
         let totalDeposits = 0;
         let uniqueDays = new Set();
         let totalRepaid = 0;
-        let totalLoanPrincipal = 0;
         let activityCount = 0;
         let welfareContributions = 0;
+        let loansTaken = [];
+        let loanRepaymentTimes = {};
 
         transactions.forEach(tx => {
             if (tx.memberPhone === m.phone && tx.date >= startDate && tx.date <= endDate) {
@@ -19870,33 +20197,51 @@ function calculateYearEndAwards(year) {
                 if (tx.type === 'loan_repayment') {
                     totalRepaid += tx.amount;
                     activityCount++;
+                    // Record repayment time (if we have loanId)
+                    if (tx.loanId) {
+                        const loan = loans.find(l => l.id === tx.loanId);
+                        if (loan && loan.approvedAt) {
+                            const time = tx.date - loan.approvedAt;
+                            if (!loanRepaymentTimes[tx.loanId] || time < loanRepaymentTimes[tx.loanId]) {
+                                loanRepaymentTimes[tx.loanId] = time;
+                            }
+                        }
+                    }
                 }
                 if (tx.type === 'welfare') {
                     welfareContributions += tx.amount;
                     activityCount++;
                 }
                 if (tx.type === 'loan_disbursement') {
-                    totalLoanPrincipal += tx.amount;
+                    loansTaken.push(tx.loanId || tx.id);
                 }
             }
         });
 
-        // Repayment ratio (avoid division by zero)
-        const repaymentRatio = totalLoanPrincipal > 0 ? totalRepaid / totalLoanPrincipal : 0;
+        // Count loans repaid within 7 days
+        let repaidWithin7Days = 0;
+        loansTaken.forEach(loanId => {
+            if (loanRepaymentTimes[loanId] !== undefined && loanRepaymentTimes[loanId] <= 7 * 24 * 60 * 60 * 1000) {
+                repaidWithin7Days++;
+            }
+        });
+        const totalLoans = loansTaken.length;
+        const repaymentRatio = totalLoans > 0 ? repaidWithin7Days / totalLoans : 0;
 
         return {
             member: m,
             totalDeposits,
             consistency: uniqueDays.size,
             totalRepaid,
-            totalLoanPrincipal,
-            repaymentRatio,
             activityCount,
-            welfareContributions
+            welfareContributions,
+            totalLoans,
+            repaidWithin7Days,
+            repaymentRatio
         };
     });
 
-    // Normalize metrics for composite score (0 to 1)
+    // Normalize for composite score
     const maxDeposits = Math.max(...metrics.map(m => m.totalDeposits), 1);
     const maxConsistency = Math.max(...metrics.map(m => m.consistency), 1);
     const maxRepayRatio = Math.max(...metrics.map(m => m.repaymentRatio), 0.01);
@@ -19909,47 +20254,39 @@ function calculateYearEndAwards(year) {
         m.normRepayRatio = m.repaymentRatio / maxRepayRatio;
         m.normActivity = m.activityCount / maxActivity;
         m.normWelfare = m.welfareContributions / maxWelfare;
-
-        // Composite score (weights: deposits 25%, consistency 25%, repayRatio 20%, activity 20%, welfare 10%)
-        m.compositeScore = 
-            m.normDeposits * 0.25 +
+        m.compositeScore =
             m.normConsistency * 0.25 +
+            m.normDeposits * 0.25 +
             m.normRepayRatio * 0.20 +
             m.normActivity * 0.20 +
             m.normWelfare * 0.10;
     });
 
-    // Find winners
+    // 1. Pick Overall Member of the Year (highest composite score)
     const overallBest = metrics.reduce((a, b) => a.compositeScore > b.compositeScore ? a : b);
-    const mostConsistent = metrics.reduce((a, b) => a.consistency > b.consistency ? a : b);
-    const topSaver = metrics.reduce((a, b) => a.totalDeposits > b.totalDeposits ? a : b);
-    // Best loan repayer: highest repayment ratio among those with at least one loan
-    const loanRepayers = metrics.filter(m => m.totalLoanPrincipal > 0);
-    const bestRepayer = loanRepayers.length ? loanRepayers.reduce((a, b) => a.repaymentRatio > b.repaymentRatio ? a : b) : null;
-    const mostActive = metrics.reduce((a, b) => a.activityCount > b.activityCount ? a : b);
+    const usedMembers = new Set([overallBest.member.id]);
 
-    // Generate descriptions
-    function getDescription(winner, type) {
-        if (!winner) return 'No eligible member';
-        switch(type) {
-            case 'overall':
-                return `Composite score of ${winner.compositeScore.toFixed(2)} – top in deposits, consistency, and activity.`;
-            case 'consistency':
-                return `Saved on ${winner.consistency} unique days – the most in the group.`;
-            case 'saver':
-                return `Total deposits of UGX ${winner.totalDeposits.toLocaleString()} – highest saver.`;
-            case 'repayer':
-                return `Repaid ${(winner.repaymentRatio * 100).toFixed(1)}% of loans taken – responsible borrower.`;
-            case 'active':
-                return `${winner.activityCount} transactions – most engaged member.`;
-            default:
-                return '';
-        }
-    }
+    // 2. Pick Most Consistent (exclude overall winner)
+    const remainingConsistency = metrics.filter(m => !usedMembers.has(m.member.id));
+    const mostConsistent = remainingConsistency.reduce((a, b) => a.consistency > b.consistency ? a : b);
+
+    // 3. Pick Top Saver (exclude overall and consistency)
+    usedMembers.add(mostConsistent.member.id);
+    const remainingSaver = metrics.filter(m => !usedMembers.has(m.member.id));
+    const topSaver = remainingSaver.reduce((a, b) => a.totalDeposits > b.totalDeposits ? a : b);
+
+    // 4. Pick Best Loan Repayer (exclude previous winners)
+    usedMembers.add(topSaver.member.id);
+    const remainingRepayer = metrics.filter(m => !usedMembers.has(m.member.id) && m.totalLoans > 0);
+    const bestRepayer = remainingRepayer.length ? remainingRepayer.reduce((a, b) => a.repaymentRatio > b.repaymentRatio ? a : b) : null;
+
+    // 5. Pick Most Active (exclude previous winners)
+    if (bestRepayer) usedMembers.add(bestRepayer.member.id);
+    const remainingActive = metrics.filter(m => !usedMembers.has(m.member.id));
+    const mostActive = remainingActive.reduce((a, b) => a.activityCount > b.activityCount ? a : b);
 
     const rewardsPool = Math.floor(groupProfit * 0.05);
 
-    // Allocate percentages
     const amounts = {
         overall: Math.floor(rewardsPool * 0.30),
         consistency: Math.floor(rewardsPool * 0.25),
@@ -19958,40 +20295,40 @@ function calculateYearEndAwards(year) {
         active: Math.floor(rewardsPool * 0.10)
     };
 
+    // Build winners array
     const winners = [
         {
             category: '👑 Overall Member of the Year',
             member: overallBest.member,
             amount: amounts.overall,
-            metric: getDescription(overallBest, 'overall')
+            metric: `Composite score ${overallBest.compositeScore.toFixed(2)} – balanced contributor`
         },
         {
             category: '📅 Most Consistent Saver',
             member: mostConsistent.member,
             amount: amounts.consistency,
-            metric: getDescription(mostConsistent, 'consistency')
+            metric: `${mostConsistent.consistency} unique days saved`
         },
         {
             category: '🏆 Top Saver of the Year',
             member: topSaver.member,
             amount: amounts.saver,
-            metric: getDescription(topSaver, 'saver')
+            metric: `UGX ${topSaver.totalDeposits.toLocaleString()} deposited`
         },
         {
             category: '💳 Best Loan Repayer',
             member: bestRepayer ? bestRepayer.member : null,
             amount: amounts.repayer,
-            metric: bestRepayer ? getDescription(bestRepayer, 'repayer') : 'No loans taken'
+            metric: bestRepayer ? `Repaid ${bestRepayer.repaidWithin7Days}/${bestRepayer.totalLoans} loans within 7 days` : 'No loans taken'
         },
         {
             category: '⭐ Most Active Member',
             member: mostActive.member,
             amount: amounts.active,
-            metric: getDescription(mostActive, 'active')
+            metric: `${mostActive.activityCount} transactions`
         }
     ];
 
-    // Equal share (95%)
     const equalShareTotal = groupProfit - rewardsPool;
     const equalSharePerMember = activeMembers.length ? Math.floor(equalShareTotal / activeMembers.length) : 0;
 
@@ -20004,7 +20341,6 @@ function calculateYearEndAwards(year) {
         year: year
     };
 }
-
 function normalizePhone(phone) {
   if (!phone) return null;
   let cleaned = phone.replace(/\s+/g, '').replace(/[()-]/g, '');
