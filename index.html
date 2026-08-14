@@ -8085,15 +8085,15 @@ function renderRewardsContent() {
         return;
     }
 
-    let winnersHtml = '<div class="rewards-grid">';
+    let winnersHtml = '<div class="rewards-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:12px;">';
     data.winners.forEach(winner => {
-        const memberName = winner.member ? escapeHtml(winner.member.name) : '— (Admin to select)';
+        const memberName = winner.member ? escapeHtml(winner.member.name) : '—';
         winnersHtml += `
-            <div class="reward-card" style="border-left: 3px solid var(--gold);">
-                <div class="reward-category">${winner.category}</div>
-                <div class="reward-member">${memberName}</div>
-                <div class="reward-amount">${money(winner.amount)}</div>
-                <div class="micro muted">${winner.metric}</div>
+            <div class="reward-card" style="border-left: 3px solid var(--gold); background: rgba(255,255,255,0.04); padding:12px; border-radius:12px;">
+                <div class="reward-category" style="font-weight:800; color:var(--gold); font-size:0.9rem;">${winner.category}</div>
+                <div class="reward-member" style="font-size:1rem; font-weight:700; margin:4px 0;">${memberName}</div>
+                <div class="reward-amount" style="font-size:1.2rem; font-weight:900; color:var(--teal);">${money(winner.amount)}</div>
+                <div class="micro muted" style="font-size:0.7rem; margin-top:4px; color:var(--t3);">${winner.metric}</div>
             </div>
         `;
     });
@@ -8105,11 +8105,11 @@ function renderRewardsContent() {
         <div><strong>Equal Share (95%):</strong> ${money(data.equalSharePerMember)} per member</div>
         <div><strong>Rewards Pool (5%):</strong> ${money(data.rewardsPoolDisplay)} – split as:</div>
         <div style="font-size:0.75rem; color:var(--t3); margin-top:4px; display:flex; flex-wrap:wrap; gap:8px;">
-            <span>📅 Most Consistent (30%)</span>
-            <span>🏆 Top Saver (25%)</span>
-            <span>💳 Best Loan Repayer (20%)</span>
-            <span>⭐ Most Active (15%)</span>
-            <span>👑 Group Champion (10%)</span>
+            <span>👑 Overall (30%)</span>
+            <span>📅 Consistent (25%)</span>
+            <span>🏆 Top Saver (20%)</span>
+            <span>💳 Best Repayer (15%)</span>
+            <span>⭐ Most Active (10%)</span>
         </div>
     `;
 
@@ -13688,89 +13688,35 @@ function renderAdminTab() {
     return;
 }
 // ─── AWARDS TAB ─────────────────────────────────────────────
-  else if (currentAdminTab === 'awards') {
-    // ─── Render Awards Management ────────────────────────────
+ else if (currentAdminTab === 'awards') {
     const currentYear = new Date().getFullYear();
     const data = calculateYearEndAwards(currentYear);
 
-    // Build the list of members for the dropdown (exclude admin)
-    const memberOptions = members.filter(m => m.approved && !m.isAdmin).map(m =>
-      `<option value="${m.id}">${escapeHtml(m.name)}</option>`
-    ).join('');
+    c.innerHTML = `
+        ${warningsHtml}
+        <div class="sec-h" style="margin-bottom:12px;">🏆 Year-End Awards (${currentYear})</div>
 
-    // Get currently stored Group Champion (if any)
-    let championName = 'Not set';
-    let championId = null;
-    if (db) {
-      db.ref('yearEndAwards/' + currentYear + '/groupChampion').once('value', snap => {
-        championId = snap.val();
-        if (championId) {
-          const champ = members.find(m => m.id === championId);
-          championName = champ ? champ.name : 'Unknown';
-        }
-        // We'll update the UI inside the callback.
-        // For simplicity, we'll render and then update via a separate function.
-      });
-    }
-
-    // Inside the awards case:
-c.innerHTML = `
-  ${warningsHtml}
-  <div class="sec-h" style="margin-bottom:12px;">🏆 Year-End Awards (${currentYear})</div>
-
-  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-    <!-- Left: Winners List -->
-    <div class="card">
-      <div class="sec-h" style="font-size:0.8rem;">🏅 Winners</div>
-      <div id="awards-winners-list" style="max-height:400px; overflow-y:auto;">
-        ${data ? data.winners.map(w => `
-          <div style="display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.05);">
-            <span style="font-weight:600;">${w.category}</span>
-            <span style="color:var(--gold);">${w.member ? escapeHtml(w.member.name) : '— (Admin to select)'}</span>
-            <span style="font-weight:700; color:var(--teal);">${money(w.amount)}</span>
-          </div>
-        `).join('') : '<div class="muted">No data yet</div>'}
-      </div>
-      <div style="margin-top:8px; font-size:0.65rem; color:var(--t3);">
-        Equal Share (95%): ${data ? money(data.equalSharePerMember) : 'N/A'} per member
-      </div>
-    </div>
-
-    <!-- Right: Group Champion Selector -->
-    <div class="card">
-      <div class="sec-h" style="font-size:0.8rem;">👑 Group Champion (Admin's Choice)</div>
-      <div style="margin-bottom:8px; padding:8px; background:rgba(245,158,11,0.08); border-radius:8px; border:1px solid rgba(245,158,11,0.15);">
-        <span style="font-weight:600;">Current Champion:</span>
-        <span id="current-champion-name" style="color:var(--gold); font-weight:700;">${championName}</span>
-      </div>
-      <div class="fgrp">
-        <label class="flbl">Select Member</label>
-        <select id="champion-select" class="inp">
-          <option value="">-- Select --</option>
-          ${memberOptions}
-        </select>
-      </div>
-      <button class="btn btn-gold btn-full" onclick="setGroupChampion()">👑 Set Group Champion</button>
-      <div class="micro muted" style="margin-top:6px;">The champion receives 10% of the rewards pool.</div>
-    </div>
-  </div>
-`;
-
-    // After rendering, update the champion name from Firebase if not already set.
-    if (db) {
-      db.ref('yearEndAwards/' + currentYear + '/groupChampion').once('value', snap => {
-        const champId = snap.val();
-        const champNameEl = document.getElementById('current-champion-name');
-        if (champId && champNameEl) {
-          const champ = members.find(m => m.id === champId);
-          champNameEl.textContent = champ ? champ.name : 'Unknown';
-        }
-        // Also update the winners list to reflect the champion
-        updateAwardsWinnersList(currentYear);
-      });
-    }
+        <div class="card">
+            <div class="sec-h" style="font-size:0.8rem;">🏅 Winners</div>
+            <div id="awards-winners-list" style="max-height:500px; overflow-y:auto;">
+                ${data ? data.winners.map(w => `
+                    <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.05);">
+                        <div style="flex:1;">
+                            <span style="font-weight:600;">${w.category}</span>
+                            <div style="font-size:0.7rem; color:var(--t3);">${w.metric}</div>
+                        </div>
+                        <span style="color:var(--gold); font-weight:600;">${w.member ? escapeHtml(w.member.name) : '—'}</span>
+                        <span style="font-weight:700; color:var(--teal);">${money(w.amount)}</span>
+                    </div>
+                `).join('') : '<div class="muted">No data yet</div>'}
+            </div>
+            <div style="margin-top:8px; font-size:0.65rem; color:var(--t3);">
+                Equal Share (95%): ${data ? money(data.equalSharePerMember) : 'N/A'} per member
+            </div>
+        </div>
+    `;
     return;
-  }
+}
 
   // ─── FALLBACK ──────────────────────────────────────────────
   c.innerHTML = '<div class="empty-state">Select a tab above</div>';
@@ -19905,11 +19851,14 @@ function calculateYearEndAwards(year) {
     const startDate = new Date(year, 0, 1).getTime();
     const endDate = new Date(year, 11, 31, 23, 59, 59).getTime();
 
+    // Compute metrics for each member
     const metrics = activeMembers.map(m => {
         let totalDeposits = 0;
         let uniqueDays = new Set();
         let totalRepaid = 0;
-        let activityCount = 0; // deposits + loan_repayments + welfare
+        let totalLoanPrincipal = 0;
+        let activityCount = 0;
+        let welfareContributions = 0;
 
         transactions.forEach(tx => {
             if (tx.memberPhone === m.phone && tx.date >= startDate && tx.date <= endDate) {
@@ -19923,69 +19872,126 @@ function calculateYearEndAwards(year) {
                     activityCount++;
                 }
                 if (tx.type === 'welfare') {
+                    welfareContributions += tx.amount;
                     activityCount++;
+                }
+                if (tx.type === 'loan_disbursement') {
+                    totalLoanPrincipal += tx.amount;
                 }
             }
         });
+
+        // Repayment ratio (avoid division by zero)
+        const repaymentRatio = totalLoanPrincipal > 0 ? totalRepaid / totalLoanPrincipal : 0;
 
         return {
             member: m,
             totalDeposits,
             consistency: uniqueDays.size,
             totalRepaid,
-            activityCount
+            totalLoanPrincipal,
+            repaymentRatio,
+            activityCount,
+            welfareContributions
         };
     });
 
+    // Normalize metrics for composite score (0 to 1)
+    const maxDeposits = Math.max(...metrics.map(m => m.totalDeposits), 1);
+    const maxConsistency = Math.max(...metrics.map(m => m.consistency), 1);
+    const maxRepayRatio = Math.max(...metrics.map(m => m.repaymentRatio), 0.01);
+    const maxActivity = Math.max(...metrics.map(m => m.activityCount), 1);
+    const maxWelfare = Math.max(...metrics.map(m => m.welfareContributions), 1);
+
+    metrics.forEach(m => {
+        m.normDeposits = m.totalDeposits / maxDeposits;
+        m.normConsistency = m.consistency / maxConsistency;
+        m.normRepayRatio = m.repaymentRatio / maxRepayRatio;
+        m.normActivity = m.activityCount / maxActivity;
+        m.normWelfare = m.welfareContributions / maxWelfare;
+
+        // Composite score (weights: deposits 25%, consistency 25%, repayRatio 20%, activity 20%, welfare 10%)
+        m.compositeScore = 
+            m.normDeposits * 0.25 +
+            m.normConsistency * 0.25 +
+            m.normRepayRatio * 0.20 +
+            m.normActivity * 0.20 +
+            m.normWelfare * 0.10;
+    });
+
+    // Find winners
+    const overallBest = metrics.reduce((a, b) => a.compositeScore > b.compositeScore ? a : b);
     const mostConsistent = metrics.reduce((a, b) => a.consistency > b.consistency ? a : b);
     const topSaver = metrics.reduce((a, b) => a.totalDeposits > b.totalDeposits ? a : b);
-    const bestRepayer = metrics.reduce((a, b) => a.totalRepaid > b.totalRepaid ? a : b);
+    // Best loan repayer: highest repayment ratio among those with at least one loan
+    const loanRepayers = metrics.filter(m => m.totalLoanPrincipal > 0);
+    const bestRepayer = loanRepayers.length ? loanRepayers.reduce((a, b) => a.repaymentRatio > b.repaymentRatio ? a : b) : null;
     const mostActive = metrics.reduce((a, b) => a.activityCount > b.activityCount ? a : b);
 
-    const rewardsPercent = 5;
-    const rewardsPool = Math.floor(groupProfit * rewardsPercent / 100);
+    // Generate descriptions
+    function getDescription(winner, type) {
+        if (!winner) return 'No eligible member';
+        switch(type) {
+            case 'overall':
+                return `Composite score of ${winner.compositeScore.toFixed(2)} – top in deposits, consistency, and activity.`;
+            case 'consistency':
+                return `Saved on ${winner.consistency} unique days – the most in the group.`;
+            case 'saver':
+                return `Total deposits of UGX ${winner.totalDeposits.toLocaleString()} – highest saver.`;
+            case 'repayer':
+                return `Repaid ${(winner.repaymentRatio * 100).toFixed(1)}% of loans taken – responsible borrower.`;
+            case 'active':
+                return `${winner.activityCount} transactions – most engaged member.`;
+            default:
+                return '';
+        }
+    }
 
+    const rewardsPool = Math.floor(groupProfit * 0.05);
+
+    // Allocate percentages
     const amounts = {
-        mostConsistent: Math.floor(rewardsPool * 0.30),
-        topSaver: Math.floor(rewardsPool * 0.25),
-        bestRepayer: Math.floor(rewardsPool * 0.20),
-        mostActive: Math.floor(rewardsPool * 0.15),
-        groupChampion: Math.floor(rewardsPool * 0.10)
+        overall: Math.floor(rewardsPool * 0.30),
+        consistency: Math.floor(rewardsPool * 0.25),
+        saver: Math.floor(rewardsPool * 0.20),
+        repayer: Math.floor(rewardsPool * 0.15),
+        active: Math.floor(rewardsPool * 0.10)
     };
 
     const winners = [
         {
+            category: '👑 Overall Member of the Year',
+            member: overallBest.member,
+            amount: amounts.overall,
+            metric: getDescription(overallBest, 'overall')
+        },
+        {
             category: '📅 Most Consistent Saver',
             member: mostConsistent.member,
-            amount: amounts.mostConsistent,
-            metric: `${mostConsistent.consistency} days saved`
+            amount: amounts.consistency,
+            metric: getDescription(mostConsistent, 'consistency')
         },
         {
             category: '🏆 Top Saver of the Year',
             member: topSaver.member,
-            amount: amounts.topSaver,
-            metric: `UGX ${topSaver.totalDeposits.toLocaleString()} deposited`
+            amount: amounts.saver,
+            metric: getDescription(topSaver, 'saver')
         },
         {
             category: '💳 Best Loan Repayer',
-            member: bestRepayer.member,
-            amount: amounts.bestRepayer,
-            metric: `UGX ${bestRepayer.totalRepaid.toLocaleString()} repaid`
+            member: bestRepayer ? bestRepayer.member : null,
+            amount: amounts.repayer,
+            metric: bestRepayer ? getDescription(bestRepayer, 'repayer') : 'No loans taken'
         },
         {
             category: '⭐ Most Active Member',
             member: mostActive.member,
-            amount: amounts.mostActive,
-            metric: `${mostActive.activityCount} transactions`
-        },
-        {
-            category: '👑 Group Champion',
-            member: null,
-            amount: amounts.groupChampion,
-            metric: 'Admin nomination'
+            amount: amounts.active,
+            metric: getDescription(mostActive, 'active')
         }
     ];
 
+    // Equal share (95%)
     const equalShareTotal = groupProfit - rewardsPool;
     const equalSharePerMember = activeMembers.length ? Math.floor(equalShareTotal / activeMembers.length) : 0;
 
