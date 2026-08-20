@@ -8153,145 +8153,188 @@ let topSaversBarChart = null;
 let insetPieChart = null;
 
 function renderStatistics() {
-  if (!members.length) return;
+    if (!members.length) return;
 
-  const activeMembers = members.filter(m => m.approved);
+    const activeMembers = members.filter(m => m.approved);
 
-  // ---- Leaderboard (unchanged, full names) ----
-  const allStats = activeMembers.map(m => {
-    let dep = 0;
-    transactions.forEach(tx => { if (tx.memberPhone === m.phone && tx.type === 'deposit') dep += tx.amount; });
-    return { ...m, totalDeposits: dep };
-  });
-  allStats.sort((a, b) => b.totalDeposits - a.totalDeposits);
-  const maxDeposit = allStats[0]?.totalDeposits || 1;
-
-  let leaderHtml = '';
-allStats.forEach((m, idx) => {
-  const percent = (m.totalDeposits / maxDeposit) * 100;
-  const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx+1}`;
-  leaderHtml += `
-    <div class="ranking-row" style="padding: 10px 12px;">
-      <div class="ranking-rank" style="min-width: 38px; font-size: 1.3rem;">${medal}</div>
-      <div class="ranking-avatar" style="width: 36px; height: 36px; font-size: 1rem; background: linear-gradient(135deg, ${getAvatarColor(m.name)}, #8b5cf6);">${m.name.charAt(0)}</div>
-      <div class="ranking-info" style="flex: 1;">
-        <div class="ranking-name" style="font-size: 0.85rem;">${escapeHtml(m.name)}</div>
-        <div class="ranking-progress-bar" style="margin: 4px 0;">
-          <div class="ranking-progress-fill" style="width: ${percent}%; background: linear-gradient(90deg, var(--gold), var(--teal));"></div>
-        </div>
-        <div class="ranking-deposit" style="font-size: 0.7rem;">
-          ${money(m.totalDeposits)} &nbsp; <span style="color: var(--teal); font-weight: 600;">(${percent.toFixed(1)}%)</span>
-        </div>
-      </div>
-      <div class="ranking-actions">
-        <a href="tel:${m.phone}" class="btn btn-sm btn-teal" style="padding: 4px 8px;">📞</a>
-      </div>
-    </div>
-  `;
-});
-  document.getElementById('compact-leaderboard').innerHTML = leaderHtml || '<div class="muted">No deposits yet</div>';
-  let totalDeposits = 0, totalOther = 0;
-  transactions.forEach(tx => {
-    if (tx.type === 'deposit') totalDeposits += tx.amount;
-    else if (['fine', 'welfare', 'expense', 'payout', 'loan_disbursement'].includes(tx.type)) {
-      if (tx.type === 'expense') totalOther += Math.abs(tx.amount);
-      else totalOther += tx.amount;
-    }
-  });
-  if (depositPieChart) depositPieChart.destroy();
-  const pieCtx = document.getElementById('depositPieChart').getContext('2d');
-  depositPieChart = new Chart(pieCtx, {
-    type: 'pie',
-    data: { labels: ['Deposits', 'Others (fines, expenses, payouts)'], datasets: [{ data: [totalDeposits, totalOther], backgroundColor: ['#10b981', '#f59e0b'] }] },
-    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } } } }
-  });
-
-  // Inset pie chart (small, same data)
-  if (insetPieChart) insetPieChart.destroy();
-  const insetCtx = document.getElementById('insetPieChart').getContext('2d');
-  insetPieChart = new Chart(insetCtx, {
-    type: 'pie',
-    data: { labels: ['Dep', 'Other'], datasets: [{ data: [totalDeposits, totalOther], backgroundColor: ['#10b981', '#f59e0b'] }] },
-    options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false } } }});
-  const memberTotals = activeMembers.map(m => {
-    let dep = 0;
-    transactions.forEach(tx => { if (tx.memberPhone === m.phone && tx.type === 'deposit') dep += tx.amount; });
-    return { name: m.name, amount: dep };
-  });
-  memberTotals.sort((a, b) => b.amount - a.amount);
-  const topSavers = memberTotals.slice(0, 8);  
-  if (topSaversBarChart) topSaversBarChart.destroy();
-  const barCtx = document.getElementById('topSaversBarChart').getContext('2d');
-  topSaversBarChart = new Chart(barCtx, {
-    type: 'bar',
-    data: {
-      labels: topSavers.map(m => m.name),
-      datasets: [{ label: 'Total Deposits (UGX)', data: topSavers.map(m => m.amount), backgroundColor: '#f59e0b', borderRadius: 6 }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      plugins: {
-        legend: { position: 'top' },
-        tooltip: { callbacks: { label: (ctx) => `UGX ${ctx.raw.toLocaleString()}` } }
-      },
-      scales: {
-        x: {
-          ticks: {
-            autoSkip: true,
-            maxRotation: 45,
-            minRotation: 45,
-            font: { size: 10 }
-          }
-        },
-        y: {
-          beginAtZero: true,
-          ticks: { callback: v => 'UGX ' + v.toLocaleString() }}}}});
-
-  // ---- Loan stats (unchanged) ----
-  const activeLoans = loans.filter(l => l.status === 'approved' && !l.repaid);
-  let totalPrincipal = 0, totalInterest = 0, totalRepay = 0, totalRepaid = 0;
-  activeLoans.forEach(loan => {
-    totalPrincipal += loan.amount || 0;
-    totalInterest += (loan.totalRepay - loan.amount) || 0;
-    totalRepay += loan.totalRepay || 0;
-    const repaidAmount = (loan.amount + (loan.totalRepay - loan.amount)) - (memberLoans[loan.memberPhone] || 0);
-    totalRepaid += Math.max(0, repaidAmount);
-  });
-  document.getElementById('stat-active-loans').innerText = activeLoans.length;
-  document.getElementById('stat-loan-principal').innerHTML = money(totalPrincipal);
-  document.getElementById('stat-loan-interest').innerHTML = money(totalInterest);
-  document.getElementById('stat-loan-total').innerHTML = money(totalRepay);
-  document.getElementById('stat-loan-repaid').innerHTML = money(totalRepaid);
-
-  // ---- Consistency leaders (unchanged) ----
-  const consistencyScores = activeMembers.map(m => {
-    const days = new Set();
-    transactions.forEach(tx => {
-      if (tx.memberPhone === m.phone && tx.type === 'deposit') {
-        days.add(new Date(tx.date).toISOString().slice(0,10));
-      }
+    // ─── 1. Leaderboard (member ranking by deposits) ──────────
+    const allStats = activeMembers.map(m => {
+        let dep = 0;
+        transactions.forEach(tx => { if (tx.memberPhone === m.phone && tx.type === 'deposit') dep += tx.amount; });
+        return { ...m, totalDeposits: dep };
     });
-    return { member: m, daysCount: days.size };
-  });
-  consistencyScores.sort((a, b) => b.daysCount - a.daysCount);
-  const topConsistency = consistencyScores.slice(0, 5);
-  let consHtml = `<div class="ranking-leaderboard" style="gap: 8px;">`;
-  topConsistency.forEach((item, i) => {
-    consHtml += `
-      <div class="ranking-row" style="padding: 8px 12px;">
-        <div class="ranking-rank" style="font-size: 1.2rem; min-width: 30px;">${i+1}</div>
-        <div class="ranking-info">
-          <div class="ranking-name">${escapeHtml(item.member.name)}</div>
-          <div class="ranking-deposit" style="font-size: 0.7rem;">${item.daysCount} day(s) with deposit</div>
-        </div>
-      </div>
-    `;
-  });
-  consHtml += `</div>`;
-  document.getElementById('consistency-list').innerHTML = consHtml || '<div class="muted">No data yet</div>';
-  renderRewardsContent(); // fills rewards data in the stats tab
+    allStats.sort((a, b) => b.totalDeposits - a.totalDeposits);
+    const maxDeposit = allStats[0]?.totalDeposits || 1;
+
+    let leaderHtml = '';
+    allStats.forEach((m, idx) => {
+        const percent = (m.totalDeposits / maxDeposit) * 100;
+        const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `${idx+1}`;
+        leaderHtml += `
+            <div class="ranking-row" data-index="${idx}" style="padding: 8px 12px; display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; margin-bottom: 0;">
+                <div class="ranking-rank" style="min-width: 32px; font-size: 1.2rem; text-align:center;">${medal}</div>
+                <div class="ranking-avatar" style="width: 32px; height: 32px; border-radius: 50%; font-size: 0.9rem; background: linear-gradient(135deg, ${getAvatarColor(m.name)}, #8b5cf6); display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; flex-shrink:0;">${m.name.charAt(0)}</div>
+                <div class="ranking-info" style="flex:1; min-width:0;">
+                    <div class="ranking-name" style="font-size: 0.8rem; font-weight:600;">${escapeHtml(m.name)}</div>
+                    <div class="ranking-progress-bar" style="margin: 2px 0; background: rgba(255,255,255,0.08); border-radius: 10px; height: 4px;">
+                        <div class="ranking-progress-fill" style="width: ${percent}%; height: 100%; background: linear-gradient(90deg, var(--gold), var(--teal)); border-radius: 10px;"></div>
+                    </div>
+                    <div class="ranking-deposit" style="font-size: 0.65rem; color: var(--t2);">${money(m.totalDeposits)} <span style="color: var(--teal); font-weight:600;">(${percent.toFixed(1)}%)</span></div>
+                </div>
+                <div class="ranking-actions">
+                    <a href="tel:${m.phone}" class="btn btn-sm btn-teal" style="padding: 2px 6px; font-size: 0.6rem;">📞</a>
+                </div>
+            </div>
+        `;
+    });
+
+    const leaderContainer = document.getElementById('compact-leaderboard');
+    if (leaderContainer) {
+        leaderContainer.innerHTML = leaderHtml || '<div class="muted">No deposits yet</div>';
+        if (typeof setupLeaderboardStack === 'function') {
+            setupLeaderboardStack(leaderContainer);
+        }
+    }
+
+    // ─── 2. Pie charts ──────────────────────────────────────────
+    let totalDeposits = 0, totalOther = 0;
+    transactions.forEach(tx => {
+        if (tx.type === 'deposit') totalDeposits += tx.amount;
+        else if (['fine', 'welfare', 'expense', 'payout', 'loan_disbursement'].includes(tx.type)) {
+            if (tx.type === 'expense') totalOther += Math.abs(tx.amount);
+            else totalOther += tx.amount;
+        }
+    });
+
+    // Main pie chart
+    if (depositPieChart) depositPieChart.destroy();
+    const pieCtx = document.getElementById('depositPieChart').getContext('2d');
+    depositPieChart = new Chart(pieCtx, {
+        type: 'pie',
+        data: {
+            labels: ['Deposits', 'Others (fines, expenses, payouts)'],
+            datasets: [{ data: [totalDeposits, totalOther], backgroundColor: ['#10b981', '#f59e0b'] }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { position: 'bottom', labels: { font: { size: 10 } } }
+            }
+        }
+    });
+
+    // Inset pie chart
+    if (insetPieChart) insetPieChart.destroy();
+    const insetCtx = document.getElementById('insetPieChart').getContext('2d');
+    insetPieChart = new Chart(insetCtx, {
+        type: 'pie',
+        data: {
+            labels: ['Dep', 'Other'],
+            datasets: [{ data: [totalDeposits, totalOther], backgroundColor: ['#10b981', '#f59e0b'] }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: { legend: { display: false } }
+        }
+    });
+
+    // ─── 3. Bar chart: Top 8 savers ─────────────────────────────
+    const memberTotals = activeMembers.map(m => {
+        let dep = 0;
+        transactions.forEach(tx => { if (tx.memberPhone === m.phone && tx.type === 'deposit') dep += tx.amount; });
+        return { name: m.name, amount: dep };
+    });
+    memberTotals.sort((a, b) => b.amount - a.amount);
+    const topSavers = memberTotals.slice(0, 8);
+
+    if (topSaversBarChart) topSaversBarChart.destroy();
+    const barCtx = document.getElementById('topSaversBarChart').getContext('2d');
+    topSaversBarChart = new Chart(barCtx, {
+        type: 'bar',
+        data: {
+            labels: topSavers.map(m => m.name),
+            datasets: [{
+                label: 'Total Deposits (UGX)',
+                data: topSavers.map(m => m.amount),
+                backgroundColor: '#f59e0b',
+                borderRadius: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { position: 'top' },
+                tooltip: { callbacks: { label: (ctx) => `UGX ${ctx.raw.toLocaleString()}` } }
+            },
+            scales: {
+                x: {
+                    ticks: {
+                        autoSkip: true,
+                        maxRotation: 45,
+                        minRotation: 45,
+                        font: { size: 10 }
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: { callback: v => 'UGX ' + v.toLocaleString() }
+                }
+            }
+        }
+    });
+
+    // ─── 4. Loan stats ──────────────────────────────────────────
+    const activeLoans = loans.filter(l => l.status === 'approved' && !l.repaid);
+    let totalPrincipal = 0, totalInterest = 0, totalRepay = 0, totalRepaid = 0;
+    activeLoans.forEach(loan => {
+        totalPrincipal += loan.amount || 0;
+        totalInterest += (loan.totalRepay - loan.amount) || 0;
+        totalRepay += loan.totalRepay || 0;
+        const repaidAmount = (loan.amount + (loan.totalRepay - loan.amount)) - (memberLoans[loan.memberPhone] || 0);
+        totalRepaid += Math.max(0, repaidAmount);
+    });
+    document.getElementById('stat-active-loans').innerText = activeLoans.length;
+    document.getElementById('stat-loan-principal').innerHTML = money(totalPrincipal);
+    document.getElementById('stat-loan-interest').innerHTML = money(totalInterest);
+    document.getElementById('stat-loan-total').innerHTML = money(totalRepay);
+    document.getElementById('stat-loan-repaid').innerHTML = money(totalRepaid);
+
+    // ─── 5. Consistency leaders ─────────────────────────────────
+    const consistencyScores = activeMembers.map(m => {
+        const days = new Set();
+        transactions.forEach(tx => {
+            if (tx.memberPhone === m.phone && tx.type === 'deposit') {
+                days.add(new Date(tx.date).toISOString().slice(0,10));
+            }
+        });
+        return { member: m, daysCount: days.size };
+    });
+    consistencyScores.sort((a, b) => b.daysCount - a.daysCount);
+    const topConsistency = consistencyScores.slice(0, 5);
+    let consHtml = `<div class="ranking-leaderboard" style="gap: 8px;">`;
+    topConsistency.forEach((item, i) => {
+        consHtml += `
+            <div class="ranking-row" style="padding: 8px 12px;">
+                <div class="ranking-rank" style="font-size: 1.2rem; min-width: 30px;">${i+1}</div>
+                <div class="ranking-info">
+                    <div class="ranking-name">${escapeHtml(item.member.name)}</div>
+                    <div class="ranking-deposit" style="font-size: 0.7rem;">${item.daysCount} day(s) with deposit</div>
+                </div>
+            </div>
+        `;
+    });
+    consHtml += `</div>`;
+    document.getElementById('consistency-list').innerHTML = consHtml || '<div class="muted">No data yet</div>';
+
+    // ─── 6. Year‑end rewards ────────────────────────────────────
+    if (typeof renderRewardsContent === 'function') {
+        renderRewardsContent();
+    }
 }
+
 function renderRewardsContent() {
     const summaryDiv = document.getElementById('rewards-summary');
     const listDiv = document.getElementById('rewards-list');
@@ -8611,148 +8654,226 @@ function cleanRotationOrder() {
 // ─── Ad System ──────────────────────────────────────────────
 let noticeAdTimer = null;
 let noticeAdQueue = [];
-let noticeAdCurrentIndex = 0;
-let noticeAdVisible = false;
+let noticeAdCycleActive = false;
 
-// ─── Start the ad system ──────────────────────────────────────
 function startNoticeAdSystem() {
-    if (noticeAdTimer) {
-        clearTimeout(noticeAdTimer);
-        noticeAdTimer = null;
-    }
-    loadActiveNoticesForAds();
+    if (!currentUser) return;
+    // Load active notices and start first cycle after a short delay
+    loadActiveNoticesForAds().then(() => {
+        // After loading, start the first cycle after 5 seconds (to let app load)
+        setTimeout(() => {
+            if (!noticeAdCycleActive) {
+                showNextNoticeAdPair();
+            }
+        }, 5000);
+    });
+    // Start the interval timer for subsequent cycles
+    const intervalMinutes = settings.noticeInterval || 10;
+    const intervalMs = intervalMinutes * 60 * 1000;
+    if (noticeAdTimer) clearInterval(noticeAdTimer);
+    noticeAdTimer = setInterval(() => {
+        // Only start a new cycle if no cycle is currently active
+        if (!noticeAdCycleActive) {
+            showNextNoticeAdPair();
+        }
+    }, intervalMs);
+    console.log(`📢 Notice ad system started. Interval: ${intervalMinutes} minutes.`);
 }
 
-// ─── Load active notices and begin the cycle ──────────────────
+function restartNoticeAdSystem() {
+    if (noticeAdTimer) {
+        clearInterval(noticeAdTimer);
+        noticeAdTimer = null;
+    }
+    if (noticeAdCycleActive) {
+        // If a cycle is active, we can't just stop it; we'll let it finish and then reset.
+        // But we can close any open overlays.
+        const overlay = document.getElementById('notice-ad-overlay');
+        if (overlay) closeAdOverlay(overlay);
+        const countdownOverlay = document.getElementById('ad-countdown-overlay');
+        if (countdownOverlay) countdownOverlay.remove();
+        noticeAdCycleActive = false;
+    }
+    noticeAdQueue = [];
+    startNoticeAdSystem();
+}
+
 function loadActiveNoticesForAds() {
-    db.ref('notices').orderByChild('active').equalTo(true).once('value', snap => {
-        const notices = snap.val() ? Object.values(snap.val()) : [];
-        if (!notices.length) {
-            noticeAdQueue = [];
-            return;
-        }
-        // Shuffle and reset index
-        noticeAdQueue = shuffleArray(notices);
-        noticeAdCurrentIndex = 0;
-        // Start the first notice after a short delay
-        if (!noticeAdVisible) {
-            setTimeout(showNextNoticeAd, 3000);
-        }
+    return new Promise((resolve) => {
+        db.ref('notices').orderByChild('active').equalTo(true).once('value', snap => {
+            const notices = snap.val() ? Object.values(snap.val()) : [];
+            if (!notices.length) {
+                noticeAdQueue = [];
+                resolve();
+                return;
+            }
+            // Shuffle and store all active notices in the queue
+            noticeAdQueue = shuffleArray(notices);
+            resolve();
+        });
     });
 }
 
-// ─── Show the next notice (called after interval) ────────────
-function showNextNoticeAd() {
-    if (noticeAdVisible) return;
-    if (!noticeAdQueue.length) {
-        // Reload (maybe new notices added)
-        loadActiveNoticesForAds();
-        return;
-    }
-    const ad = noticeAdQueue[noticeAdCurrentIndex];
-    showAdOverlay(ad);
-}
-
-// ─── Display the ad overlay ──────────────────────────────────
-function showAdOverlay(ad) {
-    noticeAdVisible = true;
-    const overlay = document.createElement('div');
-    overlay.id = 'notice-ad-overlay';
-    overlay.style.cssText = `
-        position: fixed;
-        inset: 0;
-        z-index: 99999;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 0;
-        margin: 0;
-        animation: fadeIn 0.4s ease;
-        background-color: #000;
-        background-image: ${ad.image ? `url('${ad.image}')` : 'none'};
-        background-size: 80% auto;
-        background-position: center;
-        background-repeat: no-repeat;
-    `;
-
-    overlay.innerHTML = `
-        <div style="position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.6) 100%); z-index: 1;"></div>
-        <div style="position: relative; z-index: 2; max-width: 500px; width: 90%; text-align: center; color: white; padding: 20px; text-shadow: 0 2px 10px rgba(0,0,0,0.8);">
-            <div style="font-size: 1.5rem; font-weight: 800; color: var(--gold); margin-bottom: 8px;">${escapeHtml(ad.title || '📢 Notice')}</div>
-            <div style="font-size: 1rem; color: #fff; line-height: 1.6; margin-bottom: 20px;">${escapeHtml(ad.message || '')}</div>
-            <div style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">⏳ This notice will close in <span id="ad-countdown" style="font-weight: 700; color: var(--gold);">10</span> seconds</div>
-        </div>
-        <button onclick="closeAdOverlay(this.parentNode)" style="position:absolute; top:16px; right:16px; background:rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.3); color:white; font-size:1.5rem; cursor:pointer; width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; z-index:3; backdrop-filter:blur(4px);">✕</button>
-    `;
-    document.body.appendChild(overlay);
-
-    // Countdown
-    let seconds = 10;
-    const countdownEl = document.getElementById('ad-countdown');
-    const interval = setInterval(() => {
-        seconds--;
-        if (countdownEl) countdownEl.textContent = seconds;
-        if (seconds <= 0) {
-            clearInterval(interval);
-            closeAdOverlay(overlay);
+// ─── Show the next pair of ads ──────────────────────────────
+async function showNextNoticeAdPair() {
+    if (noticeAdCycleActive) return;
+    if (noticeAdQueue.length === 0) {
+        // Try reloading from Firebase
+        await loadActiveNoticesForAds();
+        if (noticeAdQueue.length === 0) {
+            console.log('📢 No active notices. Skipping cycle.');
+            return;
         }
-    }, 1000);
+    }
 
-    overlay._interval = interval;
+    noticeAdCycleActive = true;
+
+    // Take up to 2 ads from the queue
+    const adsToShow = [];
+    for (let i = 0; i < 2 && noticeAdQueue.length > 0; i++) {
+        adsToShow.push(noticeAdQueue.shift());
+    }
+
+    try {
+        // Show countdown before the first ad
+        await showCountdown();
+
+        // Show each ad sequentially
+        for (let i = 0; i < adsToShow.length; i++) {
+            const ad = adsToShow[i];
+            await showAd(ad);
+            // If there are more ads in this pair, no countdown between them
+        }
+    } catch (err) {
+        console.error('Ad cycle error:', err);
+    } finally {
+        noticeAdCycleActive = false;
+        // The interval timer will trigger the next cycle automatically.
+    }
 }
 
-// ─── Close the overlay and schedule the next notice ──────────
+// ─── Show countdown ──────────────────────────────────────────
+function showCountdown() {
+    return new Promise((resolve) => {
+        const countdownSeconds = settings.adCountdown || 10;
+        let remaining = countdownSeconds;
+
+        const countdownEl = document.createElement('div');
+        countdownEl.id = 'ad-countdown-overlay';
+        countdownEl.style.cssText = `
+            position: fixed;
+            top: 20px;
+            left: 0;
+            right: 0;
+            z-index: 100000;
+            text-align: center;
+            color: white;
+            font-size: 1.2rem;
+            font-weight: 700;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+            pointer-events: none;
+            opacity: 0.9;
+            transition: opacity 0.3s;
+        `;
+        countdownEl.innerHTML = `⏳ Ad in <span id="countdown-number">${remaining}</span> seconds`;
+        document.body.appendChild(countdownEl);
+
+        const interval = setInterval(() => {
+            remaining--;
+            const numEl = document.getElementById('countdown-number');
+            if (numEl) numEl.textContent = remaining;
+            if (remaining <= 0) {
+                clearInterval(interval);
+                countdownEl.remove();
+                resolve();
+            }
+        }, 1000);
+    });
+}
+
+// ─── Show a single ad, returns a Promise when closed ──────
+function showAd(ad) {
+    return new Promise((resolve) => {
+        const overlay = document.createElement('div');
+        overlay.id = 'notice-ad-overlay';
+        overlay.style.cssText = `
+            position: fixed; inset: 0; z-index: 99999;
+            background: rgba(0,0,0,0.85);
+            display: flex; flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 0;
+            background-size: cover;
+            background-position: center;
+            ${ad.image ? `background-image: url('${ad.image}');` : 'background: rgba(0,0,0,0.85);'}
+            transform: scale(0.5);
+            opacity: 0;
+            transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.4s ease;
+        `;
+
+        overlay.innerHTML = `
+            <!-- Top bar with gradient -->
+            <div style="width: 100%; background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 100%); padding: 20px 20px 40px; text-align: center; z-index: 2; position: relative;">
+                <div style="font-size: 1.5rem; font-weight: 800; color: var(--gold); margin-bottom: 4px;">${escapeHtml(ad.title || '📢 Notice')}</div>
+                <div style="font-size: 1rem; color: #fff; line-height: 1.5;">${escapeHtml(ad.message || '')}</div>
+            </div>
+            <!-- Countdown at bottom -->
+            <div style="position: absolute; bottom: 30px; left: 0; right: 0; text-align: center; z-index: 2; color: rgba(255,255,255,0.7); font-size: 0.8rem; text-shadow: 0 2px 6px rgba(0,0,0,0.5);">
+                ⏳ This notice will close in <span id="ad-countdown" style="font-weight: 700; color: var(--gold);">10</span> seconds
+            </div>
+            <!-- Close button -->
+            <button onclick="closeAdOverlay(this.parentNode)" style="position:absolute; top:16px; right:16px; background:rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.3); color:white; font-size:1.5rem; cursor:pointer; width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; z-index:3; backdrop-filter:blur(4px);">✕</button>
+        `;
+
+        document.body.appendChild(overlay);
+
+        // Store resolve function on the overlay for closeAdOverlay to call
+        overlay._resolve = resolve;
+
+        // Trigger reflow for transition
+        void overlay.offsetWidth;
+
+        // Animate to full scale
+        overlay.style.transform = 'scale(1)';
+        overlay.style.opacity = '1';
+
+        // Countdown for ad display (10 seconds)
+        let seconds = 10;
+        const countdownEl = overlay.querySelector('#ad-countdown');
+        const interval = setInterval(() => {
+            seconds--;
+            if (countdownEl) countdownEl.textContent = seconds;
+            if (seconds <= 0) {
+                clearInterval(interval);
+                // Close the ad (this will trigger resolve)
+                closeAdOverlay(overlay);
+            }
+        }, 1000);
+
+        // Store interval to clear later
+        overlay._interval = interval;
+    });
+}
+
 function closeAdOverlay(overlay) {
     if (!overlay) overlay = document.getElementById('notice-ad-overlay');
     if (overlay) {
         if (overlay._interval) clearInterval(overlay._interval);
-        overlay.style.transition = 'opacity 0.3s';
+        // Fade out and shrink
+        overlay.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
+        overlay.style.transform = 'scale(0.5)';
         overlay.style.opacity = '0';
-        setTimeout(() => overlay.remove(), 350);
+        setTimeout(() => {
+            overlay.remove();
+            // Resolve the promise if not already resolved
+            if (overlay._resolve) {
+                overlay._resolve();
+                overlay._resolve = null;
+            }
+        }, 350);
     }
-    noticeAdVisible = false;
-
-    // Advance to the next notice after the interval
-    advanceToNextNotice();
 }
 
-// ─── Advance to the next notice (or reload queue) ────────────
-function advanceToNextNotice() {
-    // Move to next index
-    noticeAdCurrentIndex++;
-    if (noticeAdCurrentIndex >= noticeAdQueue.length) {
-        // Queue exhausted – reshuffle and restart
-        loadActiveNoticesForAds();
-        return;
-    }
-    // Schedule the next notice after the interval
-    const intervalMinutes = settings.noticeInterval || 10;
-    const intervalMs = intervalMinutes * 60 * 1000;
-    if (noticeAdTimer) clearTimeout(noticeAdTimer);
-    noticeAdTimer = setTimeout(() => {
-        if (!noticeAdVisible) {
-            showNextNoticeAd();
-        }
-    }, intervalMs);
-}
-
-// ─── Restart the system (called after notices are changed) ───
-function restartNoticeAdSystem() {
-    if (noticeAdTimer) {
-        clearTimeout(noticeAdTimer);
-        noticeAdTimer = null;
-    }
-    if (noticeAdVisible) {
-        const overlay = document.getElementById('notice-ad-overlay');
-        if (overlay) closeAdOverlay(overlay);
-    }
-    noticeAdQueue = [];
-    noticeAdCurrentIndex = 0;
-    startNoticeAdSystem();
-}
-
-// ─── Helper: shuffle array ──────────────────────────────────
 function shuffleArray(array) {
     const arr = array.slice();
     for (let i = arr.length - 1; i > 0; i--) {
@@ -8761,6 +8882,7 @@ function shuffleArray(array) {
     }
     return arr;
 }
+
 
 // ==========================================
 // LOAD LEDGER - WITH CHECKBOXES FOR ADMIN
@@ -15067,10 +15189,13 @@ window.saveSettingsSection = async function(section) {
         // ─── NEW: Notice Interval ────────────────────────────
        case 'notice_interval':
     const interval = parseInt(document.getElementById('set-notice-interval').value) || 10;
+    const countdown = parseInt(document.getElementById('set-ad-countdown').value) || 10;
     if (interval < 1) { toast('Minimum 1 minute', '#ef4444'); return; }
+    if (countdown < 1) { toast('Minimum 1 second', '#ef4444'); return; }
     updates.noticeInterval = interval;
+    updates.adCountdown = countdown;
     settings.noticeInterval = interval;
-    // Restart the ad system with new interval
+    settings.adCountdown = countdown;
     if (typeof restartNoticeAdSystem === 'function') restartNoticeAdSystem();
     break;
 
@@ -19709,6 +19834,7 @@ function loadSettings() {
     updateMaintenanceStatusUI();
     // Inside loadSettings, add:
 setVal('set-notice-interval', settings.noticeInterval || 10);
+setVal('set-ad-countdown', settings.adCountdown || 10);
 }
 
 window.loadLoanSettings = function() {
@@ -20069,16 +20195,20 @@ function openSettingsPanel(panelId) {
       break;
     // Inside openSettingsPanel, add this case
 case 'notice_interval':
-    title = '⏱️ Notice Interval';
+    title = '⏱️ Notice Settings';
     html = `
         <div class="fgrp">
             <label class="flbl">Show notices every (minutes)</label>
             <input type="number" id="set-notice-interval" class="inp" min="1" max="1440" value="10">
-            <div class="micro muted">Notices are shown as full‑screen ads to members. Set how often they appear.</div>
+            <div class="micro muted">How often to show a new ad if there are multiple.</div>
         </div>
-        <div class="micro muted" style="margin-top:8px;">Default: 10 minutes. Minimum: 1 minute. Maximum: 1440 minutes (24 hours).</div>
+        <div class="fgrp">
+            <label class="flbl">Countdown before ad (seconds)</label>
+            <input type="number" id="set-ad-countdown" class="inp" min="1" max="30" value="10">
+            <div class="micro muted">Members will see "Ad in X seconds" before the ad appears.</div>
+        </div>
     `;
-    saveBtn = `<button class="btn btn-gold btn-full" onclick="saveSettingsSection('notice_interval'); showSettingsMenu();">💾 Save Interval</button>`;
+    saveBtn = `<button class="btn btn-gold btn-full" onclick="saveSettingsSection('notice_interval'); showSettingsMenu();">💾 Save Settings</button>`;
     break;
 
     default:
@@ -22884,9 +23014,8 @@ body::before{content:'';position:fixed;inset:0;z-index:-2;pointer-events:none;
       if (_chatOpen) _closePanel();
     }
   }
-
+  
 </script>
-
 <style id="htf-book-transitions">
 #content{ perspective:1800px; }
 .tab{ backface-visibility:hidden; -webkit-backface-visibility:hidden; transform-style:preserve-3d; }
