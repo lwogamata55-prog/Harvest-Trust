@@ -3011,7 +3011,81 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
   </div>
   <div id="bs-renewal-notice"></div>
 </div>
+<!-- ════════════════════════════════════════════════════════════ -->
+<!-- FULL‑SCREEN NOTICE OVERLAY                                -->
+<!-- ════════════════════════════════════════════════════════════ -->
+<div id="notice-overlay" style="
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    background: rgba(0,0,0,0.92);
+    backdrop-filter: blur(16px);
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    flex-direction: column;
+    text-align: center;
+">
+    <div style="
+        max-width: 480px;
+        width: 100%;
+        background: var(--card);
+        border-radius: 28px;
+        padding: 32px 24px;
+        border: 2px solid var(--gold3);
+        box-shadow: var(--sh2);
+        position: relative;
+    ">
+        <!-- Countdown badge -->
+        <div style="
+            position: absolute;
+            top: -12px;
+            right: -12px;
+            background: var(--gold);
+            color: #000;
+            font-weight: 900;
+            font-size: 0.9rem;
+            padding: 4px 12px;
+            border-radius: 30px;
+            border: 2px solid var(--bg);
+            box-shadow: 0 2px 12px rgba(245,158,11,0.3);
+        " id="notice-countdown">10s</div>
+
+        <!-- Icon -->
+        <div style="font-size: 3.5rem; margin-bottom: 12px;" id="notice-icon">📢</div>
+
+        <!-- Title -->
+        <div style="font-family: 'Syne', sans-serif; font-size: 1.4rem; font-weight: 800; color: var(--gold); margin-bottom: 6px;" id="notice-title">Notice</div>
+
+        <!-- Message -->
+        <div style="font-size: 1rem; color: var(--t2); line-height: 1.6; white-space: pre-wrap; max-width: 500px; margin: 0 auto;" id="notice-message">
+            Loading...
+        </div>
+
+        <!-- Progress bar -->
+        <div style="margin-top: 20px; background: rgba(255,255,255,0.08); border-radius: 20px; height: 4px; overflow: hidden;">
+            <div id="notice-progress" style="height: 100%; width: 100%; background: linear-gradient(90deg, var(--gold), var(--teal)); border-radius: 20px; transition: width 0.2s linear;"></div>
+        </div>
+
+        <!-- Skip button (optional for testing) -->
+        <button onclick="skipCurrentNotice()" style="
+            margin-top: 16px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 20px;
+            padding: 4px 16px;
+            color: var(--t3);
+            font-size: 0.65rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        " onmouseover="this.style.background='rgba(255,255,255,0.12)'" onmouseout="this.style.background='rgba(255,255,255,0.06)'">
+            ⏭ Skip (dev)
+        </button>
+    </div>
+</div>
 <script>
+
 /* ── Faster Falling‑letters animation ───────────────────────────────────────────── */
 (function(){
   function run(){
@@ -3367,72 +3441,56 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
             <div class="ss-lbl" style="font-size: 0.45rem;">Available</div>
         </div>
     </div>
-
-    <!-- ════════════════════════════════════════════════════════ -->
-    <!-- MEMBER OF THE MONTH                                    -->
+     <!-- ════════════════════════════════════════════════════════ -->
+    <!-- MEMBER OF THE MONTH (if applicable)                   -->
     <!-- ════════════════════════════════════════════════════════ -->
     <div id="motm-container" style="flex-shrink:0; margin:4px 0; display:none;"></div>
-<!-- ════════════════════════════════════════════════════════ -->
-<!-- PAYMENT BUTTONS – MTN (yellow) & AIRTEL (red)        -->
-<!-- ════════════════════════════════════════════════════════ -->
-<div id="deposit-buttons" style="
-    flex-shrink:0; 
-    margin:3px 0; 
-    display:grid; 
-    grid-template-columns:1fr 1fr; 
-    gap:6px;
-">
-    <!-- ─── MTN Button ─── -->
-    <div onclick="dialDepositUSSD('mtn')" style="
-        background:linear-gradient(135deg, #ffd100, #f5a623);
-        border-radius:10px;
-        padding:6px 4px;
-        text-align:center;
-        cursor:pointer;
-        box-shadow:0 2px 6px rgba(255,209,0,0.2);
-        border:1px solid #ffd100;
-    ">
-        <div style="display:flex; flex-direction:column; align-items:center; gap:2px;">
-            <!-- Black circle with yellow text -->
-            <div style="width:36px; height:36px; border-radius:50%; background:#000; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:800; color:#ffd100;">MTN</div>
-            <div style="font-weight:700; font-size:0.7rem; color:#000;">MTN MoMo</div>
-        </div>
-    </div>
 
-    <!-- ─── Airtel Button (red background + white circle) ─── -->
-    <div onclick="dialDepositUSSD('airtel')" style="
-        background:linear-gradient(135deg, #cc0000, #990000);
-        border-radius:10px;
-        padding:6px 4px;
-        text-align:center;
-        cursor:pointer;
-        box-shadow:0 2px 6px rgba(204,0,0,0.2);
-        border:1px solid #cc0000;
-        position:relative;
-    ">
-        <div style="display:flex; flex-direction:column; align-items:center; gap:2px;">
-            <!-- White circle with red text -->
-            <div style="width:36px; height:36px; border-radius:50%; background:#ffffff; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; color:#cc0000;">AIRTEL</div>
-            <div style="font-weight:700; font-size:0.7rem; color:#ffffff;">Airtel Money</div>
+  <!-- ════════════════════════════════════════════════════════ -->
+<!-- ANNIVERSARY CARD (Big number, full width)              -->
+<!-- ════════════════════════════════════════════════════════ -->
+<div id="anniversary-card" style="
+    flex-shrink:0;
+    margin:4px 0;
+    padding:12px 16px;
+    background: linear-gradient(135deg, rgba(245,158,11,0.12), rgba(6,182,212,0.06), rgba(139,92,246,0.08));
+    border: 2px solid var(--gold);
+    border-radius: 16px;
+    text-align:center;
+    position:relative;
+    overflow:hidden;
+    box-shadow: 0 4px 24px rgba(245,158,11,0.15);
+    width:100%;
+">
+    <!-- Floating gold orbs -->
+    <div style="position:absolute; top:-30px; right:-30px; width:100px; height:100px; background:radial-gradient(circle, rgba(245,158,11,0.15), transparent 70%); border-radius:50%; pointer-events:none;"></div>
+    <div style="position:absolute; bottom:-20px; left:-20px; width:80px; height:80px; background:radial-gradient(circle, rgba(6,182,212,0.1), transparent 70%); border-radius:50%; pointer-events:none;"></div>
+
+    <div style="position:relative; z-index:1; display:flex; flex-direction:column; align-items:center; gap:4px;">
+        <!-- Moon icon -->
+        <div style="font-size:2rem; line-height:1;">🌙</div>
+        
+        <!-- Big number -->
+        <div style="display:flex; align-items:baseline; gap:6px;">
+            <span id="anniversary-badge" style="font-size:3.2rem; font-weight:900; color:var(--gold); font-family:'Syne',sans-serif; line-height:1;">--</span>
+            <span style="font-size:1rem; font-weight:600; color:var(--t2);">days</span>
         </div>
-        <span style="
-            position:absolute;
-            top:-4px;
-            right:-4px;
-            background:#fff;
-            color:#cc0000;
-            font-size:0.45rem;
-            font-weight:800;
-            padding:1px 6px;
-            border-radius:6px;
-            border:1px solid #cc0000;
-        ">Soon</span>
+        
+        <!-- Subtext -->
+        <div style="font-size:0.85rem; color:var(--t2);">until profit distribution</div>
+        
+        <!-- Share date badge -->
+        <div style="display:flex; align-items:center; gap:6px; background:rgba(245,158,11,0.08); padding:2px 14px; border-radius:20px; border:1px solid rgba(245,158,11,0.15); margin-top:2px;">
+            <span style="font-size:0.65rem; color:var(--t3);">🎉 Share date:</span>
+            <span id="anniversary-share-date" style="font-size:0.8rem; font-weight:700; color:var(--gold);">--</span>
+        </div>
     </div>
 </div>
+
     <!-- ════════════════════════════════════════════════════════ -->
     <!-- WEEKLY RECEIVER CARD                                   -->
     <!-- ════════════════════════════════════════════════════════ -->
-    <div class="weekly-receiver-card" id="weekly-receiver-card" style="flex-shrink:0; padding:10px 12px; margin-bottom:4px; min-height:160px;">
+    <div class="weekly-receiver-card" id="weekly-receiver-card" style="flex-shrink:0; padding:10px 12px; margin-bottom:4px; min-height:140px;">
         <div class="rec-orb rec-orb-1"></div>
         <div class="rec-orb rec-orb-2"></div>
         <div class="rec-orb rec-orb-3"></div>
@@ -3458,15 +3516,36 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
     </div>
 
     <!-- ════════════════════════════════════════════════════════ -->
-    <!-- CAROUSEL BANNER (bottom)                               -->
+    <!-- DEPOSIT BUTTONS – at the bottom                      -->
     <!-- ════════════════════════════════════════════════════════ -->
-    <div class="notice-banner carousel-banner" id="main-carousel" style="flex-shrink:0; margin-bottom:4px; min-height:60px; overflow:hidden;">
-        <div class="carousel-viewport" style="overflow:hidden;">
-            <div class="carousel-track" id="main-carousel-track" style="display:flex; transition:transform 0.6s ease;"></div>
+    <div id="deposit-buttons" style="flex-shrink:0; margin:6px 0; display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+        <!-- MTN Button -->
+        <div onclick="dialDepositUSSD('mtn')" style="background:linear-gradient(135deg, #ffd100, #f5a623); border-radius:10px; padding:6px 4px; text-align:center; cursor:pointer; box-shadow:0 2px 6px rgba(255,209,0,0.2); border:1px solid #ffd100;">
+            <div style="display:flex; flex-direction:column; align-items:center; gap:2px;">
+                <div style="width:36px; height:36px; border-radius:50%; background:#000; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:800; color:#ffd100;">MTN</div>
+                <div style="font-weight:700; font-size:0.7rem; color:#000;">MTN MoMo</div>
+                <div style="margin-top:2px; font-size:0.5rem; color:#000; background:rgba(0,0,0,0.08); padding:1px 6px; border-radius:4px; display:inline-block;">Code: 01992573</div>
+                <button onclick="event.stopPropagation(); copyMerchantCode();" style="background:rgba(0,0,0,0.1); border:none; border-radius:4px; padding:1px 6px; font-size:0.5rem; color:#000; cursor:pointer;">📋 Copy</button>
+            </div>
         </div>
-        <div class="carousel-dots-wrap" id="main-carousel-dots" style="padding:4px 0;"></div>
+
+        <!-- Airtel Button -->
+        <div onclick="dialAirtelDeposit()" style="background:linear-gradient(135deg, #ff0000, #cc0000); border-radius:10px; padding:6px 4px; text-align:center; cursor:pointer; box-shadow:0 2px 6px rgba(204,0,0,0.2); border:1px solid #cc0000;">
+            <div style="display:flex; flex-direction:column; align-items:center; gap:2px;">
+                <div style="width:36px; height:36px; border-radius:50%; background:#ffffff; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; color:#cc0000;">AIRTEL</div>
+                <div style="font-weight:700; font-size:0.7rem; color:#ffffff;">Airtel Money</div>
+                <div style="margin-top:2px; font-size:0.5rem; color:#ffffff; background:rgba(255,255,255,0.15); padding:1px 6px; border-radius:4px; display:inline-block;">Till: 7079538</div>
+                <button onclick="event.stopPropagation(); copyAirtelTill();" style="background:rgba(255,255,255,0.15); border:none; border-radius:4px; padding:1px 6px; font-size:0.5rem; color:#fff; cursor:pointer;">📋 Copy</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- USSD reminder notice -->
+    <div style="flex-shrink:0; margin:2px 0 4px; padding:4px; font-size:0.55rem; color:var(--t3); text-align:center; background:rgba(255,255,255,0.03); border-radius:6px;">
+        💡 <strong>MTN:</strong> *165*3*01992573*Amount# &nbsp;|&nbsp; <strong>Airtel:</strong> *185*9*7079538*Amount#
     </div>
 </div>
+
 
 <div id="t-statistics" class="tab">
   <div class="sec-h">📊 Dashboard</div>
@@ -4650,144 +4729,204 @@ function getCurrentStreak(member) {
   return streak;
 }
 
-// ─── Group Savings Thermometer ──────────────────────────────
-function computeGroupSavingsProgress() {
-  const goal = (settings && settings.monthlySavingsGoal) ? settings.monthlySavingsGoal : 1000000; // default 1M UGX
-  const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).getTime();
-  let totalSaved = 0;
-  transactions.forEach(tx => {
-    if (tx.type === 'deposit' && tx.date >= monthStart && tx.date <= monthEnd) {
-      totalSaved += tx.amount;
-    }
-  });
-  const percentage = Math.min(100, Math.round((totalSaved / goal) * 100));
-  return { totalSaved, goal, percentage };
+// ─── Render notices list ──────────────────────────────────────
+function renderNoticesList() {
+    const container = document.getElementById('notices-list');
+    if (!container) return;
+
+    db.ref('notices').once('value', snap => {
+        const notices = snap.val() ? Object.entries(snap.val()).map(([key, val]) => ({ ...val, key })) : [];
+        if (!notices.length) {
+            container.innerHTML = '<div class="muted" style="padding:12px; text-align:center;">No notices yet. Click "Add Notice" to create one.</div>';
+            return;
+        }
+
+        let html = '';
+        notices.forEach(n => {
+            const status = n.active !== false ? '🟢 Active' : '🔴 Inactive';
+            html += `
+                <div style="background:rgba(255,255,255,0.04); border:1px solid ${n.active !== false ? 'rgba(16,185,129,0.2)' : 'rgba(255,255,255,0.06)'}; border-radius:10px; padding:10px 12px; display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                    <div style="flex:1; min-width:0;">
+                        <div style="font-weight:700; font-size:0.85rem;">${escapeHtml(n.title || 'Untitled')}</div>
+                        <div class="micro muted" style="font-size:0.7rem;">${escapeHtml(n.message || '')}</div>
+                        ${n.image ? `<img src="${n.image}" style="max-height:40px; border-radius:6px; margin-top:4px; border:1px solid rgba(255,255,255,0.1);">` : ''}
+                        <div style="font-size:0.6rem; color:${n.active !== false ? 'var(--green)' : 'var(--t3)'};">${status}</div>
+                    </div>
+                    <div style="display:flex; gap:4px; flex-wrap:wrap;">
+                        <button class="btn btn-sm ${n.active !== false ? 'btn-teal' : 'btn-amber'}" onclick="toggleNotice('${n.key}')" style="padding:2px 8px; font-size:0.6rem;">
+                            ${n.active !== false ? '🔇 Deactivate' : '🔊 Activate'}
+                        </button>
+                        <button class="btn btn-sm btn-red" onclick="deleteNotice('${n.key}')" style="padding:2px 8px; font-size:0.6rem;">🗑️</button>
+                    </div>
+                </div>
+            `;
+        });
+        container.innerHTML = html;
+    });
 }
 
-function renderThermometer() {
-  const container = document.getElementById('group-thermometer');
-  if (!container) {
-    // Create container at top of home tab (after stats)
-    const homeTab = document.getElementById('t-home');
-    if (!homeTab) return;
-    const div = document.createElement('div');
-    div.id = 'group-thermometer';
-    div.style.cssText = 'flex-shrink:0; margin:4px 0;';
-    const statsStrip = homeTab.querySelector('.stats-strip');
-    if (statsStrip) {
-      homeTab.insertBefore(div, statsStrip.nextSibling);
-    } else {
-      homeTab.insertBefore(div, homeTab.firstChild);
-    }
-  }
-  const el = document.getElementById('group-thermometer');
-  if (!el) return;
+// ─── Open create notice modal ────────────────────────────────
+function openCreateNoticeModal() {
+    // Remove any existing modal
+    const existing = document.querySelector('#notice-create-modal');
+    if (existing) existing.remove();
 
-  const { totalSaved, goal, percentage } = computeGroupSavingsProgress();
-  const displayGoal = goal >= 1000000 ? (goal / 1000000).toFixed(1) + 'M' : goal.toLocaleString();
+    // Generate a unique ID for this modal instance
+    const modalId = 'notice-create-modal-' + Date.now();
 
-  el.innerHTML = `
-    <div style="background:rgba(255,255,255,0.04); border-radius:12px; padding:8px 12px; border:1px solid rgba(255,255,255,0.06);">
-      <div style="display:flex; justify-content:space-between; font-size:0.6rem; color:var(--t3); margin-bottom:2px;">
-        <span>📊 Group Savings Goal</span>
-        <span>UGX ${totalSaved.toLocaleString()} / UGX ${displayGoal}</span>
-      </div>
-      <div style="background:rgba(255,255,255,0.08); border-radius:20px; height:6px; overflow:hidden; position:relative;">
-        <div style="width:${percentage}%; height:100%; background:linear-gradient(90deg, #f59e0b, #06b6d4); border-radius:20px; transition:width 0.8s ease;"></div>
-      </div>
-      <div style="font-size:0.5rem; color:var(--t3); text-align:right; margin-top:2px;">${percentage}% complete</div>
-    </div>
-  `;
+    const modal = document.createElement('div');
+    modal.id = modalId;
+    modal.className = 'ov on';
+    modal.style.zIndex = '20020';
+    modal.innerHTML = `
+        <div class="bs" style="max-width:500px; max-height:90vh; overflow-y:auto; padding:16px 20px;">
+            <div class="bs-title">➕ Create New Notice</div>
+            <div class="fgrp">
+                <label class="flbl">Title</label>
+                <input type="text" id="notice-title-${modalId}" class="inp" placeholder="e.g. 📢 New Feature">
+            </div>
+            <div class="fgrp">
+                <label class="flbl">Message</label>
+                <textarea id="notice-message-${modalId}" class="inp" rows="3" placeholder="Your notice message..."></textarea>
+            </div>
+            <div class="fgrp">
+                <label class="flbl">Image (upload)</label>
+                <div class="drag-zone" onclick="document.getElementById('notice-image-input-${modalId}').click()" style="padding:12px; text-align:center; border:2px dashed rgba(255,255,255,0.2); border-radius:10px; cursor:pointer;">
+                    <span>📸 Tap to upload image</span>
+                    <input type="file" id="notice-image-input-${modalId}" accept="image/*" style="display:none" onchange="handleNoticeImageUpload(this, '${modalId}')">
+                    <img id="notice-image-preview-${modalId}" style="display:none; max-height:100px; margin-top:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.1);">
+                </div>
+                <input type="hidden" id="notice-image-data-${modalId}">
+            </div>
+            <div class="fgrp">
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                    <input type="checkbox" id="notice-active-${modalId}" checked style="width:16px; height:16px; accent-color:var(--gold);">
+                    <span style="font-weight:600;">Active (visible to members)</span>
+                </label>
+            </div>
+            <button class="btn btn-gold btn-full" onclick="saveNotice('${modalId}')">✅ Save Notice</button>
+            <button class="btn btn-sec btn-full" onclick="this.closest('.ov').remove()">✕ Cancel</button>
+        </div>
+    `;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 }
 
-// ─── Admin: Set monthly savings goal (add to settings modal) ──
-// We'll add a field in the settings modal dynamically.
-// This function adds the input if not present.
-function addSavingsGoalToSettings() {
-  const settingsModal = document.getElementById('ov-settings');
-  if (!settingsModal) return;
-  // Find the group settings card
-  const card = settingsModal.querySelector('.card');
-  if (!card) return;
-  // Check if already added
-  if (card.querySelector('#set-monthly-goal')) return;
-
-  const div = document.createElement('div');
-  div.className = 'fgrp';
-  div.innerHTML = `
-    <label class="flbl">Monthly Savings Goal (UGX)</label>
-    <input type="number" id="set-monthly-goal" class="inp" value="${settings.monthlySavingsGoal || 1000000}" step="10000">
-    <div class="micro">The group's monthly target – used for the thermometer.</div>
-  `;
-  // Insert before the last button (Save Settings)
-  const saveBtn = card.querySelector('.btn-gold');
-  if (saveBtn) {
-    card.insertBefore(div, saveBtn);
-  } else {
-    card.appendChild(div);
-  }
+// ─── Handle image upload ──────────────────────────────────────
+function handleNoticeImageUpload(input, modalId) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const dataUrl = e.target.result;
+        const dataEl = document.getElementById('notice-image-data-' + modalId);
+        if (dataEl) dataEl.value = dataUrl;
+        const preview = document.getElementById('notice-image-preview-' + modalId);
+        if (preview) {
+            preview.src = dataUrl;
+            preview.style.display = 'block';
+        }
+    };
+    reader.readAsDataURL(file);
 }
 
-// ─── Hook into existing UI updates ──────────────────────────
-// Patch updateHomeUI to include thermometer and streak fire
-(function() {
-  const origUpdateHomeUI = window.updateHomeUI;
-  window.updateHomeUI = function() {
-    if (typeof origUpdateHomeUI === 'function') origUpdateHomeUI();
-    // Now add our features
-    renderThermometer();
-    // Also update badges (they are in account tab, but we can call here for refresh)
-    
-  };
-
-  // Patch updateAccountUI to include badges
-  const origUpdateAccountUI = window.updateAccountUI;
-  window.updateAccountUI = function() {
-    if (typeof origUpdateAccountUI === 'function') origUpdateAccountUI();
-    
-  };
-
-  // Ensure settings modal gets our field when opened
-  const origLoadSettings = window.loadSettings;
-  window.loadSettings = function() {
-    if (typeof origLoadSettings === 'function') origLoadSettings();
-    setTimeout(addSavingsGoalToSettings, 100);
-  };
-
-  // Also when refreshLiveViews is called
-  const origRefreshLiveViews = window.refreshLiveViews;
-  window.refreshLiveViews = function(reason) {
-    if (typeof origRefreshLiveViews === 'function') origRefreshLiveViews(reason);
-    if (currentScreen === 'home') {
-      renderThermometer();
+// ─── Save a new notice ────────────────────────────────────────
+async function saveNotice(modalId) {
+    // If modalId not provided, try to find the active modal
+    if (!modalId) {
+        const modals = document.querySelectorAll('.ov.on');
+        for (const m of modals) {
+            if (m.id && m.id.startsWith('notice-create-modal-')) {
+                modalId = m.id;
+                break;
+            }
+        }
+        if (!modalId) {
+            toast('Modal not found. Please reopen the notice modal.', '#ef4444');
+            return;
+        }
     }
-    if (currentScreen === 'account') {
-      
-    }
-  };
-})();
 
-// ─── On login, render everything ─────────────────────────────
-// Also call when data loads
-(function() {
-  // After data is loaded, run once
-  const interval = setInterval(function() {
-    if (members.length && transactions.length && currentUser) {
-      clearInterval(interval);
-      setTimeout(function() {
-        renderThermometer();
-        
-        
-        // Add goal field to settings after modal is built
-        setTimeout(addSavingsGoalToSettings, 500);
-      }, 300);
-    }
-  }, 1000);
-})();
+    // Small delay to ensure DOM is ready
+    await new Promise(r => setTimeout(r, 50));
 
-console.log('✅ Badges, Streak Fire, Thermometer loaded.');
+    // Get elements using the modal ID
+    const titleEl = document.getElementById('notice-title-' + modalId);
+    const messageEl = document.getElementById('notice-message-' + modalId);
+    const imageDataEl = document.getElementById('notice-image-data-' + modalId);
+    const activeEl = document.getElementById('notice-active-' + modalId);
+
+    if (!titleEl || !messageEl) {
+        toast('Modal elements not found. Please try again.', '#ef4444');
+        return;
+    }
+
+    const title = titleEl.value ? titleEl.value.trim() : '';
+    const message = messageEl.value ? messageEl.value.trim() : '';
+    const image = imageDataEl ? imageDataEl.value : '';
+    const active = activeEl ? activeEl.checked : true;
+
+    // Debug log – check console
+    console.log('📝 Title:', title, '| Message:', message);
+
+    if (!title || !message) {
+        toast('Title and message are required. Please fill both fields.', '#ef4444');
+        if (!title) titleEl.focus();
+        else messageEl.focus();
+        return;
+    }
+
+    const noticeData = {
+        id: Date.now(),
+        title: title,
+        message: message,
+        image: image || '',
+        active: active,
+        createdAt: Date.now()
+    };
+
+    try {
+        await db.ref('notices').push(noticeData);
+        toast('✅ Notice created!', '#10b981');
+        // Close the modal
+        const modal = document.getElementById(modalId);
+        if (modal) modal.remove();
+        renderNoticesList();
+        if (typeof refreshNoticeAds === 'function') refreshNoticeAds();
+    } catch (err) {
+        console.error('Save notice error:', err);
+        toast('Failed to save notice. Check console.', '#ef4444');
+    }
+}
+
+// ─── Toggle notice active status ──────────────────────────────
+async function toggleNotice(key) {
+    const snap = await db.ref('notices/' + key).once('value');
+    const notice = snap.val();
+    if (!notice) return;
+    const newActive = !(notice.active !== false);
+    await db.ref('notices/' + key + '/active').set(newActive);
+    toast(newActive ? '🔊 Notice activated' : '🔇 Notice deactivated', '#f59e0b');
+    renderNoticesList();
+    if (typeof refreshNoticeAds === 'function') refreshNoticeAds();
+}
+
+// ─── Delete a notice ──────────────────────────────────────────
+async function deleteNotice(key) {
+    if (!confirm('Delete this notice?')) return;
+    try {
+        await db.ref('notices/' + key).remove();
+        toast('🗑️ Notice deleted', '#ef4444');
+        // Refresh the admin list
+        renderNoticesList();
+        // Restart the ad system
+        if (typeof restartNoticeAdSystem === 'function') restartNoticeAdSystem();
+    } catch (err) {
+        console.error('Delete notice error:', err);
+        toast('Failed to delete notice', '#ef4444');
+    }
+}
+
 function getCurrentLoadingMessage() {
   for (const key in LOADING_STATE) {
     if (!LOADING_STATE[key]) {
@@ -4848,7 +4987,8 @@ function hasActiveLoanFromApplication() {
     l.loanQuestions &&          
     l.loanQuestions.length > 0
   );}
-let mainCarouselNotifs=[], mainCarouselIdx=0, mainCarouselTimer=null;
+
+
 let currentScreen='login';
 let memberPresence={};
 const ADMIN_PASSWORD='admin123';
@@ -4903,10 +5043,13 @@ function updateAwardsWinnersList(year) {
 }
 function updateAnniversaryCountdown() {
     const badge = document.getElementById('anniversary-badge');
+    const shareDateEl = document.getElementById('anniversary-share-date');
     if (!badge) return;
-    
+
     const days = getDaysUntilProfitDistribution();
     let text;
+    let shareDate = '--';
+    
     if (days === null) {
         text = '--';
     } else if (days === 0) {
@@ -4914,17 +5057,30 @@ function updateAnniversaryCountdown() {
     } else {
         text = days.toString();
     }
-    
-    if (badge.textContent !== text) {
-        badge.textContent = text;
-        // Auto‑adjust width for 2‑4 digits
-        const len = text.length;
-        if (len <= 2) badge.style.minWidth = '24px';
-        else if (len === 3) badge.style.minWidth = '34px';
-        else badge.style.minWidth = '44px';
-    }
-}
 
+    // Compute share date (next anniversary)
+    const groupStart = settings.groupStartDate ? new Date(settings.groupStartDate) : null;
+    if (groupStart && !isNaN(groupStart.getTime())) {
+        const today = new Date();
+        let nextAnniv = new Date(today.getFullYear(), groupStart.getMonth(), groupStart.getDate());
+        if (nextAnniv < today) {
+            nextAnniv.setFullYear(nextAnniv.getFullYear() + 1);
+        }
+        // If the anniversary is today, show today
+        if (nextAnniv.getTime() === today.getTime()) {
+            shareDate = '🎉 Today!';
+        } else {
+            shareDate = nextAnniv.toLocaleDateString('en-UG', { 
+                year: 'numeric', 
+                month: 'short', 
+                day: 'numeric' 
+            });
+        }
+    }
+
+    if (badge.textContent !== text) badge.textContent = text;
+    if (shareDateEl && shareDateEl.textContent !== shareDate) shareDateEl.textContent = shareDate;
+}
 // Get the start of today (local midnight)
 function getTodayStart() {
   const d = new Date();
@@ -6247,7 +6403,6 @@ function startOverdueLoanChecker() {
     if (hasOverdue) {
       checkAndSendLateReminders();
     }}, 1800000);}
-
 function addHarshReminderButton() {
  
   const overdueAppLoans = loans.filter(l => 
@@ -7394,7 +7549,7 @@ function initFirebase(){
 }
 function enableFastFirebaseSync(){
   if(!db)return;
-  ['settings','members','transactions','rotation','applications','notifications','loanSettings','loans','mainNotices','status'].forEach(path=>{
+  ['settings','members','transactions','rotation','applications','notifications','loanSettings','loans','status'].forEach(path=>{
     const ref=db.ref(path);
     if(ref.keepSynced)ref.keepSynced(true);
     ref.once('value').catch(()=>{});
@@ -7510,16 +7665,6 @@ function loadAllData() {
     });
   }, 400);
   
-  // Load notices (mainCarouselNotifs)
-  setTimeout(() => {
-    db.ref('mainNotices').on('value', snap => {
-      const val = snap.val() || {};
-      mainCarouselNotifs = Object.entries(val).map(([key, notice]) => ({ ...notice, key }));
-      renderMainCarousel();
-      if (currentScreen === 'admin' && adminUnlocked && currentAdminTab === 'notice') renderAdminTab();
-      markDataLoaded('notices');
-    });
-  }, 500);
 
   // ─── NOTIFICATIONS – REAL-TIME LISTENER ────────────────
   setTimeout(() => {
@@ -7702,10 +7847,6 @@ if (typeof checkAnniversaryWarning === 'function') {
     checkPayoutOverdue();
   }
 
-  
-if (document.getElementById('main-carousel-track') && document.getElementById('main-carousel-track').children.length === 0) {
-  renderMainCarousel();
-}
 
 // At the end of updateHomeUI(), after existing updates:
 updateAnniversaryCountdown();
@@ -8223,66 +8364,7 @@ document.querySelectorAll('.stats-tab-btn').forEach(btn => {
     if (tabId === 'ledger') loadLedger(window.currentLedgerFilter || 'all');
   });
 });
-function renderMainCarousel() {
-  const track = document.getElementById('main-carousel-track');
-  const dots = document.getElementById('main-carousel-dots');
-  if (!track || !dots) return;
 
-  let slides = [];
-
-  // 1. Try custom notices from Firebase
-  if (mainCarouselNotifs && mainCarouselNotifs.length) {
-    slides = mainCarouselNotifs;
-  }
-  // 2. Otherwise use the notice from settings
-  else if (settings.noticeText && settings.noticeText.trim() !== '') {
-    slides = [{ text: settings.noticeText, imageData: settings.noticeImageData || '' }];
-  }
-  // 3. Ultimate fallback – hardcoded default
-  else {
-    slides = [{
-      text: "🌾 Welcome to Harvest Trust Finance! 🌾\nSave daily, grow together, and prosper.",
-      imageData: ""
-    }];
-  }
-
-  // Build carousel HTML (with a fallback if slides empty)
-  track.innerHTML = slides.map(s => `
-    <div class="c-slide">
-      <div>
-        <div class="notice-title">📢 NOTICE</div>
-        <div class="notice-content">${escapeHtml(s.text)}</div>
-        ${s.imageData ? `<img src="${s.imageData}" class="notice-image" onerror="this.style.display='none'">` : ''}
-      </div>
-    </div>
-  `).join('');
-
-  // Build dots
-  dots.innerHTML = slides.map((_, i) => `<button class="c-dot ${i === 0 ? 'active' : ''}" onclick="goToMainSlide(${i})"></button>`).join('');
-
-  mainCarouselIdx = 0;
-  updateMainCarouselPos();
-
-  // Ensure the carousel is visible
-  const banner = document.getElementById('main-carousel');
-  if (banner) banner.style.display = 'block';
-
-  // Start auto‑play if more than 1 slide
-  if (slides.length > 1) {
-    startMainCarouselTimer();
-  } else {
-    if (mainCarouselTimer) clearInterval(mainCarouselTimer);
-  }
-}
-function startMainCarouselTimer(){
-  if(mainCarouselTimer)clearInterval(mainCarouselTimer);
-  const slides=mainCarouselNotifs.length?mainCarouselNotifs:[{}];
-  if(slides.length<=1)return;
-  mainCarouselTimer=setInterval(()=>{
-    mainCarouselIdx=(mainCarouselIdx+1)%slides.length;
-    updateMainCarouselPos();
-  },5000);
-}
 let notificationAdTimer = null;
 let notificationQueue = [];
 let currentAdIndex = 0;
@@ -8384,52 +8466,6 @@ window.updateNotificationBadge = function() {
   origUpdateBadge();
   refreshNotificationQueue();
 };
-function updateMainCarouselPos(){
-  const track=document.getElementById('main-carousel-track');
-  if(track)track.style.transform=`translateX(-${mainCarouselIdx*100}%)`;
-  document.querySelectorAll('#main-carousel-dots .c-dot').forEach((d,i)=>d.classList.toggle('active',i===mainCarouselIdx));
-}
-window.goToMainSlide=function(i){mainCarouselIdx=i;updateMainCarouselPos();startMainCarouselTimer();};
-window.addCarouselNotice = function() {
-  if (mainCarouselNotifs.length >= 5) {
-    toast('Maximum 5 notices', '#ef4444');
-    return;
-  }
-  const msg = document.getElementById('c-msg').value.trim();
-  if (!msg) {
-    toast('Enter a message', '#ef4444');
-    return;
-  }
-  const icon = document.getElementById('c-icon').value || '📢';
-  const imgData = document.getElementById('c-image-data').value;
-  db.ref('mainNotices').push({
-    text: msg,
-    icon: icon,
-    imageData: imgData || null,
-    payee: ''
-  }).then(() => {
-    toast('Carousel notice added!', '#10b981');
-    closeOv('ov-carousel-compose');
-    document.getElementById('c-msg').value = '';
-    document.getElementById('c-icon').value = '📢';
-    document.getElementById('c-preview').style.display = 'none';
-    document.getElementById('c-image-data').value = '';
-  }).catch(err => {
-    console.error(err);
-    toast('Add failed', '#ef4444');
-  });
-};
-window.removeCarouselNotice = function(key) {
-  if (!key) return;
-  db.ref('mainNotices/' + key).remove().then(() => {
-    toast('Notice deleted', '#ef4444');
-    // Refresh will happen automatically via listener
-  }).catch(err => {
-    console.error(err);
-    toast('Delete failed', '#ef4444');
-  });
-};
-function refreshCarouselPayee(){ renderMainCarousel(); }
 
 const TX_ICONS = {
   deposit: '💰',
@@ -8458,15 +8494,6 @@ function updateMsgCounter() {
   }
 }
 
-// Attach event listener when modal is opened
-function attachMsgCounterListener() {
-  const textarea = document.getElementById('c-msg');
-  if (textarea) {
-    textarea.removeEventListener('input', updateMsgCounter);
-    textarea.addEventListener('input', updateMsgCounter);
-    updateMsgCounter(); // initial count
-  }
-}
 
 function renderTxRow(tx, i) {
   const m = members.find(m => m.phone === tx.memberPhone) || { name: tx.memberName || '?' };
@@ -8580,6 +8607,132 @@ function cleanRotationOrder() {
   if (newOrder.length !== rotation.order.length) {
     db.ref('rotation').update({ order: newOrder, currentIndex: 0 });
   }
+}
+// ─── Ad System ──────────────────────────────────────────────
+let noticeAdTimer = null;
+let noticeAdQueue = [];
+let noticeAdVisible = false;
+
+function startNoticeAdSystem() {
+    // Admin can also see notices (for testing)
+    // if (!currentUser) return; // (optional)
+    loadActiveNoticesForAds();
+    const intervalMinutes = settings.noticeInterval || 10;
+    const intervalMs = intervalMinutes * 60 * 1000;
+    if (noticeAdTimer) clearInterval(noticeAdTimer);
+    noticeAdTimer = setInterval(() => {
+        loadActiveNoticesForAds();
+    }, intervalMs);
+    console.log(`📢 Notice ad system started. Interval: ${intervalMinutes} minutes.`);
+}
+
+function restartNoticeAdSystem() {
+    if (noticeAdTimer) {
+        clearInterval(noticeAdTimer);
+        noticeAdTimer = null;
+    }
+    if (noticeAdVisible) {
+        const overlay = document.getElementById('notice-ad-overlay');
+        if (overlay) closeAdOverlay(overlay);
+    }
+    noticeAdQueue = [];
+    startNoticeAdSystem();
+}
+
+function loadActiveNoticesForAds() {
+    db.ref('notices').orderByChild('active').equalTo(true).once('value', snap => {
+        const notices = snap.val() ? Object.values(snap.val()) : [];
+        if (!notices.length) {
+            noticeAdQueue = [];
+            return;
+        }
+        noticeAdQueue = shuffleArray(notices);
+        // Show first ad after 3 seconds (if not already visible)
+        if (!noticeAdVisible) {
+            setTimeout(showNextNoticeAd, 3000);
+        }
+    });
+}
+
+function showNextNoticeAd() {
+    if (noticeAdVisible) return;
+    if (!noticeAdQueue.length) {
+        loadActiveNoticesForAds();
+        return;
+    }
+    const ad = noticeAdQueue.pop(); // take one
+    showAdOverlay(ad);
+}
+
+function showAdOverlay(ad) {
+    noticeAdVisible = true;
+    const overlay = document.createElement('div');
+    overlay.id = 'notice-ad-overlay';
+    overlay.style.cssText = `
+        position: fixed; inset: 0; z-index: 99999;
+        display: flex; flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        padding: 0;
+        animation: fadeIn 0.4s ease;
+        background-size: cover;
+        background-position: center;
+        ${ad.image ? `background-image: url('${ad.image}');` : 'background: rgba(0,0,0,0.85);'}
+    `;
+
+    overlay.innerHTML = `
+        <!-- Top bar with gradient for readability -->
+        <div style="width: 100%; background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 100%); padding: 20px 20px 40px; text-align: center; z-index: 2; position: relative;">
+            <div style="font-size: 1.5rem; font-weight: 800; color: var(--gold); margin-bottom: 4px;">${escapeHtml(ad.title || '📢 Notice')}</div>
+            <div style="font-size: 1rem; color: #fff; line-height: 1.5;">${escapeHtml(ad.message || '')}</div>
+        </div>
+        <!-- Countdown at bottom -->
+        <div style="position: absolute; bottom: 30px; left: 0; right: 0; text-align: center; z-index: 2; color: rgba(255,255,255,0.7); font-size: 0.8rem; text-shadow: 0 2px 6px rgba(0,0,0,0.5);">
+            ⏳ This notice will close in <span id="ad-countdown" style="font-weight: 700; color: var(--gold);">10</span> seconds
+        </div>
+        <!-- Close button -->
+        <button onclick="closeAdOverlay(this.parentNode)" style="position:absolute; top:16px; right:16px; background:rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.3); color:white; font-size:1.5rem; cursor:pointer; width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; z-index:3; backdrop-filter:blur(4px);">✕</button>
+    `;
+    document.body.appendChild(overlay);
+
+    let seconds = 10;
+    const countdownEl = document.getElementById('ad-countdown');
+    const interval = setInterval(() => {
+        seconds--;
+        if (countdownEl) countdownEl.textContent = seconds;
+        if (seconds <= 0) {
+            clearInterval(interval);
+            closeAdOverlay(overlay);
+        }
+    }, 1000);
+
+    overlay._interval = interval;
+}
+
+function closeAdOverlay(overlay) {
+    if (!overlay) overlay = document.getElementById('notice-ad-overlay');
+    if (overlay) {
+        if (overlay._interval) clearInterval(overlay._interval);
+        overlay.style.transition = 'opacity 0.3s';
+        overlay.style.opacity = '0';
+        setTimeout(() => overlay.remove(), 350);
+    }
+    noticeAdVisible = false;
+    // After closing, check if there are more ads in the queue
+    setTimeout(() => {
+        if (noticeAdQueue.length > 0 && !noticeAdVisible) {
+            showNextNoticeAd();
+        }
+    }, 5000);
+}
+
+function shuffleArray(array) {
+    const arr = array.slice();
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
 }
 
 // ==========================================
@@ -9919,66 +10072,67 @@ function updateAccountUI(){
 updateNotificationBadge();
 updateLoanIndicator();
 }
-async function updateNotificationBadge() {
-  if (!currentUser) return;
+function updateNotificationBadge() {
+    if (!currentUser) return;
 
-  // ----- Member notifications (bell icon) -----
-  if (!currentUser.isAdmin) {
-    const memberNotifs = notifications[currentUser.id] || [];
-    const unreadCount = memberNotifs.filter(n => !n.read).length;
-    const badge = document.getElementById('notification-badge');
-    if (badge) {
-      if (unreadCount > 0) {
-        badge.classList.remove('hidden');
-        badge.innerText = unreadCount;
-      } else {
-        badge.classList.add('hidden');
-      }
-    }
-    return;
-  }
-
-  // ----- Admin pending actions (lock icon) -----
-  if (currentUser.isAdmin) {
-    try {
-      // 1. Pending membership applications
-      const membersSnap = await db.ref('applications').orderByChild('status').equalTo('pending').once('value');
-      const pendingMembers = membersSnap.val() ? Object.keys(membersSnap.val()).length : 0;
-
-      // 2. Pending loan applications (status = 'pending')
-      const pendingLoans = loans.filter(l => l.status === 'pending').length;
-
-      // 3. Pending referral bonuses (type 'pending_referral_bonus' and cleared = false)
-      const refBonusSnap = await db.ref('transactions').orderByChild('type').equalTo('pending_referral_bonus').once('value');
-      const pendingReferrals = refBonusSnap.val()
-        ? Object.values(refBonusSnap.val()).filter(tx => !tx.cleared).length
-        : 0;
-
-      // 4. Pending password reset requests
-      const resetSnap = await db.ref('passwordResetRequests').orderByChild('status').equalTo('pending').once('value');
-      const pendingResets = resetSnap.val() ? Object.keys(resetSnap.val()).length : 0;
-
-      const totalPending = pendingMembers + pendingLoans + pendingReferrals + pendingResets;
-
-      const adminBadge = document.getElementById('admin-pending-badge');
-      if (adminBadge) {
-        if (totalPending > 0) {
-          adminBadge.classList.remove('hidden');
-          adminBadge.innerText = totalPending;
-        } else {
-          adminBadge.classList.add('hidden');
+    // ----- Member notifications (bell icon) -----
+    if (!currentUser.isAdmin) {
+        let memberNotifs = notifications[currentUser.id] || [];
+        // If it's an object (Firebase returns object), convert to array
+        if (!Array.isArray(memberNotifs)) {
+            memberNotifs = Object.values(memberNotifs);
         }
-      }
-    } catch (err) {
-      console.error("Error counting admin pending actions:", err);
-      
-      // 5. Pending leave requests
-const leaveSnap = await db.ref('leaveRequests').orderByChild('status').equalTo('pending').once('value');
-const pendingLeave = leaveSnap.val() ? Object.keys(leaveSnap.val()).length : 0;
-
-const totalPending = pendingMembers + pendingLoans + pendingReferrals + pendingResets + pendingLeave;
+        const unreadCount = memberNotifs.filter(n => !n.read).length;
+        const badge = document.getElementById('notification-badge');
+        if (badge) {
+            if (unreadCount > 0) {
+                badge.classList.remove('hidden');
+                badge.innerText = unreadCount;
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+        return;
     }
-  }
+
+    // ----- Admin pending actions (lock icon) -----
+    if (currentUser.isAdmin) {
+        try {
+            let totalPending = 0;
+            // Count pending applications
+            db.ref('applications').orderByChild('status').equalTo('pending').once('value', snap => {
+                totalPending += snap.val() ? Object.keys(snap.val()).length : 0;
+                // Count pending loans
+                const pendingLoans = loans.filter(l => l.status === 'pending').length;
+                totalPending += pendingLoans;
+                // Count pending leave requests
+                db.ref('leaveRequests').orderByChild('status').equalTo('pending').once('value', snap2 => {
+                    totalPending += snap2.val() ? Object.keys(snap2.val()).length : 0;
+                    // Count pending password resets
+                    db.ref('passwordResetRequests').orderByChild('status').equalTo('pending').once('value', snap3 => {
+                        totalPending += snap3.val() ? Object.keys(snap3.val()).length : 0;
+                        // Count pending referral bonuses
+                        db.ref('transactions').orderByChild('type').equalTo('pending_referral_bonus').once('value', snap4 => {
+                            const refs = snap4.val() ? Object.values(snap4.val()).filter(tx => !tx.cleared) : [];
+                            totalPending += refs.length;
+
+                            const adminBadge = document.getElementById('admin-pending-badge');
+                            if (adminBadge) {
+                                if (totalPending > 0) {
+                                    adminBadge.classList.remove('hidden');
+                                    adminBadge.innerText = totalPending;
+                                } else {
+                                    adminBadge.classList.add('hidden');
+                                }
+                            }
+                        });
+                    });
+                });
+            });
+        } catch (err) {
+            console.error("Error counting admin pending actions:", err);
+        }
+    }
 }
 
 function getMembersWithDepositToday() {
@@ -10037,109 +10191,94 @@ function showPrepaidInPreview(member, remaining, previewEl) {
 }
 
 function showMainApp() {
-  const blankDiv = document.getElementById('post-login-blank');
-  const nameSpan = document.getElementById('post-login-welcome-name');
-  const referralSpan = document.getElementById('post-login-referral-code');
+    const blankDiv = document.getElementById('post-login-blank');
+    const nameSpan = document.getElementById('post-login-welcome-name');
+    const referralSpan = document.getElementById('post-login-referral-code');
 
-  // Set the member name and referral code on the welcome screen
-  if (currentUser && !currentUser.isAdmin) {
-    if (nameSpan) nameSpan.innerText = currentUser.name || 'Member';
-    if (referralSpan) {
-      const referralCode = currentUser.id?.slice(-6) || currentUser.phone?.slice(-4) || 'HTF';
-      referralSpan.innerHTML = `Your Referral Code: <strong style="color: var(--gold);">${escapeHtml(referralCode)}</strong>`;
-    }
-  } else if (currentUser && currentUser.isAdmin) {
-    if (nameSpan) nameSpan.innerText = 'Admin';
-    if (referralSpan) referralSpan.innerHTML = 'Admin Access – No Referral Code';
-  }
-
-  if (blankDiv) {
-    // Show the welcome blank screen
-    blankDiv.style.opacity = '1';
-    blankDiv.style.visibility = 'visible';
-
-    // Animate the inner card
-    const innerCard = blankDiv.querySelector('div > div');
-    if (innerCard) {
-      setTimeout(() => innerCard.style.transform = 'scale(1)', 50);
-    }
-
-    // Hide login/pending screens immediately
-    document.getElementById('login-screen').classList.add('hidden');
-    document.getElementById('signup-screen').classList.add('hidden');
-    document.getElementById('pending-screen').classList.add('hidden');
-
-    // Wait 3 seconds then proceed
-    setTimeout(() => {
-      blankDiv.style.opacity = '0';
-      setTimeout(() => {
-        blankDiv.style.visibility = 'hidden';
-      }, 400);
-
-      // Now show the actual app
-      document.getElementById('app').classList.add('on');
-      syncCurrentUserFromMembers();
-      computePots();
-      updateAccountBalances();
-      updateAccountUI();
-      checkMembershipRenewal(currentUser);
-      goTab('home', document.getElementById('ni-home'));
-      setupPresence();
-
-      // Start notification ad (if not admin)
-      if (currentUser && !currentUser.isAdmin) {
-        startNotificationAd();
-        setTimeout(() => {
-          const userNotifs = notifications[currentUser.id] || [];
-          const unreadCount = userNotifs.filter(n => !n.read).length;
-          if (unreadCount > 0) {
-            showNotificationsPopup();
-          }
-        }, 800);
-      }
-
-      setAdminDoorVisibility();
-      if (typeof hideTabLoading === 'function') hideTabLoading();
-
-      // Show the deposit notice (once per session)
-      if (currentUser && !currentUser.isAdmin && !sessionStorage.getItem('htf_deposit_notice_shown')) {
-        setTimeout(() => {
-          toast('📢 IMPORTANT: Use MTN MoMo button to deposit. Do NOT send to admin number!', '#f59e0b');
-          sessionStorage.setItem('htf_deposit_notice_shown', 'true');
-        }, 3000);
-      }
-
-    }, 2000); // wait for the welcome screen to fade
-  } else {
-    // Fallback (if blank div missing) – show app directly
-    document.getElementById('app').classList.add('on');
-    syncCurrentUserFromMembers();
-    updateAccountUI();
-    checkMembershipRenewal(currentUser);
-    goTab('home', document.getElementById('ni-home'));
-    setupPresence();
+    // Set welcome screen data
     if (currentUser && !currentUser.isAdmin) {
-      startNotificationAd();
-      setTimeout(() => {
-        const userNotifs = notifications[currentUser.id] || [];
-        const unreadCount = userNotifs.filter(n => !n.read).length;
-        if (unreadCount > 0) {
-          showNotificationsPopup();
+        if (nameSpan) nameSpan.innerText = currentUser.name || 'Member';
+        if (referralSpan) {
+            const referralCode = currentUser.id?.slice(-6) || currentUser.phone?.slice(-4) || 'HTF';
+            referralSpan.innerHTML = `Your Referral Code: <strong style="color: var(--gold);">${escapeHtml(referralCode)}</strong>`;
         }
-      }, 800);
+    } else if (currentUser && currentUser.isAdmin) {
+        if (nameSpan) nameSpan.innerText = 'Admin';
+        if (referralSpan) referralSpan.innerHTML = 'Admin Access – No Referral Code';
     }
-    setAdminDoorVisibility();
-    if (typeof hideTabLoading === 'function') hideTabLoading();
-  }
 
-  // ─── Start the home updates (single timer) ───
-  startHomeUpdates();
+    if (blankDiv) {
+        blankDiv.style.opacity = '1';
+        blankDiv.style.visibility = 'visible';
+        const innerCard = blankDiv.querySelector('div > div');
+        if (innerCard) setTimeout(() => innerCard.style.transform = 'scale(1)', 50);
 
-  // ─── Render member of the month (if enabled) ───
-  if (typeof renderMemberOfTheMonth === 'function') {
-    setTimeout(renderMemberOfTheMonth, 500);
-  }
+        document.getElementById('login-screen').classList.add('hidden');
+        document.getElementById('signup-screen').classList.add('hidden');
+        document.getElementById('pending-screen').classList.add('hidden');
+
+        setTimeout(() => {
+            blankDiv.style.opacity = '0';
+            setTimeout(() => blankDiv.style.visibility = 'hidden', 400);
+
+            document.getElementById('app').classList.add('on');
+            syncCurrentUserFromMembers();
+            computePots();
+            updateAccountBalances();
+            updateAccountUI();
+            checkMembershipRenewal(currentUser);
+            goTab('home', document.getElementById('ni-home'));
+            setupPresence();
+
+            if (currentUser && !currentUser.isAdmin) {
+                startNotificationAd();
+                // ─── Start the notice ad system ───
+                startNoticeAdSystem();
+                setTimeout(() => {
+                    const userNotifs = notifications[currentUser.id] || [];
+                    const unreadCount = userNotifs.filter(n => !n.read).length;
+                    if (unreadCount > 0) showNotificationsPopup();
+                }, 800);
+            }
+
+            setAdminDoorVisibility();
+            if (typeof hideTabLoading === 'function') hideTabLoading();
+
+            if (currentUser && !currentUser.isAdmin && !sessionStorage.getItem('htf_deposit_notice_shown')) {
+                setTimeout(() => {
+                    toast('📢 IMPORTANT: Use MTN MoMo button to deposit. Do NOT send to admin number!', '#f59e0b');
+                    sessionStorage.setItem('htf_deposit_notice_shown', 'true');
+                }, 3000);
+            }
+
+        }, 3000);
+    } else {
+        // Fallback
+        document.getElementById('app').classList.add('on');
+        syncCurrentUserFromMembers();
+        updateAccountUI();
+        checkMembershipRenewal(currentUser);
+        goTab('home', document.getElementById('ni-home'));
+        setupPresence();
+        if (currentUser && !currentUser.isAdmin) {
+            startNotificationAd();
+            startNoticeAdSystem();
+            setTimeout(() => {
+                const userNotifs = notifications[currentUser.id] || [];
+                const unreadCount = userNotifs.filter(n => !n.read).length;
+                if (unreadCount > 0) showNotificationsPopup();
+            }, 800);
+        }
+        setAdminDoorVisibility();
+        if (typeof hideTabLoading === 'function') hideTabLoading();
+    }// ─── Start the notice ad system ──────────────────────────
+startNoticeAdSystem();
+    startHomeUpdates();
+    if (typeof renderMemberOfTheMonth === 'function') {
+        setTimeout(renderMemberOfTheMonth, 500);
+    }
 }
+
 
 // 10 group-relevant questions
 const securityQuestions = [
@@ -11440,6 +11579,11 @@ window.logout=function(){
   if(currentUser && !currentUser.isAdmin && db){
     db.ref('/status/' + currentUser.id).set({ state: 'offline', last_changed: Date.now() });
   // Inside logout()
+// In logout()
+if (noticeAdTimer) clearInterval(noticeAdTimer);
+noticeAdTimer = null;
+noticeAdQueue = [];
+noticeAdVisible = false;
 if (_remindTimer) {
   clearTimeout(_remindTimer);
   _remindTimer = null;
@@ -12954,7 +13098,7 @@ function showLoanApprovalReceipt(member, loanData, schedule, onSend, onCopy, onS
         toast('⚠️ Receipt already open', '#f59e0b');
         return;
     }
-
+    
     const safeAmount = Number(loanData.amount) || 0;
     const safeRate = Number(loanData.interestRate) || 0;
     const safeTotal = Number(loanData.totalRepay) || 0;
@@ -13807,7 +13951,7 @@ function renderAdminTab() {
   const c = document.getElementById('admin-content');
   if (!c) return;
 
-  // Back button
+  // ─── Back button ──────────────────────────────────────────
   if (!c.querySelector('.admin-back-btn')) {
     const backBtn = document.createElement('div');
     backBtn.className = 'admin-back-btn';
@@ -13912,7 +14056,6 @@ function renderAdminTab() {
       </div>
     `;
 
-    // Pending loans
     const pendingLoans = loans.filter(l => l.status === 'pending');
     let pendingLoansHtml = '';
     if (pendingLoans.length) {
@@ -13941,7 +14084,7 @@ function renderAdminTab() {
       `;
     }
 
-    // Active loans (simplified)
+    // Active loans (simplified – you can keep your existing logic)
     const activeByMember = {};
     loans.forEach(l => {
       if (l.status === 'approved' && !l.repaid) {
@@ -14029,31 +14172,37 @@ function renderAdminTab() {
         <button class="btn btn-purple btn-full" onclick="toggleActiveLoans()" style="margin-top: 8px; padding: 8px; font-size: 0.75rem;">📋 Show Active Loans</button>
       `;
     }
-  
-     c.innerHTML = `
+
+    // Debt logs section (if you keep it)
+    const debtLogsHtml = `<div id="admin-debt-logs" style="margin-top:12px;"></div>`;
+
+    c.innerHTML = `
       ${warningsHtml}
       ${financialSummaryHtml}
       ${pendingActivityHtml}
       ${pendingLoansHtml}
       ${activeLoansHtml}
+      ${debtLogsHtml}
     `;
+    // If you have renderDebtLogs, call it here.
+    if (typeof renderDebtLogs === 'function') setTimeout(renderDebtLogs, 200);
     return;
   }
 
   // ─── NOTICE TAB ────────────────────────────────────────────
   else if (currentAdminTab === 'notice') {
-    // ... (keep your existing notice tab code)
     c.innerHTML = `
       ${warningsHtml}
-      <div class="card">
-        <div class="sec-h">📢 Notice Management</div>
-        <div class="fgrp">
-          <label class="flbl">Notice Text</label>
-          <textarea id="admin-notice-text" class="inp" rows="3">${settings.noticeText || ''}</textarea>
-        </div>
-        <button class="btn btn-gold btn-full" onclick="updateNotice()">📢 Publish Notice</button>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <div class="sec-h" style="margin:0;">📢 Manage Notices</div>
+        <button class="btn btn-sm btn-gold" onclick="openCreateNoticeModal()">➕ Add Notice</button>
+      </div>
+      <div id="notices-list" style="max-height:400px; overflow-y:auto; display:flex; flex-direction:column; gap:8px;"></div>
+      <div class="micro muted" style="margin-top:8px; text-align:center;">
+        Notices are shown as full‑screen ads to members. Each ad lasts 10 seconds and repeats every 10 minutes.
       </div>
     `;
+    renderNoticesList();
     return;
   }
 
@@ -14073,7 +14222,6 @@ function renderAdminTab() {
       <div class="card">
         <div class="sec-h">🌾 Harvest Actions</div>
         <button class="btn btn-teal btn-full" onclick="openAddTransaction()">➕ Add Transaction</button>
-        <button class="btn btn-teal btn-full" onclick="openBulkAddTransaction()">➕ Bulk Add Transaction</button>
         <button class="btn btn-green btn-full" onclick="openOv('ov-mark-paid')">✅ Mark Weekly Payout</button>
         <button class="btn btn-gold btn-full" onclick="previewProfitDistribution()">🎉 Distribute Profit Pool</button>
         <button class="btn btn-purple btn-full" onclick="openOv('ov-rot-manage'); buildDragRotation();">🔄 Manage Payout Rotation</button>
@@ -14110,27 +14258,7 @@ function renderAdminTab() {
       });
     }
 
-     const membersListHtml = `
-        <div id="allMembersContainer" style="display: none;">
-            <div class="card">
-                <div class="sec-h" style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>👥 All Members <span class="pill-badge pill-green">${members.length}</span></span>
-                </div>
-                <div id="admin-members-list"></div>
-            </div>
-        </div>
-        <button class="btn btn-purple btn-full" onclick="toggleAllMembers()" style="margin-top: 8px;">👥 Show/Hide All Members</button>
-    `;
-
-     c.innerHTML = `
-      ${warningsHtml}
-      <div class="card">
-        <div class="sec-h">⚡ Quick Actions</div>
-        <button class="btn btn-teal btn-full" onclick="openReceiptLookup()">🔍 Find Receipt</button>
-        <button class="btn btn-gold btn-full" onclick="openOv('ov-add-mbr')">👤 Add New Member</button>
-        <button class="btn btn-teal btn-full" onclick="loadApplications()">📝 View Applications<span id="apps-badge-wrap" style="display:none;background:var(--red);color:#fff;border-radius:99px;padding:1px 7px;font-size:0.65rem;font-weight:800;margin-left:4px"><span id="apps-count">0</span></span></button>
-        <button class="btn btn-purple btn-full" onclick="generateGroupReport()">📊 Generate Group Report</button>
-      </div>
+    const membersListHtml = `
       <div id="allMembersContainer" style="display: none;">
         <div class="card">
           <div class="sec-h" style="display: flex; justify-content: space-between; align-items: center;">
@@ -14140,6 +14268,18 @@ function renderAdminTab() {
         </div>
       </div>
       <button class="btn btn-purple btn-full" onclick="toggleAllMembers()" style="margin-top: 8px;">👥 Show/Hide All Members</button>
+    `;
+
+    c.innerHTML = `
+      ${warningsHtml}
+      <div class="card">
+        <div class="sec-h">⚡ Quick Actions</div>
+        <button class="btn btn-teal btn-full" onclick="openReceiptLookup()">🔍 Find Receipt</button>
+        <button class="btn btn-gold btn-full" onclick="openOv('ov-add-mbr')">👤 Add New Member</button>
+        <button class="btn btn-teal btn-full" onclick="loadApplications()">📝 View Applications<span id="apps-badge-wrap" style="display:none;background:var(--red);color:#fff;border-radius:99px;padding:1px 7px;font-size:0.65rem;font-weight:800;margin-left:4px"><span id="apps-count">0</span></span></button>
+        <button class="btn btn-purple btn-full" onclick="generateGroupReport()">📊 Generate Group Report</button>
+      </div>
+      ${membersListHtml}
     `;
     updateAdminMembersList();
     return;
@@ -14188,8 +14328,6 @@ function renderAdminTab() {
         <button class="btn btn-gold btn-full" onclick="openSettingsModal()">⚙️ Group Settings</button>
         <button class="btn btn-purple btn-full" onclick="openEditTermsModal()">📝 Edit Terms</button>
         <button class="btn btn-amber btn-full" onclick="openOv('ov-loan-settings');loadLoanSettings()">💰 Loan Settings</button>
-       <button class="btn btn-amber btn-full" onclick="prepareYearlyShare()">📅 Prepare Yearly Share</button>
-<button class="btn btn-purple btn-full" onclick="togglePrepaidPause()">${settings.prepaidPaused ? '🔓 Resume Prepaid' : '🔒 Pause Prepaid'}</button>
         <button class="btn btn-teal btn-full" onclick="generateGroupReport()">📊 Group Report</button>
         <button class="btn btn-green btn-full" onclick="openMemberStatusMessages()">📨 Send Status Messages</button>
       </div>
@@ -14207,54 +14345,23 @@ function renderAdminTab() {
   // ─── LOGS TAB ───────────────────────────────────────────────
   else if (currentAdminTab === 'logs') {
     c.innerHTML = `
-        <div class="sec-h">📋 Activity Logs</div>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:8px;">
-            <div class="card">
-                <div class="sec-h" style="color:var(--teal); font-size:0.8rem;">💰 Bulk Deposits</div>
-                <div id="admin-bulk-tx-logs" style="max-height:400px; overflow-y:auto;"></div>
-            </div>
-            <div class="card">
-                <div class="sec-h" style="color:var(--red); font-size:0.8rem;">🧾 Bulk Debts</div>
-                <div id="admin-bulk-debt-logs" style="max-height:400px; overflow-y:auto;"></div>
-            </div>
-        </div>
-    `;
-    renderBulkTxLogs();
-    renderBulkDebtLogs();
-    // Update badge after rendering
-    setTimeout(updateLogsBadge, 500);
-    return;
-}
-// ─── AWARDS TAB ─────────────────────────────────────────────
- else if (currentAdminTab === 'awards') {
-    const currentYear = new Date().getFullYear();
-    const data = calculateYearEndAwards(currentYear);
-
-    c.innerHTML = `
-        ${warningsHtml}
-        <div class="sec-h" style="margin-bottom:12px;">🏆 Year-End Awards (${currentYear})</div>
-
+      ${warningsHtml}
+      <div class="sec-h">📋 Activity Logs</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:8px;">
         <div class="card">
-            <div class="sec-h" style="font-size:0.8rem;">🏅 Winners</div>
-            <div id="awards-winners-list" style="max-height:500px; overflow-y:auto;">
-                ${data ? data.winners.map(w => `
-                    <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.05);">
-                        <div style="flex:1;">
-                            <span style="font-weight:600;">${w.category}</span>
-                            <div style="font-size:0.7rem; color:var(--t3);">${w.metric}</div>
-                        </div>
-                        <span style="color:var(--gold); font-weight:600;">${w.member ? escapeHtml(w.member.name) : '—'}</span>
-                        <span style="font-weight:700; color:var(--teal);">${money(w.amount)}</span>
-                    </div>
-                `).join('') : '<div class="muted">No data yet</div>'}
-            </div>
-            <div style="margin-top:8px; font-size:0.65rem; color:var(--t3);">
-                Equal Share (95%): ${data ? money(data.equalSharePerMember) : 'N/A'} per member
-            </div>
+          <div class="sec-h" style="color:var(--teal); font-size:0.8rem;">💰 Bulk Deposits</div>
+          <div id="admin-bulk-tx-logs" style="max-height:400px; overflow-y:auto;"></div>
         </div>
+        <div class="card">
+          <div class="sec-h" style="color:var(--red); font-size:0.8rem;">🧾 Bulk Debts</div>
+          <div id="admin-bulk-debt-logs" style="max-height:400px; overflow-y:auto;"></div>
+        </div>
+      </div>
     `;
+    if (typeof renderBulkTxLogs === 'function') setTimeout(renderBulkTxLogs, 200);
+    if (typeof renderBulkDebtLogs === 'function') setTimeout(renderBulkDebtLogs, 200);
     return;
-}
+  }
 
   // ─── FALLBACK ──────────────────────────────────────────────
   c.innerHTML = '<div class="empty-state">Select a tab above</div>';
@@ -14930,11 +15037,15 @@ window.saveSettingsSection = async function(section) {
             updateMaintenanceBadge();
             break;
 
-        case 'monthly_goal':
-            updates.monthlySavingsGoal = parseInt(document.getElementById('set-monthly-goal').value) || 1000000;
-            settings.monthlySavingsGoal = updates.monthlySavingsGoal;
-            renderThermometer(); // refresh the home screen thermometer
-            break;
+        // ─── NEW: Notice Interval ────────────────────────────
+       case 'notice_interval':
+    const interval = parseInt(document.getElementById('set-notice-interval').value) || 10;
+    if (interval < 1) { toast('Minimum 1 minute', '#ef4444'); return; }
+    updates.noticeInterval = interval;
+    settings.noticeInterval = interval;
+    // Restart the ad system with new interval
+    if (typeof restartNoticeAdSystem === 'function') restartNoticeAdSystem();
+    break;
 
         default:
             toast('Unknown section', '#ef4444');
@@ -14955,6 +15066,7 @@ window.saveSettingsSection = async function(section) {
         }
     }
 };
+
 window.saveSavingsSettings=function(){settings.dailyAmount=+document.getElementById('admin-daily').value;settings.welfareAmount=+document.getElementById('admin-welfare').value;settings.fineContribution=+document.getElementById('admin-finecontrib').value;settings.fineAmount=+document.getElementById('admin-fine').value;db.ref('settings').update({dailyAmount:settings.dailyAmount,welfareAmount:settings.welfareAmount,fineContribution:settings.fineContribution,fineAmount:settings.fineAmount});toast(t('save_rates'),'#10b981');renderAdminTab();updateHomeUI();};
 window.updateNotice = function() {
   const noticeText = document.getElementById('admin-notice-text').value.trim();
@@ -14974,10 +15086,7 @@ window.updateNotice = function() {
     noticeImageData: settings.noticeImageData
   }).then(() => {
     toast('Notice published!', '#10b981');
-    // Update the main carousel (if no custom notices exist)
-    if (mainCarouselNotifs.length === 0) {
-      renderMainCarousel();
-    }
+   
     // Refresh the admin notice tab
     if (currentAdminTab === 'notice') renderAdminTab();
   }).catch(err => {
@@ -17641,80 +17750,108 @@ function populateMemberCheckboxes(type) {
         </label>
     `).join('');
 }
+// ─── MTN Deposit ──────────────────────────────────────────────
 function dialDepositUSSD(network) {
-    // ─── Airtel: Coming soon ──────────────────────────────
-    if (network === 'airtel') {
-        toast('⏳ Airtel Money coming soon. Please use MTN for now.', '#f59e0b');
+    if (network !== 'mtn') {
+        toast('Only MTN is supported here.', '#f59e0b');
         return;
     }
 
-    // ─── MTN: Active ──────────────────────────────────────
-    // 1. Prompt for amount
     const amountInput = prompt('Enter amount to deposit (UGX):', '');
     if (amountInput === null) {
         toast('Deposit cancelled', '#f59e0b');
         return;
     }
 
-    // 2. Validate amount
     const amount = parseFloat(amountInput);
     if (isNaN(amount) || amount <= 0) {
         toast('Please enter a valid amount', '#ef4444');
         return;
     }
 
-    // 3. Construct USSD code with amount
     const merchantCode = '01992573';
     const ussdString = `*165*3*${merchantCode}*${amount}#`;
 
-    // ─── 4. Send notification to admin ──────────────────────
+    // Send notification to admin
     const memberName = currentUser ? currentUser.name : 'Unknown Member';
     const memberPhone = currentUser ? currentUser.phone : 'Unknown';
-    const timestamp = new Date().toLocaleString();
-
     const notif = {
         id: Date.now(),
-        text: `📱 Deposit Request (MTN): ${memberName} (${memberPhone}) wants to deposit UGX ${amount.toLocaleString()} via USSD at ${timestamp}. Please verify and confirm the deposit.`,
+        text: `📱 Deposit Request (MTN): ${memberName} (${memberPhone}) wants to deposit UGX ${amount.toLocaleString()} via USSD (Code: ${merchantCode}) at ${new Date().toLocaleString()}.`,
         date: Date.now(),
         read: false,
-        type: 'deposit_request'
+        type: 'deposit_request_mtn'
     };
-
     db.ref('notifications/admin').push(notif)
-        .then(() => {
-            toast('Deposit request sent to admin.', '#10b981');
-        })
-        .catch(err => {
-            console.error('Notification error:', err);
-            toast('Deposit request sent, but admin notification failed.', '#f59e0b');
-        });
+        .then(() => toast('Deposit request sent to admin.', '#10b981'))
+        .catch(() => toast('Deposit request sent, but admin notification failed.', '#f59e0b'));
 
-    // 5. Open dialer
     window.location.href = `tel:${ussdString}`;
 }
 
-// ─── Copy merchant code ────────────────────────────────────
+// ─── Airtel Deposit ──────────────────────────────────────────────
+function dialAirtelDeposit() {
+    const amountInput = prompt('Enter amount to deposit (UGX):', '');
+    if (amountInput === null) {
+        toast('Deposit cancelled', '#f59e0b');
+        return;
+    }
+
+    const amount = parseFloat(amountInput);
+    if (isNaN(amount) || amount <= 0) {
+        toast('Please enter a valid amount', '#ef4444');
+        return;
+    }
+
+    const tillNumber = '7079538';
+    const ussdString = `*185*9*${tillNumber}*${amount}#`;
+
+    // Send notification to admin
+    const memberName = currentUser ? currentUser.name : 'Unknown Member';
+    const memberPhone = currentUser ? currentUser.phone : 'Unknown';
+    const notif = {
+        id: Date.now(),
+        text: `📱 Deposit Request (Airtel): ${memberName} (${memberPhone}) wants to deposit UGX ${amount.toLocaleString()} via USSD (Till: ${tillNumber}) at ${new Date().toLocaleString()}.`,
+        date: Date.now(),
+        read: false,
+        type: 'deposit_request_airtel'
+    };
+    db.ref('notifications/admin').push(notif)
+        .then(() => toast('Deposit request sent to admin.', '#10b981'))
+        .catch(() => toast('Deposit request sent, but admin notification failed.', '#f59e0b'));
+
+    window.location.href = `tel:${ussdString}`;
+}
+
+// ─── Copy functions ──────────────────────────────────────────────
 function copyMerchantCode() {
     const code = '01992573';
+    fallbackCopy(code, 'Merchant code copied!');
+}
+
+function copyAirtelTill() {
+    const till = '7079538';
+    fallbackCopy(till, 'Airtel till number copied!');
+}
+
+function fallbackCopy(text, successMsg) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(code).then(() => {
-            toast('Merchant code copied!', '#10b981');
-        }).catch(() => {
-            fallbackCopy(code);
-        });
+        navigator.clipboard.writeText(text)
+            .then(() => toast(successMsg || 'Copied!', '#10b981'))
+            .catch(() => fallbackCopyManual(text, successMsg));
     } else {
-        fallbackCopy(code);
+        fallbackCopyManual(text, successMsg);
     }
 }
 
-function fallbackCopy(text) {
+function fallbackCopyManual(text, successMsg) {
     const input = document.createElement('input');
     input.value = text;
     document.body.appendChild(input);
     input.select();
     document.execCommand('copy');
     document.body.removeChild(input);
-    toast('Merchant code copied!', '#10b981');
+    toast(successMsg || 'Copied!', '#10b981');
 }
 function toggleMemberList(type) {
     const container = document.getElementById(type + '-member-list');
@@ -19535,9 +19672,6 @@ function loadSettings() {
         }
     }
 
-    // Monthly Goal
-    setVal('set-monthly-goal', settings.monthlySavingsGoal || 1000000);
-
     // Banner preview
     if (settings.bannerData) {
         const prev = document.getElementById('banner-preview');
@@ -19546,6 +19680,8 @@ function loadSettings() {
 
     // Update maintenance status
     updateMaintenanceStatusUI();
+    // Inside loadSettings, add:
+setVal('set-notice-interval', settings.noticeInterval || 10);
 }
 
 window.loadLoanSettings = function() {
@@ -19578,7 +19714,6 @@ window.resetGroup = function() {
       db.ref('rotation').remove();
       db.ref('loans').remove();
       db.ref('applications').remove();
-      db.ref('mainNotices').remove();
       db.ref('status').remove();
       db.ref('notifications').remove();
       db.ref('passwordResetRequests').remove();
@@ -19587,7 +19722,6 @@ window.resetGroup = function() {
       transactions = [];
       loans = [];
       rotation = { order: [], currentIndex: 0, history: [] };
-      mainCarouselNotifs = [];
       notifications = {};
       toast('All data has been cleared.', '#ef4444');
       setTimeout(() => location.reload(), 1500);
@@ -19601,7 +19735,6 @@ window.resetDataKeepMembers = function() {
       db.ref('transactions').remove();
       db.ref('rotation').remove();
       db.ref('loans').remove();
-      db.ref('mainNotices').remove();
       location.reload();
     }
   }, 'Reset Data (Keep Members)');
@@ -19762,10 +19895,10 @@ const SETTINGS_MENU = [
   { id: 'referral', icon: '👥', label: 'Referral' },
   { id: 'theme', icon: '🎨', label: 'Theme' },
   { id: 'maintenance', icon: '🔧', label: 'Maintenance' },
-  { id: 'monthly_goal', icon: '🎯', label: 'Monthly Goal' },
   { id: 'banner', icon: '🖼️', label: 'Banner' },
   { id: 'security', icon: '🔑', label: 'Security' },
-   { id: 'scheduler', icon: '⏰', label: 'Scheduler' },
+   // In SETTINGS_MENU array or in the HTML grid, add:
+{ id: 'notice_interval', icon: '⏱️', label: 'Notice Interval' },
 ];
 
 // ─── Show settings menu ──────────────────────────────────
@@ -19885,15 +20018,6 @@ function openSettingsPanel(panelId) {
       saveBtn = `<button class="btn btn-red btn-full" onclick="saveSettingsSection('maintenance'); showSettingsMenu();">⚡ Apply Maintenance</button>`;
       break;
 
-    case 'monthly_goal':
-      title = '🎯 Monthly Goal';
-      html = `
-        <div class="fgrp"><label class="flbl">Goal Amount (UGX)</label><input type="number" id="set-monthly-goal" class="inp"></div>
-        <div class="micro muted">Used for the thermometer on home screen.</div>
-      `;
-      saveBtn = `<button class="btn btn-gold btn-full" onclick="saveSettingsSection('monthly_goal'); showSettingsMenu();">💾 Save Goal</button>`;
-      break;
-
     case 'banner':
       title = '🖼️ Group Banner';
       html = `
@@ -19916,6 +20040,19 @@ function openSettingsPanel(panelId) {
       `;
       saveBtn = `<button class="btn btn-red btn-full" onclick="changeAdminPassword(); showSettingsMenu();">🔑 Change Password</button>`;
       break;
+    // Inside openSettingsPanel, add this case
+case 'notice_interval':
+    title = '⏱️ Notice Interval';
+    html = `
+        <div class="fgrp">
+            <label class="flbl">Show notices every (minutes)</label>
+            <input type="number" id="set-notice-interval" class="inp" min="1" max="1440" value="10">
+            <div class="micro muted">Notices are shown as full‑screen ads to members. Set how often they appear.</div>
+        </div>
+        <div class="micro muted" style="margin-top:8px;">Default: 10 minutes. Minimum: 1 minute. Maximum: 1440 minutes (24 hours).</div>
+    `;
+    saveBtn = `<button class="btn btn-gold btn-full" onclick="saveSettingsSection('notice_interval'); showSettingsMenu();">💾 Save Interval</button>`;
+    break;
 
     default:
       showSettingsMenu();
@@ -20009,81 +20146,6 @@ function getMembershipYear(m){
   if(now.getMonth()<j.getMonth()||(now.getMonth()===j.getMonth()&&now.getDate()<j.getDate()))y--;
   return Math.max(1,y+1);
 }
-let dragSrcIndex = null;
-
-function initCarouselDrag() {
-  const container = document.getElementById('carousel-drag-list');
-  if (!container) return;
-  const items = container.querySelectorAll('.rot-drag-item');
-  items.forEach(item => {
-    item.setAttribute('draggable', 'true');
-    item.removeEventListener('dragstart', handleDragStart);
-    item.removeEventListener('dragover', handleDragOver);
-    item.removeEventListener('drop', handleDrop);
-    item.addEventListener('dragstart', handleDragStart);
-    item.addEventListener('dragover', handleDragOver);
-    item.addEventListener('drop', handleDrop);
-  });
-}
-
-function handleDragStart(e) {
-  dragSrcIndex = Array.from(e.target.closest('.rot-drag-item').parentNode.children).indexOf(e.target.closest('.rot-drag-item'));
-  e.dataTransfer.effectAllowed = 'move';
-}
-
-function handleDragOver(e) {
-  e.preventDefault();
-  e.dataTransfer.dropEffect = 'move';
-}
-
-function handleDrop(e) {
-  e.preventDefault();
-  const targetItem = e.target.closest('.rot-drag-item');
-  if (!targetItem) return;
-  const targetIndex = Array.from(targetItem.parentNode.children).indexOf(targetItem);
-  if (dragSrcIndex === null || dragSrcIndex === targetIndex) return;
-  
-  const container = document.getElementById('carousel-drag-list');
-  const items = Array.from(container.children);
-  const [movedItem] = items.splice(dragSrcIndex, 1);
-  items.splice(targetIndex, 0, movedItem);
-  container.innerHTML = '';
-  items.forEach(item => container.appendChild(item));
-  dragSrcIndex = null;
-  // Re-attach drag listeners
-  initCarouselDrag();
-}
-window.saveCarouselOrder = async function() {
-  const container = document.getElementById('carousel-drag-list');
-  if (!container) {
-    toast('Carousel list not found', '#ef4444');
-    return;
-  }
-  const items = container.querySelectorAll('.rot-drag-item');
-  const newOrder = [];
-  items.forEach(item => {
-    const key = item.getAttribute('data-notice-key');
-    if (key) newOrder.push(key);
-  });
-  if (newOrder.length !== mainCarouselNotifs.length) {
-    toast('Order mismatch. Please refresh the page.', '#ef4444');
-    return;
-  }
-  // Reorder mainCarouselNotifs according to newOrder
-  const orderedNotifs = [];
-  for (let key of newOrder) {
-    const notice = mainCarouselNotifs.find(n => n.key === key);
-    if (notice) orderedNotifs.push(notice);
-  }
-  mainCarouselNotifs = orderedNotifs;
-  // Save order to Firebase (as an array of notice keys)
-  await db.ref('settings/carouselOrder').set(newOrder);
-  // Re-render the carousel on home page
-  renderMainCarousel();
-  toast('Carousel order saved!', '#10b981');
-  // Refresh the admin notice tab to show new order
-  if (currentAdminTab === 'notice') renderAdminTab();
-};
  
 function checkMembershipRenewal(m){
   if(!m||m.isAdmin)return;
@@ -20897,8 +20959,7 @@ function showAdminGrid() {
     { id: 'users', name: 'Users', icon: '👥' },
     { id: 'fines', name: 'Fines', icon: '⚡' },
     { id: 'settings', name: 'Settings', icon: '⚙️' },
-    { id: 'logs', name: 'Logs', icon: '📋' },
-    { id: 'awards', name: 'Awards', icon: '🏆' } // ✅ NEW
+    { id: 'logs', name: 'Logs', icon: '📋' }
   ];
 
   let html = `<div class="admin-grid">`;
