@@ -8611,34 +8611,19 @@ function cleanRotationOrder() {
 // ─── Ad System ──────────────────────────────────────────────
 let noticeAdTimer = null;
 let noticeAdQueue = [];
+let noticeAdCurrentIndex = 0;
 let noticeAdVisible = false;
 
+// ─── Start the ad system ──────────────────────────────────────
 function startNoticeAdSystem() {
-    // Admin can also see notices (for testing)
-    // if (!currentUser) return; // (optional)
-    loadActiveNoticesForAds();
-    const intervalMinutes = settings.noticeInterval || 10;
-    const intervalMs = intervalMinutes * 60 * 1000;
-    if (noticeAdTimer) clearInterval(noticeAdTimer);
-    noticeAdTimer = setInterval(() => {
-        loadActiveNoticesForAds();
-    }, intervalMs);
-    console.log(`📢 Notice ad system started. Interval: ${intervalMinutes} minutes.`);
-}
-
-function restartNoticeAdSystem() {
     if (noticeAdTimer) {
-        clearInterval(noticeAdTimer);
+        clearTimeout(noticeAdTimer);
         noticeAdTimer = null;
     }
-    if (noticeAdVisible) {
-        const overlay = document.getElementById('notice-ad-overlay');
-        if (overlay) closeAdOverlay(overlay);
-    }
-    noticeAdQueue = [];
-    startNoticeAdSystem();
+    loadActiveNoticesForAds();
 }
 
+// ─── Load active notices and begin the cycle ──────────────────
 function loadActiveNoticesForAds() {
     db.ref('notices').orderByChild('active').equalTo(true).once('value', snap => {
         const notices = snap.val() ? Object.values(snap.val()) : [];
@@ -8646,55 +8631,63 @@ function loadActiveNoticesForAds() {
             noticeAdQueue = [];
             return;
         }
+        // Shuffle and reset index
         noticeAdQueue = shuffleArray(notices);
-        // Show first ad after 3 seconds (if not already visible)
+        noticeAdCurrentIndex = 0;
+        // Start the first notice after a short delay
         if (!noticeAdVisible) {
             setTimeout(showNextNoticeAd, 3000);
         }
     });
 }
 
+// ─── Show the next notice (called after interval) ────────────
 function showNextNoticeAd() {
     if (noticeAdVisible) return;
     if (!noticeAdQueue.length) {
+        // Reload (maybe new notices added)
         loadActiveNoticesForAds();
         return;
     }
-    const ad = noticeAdQueue.pop(); // take one
+    const ad = noticeAdQueue[noticeAdCurrentIndex];
     showAdOverlay(ad);
 }
 
+// ─── Display the ad overlay ──────────────────────────────────
 function showAdOverlay(ad) {
     noticeAdVisible = true;
     const overlay = document.createElement('div');
     overlay.id = 'notice-ad-overlay';
     overlay.style.cssText = `
-        position: fixed; inset: 0; z-index: 99999;
-        display: flex; flex-direction: column;
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        display: flex;
+        flex-direction: column;
         align-items: center;
-        justify-content: flex-start;
+        justify-content: center;
         padding: 0;
+        margin: 0;
         animation: fadeIn 0.4s ease;
-        background-size: cover;
+        background-color: #000;
+        background-image: ${ad.image ? `url('${ad.image}')` : 'none'};
+        background-size: 80% auto;
         background-position: center;
-        ${ad.image ? `background-image: url('${ad.image}');` : 'background: rgba(0,0,0,0.85);'}
+        background-repeat: no-repeat;
     `;
 
     overlay.innerHTML = `
-        <!-- Top bar with gradient for readability -->
-        <div style="width: 100%; background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 100%); padding: 20px 20px 40px; text-align: center; z-index: 2; position: relative;">
-            <div style="font-size: 1.5rem; font-weight: 800; color: var(--gold); margin-bottom: 4px;">${escapeHtml(ad.title || '📢 Notice')}</div>
-            <div style="font-size: 1rem; color: #fff; line-height: 1.5;">${escapeHtml(ad.message || '')}</div>
+        <div style="position: absolute; inset: 0; background: linear-gradient(to bottom, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.6) 100%); z-index: 1;"></div>
+        <div style="position: relative; z-index: 2; max-width: 500px; width: 90%; text-align: center; color: white; padding: 20px; text-shadow: 0 2px 10px rgba(0,0,0,0.8);">
+            <div style="font-size: 1.5rem; font-weight: 800; color: var(--gold); margin-bottom: 8px;">${escapeHtml(ad.title || '📢 Notice')}</div>
+            <div style="font-size: 1rem; color: #fff; line-height: 1.6; margin-bottom: 20px;">${escapeHtml(ad.message || '')}</div>
+            <div style="font-size: 0.8rem; color: rgba(255,255,255,0.7);">⏳ This notice will close in <span id="ad-countdown" style="font-weight: 700; color: var(--gold);">10</span> seconds</div>
         </div>
-        <!-- Countdown at bottom -->
-        <div style="position: absolute; bottom: 30px; left: 0; right: 0; text-align: center; z-index: 2; color: rgba(255,255,255,0.7); font-size: 0.8rem; text-shadow: 0 2px 6px rgba(0,0,0,0.5);">
-            ⏳ This notice will close in <span id="ad-countdown" style="font-weight: 700; color: var(--gold);">10</span> seconds
-        </div>
-        <!-- Close button -->
         <button onclick="closeAdOverlay(this.parentNode)" style="position:absolute; top:16px; right:16px; background:rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.3); color:white; font-size:1.5rem; cursor:pointer; width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; z-index:3; backdrop-filter:blur(4px);">✕</button>
     `;
     document.body.appendChild(overlay);
 
+    // Countdown
     let seconds = 10;
     const countdownEl = document.getElementById('ad-countdown');
     const interval = setInterval(() => {
@@ -8709,6 +8702,7 @@ function showAdOverlay(ad) {
     overlay._interval = interval;
 }
 
+// ─── Close the overlay and schedule the next notice ──────────
 function closeAdOverlay(overlay) {
     if (!overlay) overlay = document.getElementById('notice-ad-overlay');
     if (overlay) {
@@ -8718,14 +8712,47 @@ function closeAdOverlay(overlay) {
         setTimeout(() => overlay.remove(), 350);
     }
     noticeAdVisible = false;
-    // After closing, check if there are more ads in the queue
-    setTimeout(() => {
-        if (noticeAdQueue.length > 0 && !noticeAdVisible) {
-            showNextNoticeAd();
-        }
-    }, 5000);
+
+    // Advance to the next notice after the interval
+    advanceToNextNotice();
 }
 
+// ─── Advance to the next notice (or reload queue) ────────────
+function advanceToNextNotice() {
+    // Move to next index
+    noticeAdCurrentIndex++;
+    if (noticeAdCurrentIndex >= noticeAdQueue.length) {
+        // Queue exhausted – reshuffle and restart
+        loadActiveNoticesForAds();
+        return;
+    }
+    // Schedule the next notice after the interval
+    const intervalMinutes = settings.noticeInterval || 10;
+    const intervalMs = intervalMinutes * 60 * 1000;
+    if (noticeAdTimer) clearTimeout(noticeAdTimer);
+    noticeAdTimer = setTimeout(() => {
+        if (!noticeAdVisible) {
+            showNextNoticeAd();
+        }
+    }, intervalMs);
+}
+
+// ─── Restart the system (called after notices are changed) ───
+function restartNoticeAdSystem() {
+    if (noticeAdTimer) {
+        clearTimeout(noticeAdTimer);
+        noticeAdTimer = null;
+    }
+    if (noticeAdVisible) {
+        const overlay = document.getElementById('notice-ad-overlay');
+        if (overlay) closeAdOverlay(overlay);
+    }
+    noticeAdQueue = [];
+    noticeAdCurrentIndex = 0;
+    startNoticeAdSystem();
+}
+
+// ─── Helper: shuffle array ──────────────────────────────────
 function shuffleArray(array) {
     const arr = array.slice();
     for (let i = arr.length - 1; i > 0; i--) {
