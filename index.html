@@ -4532,7 +4532,6 @@ const FIREBASE_CONFIG={
   messagingSenderId:"59557732077",
   appId:"1:59557732077:web:aa79eb14010d05728176e4"
 };
-const SERVER_URL = 'https://harvest-trust-pesapal.onrender.com';
 // ─── PESAPAL CREDENTIALS ──────────────────────────────────────
 const PESAPAL_CONSUMER_KEY = 'GZLl95Wvb+Q9tpij6uw36i4UipT9ezqB';
 const PESAPAL_CONSUMER_SECRET = 'dY0NpHNc+0HxJi2I9X0u+ABFEyo=';
@@ -7165,33 +7164,42 @@ async function updateLoanRepaidStatus(phone) {
 // ════════════════════════════════════════════════════════════════
 
 // ─── Get Token via Cloud Function ─────────────────────────────
+const SERVER_URL = 'https://harvest-trust-pesapal.onrender.com';
+
+// ─── GET TOKEN FROM RENDER SERVER ─────────────────────────────
 async function getPesapalToken() {
     try {
-        // Make sure firebase.functions() is available
-        if (typeof firebase === 'undefined' || !firebase.functions) {
-            throw new Error('Firebase Functions SDK not loaded. Add the script tag.');
-        }
-        const getTokenFunction = firebase.functions().httpsCallable('getPesapalToken');
-        const result = await getTokenFunction();
-        return result.data.token;
+        const response = await fetch(SERVER_URL + '/api/get-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        if (!response.ok) throw new Error('Server error: ' + response.status);
+        const data = await response.json();
+        if (!data.token) throw new Error('No token received');
+        return data.token;
     } catch (err) {
         console.error('❌ Token error:', err);
         throw new Error('Failed to get Pesapal token: ' + err.message);
     }
 }
-
 // ─── Initiate Payment via Cloud Function ──────────────────────
+// ─── INITIATE PAYMENT VIA RENDER SERVER ──────────────────────
 async function initiatePesapalPayment(phone, amount, memberId, memberName, provider) {
     try {
-        const initiatePayment = firebase.functions().httpsCallable('initiatePesapalPayment');
-        const result = await initiatePayment({
-            phone: phone,
-            amount: amount,
-            memberId: memberId,
-            memberName: memberName,
-            provider: provider || 'MTN_UGANDA'
+        const response = await fetch(SERVER_URL + '/api/initiate-payment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                phone: phone,
+                amount: amount,
+                memberId: memberId,
+                memberName: memberName,
+                provider: provider || 'MTN_UGANDA'
+            })
         });
-        return result.data;
+        if (!response.ok) throw new Error('Server error: ' + response.status);
+        const data = await response.json();
+        return data;
     } catch (err) {
         console.error('❌ Payment initiation error:', err);
         throw new Error('Payment initiation failed: ' + err.message);
