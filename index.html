@@ -1587,6 +1587,79 @@ select.inp option{background:#0a1628;color:var(--t)}
 .pill-green{background:rgba(16,185,129,0.15);color:var(--green);border:1px solid rgba(16,185,129,0.25)}
 .pill-amber{background:rgba(245,158,11,0.15);color:var(--amber);border:1px solid rgba(245,158,11,0.25)}
 .pill-red{background:rgba(239,68,68,0.15);color:var(--red);border:1px solid rgba(239,68,68,0.25)}
+/* ─── 5‑Box PIN Input ──────────────────────────────────────── */
+.pin-container {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin: 20px 0 8px;
+}
+
+.pin-box {
+    width: 52px;
+    height: 58px;
+    border: 2px solid #4a9eff;
+    border-radius: 14px;
+    background: rgba(255,255,255,0.05);
+    color: var(--t);
+    font-size: 1.8rem;
+    font-weight: 700;
+    text-align: center;
+    font-family: 'JetBrains Mono', monospace;
+    outline: none;
+    transition: all 0.25s ease;
+    caret-color: var(--gold);
+}
+
+.pin-box:focus {
+    border-color: #66b0ff;
+    box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.3);
+    transform: translateY(-2px);
+}
+
+.pin-box.filled {
+    background: rgba(74, 158, 255, 0.15);
+    border-color: #66b0ff;
+}
+
+
+@keyframes pinShake {
+    0%,100% { transform: translateX(0); }
+    15% { transform: translateX(-8px) rotate(-1.5deg); }
+    30% { transform: translateX(8px) rotate(1.5deg); }
+    45% { transform: translateX(-5px); }
+    60% { transform: translateX(5px); }
+    75% { transform: translateX(-3px); }
+    90% { transform: translateX(3px); }
+}
+
+.pin-box.hidden {
+    display: none;
+}
+
+/* ─── Mobile Responsive ────────────────────────────────────── */
+@media (max-width: 480px) {
+    .pin-box {
+        width: 44px;
+        height: 50px;
+        font-size: 1.5rem;
+    }
+    .pin-container {
+        gap: 8px;
+    }
+}
+
+/* ─── Also add this if you don't have the auth-card shake ─── */
+@keyframes authCardShake {
+    0%,100% { transform: translateX(0); }
+    20% { transform: translateX(-9px); }
+    40% { transform: translateX(9px); }
+    60% { transform: translateX(-5px); }
+    80% { transform: translateX(5px); }
+}
+.auth-card-shake {
+    animation: authCardShake 0.45s cubic-bezier(.36,.07,.19,.97) both !important;
+}
 
 /* Admin grid cards – modern, animated, attractive */
 .admin-grid {
@@ -3240,19 +3313,27 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
 </style>
 <div class="bg-orb bg-orb-1"></div><div class="bg-orb bg-orb-2"></div><div class="bg-orb bg-orb-3"></div>
 <div class="twrap" id="twrap"></div>
-<div id="login-screen" class="auth-container hidden">
-  <div class="auth-deco auth-deco-1">🌾</div>
-  <div class="auth-deco auth-deco-2">💰</div>
-  <div class="auth-deco auth-deco-3">🦁</div>
+<div id="login-screen" class="auth-container">
   <div class="auth-card">
     <div class="auth-brand"><div class="auth-brand-icon">🌿</div></div>
-    <div class="auth-title">🌾 Harvest Trust Finance</div>
-    <div class="auth-subtitle">Welcome to Harvest Trust Finance</div>
-    <input type="password" id="login-password" class="auth-input" placeholder="Enter Password" onkeydown="if(event.key==='Enter')doLogin()">
-    <button class="auth-btn" onclick="doLogin()">🔓 Login</button>
+    <div class="auth-title">🌾 Harvest Trust</div>
+    <div class="auth-subtitle">Enter your PIN to login</div>
+
+    <!-- 5‑Box PIN Input -->
+    <div class="pin-container">
+      <input type="text" class="pin-box" id="pin-0" maxlength="1" autofocus>
+      <input type="text" class="pin-box" id="pin-1" maxlength="1">
+      <input type="text" class="pin-box" id="pin-2" maxlength="1">
+      <input type="text" class="pin-box" id="pin-3" maxlength="1">
+      <input type="text" class="pin-box" id="pin-4" maxlength="1">,.
+    </div>
+
+    <div id="login-error" class="micro" style="color:var(--red); text-align:center; margin-top:8px; min-height:20px;"></div>
+
+   <button id="login-submit-btn" class="auth-btn" onclick="doLogin()">🔓 Login</button>
+
     <div class="auth-link" onclick="showSignup()">Click here to sign up</div>
     <div class="auth-link" onclick="openForgotPassword()">Forgot password?</div>
-    <div id="login-error" class="micro" style="color:var(--red);text-align:center;margin-top:8px;min-height:16px;"></div>
     <div class="version-footer">v2.0.0 · Lwogamata</div>
   </div>
 </div>
@@ -3427,21 +3508,6 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
   <div class="micro muted" style="margin-top: 12px;">Loading...</div>
 </div>
     <div id="t-home" class="tab on">
-      <!-- Test Pesapal Connection Button -->
-<div style="margin: 6px 0; display: flex; gap: 8px; flex-wrap: wrap;">
-    <button onclick="testPesapalConnection()" style="
-        padding: 8px 16px;
-        background: var(--teal);
-        border-radius: 8px;
-        color: #fff;
-        font-weight: 700;
-        border: none;
-        cursor: pointer;
-        flex: 1;
-    ">
-        🔌 Test Pesapal
-    </button>
-</div>
     <!-- ════════════════════════════════════════════════════════ -->
     <!-- STATS STRIP (2 tiles)                                  -->
     <!-- ════════════════════════════════════════════════════════ -->
@@ -3555,17 +3621,6 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
             </div>
         </div>
     </div>
-    <!-- MTN Button -->
-<div onclick="payWithPesapal('MTN_UGANDA')" style="background:linear-gradient(135deg, #ffd100, #f5a623); border-radius:10px; padding:10px; text-align:center; cursor:pointer;">
-    <div style="font-weight:700; color:#000;">MTN MoMo</div>
-    <div style="font-size:0.6rem; color:#000;">via Pesapal</div>
-</div>
-
-<!-- Airtel Button -->
-<div onclick="payWithPesapal('AIRTEL_UGANDA')" style="background:linear-gradient(135deg, #ff0000, #cc0000); border-radius:10px; padding:10px; text-align:center; cursor:pointer;">
-    <div style="font-weight:700; color:#fff;">Airtel Money</div>
-    <div style="font-size:0.6rem; color:#fff;">via Pesapal</div>
-</div>
 
     <!-- USSD reminder notice -->
     <div style="flex-shrink:0; margin:2px 0 4px; padding:4px; font-size:0.55rem; color:var(--t3); text-align:center; background:rgba(255,255,255,0.03); border-radius:6px;">
@@ -4532,10 +4587,6 @@ const FIREBASE_CONFIG={
   messagingSenderId:"59557732077",
   appId:"1:59557732077:web:aa79eb14010d05728176e4"
 };
-// ─── PESAPAL CREDENTIALS ──────────────────────────────────────
-const PESAPAL_CONSUMER_KEY = 'GZLl95Wvb+Q9tpij6uw36i4UipT9ezqB';
-const PESAPAL_CONSUMER_SECRET = 'dY0NpHNc+0HxJi2I9X0u+ABFEyo=';
-const PESAPAL_BASE_URL = 'https://www.pesapal.com/api/PostPesapalDirectOrderV4';
 
 let currentStep = 0;
 let db=null;
@@ -4646,6 +4697,11 @@ function updateLoadingProgress() {
     allDataLoaded = true;
     if (window._onAllDataLoaded) window._onAllDataLoaded();
   }}
+// ─── Get notifications as array ──────────────────────────────
+function getUserNotifications(memberId) {
+    let data = notifications[memberId] || {};
+    return Array.isArray(data) ? data : Object.values(data);
+}
 function getLastPayoutDate() {
     var payouts = transactions
         .filter(function(tx) { return tx.type === 'payout'; })
@@ -5353,6 +5409,22 @@ function getReceiptQuote(member) {
     const list = quotes[category] || quotes.other;
     return list[Math.floor(Math.random() * list.length)];
 }
+// ─── Get member's PIN ─────────────────────────────────────────
+function getMemberPin(member) {
+    if (!member || !member.name || !member.phone) return null;
+    const firstLetter = member.name.charAt(0).toUpperCase();
+    const lastFour = member.phone.slice(-4);
+    return firstLetter + lastFour;
+}
+
+// ─── Show PIN to user (e.g., after signup) ──────────────────
+function showMemberPin(member) {
+    const pin = getMemberPin(member);
+    if (pin) {
+        alert(`Your login PIN is: ${pin}\n\nFirst letter of your name: ${member.name.charAt(0).toUpperCase()}\nLast 4 digits of your phone: ${member.phone.slice(-4)}`);
+    }
+}
+
 // ─── Get member's rank based on total deposits ──────────────
 function getMemberRank(member) {
     if (!member) return '—';
@@ -7159,133 +7231,6 @@ async function updateLoanRepaidStatus(phone) {
     console.log(`Outstanding not zero: ${outstanding}`);
   }
 }
-// ════════════════════════════════════════════════════════════════
-// PESAPAL FUNCTIONS – Place AFTER goTab
-// ════════════════════════════════════════════════════════════════
-
-// ─── Get Token via Cloud Function ─────────────────────────────
-const SERVER_URL = 'https://harvest-trust-pesapal.onrender.com';
-
-// ─── GET TOKEN FROM RENDER SERVER ─────────────────────────────
-async function getPesapalToken() {
-    try {
-        const response = await fetch(SERVER_URL + '/api/get-token', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-        if (!response.ok) throw new Error('Server error: ' + response.status);
-        const data = await response.json();
-        if (!data.token) throw new Error('No token received');
-        return data.token;
-    } catch (err) {
-        console.error('❌ Token error:', err);
-        throw new Error('Failed to get Pesapal token: ' + err.message);
-    }
-}
-// ─── Initiate Payment via Cloud Function ──────────────────────
-// ─── INITIATE PAYMENT VIA RENDER SERVER ──────────────────────
-async function initiatePesapalPayment(phone, amount, memberId, memberName, provider) {
-    try {
-        const response = await fetch(SERVER_URL + '/api/initiate-payment', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                phone: phone,
-                amount: amount,
-                memberId: memberId,
-                memberName: memberName,
-                provider: provider || 'MTN_UGANDA'
-            })
-        });
-        if (!response.ok) throw new Error('Server error: ' + response.status);
-        const data = await response.json();
-        return data;
-    } catch (err) {
-        console.error('❌ Payment initiation error:', err);
-        throw new Error('Payment initiation failed: ' + err.message);
-    }
-}
-
-// ─── Payment Button Handler ────────────────────────────────────
-window.payWithPesapal = async function(provider) {
-    // Check if user is logged in
-    if (!currentUser) {
-        toast('Please login first', '#ef4444');
-        return;
-    }
-
-    // Admin cannot make deposits
-    if (currentUser.isAdmin) {
-        toast('Admin cannot make deposits', '#ef4444');
-        return;
-    }
-
-    // Ask for amount
-    const amount = prompt('Enter amount to deposit (UGX):', '');
-    if (amount === null) {
-        toast('Payment cancelled', '#f59e0b');
-        return;
-    }
-
-    const parsedAmount = parseFloat(amount);
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
-        toast('Please enter a valid amount', '#ef4444');
-        return;
-    }
-
-    // Minimum amount
-    if (parsedAmount < 100) {
-        toast('Minimum amount is UGX 100', '#ef4444');
-        return;
-    }
-
-    try {
-        toast('⏳ Initiating payment...', '#f59e0b');
-
-        const result = await initiatePesapalPayment(
-            currentUser.phone,
-            parsedAmount,
-            currentUser.id,
-            currentUser.name,
-            provider
-        );
-
-        console.log('Payment result:', result);
-
-        if (result.status === 'success' || result.redirect_url) {
-            toast('📱 Check your phone. Confirm the USSD prompt.', '#10b981');
-
-            // If there's a redirect URL, open it
-            if (result.redirect_url) {
-                window.open(result.redirect_url, '_blank');
-            }
-        } else {
-            const errorMsg = result.message || 'Payment initiation failed. Try again.';
-            toast('❌ ' + errorMsg, '#ef4444');
-        }
-
-    } catch (err) {
-        console.error('❌ Payment error:', err);
-        toast('❌ Error: ' + err.message, '#ef4444');
-    }
-};
-
-// ─── Test Connection Function ──────────────────────────────────
-window.testPesapalConnection = async function() {
-    try {
-        toast('🔄 Testing Pesapal connection...', '#06b6d4');
-        const token = await getPesapalToken();
-        if (token) {
-            toast('✅ Pesapal connected! Token received.', '#10b981');
-            console.log('Token:', token);
-        } else {
-            toast('❌ No token received', '#ef4444');
-        }
-    } catch (err) {
-        toast('❌ Connection failed: ' + err.message, '#ef4444');
-        console.error('Test error:', err);
-    }
-};
 
 async function getOrCreateActiveLoan(memberId, memberPhone, memberName) {
   // Find an existing active (approved, not repaid) loan for this member
@@ -7694,7 +7639,7 @@ function setupPresence(){
 // Auto‑show unread notifications popup (for non‑admin members)
 if (currentUser && !currentUser.isAdmin) {
   setTimeout(() => {
-    const userNotifs = notifications[currentUser.id] || [];
+    const userNotifs = getNotificationsArray(currentUser.id);
     const unreadCount = userNotifs.filter(n => !n.read).length;
     if (unreadCount > 0) {
       showNotificationsPopup();
@@ -8407,16 +8352,19 @@ function startNotificationAd() {
 }
 
 function refreshNotificationQueue() {
-  if (!currentUser || currentUser.isAdmin) {
-    notificationQueue = [];
-    return;
-  }
-  const userNotifs = notifications[currentUser.id] || [];
-  // Only unread broadcast messages
-  const unreadBroadcasts = userNotifs.filter(n => !n.read && n.broadcast === true);
-  // Randomize order
-  notificationQueue = unreadBroadcasts.sort(() => Math.random() - 0.5);
-  currentAdIndex = 0;
+    if (!currentUser || currentUser.isAdmin) {
+        notificationQueue = [];
+        return;
+    }
+    
+    let userNotifs = notifications[currentUser.id] || {};
+    if (!Array.isArray(userNotifs)) {
+        userNotifs = Object.values(userNotifs);
+    }
+    
+    const unreadBroadcasts = userNotifs.filter(n => !n.read && n.broadcast === true);
+    notificationQueue = unreadBroadcasts.sort(() => Math.random() - 0.5);
+    currentAdIndex = 0;
 }
 function showWelcomeOverlay(memberName) {
   const overlay = document.getElementById('welcome-overlay');
@@ -9637,9 +9585,7 @@ updateLoanIndicator();
 function updateNotificationBadge() {
     if (!currentUser) return;
 
-    // ----- Member notifications (bell icon) -----
     if (!currentUser.isAdmin) {
-        // ✅ FIX: Convert object to array if needed
         let userNotifs = notifications[currentUser.id] || {};
         if (!Array.isArray(userNotifs)) {
             userNotifs = Object.values(userNotifs);
@@ -9776,7 +9722,7 @@ function showMainApp() {
                 // ─── Start the notice ad system ───
                 startNoticeAdSystem();
                 setTimeout(() => {
-                    const userNotifs = notifications[currentUser.id] || [];
+                    const userNotifs = getNotificationsArray(currentUser.id);
                     const unreadCount = userNotifs.filter(n => !n.read).length;
                     if (unreadCount > 0) showNotificationsPopup();
                 }, 800);
@@ -9805,7 +9751,7 @@ function showMainApp() {
             startNotificationAd();
             startNoticeAdSystem();
             setTimeout(() => {
-                const userNotifs = notifications[currentUser.id] || [];
+                const userNotifs = getNotificationsArray(currentUser.id);
                 const unreadCount = userNotifs.filter(n => !n.read).length;
                 if (unreadCount > 0) showNotificationsPopup();
             }, 800);
@@ -10690,6 +10636,7 @@ window.printSingleReceipt = function() {
 window.showSignup = function() {
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('signup-screen').classList.remove('hidden');
+   clearPinBoxes();
   currentStep = 0;               // <-- add this
   currentQuestionIndex = 0;      // optional
   signupAnswers = new Array(10).fill('');
@@ -10723,6 +10670,7 @@ window.backToLogin = function() {
   document.getElementById('signup-screen').classList.add('hidden');
   document.getElementById('pending-screen').classList.add('hidden');
   document.getElementById('login-screen').classList.remove('hidden');
+   clearPinBoxes();
   // Clear login input and error
   const loginPwd = document.getElementById('login-password');
   if (loginPwd) loginPwd.value = '';
@@ -10733,6 +10681,7 @@ window.backToLogin = function() {
   signupAnswers = new Array(10).fill('');
   signupExtra = { name: '', phone: '',  why: '', photoData: '' };
 };
+
 window.submitSignupNew = function() {
   const name = document.getElementById('signup-name').value.trim();
   const phone = document.getElementById('signup-phone').value.trim();
@@ -18734,35 +18683,35 @@ function showAdminGrid() {
   });
 }
 
-
 function showNotificationsPopup() {
-  if (!currentUser || currentUser.isAdmin) return;
-  const userNotifs = notifications[currentUser.id] || [];
-  const listDiv = document.getElementById('notifications-popup-list');
-  if (!listDiv) return;
+    if (!currentUser || currentUser.isAdmin) return;
+    
+    let userNotifs = notifications[currentUser.id] || {};
+    if (!Array.isArray(userNotifs)) {
+        userNotifs = Object.values(userNotifs);
+    }
+    
+    const listDiv = document.getElementById('notifications-popup-list');
+    if (!listDiv) return;
 
-  if (userNotifs.length === 0) {
-    listDiv.innerHTML = '<div class="empty-state">No notifications</div>';
+    if (userNotifs.length === 0) {
+        listDiv.innerHTML = '<div class="empty-state">No notifications</div>';
+        openOv('ov-notifications-popup');
+        return;
+    }
+
+    let html = '<div style="display:flex;flex-direction:column;gap:8px;">';
+    userNotifs.slice().sort((a, b) => b.id - a.id).forEach(n => {
+        html += `...`; // existing code
+    });
+    html += '</div>';
+    listDiv.innerHTML = html;
     openOv('ov-notifications-popup');
-    return;
-  }
-
-  let html = '<div style="display:flex;flex-direction:column;gap:8px;">';
-  userNotifs.slice().sort((a, b) => b.id - a.id).forEach(n => {
-    html += `
-      <div style="padding:12px;border-radius:12px;background:${n.read ? 'rgba(255,255,255,0.04)' : 'rgba(245,158,11,0.1)'};border:1px solid ${n.read ? 'rgba(255,255,255,0.1)' : 'rgba(245,158,11,0.3)'}">
-        <div style="font-weight:${n.read ? '400' : '600'}">${escapeHtml(n.text)}</div>
-        <div class="micro muted" style="margin-top:4px">${new Date(n.date).toLocaleString()}</div>
-        <div style="display:flex;gap:8px;margin-top:8px">
-          ${!n.read ? `<button class="btn btn-sm btn-teal" onclick="markNotifReadPopup(${n.id})">✓ Mark Read</button>` : ''}
-          <button class="btn btn-sm btn-red" onclick="deleteNotifPopup(${n.id})">🗑️ Delete</button>
-        </div>
-      </div>
-    `;
-  });
-  html += '</div>';
-  listDiv.innerHTML = html;
-  openOv('ov-notifications-popup');
+}
+// ─── Get notifications as array ──────────────────────────────
+function getNotificationsArray(memberId) {
+    const data = notifications[memberId] || {};
+    return Array.isArray(data) ? data : Object.values(data);
 }
 
 window.markNotifReadPopup = async function(id) {
@@ -19472,77 +19421,297 @@ function updateMaintenanceStatusUI() {
 // ==========================================
 // UPDATED doLogin() FUNCTION
 // ==========================================
+// ─── DO LOGIN – 5‑Box PIN Version ────────────────────────────
+function doLogin() {
+    let pin = '';
+    for (let i = 0; i < 5; i++) {
+        const box = document.getElementById('pin-' + i);
+        if (box) pin += box.value;
+    }
+    console.log('🔹 Login attempted with PIN:', pin);
 
-window.doLogin = function() {
-  // Dismiss keyboard on mobile
-  if (document.activeElement && document.activeElement.blur) {
-    document.activeElement.blur();
-  }
-  
-  const pwd = document.getElementById('login-password').value.trim();
-  const errEl = document.getElementById('login-error');
-  if (!pwd) { 
-    errEl.innerText = 'Please enter your PIN or admin password'; 
-    return; 
-  }
-  
-  // STEP 1: Check admin password (ALWAYS allowed)
-  const storedAdminPwd = settings.adminPassword || ADMIN_PASSWORD;
-  if (pwd === storedAdminPwd) {
-    currentUser = { name: 'Admin', phone: 'admin', isAdmin: true };
-    adminUnlocked = true;
-    showMainApp();
-    setTimeout(function() {
-      goTab('admin', document.getElementById('ni-admin'));
-    }, 300);
-    return;
-  }
-  
-  // STEP 2: Check maintenance mode for members
-  if (settings.maintenanceMode === true) {
-    showMaintenanceOverlay();
-    errEl.innerText = '🔧 System is under maintenance. Please try again later.';
-    errEl.style.color = 'var(--gold)';
-    errEl.style.fontWeight = '700';
-    toast('🔧 Maintenance mode is active', '#f59e0b');
-    return;
-  }
-  
-  // STEP 3: Check members
-  const match = members.find(m => m.phone && m.phone.slice(-4) === pwd);
-  if (!match) {
-    db.ref('applications').orderByChild('phone').once('value', snap => {
-      let found = false;
-      snap.forEach(child => {
-        const app = child.val();
-        if (app.phone && app.phone.slice(-4) === pwd && app.status === 'pending') {
-          found = true;
-        }
-      });
-      if (found) {
-        errEl.innerText = 'Your application is under review. Please wait for admin approval.';
-      } else {
-        errEl.innerText = 'No account found. Please sign up or check your PIN.';
-      }
+    const errEl = document.getElementById('login-error');
+
+    // Check if all boxes are filled
+    if (pin.length < 5) {
+        errEl.innerText = 'Please enter your 5‑character PIN';
+        return;
+    }
+
+    // ─── STEP 1: Check admin password ────────────────────────
+    if (pin.toLowerCase() === 'admin') {
+        currentUser = { name: 'Admin', phone: 'admin', isAdmin: true };
+        adminUnlocked = true;
+        clearPinBoxes();
+        showMainApp();
+        setTimeout(function() {
+            goTab('admin', document.getElementById('ni-admin'));
+        }, 300);
+        return;
+    }
+
+    // ─── STEP 2: Check maintenance mode ──────────────────────
+    if (settings.maintenanceMode === true) {
+        showMaintenanceOverlay();
+        errEl.innerText = '🔧 System is under maintenance. Please try again later.';
+        errEl.style.color = 'var(--gold)';
+        errEl.style.fontWeight = '700';
+        toast('🔧 Maintenance mode is active', '#f59e0b');
+        return;
+    }
+
+    // ─── STEP 3: Check members ───────────────────────────────
+    // Format: First letter of name (uppercase) + last 4 digits of phone
+    // Example: Yahayah (phone ends 1720) → Y1720
+
+    const firstChar = pin.charAt(0).toUpperCase();
+    const lastFour = pin.slice(1, 5); // digits 2-5
+
+    // Find member where:
+    // - First letter of name matches PIN's first char
+    // - Last 4 digits of phone match the remaining 4 chars
+    const match = members.find(m => {
+        if (!m.phone || !m.name) return false;
+        const nameFirst = m.name.charAt(0).toUpperCase();
+        const phoneLast4 = m.phone.slice(-4);
+        return nameFirst === firstChar && phoneLast4 === lastFour;
     });
-    return;
-  }
-  
-  if (match.approved === false) {
-    showPendingScreen(match);
-    return;
-  }
-  
-  if (match.feeCleared === false) {
-    errEl.innerText = `⚠️ Your account is approved but the signup fee of ${money(settings.signupFee)} is still pending. Please pay the fee to the group admin to activate your login.`;
-    return;
-  }
-  
-  currentUser = match;
-  adminUnlocked = false;
-  showMainApp();
+
+    if (!match) {
+        // Check if there's a pending application
+        db.ref('applications').orderByChild('phone').once('value', snap => {
+            let found = false;
+            snap.forEach(child => {
+                const app = child.val();
+                if (app.phone && app.phone.slice(-4) === lastFour && app.status === 'pending') {
+                    found = true;
+                }
+            });
+            if (found) {
+                errEl.innerText = 'Your application is under review. Please wait for admin approval.';
+            } else {
+                errEl.innerText = 'No account found. Check your name initial and phone number.';
+            }
+        });
+        shakePinBoxes();
+        return;
+    }
+
+    if (match.approved === false) {
+        showPendingScreen(match);
+        return;
+    }
+
+    if (match.feeCleared === false) {
+        errEl.innerText = `⚠️ Your account is approved but the signup fee of ${money(settings.signupFee)} is still pending. Please pay the fee to the group admin to activate your login.`;
+        shakePinBoxes();
+        return;
+    }
+
+    // ─── SUCCESS ──────────────────────────────────────────────
+    currentUser = match;
+    adminUnlocked = false;
+    clearPinBoxes();
+    showMainApp();
+    toast(`Welcome ${currentUser.name}! 🌾`, '#10b981');
+}
+
+// ─── Shake the PIN boxes on error ────────────────────────────
+function shakePinBoxes() {
+    for (let i = 0; i < 5; i++) {
+        const box = document.getElementById('pin-' + i);
+        if (box) {
+            box.classList.add('error');
+            setTimeout(() => box.classList.remove('error'), 500);
+        }
+    }
+    const card = document.querySelector('.auth-card');
+    if (card) {
+        card.classList.add('auth-card-shake');
+        setTimeout(() => card.classList.remove('auth-card-shake'), 500);
+    }
+}
+
+// ─── Clear PIN boxes ──────────────────────────────────────────
+function clearPinBoxes() {
+    for (let i = 0; i < 5; i++) {
+        const box = document.getElementById('pin-' + i);
+        if (box) {
+            box.value = '';
+            box.classList.remove('filled', 'error');
+        }
+    }
+    const errEl = document.getElementById('login-error');
+    if (errEl) errEl.innerText = '';
+    setTimeout(() => {
+        const firstBox = document.getElementById('pin-0');
+        if (firstBox) firstBox.focus();
+    }, 300);
+}
+// ─── 5‑Box PIN Auto‑Advance & Auto‑Login ─────────────────────
+
+let pinBoxesReady = false;
+
+function setupPinBoxes() {
+    const boxes = document.querySelectorAll('.pin-box');
+    if (!boxes.length) {
+        // If boxes don't exist, try again later
+        setTimeout(setupPinBoxes, 300);
+        return;
+    }
+
+    // If already set up, skip
+    if (pinBoxesReady) return;
+    pinBoxesReady = true;
+
+    const total = boxes.length;
+
+    boxes.forEach((box, index) => {
+        // Remove any previous listeners by cloning (clean approach)
+        const newBox = box.cloneNode(true);
+        box.parentNode.replaceChild(newBox, box);
+        // Update the boxes reference
+        boxes[index] = newBox;
+        const currentBox = newBox;
+
+        // ─── INPUT: auto-advance ──────────────────────────────
+        currentBox.addEventListener('input', function() {
+            // Allow only alphanumeric
+            this.value = this.value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 1);
+
+            if (this.value.length === 1) {
+                this.classList.add('filled');
+                // Move to next box if not the last
+                if (index < total - 1) {
+                    boxes[index + 1].focus();
+                }
+            } else {
+                this.classList.remove('filled');
+            }
+
+            // Check if all 5 are filled → auto-login
+            let allFilled = true;
+            let pin = '';
+            for (let i = 0; i < total; i++) {
+                if (boxes[i].value.length !== 1) {
+                    allFilled = false;
+                    break;
+                }
+                pin += boxes[i].value;
+            }
+            if (allFilled) {
+                setTimeout(() => {
+                    doLogin();
+                }, 150);
+            }
+        });
+
+        // ─── KEYDOWN: backspace, arrows, enter ────────────────
+        currentBox.addEventListener('keydown', function(e) {
+            if (e.key === 'Backspace') {
+                if (this.value === '') {
+                    // Move to previous and clear it
+                    if (index > 0) {
+                        boxes[index - 1].focus();
+                        boxes[index - 1].value = '';
+                        boxes[index - 1].classList.remove('filled');
+                        e.preventDefault();
+                    }
+                } else {
+                    // Clear this box
+                    this.value = '';
+                    this.classList.remove('filled');
+                    e.preventDefault();
+                }
+            } else if (e.key === 'ArrowLeft' && index > 0) {
+                boxes[index - 1].focus();
+                e.preventDefault();
+            } else if (e.key === 'ArrowRight' && index < total - 1) {
+                boxes[index + 1].focus();
+                e.preventDefault();
+            } else if (e.key === 'Enter') {
+                doLogin();
+                e.preventDefault();
+            }
+        });
+
+        // ─── PASTE: fill all boxes ────────────────────────────
+        currentBox.addEventListener('paste', function(e) {
+            e.preventDefault();
+            const paste = (e.clipboardData || window.clipboardData).getData('text');
+            const chars = paste.replace(/[^a-zA-Z0-9]/g, '').slice(0, total).split('');
+            for (let i = 0; i < total && i < chars.length; i++) {
+                boxes[i].value = chars[i];
+                if (chars[i]) boxes[i].classList.add('filled');
+                else boxes[i].classList.remove('filled');
+            }
+            // Focus first empty box, or auto-login
+            let nextEmpty = -1;
+            for (let i = 0; i < total; i++) {
+                if (boxes[i].value === '') {
+                    nextEmpty = i;
+                    break;
+                }
+            }
+            if (nextEmpty !== -1) {
+                boxes[nextEmpty].focus();
+            } else {
+                setTimeout(doLogin, 150);
+            }
+        });
+
+        // ─── FOCUS: clear error state ────────────────────────
+        currentBox.addEventListener('focus', function() {
+            this.classList.remove('error');
+            document.getElementById('login-error').innerText = '';
+        });
+    });
+
+    // Focus first box after a short delay
+    setTimeout(() => {
+        if (boxes[0]) boxes[0].focus();
+    }, 200);
+
+    console.log('✅ PIN boxes set up with auto‑advance');
+}
+// ─── Reset setup flag when login screen hides ────────────────
+function resetPinBoxes() {
+    pinBoxesSetup = false;
+}
+
+// ─── Automatically initialize PIN boxes ─────────────────────
+
+function initPinBoxes() {
+    const loginScreen = document.getElementById('login-screen');
+    if (loginScreen && !loginScreen.classList.contains('hidden')) {
+        setupPinBoxes();
+    } else {
+        // If login is hidden, wait and try again
+        setTimeout(initPinBoxes, 500);
+    }
+}
+
+// Run on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Wait for everything to render
+    setTimeout(initPinBoxes, 800);
+});
+
+// Also run whenever the login screen becomes visible
+// (e.g., after signup or logout)
+const origBackToLogin = window.backToLogin;
+window.backToLogin = function() {
+    origBackToLogin();
+    pinBoxesReady = false; // reset so it re‑sets up
+    setTimeout(initPinBoxes, 300);
 };
 
+// Override showSignup to reset the setup flag
+const origShowSignup = window.showSignup;
+window.showSignup = function() {
+    origShowSignup();
+    pinBoxesReady = false;
+};
 // ==========================================
 // UPDATED applySettings() FUNCTION
 // ==========================================
