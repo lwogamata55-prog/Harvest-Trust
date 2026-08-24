@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
+const OAuth = require('oauth').OAuth;
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -8,37 +9,65 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// ─── PESAPAL CONFIG ──────────────────────────────────────────
+// ════════════════════════════════════════════════════════════
+// PESAPAL CONFIG – REPLACE WITH YOUR CREDENTIALS
+// ════════════════════════════════════════════════════════════
 const PESAPAL_CONSUMER_KEY = 'GZLl95Wvb+Q9tpij6uw36i4UipT9ezqB';
 const PESAPAL_CONSUMER_SECRET = 'dY0NpHNc+0HxJi2I9X0u+ABFEyo=';
-const PESAPAL_BASE_URL = 'https://www.pesapal.com/api/PostPesapalDirectOrderV4';
+const PESAPAL_BASE_URL = 'https://www.pesapal.com/api/PostPesapalDirectOrderV4'; // ✅ This endpoint is for orders, not for token
 
-// ─── HEALTH CHECK ────────────────────────────────────────────
-app.get('/', (req, res) => {
-    res.json({ status: 'ok', message: 'Harvest Trust Pesapal Server' });
+// ════════════════════════════════════════════════════════════
+// OAuth 1.0a Helper
+// ════════════════════════════════════════════════════════════
+function createOAuthClient() {
+    return new OAuth(
+        PESAPAL_BASE_URL,                      // request URL (same as access URL for Pesapal)
+        PESAPAL_BASE_URL,                      // access URL (same)
+        PESAPAL_CONSUMER_KEY,
+        PESAPAL_CONSUMER_SECRET,
+        '1.0',                                 // OAuth version
+        null,                                  // callback URL (not used for 2-legged OAuth)
+        'HMAC-SHA1'
+    );
+}
+
+// ════════════════════════════════════════════════════════════
+// 1. GET TOKEN – Using OAuth 1.0a
+// ════════════════════════════════════════════════════════════
+app.post('/api/get-token', (req, res) => {
+    const oauth = createOAuthClient();
+    // Pesapal expects an empty POST to get a token
+    oauth.post(
+        PESAPAL_BASE_URL,                     // URL
+        null,                                 // OAuth token (none for 2-legged)
+        null,                                 // OAuth token secret (none)
+        {},                                   // request body (empty)
+        'application/json',
+        (err, data, response) => {
+            if (err) {
+                console.error('❌ OAuth error:', err);
+                return res.status(500).json({ error: err.message });
+            }
+            try {
+                // Pesapal returns JSON with the token
+                const parsed = JSON.parse(data);
+                if (!parsed.token) {
+                    console.error('❌ No token in response:', parsed);
+                    return res.status(500).json({ error: 'No token received' });
+                }
+                res.json({ token: parsed.token });
+            } catch (parseErr) {
+                console.error('❌ JSON parse error:', parseErr);
+                console.error('🔹 Raw response:', data);
+                res.status(500).json({ error: 'Invalid response from Pesapal' });
+            }
+        }
+    );
 });
 
-// ─── GET TOKEN ───────────────────────────────────────────────
-app.post('/api/get-token', async (req, res) => {
-    try {
-        const response = await fetch(PESAPAL_BASE_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                consumer_key: PESAPAL_CONSUMER_KEY,
-                consumer_secret: PESAPAL_CONSUMER_SECRET
-            })
-        });
-        const data = await response.json();
-        if (!data.token) throw new Error('No token received');
-        res.json({ token: data.token });
-    } catch (error) {
-        console.error('❌ get-token error:', error.message);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// ─── INITIATE PAYMENT ────────────────────────────────────────
+// ════════════════════════════════════════════════════════════
+// 2. INITIATE PAYMENT – Using OAuth 1.0a
+// ════════════════════════════════════════════════════════════
 app.post('/api/initiate-payment', async (req, res) => {
     const { phone, amount, memberId, memberName, provider } = req.body;
 
@@ -47,53 +76,83 @@ app.post('/api/initiate-payment', async (req, res) => {
     }
 
     try {
-        // 1. Get token
-        const tokenResponse = await fetch(PESAPAL_BASE_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                consumer_key: PESAPAL_CONSUMER_KEY,
-                consumer_secret: PESAPAL_CONSUMER_SECRET
-            })
-        });
-        const tokenData = await tokenResponse.json();
-        if (!tokenData.token) throw new Error('No token received');
-
-        // 2. Initiate payment
-        const paymentResponse = await fetch(PESAPAL_BASE_URL, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + tokenData.token
-            },
-            body: JSON.stringify({
-                amount: Number(amount),
-                currency: 'UGX',
-                description: 'Harvest Trust Savings - ' + memberName,
-                customer_phone: phone,
-                customer_email: memberId + '@harvesttrust.com',
-                payment_methods: 'MOBILE_MONEY',
-                provider: provider || 'MTN_UGANDA',
-                callback_url: 'https://yourdomain.com/callback',
-                ipn_url: 'https://your-render-app.onrender.com/api/webhook',
-                merchant_reference: 'HTF-' + Date.now()
-            })
+        // Get token first
+        const tokenResponse = await new Promise((resolve, reject) => {
+            const oauth = createOAuthClient();
+            oauth.post(
+                PESAPAL_BASE_URL,
+                null, null, {},
+                'application/json',
+                (err, data, response) => {
+                    if (err) return reject(err);
+                    try {
+                        resolve(JSON.parse(data));
+                    } catch (e) {
+                        reject(new Error('Invalid token response: ' + data));
+                    }
+                }
+            );
         });
 
-        const result = await paymentResponse.json();
-        console.log('✅ Payment initiated for', memberName);
-        res.json(result);
+        if (!tokenResponse.token) throw new Error('No token received');
 
+        // Use token to initiate payment
+        const paymentPayload = {
+            amount: Number(amount),
+            currency: 'UGX',
+            description: 'Harvest Trust Savings - ' + memberName,
+            customer_phone: phone,
+            customer_email: memberId + '@harvesttrust.com',
+            payment_methods: 'MOBILE_MONEY',
+            provider: provider || 'MTN_UGANDA',
+            callback_url: 'https://yourdomain.com/callback',
+            ipn_url: 'https://your-render-app.onrender.com/api/webhook',
+            merchant_reference: 'HTF-' + Date.now()
+        };
+
+        // Now make a POST to Pesapal with OAuth using the token
+        const oauth = createOAuthClient();
+        oauth.post(
+            PESAPAL_BASE_URL,
+            tokenResponse.token,                // OAuth token from previous step
+            tokenResponse.tokenSecret,          // OAuth token secret (if provided)
+            paymentPayload,
+            'application/json',
+            (err, data, response) => {
+                if (err) {
+                    console.error('❌ Payment OAuth error:', err);
+                    return res.status(500).json({ error: err.message });
+                }
+                try {
+                    const result = JSON.parse(data);
+                    console.log('✅ Payment initiated:', result);
+                    res.json(result);
+                } catch (parseErr) {
+                    console.error('❌ Payment parse error:', parseErr);
+                    console.error('🔹 Raw response:', data);
+                    res.status(500).json({ error: 'Invalid payment response' });
+                }
+            }
+        );
     } catch (error) {
         console.error('❌ initiate-payment error:', error.message);
         res.status(500).json({ error: error.message });
     }
 });
 
-// ─── WEBHOOK ──────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════
+// 3. WEBHOOK – (unchanged)
+// ════════════════════════════════════════════════════════════
 app.post('/api/webhook', async (req, res) => {
     console.log('📨 Webhook received:', req.body);
     res.sendStatus(200);
+});
+
+// ════════════════════════════════════════════════════════════
+// HEALTH CHECK
+// ════════════════════════════════════════════════════════════
+app.get('/', (req, res) => {
+    res.json({ status: 'ok', message: 'Harvest Trust Pesapal Server (OAuth)' });
 });
 
 app.listen(PORT, () => {
