@@ -8035,8 +8035,6 @@ allStats.forEach((m, idx) => {
 function renderRewardsContent() {
     const summaryDiv = document.getElementById('rewards-summary');
     const listDiv = document.getElementById('rewards-list');
-    const referralDiv = document.getElementById('referral-code-display-stats');
-    const referralBox = document.getElementById('referral-box-stats');
 
     if (!summaryDiv || !listDiv) return;
 
@@ -8044,51 +8042,86 @@ function renderRewardsContent() {
     if (!data || data.totalMembers === 0) {
         summaryDiv.innerHTML = '<div class="muted">No active members yet.</div>';
         listDiv.innerHTML = '';
-        if (referralBox) referralBox.style.display = 'none';
         return;
     }
 
-    // Build winners HTML (cards)
+    // Build winners HTML (cards) with definitions inside each card
     let winnersHtml = '<div class="rewards-grid">';
     data.winners.forEach(winner => {
-        if (winner.eligible) {
+        // Define the definition text for each category
+        let definition = '';
+        switch (winner.category) {
+            case 'Group Champion':
+                definition = '🏆 Highest total savings (deposits) over the entire period.';
+                break;
+            case 'Member of the Year':
+                definition = '🌟 Highest overall contribution score (deposits + consistency + loan repayments).';
+                break;
+            case 'Most Consistent':
+                definition = '📅 Most days with a deposit (frequency of saving).';
+                break;
+            case 'Most Active':
+                definition = '⚡ Most transactions (deposits, loan repayments, welfare, etc.).';
+                break;
+            case 'Best Loan Repayer':
+                definition = '💳 Consistently repays loans – based on number of loans repaid, repayment frequency, and total repaid amount.';
+                break;
+            default:
+                definition = '';
+        }
+
+        if (winner.eligible && winner.member) {
             winnersHtml += `
-                <div class="reward-card">
+                <div class="reward-card" style="position: relative; overflow: hidden;">
                     <div class="reward-category">${winner.category}</div>
                     <div class="reward-member">${escapeHtml(winner.member.name)}</div>
                     <div class="reward-amount">${money(winner.amount)}</div>
-                    <div class="micro muted">${winner.metric}</div>
+                    <div class="micro muted" style="margin-bottom: 4px;">${winner.metric}</div>
+                    <!-- Moving TV words (ticker) inside the card -->
+                    <div style="overflow: hidden; white-space: nowrap; background: rgba(255,255,255,0.04); border-radius: 6px; padding: 2px 0; margin-top: 4px; border: 1px solid rgba(255,255,255,0.06);">
+                        <div style="display: inline-block; animation: tickerScroll 12s linear infinite; padding-left: 100%; font-size: 0.6rem; color: var(--t2);">
+                            ${definition}
+                        </div>
+                    </div>
                 </div>
             `;
         } else {
             winnersHtml += `
-                <div class="reward-card" style="opacity: 0.7;">
+                <div class="reward-card" style="opacity: 0.7; position: relative; overflow: hidden;">
                     <div class="reward-category">${winner.category}</div>
                     <div class="reward-member">— —</div>
                     <div class="reward-amount">UGX 0</div>
-                    <div class="micro muted">No eligible member</div>
+                    <div class="micro muted">${winner.metric}</div>
+                    <div style="overflow: hidden; white-space: nowrap; background: rgba(255,255,255,0.04); border-radius: 6px; padding: 2px 0; margin-top: 4px; border: 1px solid rgba(255,255,255,0.06);">
+                        <div style="display: inline-block; animation: tickerScroll 12s linear infinite; padding-left: 100%; font-size: 0.6rem; color: var(--t3);">
+                            ${definition}
+                        </div>
+                    </div>
                 </div>
             `;
         }
     });
     winnersHtml += '</div>';
 
-    // Show a summary
     summaryDiv.innerHTML = `
         <div><strong>Total Profit Pool:</strong> ${money(data.groupProfit)}</div>
-        <div><strong>Equal Share (95%):</strong> ${money(data.equalSharePerMember)} per member</div>
-        <div><strong>Rewards Pool (5%):</strong> ${money(data.rewardsPoolDisplay)} – shared equally among the top 3 savers</div>
+        <div><strong>Rewards Pool (5%):</strong> ${money(data.totalRewardsPool)}</div>
+        <div><strong>Rewards distributed as:</strong> Group Champion (40%), Member of the Year (25%), Most Consistent (18%), Most Active (12%), Best Loan Repayer (5%)</div>
     `;
 
     listDiv.innerHTML = winnersHtml;
 
-    // Referral section (only for members)
-    if (referralBox && currentUser && !currentUser.isAdmin) {
-        referralBox.style.display = 'block';
-        const code = currentUser.id?.slice(-6) || currentUser.phone?.slice(-4);
-        if (referralDiv) referralDiv.innerHTML = `<strong>Your Referral Code:</strong> ${code}`;
-    } else if (referralBox) {
-        referralBox.style.display = 'none';
+    // Ensure the ticker animation keyframes exist (add once)
+    if (!document.getElementById('ticker-style')) {
+        const style = document.createElement('style');
+        style.id = 'ticker-style';
+        style.textContent = `
+            @keyframes tickerScroll {
+                0% { transform: translateX(0); }
+                100% { transform: translateX(-100%); }
+            }
+        `;
+        document.head.appendChild(style);
     }
 }
 
@@ -20110,61 +20143,136 @@ function calculateRewards() {
     const activeMembers = members.filter(m => m.approved);
     if (activeMembers.length === 0) return null;
 
-    const rewardsPercent = 5;
-    const rewardsPool = Math.floor(groupProfit * rewardsPercent / 100);
-    let equalShareTotal = groupProfit - rewardsPool;
+    const rewardsPool = Math.floor(groupProfit * 0.05);
+    if (rewardsPool <= 0) return null;
 
-    // Build member scores (deposits + consistency)
-    const memberScores = activeMembers.map(m => {
+    // Compute metrics for each member
+    const memberMetrics = activeMembers.map(m => {
         let totalDeposits = 0;
-        let consistencyDays = 0;
-        const daysSet = new Set();
+        let consistencyDays = new Set();
+        let transactionCount = 0;
+        let repaidLoans = 0;
+        let totalRepaidAmount = 0;
+        let loanRepaymentCount = 0;
+
         transactions.forEach(tx => {
-            if (tx.memberPhone === m.phone && tx.type === 'deposit') {
-                totalDeposits += tx.amount;
-                const dateStr = new Date(tx.date).toISOString().slice(0, 10);
-                daysSet.add(dateStr);
+            if (tx.memberPhone === m.phone) {
+                transactionCount++;
+                if (tx.type === 'deposit') {
+                    totalDeposits += tx.amount;
+                    consistencyDays.add(new Date(tx.date).toISOString().slice(0, 10));
+                }
+                if (tx.type === 'loan_repayment') {
+                    loanRepaymentCount++;
+                    totalRepaidAmount += tx.amount;
+                }
             }
         });
-        consistencyDays = daysSet.size;
-        // Score: deposits + 1000 per consistency day (weighted)
-        const score = totalDeposits + (consistencyDays * 1000);
-        return { member: m, totalDeposits, consistencyDays, score };
+
+        loans.forEach(loan => {
+            if (loan.memberId === m.id && loan.repaid === true) {
+                repaidLoans++;
+            }
+        });
+
+        const score = totalDeposits + (consistencyDays.size * 1000) + (repaidLoans * 10000);
+        // Best Loan Repayer score: consistency = (repaidLoans * 2) + (loanRepaymentCount * 1.5) + (totalRepaidAmount / 100000)
+        const loanRepayerScore = (repaidLoans * 2) + (loanRepaymentCount * 1.5) + (totalRepaidAmount / 100000);
+
+        return {
+            member: m,
+            totalDeposits,
+            consistencyDays: consistencyDays.size,
+            transactionCount,
+            repaidLoans,
+            loanRepaymentCount,
+            totalRepaidAmount,
+            loanRepayerScore,
+            score
+        };
     });
 
-    // Sort by score descending
-    memberScores.sort((a, b) => b.score - a.score);
+    // Sort by each metric (descending)
+    const sortedByDeposits = [...memberMetrics].sort((a, b) => b.totalDeposits - a.totalDeposits);
+    const sortedByConsistency = [...memberMetrics].sort((a, b) => b.consistencyDays - a.consistencyDays);
+    const sortedByActivity = [...memberMetrics].sort((a, b) => b.transactionCount - a.transactionCount);
+    const sortedByScore = [...memberMetrics].sort((a, b) => b.score - a.score);
+    const sortedByLoanRepayer = [...memberMetrics].sort((a, b) => b.loanRepayerScore - a.loanRepayerScore);
 
-    // Take top 3 (or fewer if less than 3 members)
-    const topThree = memberScores.slice(0, 3);
+    const percentages = {
+        champion: 0.40,
+        memberOfYear: 0.25,
+        mostConsistent: 0.18,
+        mostActive: 0.12,
+        bestLoanRepayer: 0.05
+    };
 
-    // Equal share of rewards pool
-    const rewardAmount = topThree.length > 0 ? Math.floor(rewardsPool / topThree.length) : 0;
+    const usedMemberIds = new Set();
+    let winners = [];
 
-    const titles = ['🏆 Top Saver', '📅 Consistent Saver', '💪 Active Saver'];
+    const pickWinner = (sortedList, categoryName, metricLabel, metricKey) => {
+        // Guard: if list is empty or undefined, return no winner
+        if (!sortedList || sortedList.length === 0) {
+            winners.push({
+                category: categoryName,
+                member: null,
+                amount: 0,
+                metric: 'No eligible member',
+                eligible: false
+            });
+            return;
+        }
 
-    const winners = topThree.map((s, index) => ({
-        category: titles[index] || `#${index+1} Saver`,
-        member: s.member,
-        amount: rewardAmount,
-        metric: `UGX ${s.totalDeposits.toLocaleString()} · ${s.consistencyDays} days`,
-        eligible: true
-    }));
+        for (let item of sortedList) {
+            // Guard: skip if item is invalid or member already used
+            if (!item || !item.member) continue;
+            if (usedMemberIds.has(item.member.id)) continue;
 
-    // Add unallocated rewards back to equal share
-    const usedRewards = winners.reduce((sum, w) => sum + w.amount, 0);
-    equalShareTotal += (rewardsPool - usedRewards);
+            usedMemberIds.add(item.member.id);
+            const amount = Math.floor(rewardsPool * percentages[categoryName]);
+            // Guard for metric value
+            const metricValue = (item[metricKey] !== undefined && item[metricKey] !== null) ? item[metricKey].toLocaleString() : 'N/A';
+            winners.push({
+                category: categoryName,
+                member: item.member,
+                amount: amount,
+                metric: metricLabel + ': ' + metricValue,
+                eligible: true
+            });
+            return;
+        }
 
-    const equalSharePerMember = activeMembers.length ? Math.floor(equalShareTotal / activeMembers.length) : 0;
+        // If no eligible member found
+        winners.push({
+            category: categoryName,
+            member: null,
+            amount: 0,
+            metric: 'No eligible member',
+            eligible: false
+        });
+    };
+
+    const categories = [
+        { key: 'champion', label: 'Group Champion', sortList: sortedByDeposits, metricKey: 'totalDeposits', display: 'Total Deposits' },
+        { key: 'memberOfYear', label: 'Member of the Year', sortList: sortedByScore, metricKey: 'score', display: 'Overall Score' },
+        { key: 'mostConsistent', label: 'Most Consistent', sortList: sortedByConsistency, metricKey: 'consistencyDays', display: 'Days with Deposits' },
+        { key: 'mostActive', label: 'Most Active', sortList: sortedByActivity, metricKey: 'transactionCount', display: 'Total Transactions' },
+        { key: 'bestLoanRepayer', label: 'Best Loan Repayer', sortList: sortedByLoanRepayer, metricKey: 'loanRepayerScore', display: 'Repayment Consistency' }
+    ];
+
+    categories.forEach(cat => {
+        pickWinner(cat.sortList, cat.key, cat.display, cat.metricKey);
+    });
 
     return {
-        equalSharePerMember,
         winners,
+        totalRewardsPool: rewardsPool,
         totalMembers: activeMembers.length,
-        groupProfit,
-        rewardsPoolDisplay: rewardsPool,
+        groupProfit
     };
 }
+
+
 function normalizePhone(phone) {
   if (!phone) return null;
   let cleaned = phone.replace(/\s+/g, '').replace(/[()-]/g, '');
