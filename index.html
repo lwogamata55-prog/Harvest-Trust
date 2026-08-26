@@ -4512,7 +4512,8 @@ let loanSettings = {
 let loans=[];
 let notifications = {};
 let memberApplicationLoans = {};  
-let memberAssignedLoans = {};     
+let memberAssignedLoans = {};  
+let memberPrepaid = {}; // Prepaid balances (kept for compatibility, but always empty)
 // ─── Translation helper (identity function) ──────────────
 function t(str) { return str; }
 
@@ -4905,8 +4906,7 @@ window.previewDebtAssignment = function() {
 
     const totalRepayPerMember = Math.floor(principal * (1 + interestRate / 100));
     const interest = totalRepayPerMember - principal;
-    const dueDate = Date.now() + 30 * 24 * 60 * 60 * 1000; // 30 days default
-
+    const dueDate = null; // No due date
     // ─── SINGLE MEMBER – show receipt modal directly ──────
     if (selectedMembers.length === 1) {
         const member = selectedMembers[0];
@@ -6098,62 +6098,48 @@ function generateReceiptNumber() {
 }
 
 function getReceiptQuote(member) {
-  const phone = member?.phone || '';
-  const loanBalance = memberLoans[phone] || 0;
-  const debtBalance = memberDebts[phone] || 0;
-  const prepaidBalance = memberPrepaid[phone] || 0;
-  const totalOwed = loanBalance + debtBalance;
+    const phone = member?.phone || '';
+    const loanBalance = memberLoans[phone] || 0;
+    const debtBalance = memberDebts[phone] || 0;
+    const totalOwed = loanBalance + debtBalance;
 
-  // Determine category
-  let category = '';
-  if (totalOwed === 0 && prepaidBalance === 0) category = 'clear';
-  else if (totalOwed === 0 && prepaidBalance > 0) category = 'prepaid';
-  else if (totalOwed > 0 && prepaidBalance > 0) category = 'mix';
-  else if (totalOwed > 0 && prepaidBalance === 0) {
-    if (totalOwed > 100000) category = 'large_debt';
-    else if (totalOwed > 10000) category = 'medium_debt';
-    else category = 'small_debt';
-  } else category = 'other';
+    // Determine category based only on debt/loan balances
+    let category = '';
+    if (totalOwed === 0) {
+        category = 'clear';
+    } else if (totalOwed < 10000) {
+        category = 'small_debt';
+    } else if (totalOwed < 100000) {
+        category = 'medium_debt';
+    } else {
+        category = 'large_debt';
+    }
 
-  const quotes = {
-    clear: [
-      '🌱 You are debt-free! Keep up the great savings habit.',
-      '💪 Zero balance – you’re building a strong financial future.',
-      '🎯 No outstanding debt. You’re on track!',
-    ],
-    prepaid: [
-      '💠 You have prepaid future days – great planning!',
-      '⏳ You’re ahead of schedule. Keep it up!',
-      '📅 Prepaid balance means you’re ready for tomorrow.',
-    ],
-    small_debt: [
-      '💳 Small debt – pay it off soon to avoid interest.',
-      '📉 You owe a little. Clear it quickly and stay healthy.',
-      '🧾 Minor debt – settle within a week for peace of mind.',
-    ],
-    medium_debt: [
-      '⚠️ Moderate debt – consider a repayment plan.',
-      '📊 Your debt is building. Focus on clearing it step by step.',
-      '⏰ Medium debt – the sooner you repay, the less interest.',
-    ],
-    large_debt: [
-      '🚨 Large debt – please contact admin immediately.',
-      '📉 Significant loan – prioritise repayment to avoid penalties.',
-      '💪 You can clear this with consistent daily savings.',
-    ],
-    mix: [
-      '🔄 You have both prepaid and debt. Use prepaid to offset future days.',
-      '⚖️ Prepaid balance can cover future savings while you clear debt.',
-      '🧠 Smart move: prepaid covers tomorrow, focus on today’s debt.',
-    ],
-    other: [
-      '💬 Thank you for saving with Harvest Trust Finance.',
-      '🌾 Together we grow. Keep saving daily.',
-    ],
-  };
+    const quotes = {
+        clear: [
+            '🌱 You are debt-free! Keep up the great savings habit.',
+            '💪 Zero balance – you’re building a strong financial future.',
+            '🎯 No outstanding debt. You’re on track!',
+        ],
+        small_debt: [
+            '💳 Small debt – pay it off soon to avoid interest.',
+            '📉 You owe a little. Clear it quickly and stay healthy.',
+            '🧾 Minor debt – settle within a week for peace of mind.',
+        ],
+        medium_debt: [
+            '⚠️ Moderate debt – consider a repayment plan.',
+            '📊 Your debt is building. Focus on clearing it step by step.',
+            '⏰ Medium debt – the sooner you repay, the less interest.',
+        ],
+        large_debt: [
+            '🚨 Large debt – please contact admin immediately.',
+            '📉 Significant loan – prioritise repayment to avoid penalties.',
+            '💪 You can clear this with consistent daily savings.',
+        ],
+    };
 
-  const list = quotes[category] || quotes.other;
-  return list[Math.floor(Math.random() * list.length)];
+    const list = quotes[category] || quotes.clear;
+    return list[Math.floor(Math.random() * list.length)];
 }
 function generateRepaymentSchedule(principal, interestRate, weeks, startDate) {
   const extraWeekly = loanSettings.extraWeeklyInterest || 2;
@@ -15478,7 +15464,6 @@ window.showTransactionReceiptModal = function(
             ${(txType === 'deposit' && description) ? `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;"><span style="color:#6b7280;">Note</span><span style="font-weight:600;">${escapeHtml(description)}</span></div>` : ''}
             <!-- Deposit status message -->
             <div style="display:flex;justify-content:space-between;padding:6px 0;background:#fef3c7;border-radius:6px;padding:8px 12px;margin:6px 0;border:1px solid #f59e0b;">
-                <span style="color:#92400e;font-weight:700;">📌 Status</span>
                 <span style="color:#92400e;font-weight:900;">${escapeHtml(depositMsg)}</span>
             </div>
         </div>
@@ -15851,51 +15836,59 @@ window.showDebtReceiptModal = function(
     const quote = getReceiptQuote(member);
 
     function buildReceiptHTML() {
-        return `
-        <div id="receipt-content" style="max-width:360px;margin:0 auto;background:#ffffff;border-radius:24px;padding:24px 20px 20px;font-family:'DM Sans',sans-serif;text-align:center;color:#111827;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
-            <div style="font-size:1.1rem;font-weight:900;color:#111827;letter-spacing:-0.5px;">🌾 Harvest Trust Finance</div>
-            <div style="width:40px;height:3px;background:#f59e0b;margin:8px auto 12px;border-radius:99px;"></div>
-            <div style="font-size:2.8rem;font-weight:900;color:#ef4444;line-height:1.2;margin:8px 0;">UGX ${safeTotal.toLocaleString()}</div>
-            <div style="font-size:0.75rem;color:#9ca3af;font-weight:600;margin-bottom:16px;">Debt Assigned</div>
-            <div style="border-top:1px solid #f3f4f6;margin-bottom:14px;"></div>
-            <div style="text-align:left;font-size:0.85rem;">
-                <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-                    <span style="color:#6b7280;">Member</span>
-                    <span style="font-weight:600;">${escapeHtml(member?.name || 'Unknown')}</span>
-                </div>
-                <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-                    <span style="color:#6b7280;">Principal</span>
-                    <span style="font-weight:600;">UGX ${safePrincipal.toLocaleString()}</span>
-                </div>
-                <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-                    <span style="color:#6b7280;">Interest (${interestRate}%)</span>
-                    <span style="font-weight:600;">UGX ${safeInterest.toLocaleString()}</span>
-                </div>
-                <div style="display:flex;justify-content:space-between;padding:6px 0;background:#fef3c7;border-radius:6px;padding:8px 12px;margin:6px 0;border:1px solid #f59e0b;">
-                    <span style="color:#92400e;font-weight:700;">💰 Total Loan Balance</span>
-                    <span style="color:#92400e;font-weight:900;">UGX ${totalLoanAfter.toLocaleString()}</span>
-                </div>
-                <div style="display:flex;justify-content:space-between;padding:6px 0;background:#e8f4fd;border-radius:6px;padding:8px 12px;margin:6px 0;border:1px solid #06b6d4;">
-                    <span style="color:#0e7490;font-weight:700;">📅 Due Date</span>
-                    <span style="color:#0e7490;font-weight:900;">${dueDateLabel}</span>
-                </div>
-                <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-                    <span style="color:#6b7280;">Reason</span>
-                    <span style="font-weight:600;">${escapeHtml(reason || 'N/A')}</span>
-                </div>
+    const date = new Date();
+    const dateLabel = date.toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' });
+    const timeLabel = date.toLocaleTimeString('en-UG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const txTypeUpper = (txType || 'transaction').toUpperCase();
+    return `
+    <div id="receipt-content" style="max-width:360px;margin:0 auto;background:#ffffff;border-radius:24px;padding:24px 20px 20px;font-family:'DM Sans',sans-serif;text-align:center;color:#111827;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+        <div style="font-size:1.1rem;font-weight:900;color:#111827;letter-spacing:-0.5px;">🌾 Harvest Trust Finance</div>
+        <div style="width:40px;height:3px;background:#f59e0b;margin:8px auto 12px;border-radius:99px;"></div>
+        <div style="font-size:2.8rem;font-weight:900;color:#16a34a;line-height:1.2;margin:8px 0;">UGX ${safeAmount.toLocaleString()}</div>
+        <div style="font-size:0.75rem;color:#9ca3af;font-weight:600;margin-bottom:16px;">${txTypeUpper} Successful</div>
+        <div style="border-top:1px solid #f3f4f6;margin-bottom:14px;"></div>
+        <div style="text-align:left;font-size:0.85rem;">
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                <span style="color:#6b7280;">Member</span>
+                <span style="font-weight:600;">${escapeHtml(member?.name || 'Unknown')}</span>
             </div>
-            <div style="margin-top:14px;padding:10px;background:#f7fafc;border-radius:8px;font-size:0.75rem;color:#4a5568;font-style:italic;border-left:3px solid #f59e0b;text-align:left;">
-                ${escapeHtml(quote)}
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                <span style="color:#6b7280;">Payment Method</span>
+                <span style="font-weight:600;">${txType === 'deposit' ? 'Deposit' : txTypeUpper}</span>
             </div>
-            <div style="margin-top:16px;padding-top:12px;border-top:1px solid #f3f4f6;">
-                <div style="font-size:0.85rem;font-weight:700;color:#1a202c;letter-spacing:0.5px;font-family:monospace;">
-                    Receipt #: ${receiptNumber}
-                </div>
-                <div style="font-size:0.5rem;color:#9ca3af;margin-top:4px;">${new Date().toLocaleString()}</div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                <span style="color:#6b7280;">Date & Time</span>
+                <span style="font-weight:600;">${dateLabel}, ${timeLabel}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:6px 0;background:#e8f4fd;border-radius:6px;padding:8px 12px;margin:6px 0;border:1px solid #06b6d4;">
+                <span style="color:#0e7490;font-weight:700;">💰 Remaining Loan Balance</span>
+                <span style="color:#0e7490;font-weight:900;">UGX ${displayLoanBalance.toLocaleString()}</span>
+            </div>
+            ${(txType === 'deposit' && description) ? `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;"><span style="color:#6b7280;">Note</span><span style="font-weight:600;">${escapeHtml(description)}</span></div>` : ''}
+            ${runsTillDisplay ? `
+            <div style="display:flex;justify-content:space-between;padding:6px 0;background:#fef3c7;border-radius:6px;padding:8px 12px;margin:6px 0;border:1px solid #f59e0b;">
+                <span style="color:#92400e;font-weight:700;">${runsTillDisplay.split(' ')[0]}</span>
+                <span style="color:#92400e;font-weight:900;">${runsTillDisplay.split(' ').slice(2).join(' ')}</span>
+            </div>
+            ` : ''}
+            <!-- ✅ Fixed Status Row -->
+            <div style="display: grid; grid-template-columns: auto 1fr; gap: 12px; padding: 8px 12px; background:#fef3c7; border-radius:6px; margin:6px 0; border:1px solid #f59e0b;">
+                <span style="color:#92400e;font-weight:900; text-align: right; word-break: break-word;">${escapeHtml(depositMsg)}</span>
             </div>
         </div>
-        `;
-    }
+        <div style="margin-top:14px;padding:10px;background:#f7fafc;border-radius:8px;font-size:0.75rem;color:#4a5568;font-style:italic;border-left:3px solid #f59e0b;text-align:left;">
+            ${escapeHtml(quote)}
+        </div>
+        <div style="margin-top:16px;padding-top:12px;border-top:1px solid #f3f4f6;">
+            <div style="font-size:0.85rem;font-weight:700;color:#1a202c;letter-spacing:0.5px;font-family:monospace;">
+                Receipt #: ${receiptNumber}
+            </div>
+            <div style="font-size:0.5rem;color:#9ca3af;margin-top:4px;">${new Date().toLocaleString()}</div>
+        </div>
+    </div>
+    `;
+}
+
 
     const receiptHTML = buildReceiptHTML();
     const modal = document.createElement('div');
