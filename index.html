@@ -4021,6 +4021,61 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
     </div>
   </div>
 </div>
+<!-- ========================================== -->
+<!-- REMINDER IMAGE GENERATOR MODAL             -->
+<!-- ========================================== -->
+<div class="ov" id="ov-reminder-generator" onclick="maybeClose(event,'ov-reminder-generator')">
+    <div class="bs" style="max-width: 520px; max-height: 90vh; overflow-y: auto; padding: 16px 18px;">
+        <div class="bs-title" style="margin-bottom: 16px;">📨 Generate Reminder Image</div>
+
+        <!-- Member Selection -->
+        <div class="fgrp">
+            <label class="flbl">Select Member</label>
+            <select id="reminder-member" class="inp">
+                <option value="">-- Select Member --</option>
+            </select>
+        </div>
+
+        <!-- Reminder Type -->
+        <div class="fgrp">
+            <label class="flbl">Reminder Type</label>
+            <select id="reminder-type" class="inp" onchange="updateReminderPreview()">
+                <option value="debt">💳 Pay Your Debt</option>
+                <option value="loan_eligible">💰 You Are Eligible for a Loan</option>
+                <option value="overdue">🚨 Loan Overdue</option>
+                <option value="welcome">👋 Welcome to the Group</option>
+                <option value="payout">📅 Upcoming Payout</option>
+                <option value="consistency">🏆 Consistency Encouragement</option>
+                <option value="late_fee">⏰ Late Fee Reminder</option>
+                <option value="renewal">🔄 Membership Renewal</option>
+                <option value="general">📢 General Reminder</option>
+                <option value="good_standing">✅ Good Standing</option>
+            </select>
+        </div>
+
+        <!-- Date Picker -->
+        <div class="fgrp">
+            <label class="flbl">Date (for the reminder)</label>
+            <input type="date" id="reminder-date" class="inp" onchange="updateReminderPreview()">
+        </div>
+
+        <!-- Custom Message (optional) -->
+        <div class="fgrp">
+            <label class="flbl">Custom Message (optional – overrides template)</label>
+            <textarea id="reminder-custom-msg" class="inp" rows="2" placeholder="Write your own message..." oninput="updateReminderPreview()"></textarea>
+        </div>
+
+        <!-- Message Preview -->
+        <div id="reminder-preview" class="hint-box" style="display: none; background: rgba(6,182,212,0.08); border-color: rgba(6,182,212,0.2);">
+            <div style="font-weight: 700; color: var(--teal); margin-bottom: 4px;">📝 Preview</div>
+            <div id="reminder-preview-text" style="font-size: 0.85rem; white-space: pre-wrap; line-height: 1.6; color: var(--t2);"></div>
+        </div>
+
+        <!-- Generate Button -->
+        <button class="btn btn-gold btn-full" onclick="generateReminderImage()" style="font-size: 1rem; padding: 14px;">🖼️ Generate Reminder Image</button>
+        <button class="btn btn-sec btn-full" onclick="closeOv('ov-reminder-generator')">Cancel</button>
+    </div>
+</div>
 
 <!-- Countdown Overlay -->
 <div id="countdown-overlay" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.92); backdrop-filter: blur(16px); z-index: 99999; align-items: center; justify-content: center; flex-direction: column; padding: 20px;">
@@ -4907,7 +4962,8 @@ window.previewDebtAssignment = function() {
     const totalRepayPerMember = Math.floor(principal * (1 + interestRate / 100));
     const interest = totalRepayPerMember - principal;
     const dueDate = null; // No due date
-    // ─── SINGLE MEMBER – show receipt modal directly ──────
+
+    // ─── SINGLE MEMBER ──────────────────────────────────────
     if (selectedMembers.length === 1) {
         const member = selectedMembers[0];
         showDebtReceiptModal(
@@ -4931,7 +4987,7 @@ window.previewDebtAssignment = function() {
         return;
     }
 
-    // ─── MULTIPLE MEMBERS – show bulk preview modal ──────
+    // ─── MULTIPLE MEMBERS ──────────────────────────────────
     const totalPrincipal = principal * selectedMembers.length;
     const totalInterest = interest * selectedMembers.length;
     const totalRepay = totalRepayPerMember * selectedMembers.length;
@@ -4948,7 +5004,6 @@ window.previewDebtAssignment = function() {
         </tr>`;
     }).join('');
 
-    // Build the preview content
     const content = `
         <div style="background:rgba(245,158,11,0.06); border-radius:12px; padding:12px; margin-bottom:12px; border:1px solid rgba(245,158,11,0.15);">
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px; font-size:0.85rem;">
@@ -4974,24 +5029,20 @@ window.previewDebtAssignment = function() {
                 <tbody>${rowsHtml}</tbody>
             </table>
         </div>
-        <div class="micro muted" style="margin-top:8px; text-align:center;">Due date: ${new Date(dueDate).toLocaleDateString()} (30 days from now)</div>
+        <div class="micro muted" style="margin-top:8px; text-align:center;">No due date (loan has no expiry)</div>
     `;
 
-    // Show the bulk preview modal
     showBulkPreviewModal(
         '📊 Preview Debt Assignment',
         content,
         async function() {
-            // Close preview modal
             closeOv('ov-bulk-preview');
             
-            // Execute debt assignment for all members
             const logMembers = [];
             for (const member of selectedMembers) {
                 try {
                     await executeDebtAssignment(member, principal, interestRate, interest, totalRepayPerMember, reason, dueDate, Date.now());
                     
-                    // Generate receipt for each member
                     const receipt = await generateDebtReceiptImage(
                         member,
                         principal,
@@ -5014,7 +5065,6 @@ window.previewDebtAssignment = function() {
                 }
             }
 
-            // Create bulk debt log with receipts
             if (logMembers.length) {
                 await createBulkDebtLogWithReceipts(
                     logMembers,
@@ -5032,6 +5082,7 @@ window.previewDebtAssignment = function() {
         }
     );
 };
+
 // ─── Set debt date/time to now ─────────────────────────────
 function setDebtToNow() {
     const now = new Date();
@@ -5048,39 +5099,7 @@ function getDebtTimestamp() {
     const [hours, minutes] = timeStr.split(':').map(Number);
     return new Date(year, month - 1, day, hours, minutes).getTime();
 }
-function renderDebtLogs() {
-    const container = document.getElementById('admin-debt-logs');
-    if (!container) return;
 
-    db.ref('notifications/admin_debt_logs').orderByChild('timestamp').limitToLast(20).once('value', snap => {
-        const logs = snap.val() ? Object.entries(snap.val()).map(([key, val]) => ({ ...val, key })) : [];
-        if (!logs.length) {
-            container.innerHTML = '<div class="muted" style="padding:8px;">No debt assignment logs</div>';
-            return;
-        }
-        let html = `<div style="max-height:300px; overflow-y:auto; margin-bottom:8px;">
-            <div style="font-size:0.7rem; font-weight:700; color:var(--t3); margin-bottom:4px;">📋 Recent Debt Assignments</div>`;
-        logs.reverse().forEach(log => {
-            const membersList = log.members.map(m => `${m.name} (${money(m.amount)})`).join(', ');
-            html += `
-                <div style="background:${log.read ? 'rgba(255,255,255,0.03)' : 'rgba(245,158,11,0.08)'}; border:1px solid ${log.read ? 'rgba(255,255,255,0.06)' : 'rgba(245,158,11,0.2)'}; border-radius:8px; padding:8px 10px; margin-bottom:4px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <div>
-                            <div style="font-size:0.75rem; font-weight:600;">📅 ${log.date} – ${log.count} member(s)</div>
-                            <div class="micro muted" style="font-size:0.6rem;">${membersList}</div>
-                        </div>
-                        <div style="display:flex; gap:4px;">
-                            ${!log.read ? `<button class="btn btn-sm btn-teal" onclick="markDebtLogRead('${log.key}')" style="padding:2px 8px; font-size:0.55rem;">✓ Mark Read</button>` : ''}
-                            <button class="btn btn-sm btn-red" onclick="deleteDebtLog('${log.key}')" style="padding:2px 8px; font-size:0.55rem;">🗑️</button>
-                        </div>
-                    </div>
-                </div>
-            `;
-        });
-        html += `</div>`;
-        container.innerHTML = html;
-    });
-}
 
 // ─── Helper functions (already exist, keep them) ──────────
 function getTodaysDepositStatus() {
@@ -5493,17 +5512,7 @@ document.addEventListener('keydown', function(e) {
 });
 window.openImageViewer = openImageViewer;
 window.closeImageViewer = closeImageViewer;
-function openImagePreview(src) {
-  const modal = document.getElementById('image-preview-modal');
-  const img = document.getElementById('image-preview-modal-img');
-  if (modal && img) {
-    img.src = src;
-    modal.style.display = 'flex';}}
 
-function closeImagePreview() {
-  const modal = document.getElementById('image-preview-modal');
-  if (modal) modal.style.display = 'none';
-}
 function openOv(id) {
   const el = document.getElementById(id);
   if (el) {
@@ -5771,32 +5780,6 @@ function getDaysActive(member) {
 function getDailyRequiredForMember(memberId) {
   const dailySavings = (settings.dailyAmount || 2000) + (settings.welfareAmount || 500);
   return dailySavings;}
-function getAllowedBorrowerIndex(receiverIndex, totalMembers) {
-  return totalMembers - 1 - receiverIndex;}
-async function checkAndAdvanceLoanRotation(memberPhone) {
-  const activeLoans = loans.filter(l => 
-    l.memberPhone === memberPhone && 
-    l.status === 'approved' && 
-    !l.repaid
-  );
-  
-  const hasApplicationLoan = activeLoans.some(l => l.loanQuestions && l.loanQuestions.length > 0);
-  
-  if (!hasApplicationLoan) return false;
-  
-  const allRepaid = activeLoans.every(l => {
-    const remaining = memberLoans[memberPhone] || 0;
-    return remaining === 0;
-  });
-  
-  if (allRepaid && loanRotationOrder.length > 0) {
-    loanReceiverIndex = (loanReceiverIndex + 1) % loanRotationOrder.length;
-    await db.ref('settings/loanReceiverIndex').set(loanReceiverIndex);
-    return true;
-  }
-  
-  return false;
-}
 
 // ==========================================
 // LATE PAYMENT REMINDER - APPLICATION LOANS ONLY
@@ -6097,6 +6080,50 @@ function generateReceiptNumber() {
   return "HTF-" + timestamp + "-" + random;
 }
 
+function getReminderTemplates() {
+    return {
+        debt: {
+            title: '💳 Pay Your Debt',
+            template: (member, date) => `Dear ${member.name},\n\nThis is a reminder that you have an outstanding debt of ${money(memberDebts[member.phone] || 0)}.\n\nPlease make arrangements to clear this debt as soon as possible to avoid additional penalties.\n\nIf you have any questions, please contact the admin.\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
+        },
+        loan_eligible: {
+            title: '💰 You Are Eligible for a Loan',
+            template: (member, date) => `Dear ${member.name},\n\nBased on your consistent savings and repayment history, you are now eligible to request a loan of up to ${money(calculateMaxLoan(member))}.\n\nTo apply, go to Account → Request Loan and fill out the application form.\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
+        },
+        overdue: {
+            title: '🚨 Loan Overdue',
+            template: (member, date) => `Dear ${member.name},\n\nThis is a FINAL NOTICE that your loan is ${getOverdueDays(member)} days overdue.\n\nOutstanding amount: ${money(memberLoans[member.phone] || 0)}\n\nImmediate repayment is required to avoid further penalties and legal action.\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
+        },
+        welcome: {
+            title: '👋 Welcome to the Group',
+            template: (member, date) => `Dear ${member.name},\n\nWelcome to Harvest Trust Finance! We are thrilled to have you as a member.\n\nYour daily savings of UGX ${settings.dailyAmount || 2000} + welfare of UGX ${settings.welfareAmount || 500} will be automatically tracked.\n\nWe look forward to growing together!\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
+        },
+        payout: {
+            title: '📅 Upcoming Payout',
+            template: (member, date) => `Dear ${member.name},\n\nYour weekly payout of ${money(getWeeklyGross())} is due on ${getNextPayoutDateString()}.\n\nPlease ensure your account is in good standing to receive the full amount.\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
+        },
+        consistency: {
+            title: '🏆 Consistency Encouragement',
+            template: (member, date) => `Dear ${member.name},\n\nYou have saved on ${getConsistencyDays(member)} days this month! Your discipline is building a strong financial future.\n\nKeep up the great work – consistency is key to achieving your goals.\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
+        },
+        late_fee: {
+            title: '⏰ Late Fee Reminder',
+            template: (member, date) => `Dear ${member.name},\n\nA late fee of ${money(settings.fineAmount || 5000)} has been applied to your account for missing your daily savings.\n\nPlease make your deposit today to avoid further penalties.\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
+        },
+        renewal: {
+            title: '🔄 Membership Renewal',
+            template: (member, date) => `Dear ${member.name},\n\nYour membership is due for renewal. The renewal fee is ${money(settings.renewalFee || 0)}.\n\nPlease pay this fee to continue enjoying the benefits of the group.\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
+        },
+        general: {
+            title: '📢 General Reminder',
+            template: (member, date) => `Dear ${member.name},\n\nThis is a general reminder to stay on top of your daily savings and loan obligations.\n\nIf you have any questions, please reach out to the admin.\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
+        },
+        good_standing: {
+            title: '✅ Good Standing',
+            template: (member, date) => `Dear ${member.name},\n\nCongratulations! You are in good standing with no outstanding debts or loans.\n\nThank you for your commitment to saving and repaying on time.\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
+        }
+    };
+}
 function getReceiptQuote(member) {
     const phone = member?.phone || '';
     const loanBalance = memberLoans[phone] || 0;
@@ -6329,135 +6356,6 @@ async function generateWeeklyPayoutReceiptImage(beneficiary, weeklyGross, loan, 
   }
 }
 
-function generatePayoutFallbackPhone(beneficiary, weeklyGross, loan, netPayout) {
-  // Note: Removed 'debt' parameter
-  try {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = 360;
-    canvas.height = 520;
-    
-    ctx.fillStyle = '#ffffff';
-    ctx.shadowColor = 'rgba(0,0,0,0.08)';
-    ctx.shadowBlur = 40;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 10;
-    ctx.beginPath();
-    ctx.roundRect(0, 0, canvas.width, canvas.height, 28);
-    ctx.fill();
-    ctx.shadowColor = 'transparent';
-    
-    let y = 30;
-    const cx = canvas.width / 2;
-    const leftX = 24;
-    
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#1a202c';
-    ctx.font = '10px -apple-system, sans-serif';
-    ctx.fillText('9:41', leftX, y);
-    ctx.textAlign = 'right';
-    ctx.fillText('●●●●●  📶  🔋', canvas.width - leftX, y);
-    y += 22;
-    
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#e8f5e9';
-    ctx.beginPath();
-    ctx.roundRect(cx - 55, y - 8, 110, 20, 20);
-    ctx.fill();
-    ctx.fillStyle = '#2e7d32';
-    ctx.font = '9px -apple-system, sans-serif';
-    ctx.fillText('✅ Payout Success!', cx, y + 3);
-    y += 22;
-    
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#4a5568';
-    ctx.font = '11px -apple-system, sans-serif';
-    ctx.fillText('Your weekly payout was successful.', cx, y);
-    y += 28;
-    
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#a0aec0';
-    ctx.font = '9px -apple-system, sans-serif';
-    ctx.fillText('Net Payout', leftX, y);
-    ctx.fillStyle = '#1a202c';
-    ctx.font = 'bold 28px -apple-system, sans-serif';
-    y += 28;
-    ctx.fillText(`UGX ${netPayout.toLocaleString()}`, leftX, y);
-    y += 20;
-    
-    ctx.strokeStyle = 'rgba(0,0,0,0.04)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(leftX, y);
-    ctx.lineTo(canvas.width - leftX, y);
-    ctx.stroke();
-    y += 14;
-    
-    // ===== BREAKDOWN (NO DEBT) =====
-    const items = [
-      ['📊 Gross', `UGX ${weeklyGross.toLocaleString()}`, '#2d3748'],
-    ];
-    if (loan > 0) items.push(['⭐ Loan', `- UGX ${loan.toLocaleString()}`, '#e53e3e']);
-    items.push(['💰 Net', `UGX ${netPayout.toLocaleString()}`, '#6b46c1']);
-    
-    items.forEach(([label, value, color], i) => {
-      const lineY = y + (i * 20);
-      ctx.textAlign = 'left';
-      ctx.fillStyle = '#6b46c1';
-      ctx.font = '10px -apple-system, sans-serif';
-      ctx.fillText(label, leftX, lineY);
-      ctx.textAlign = 'right';
-      ctx.fillStyle = color;
-      ctx.font = 'bold 10px -apple-system, sans-serif';
-      ctx.fillText(value, canvas.width - leftX, lineY);
-    });
-    
-    y += (items.length * 20) + 16;
-    
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#a0aec0';
-    ctx.font = '9px -apple-system, sans-serif';
-    ctx.fillText('Beneficiary', leftX, y);
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#2d3748';
-    ctx.font = '9px -apple-system, sans-serif';
-    ctx.fillText(beneficiary?.name || 'Unknown', canvas.width - leftX, y);
-    y += 16;
-    
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#a0aec0';
-    ctx.font = '9px -apple-system, sans-serif';
-    ctx.fillText('Phone', leftX, y);
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#2d3748';
-    ctx.font = '9px -apple-system, sans-serif';
-    ctx.fillText(beneficiary?.phone || 'N/A', canvas.width - leftX, y);
-    y += 20;
-    
-    const btnY = y;
-    ctx.strokeStyle = '#6b46c1';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(leftX, btnY, (canvas.width - (leftX * 2) - 10) / 2, 34, 30);
-    ctx.stroke();
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#6b46c1';
-    ctx.font = '10px -apple-system, sans-serif';
-    ctx.fillText('📋 Share Receipt', leftX + ((canvas.width - (leftX * 2) - 10) / 4), btnY + 20);
-    
-    const btn2X = leftX + (canvas.width - (leftX * 2) - 10) / 2 + 10;
-    ctx.beginPath();
-    ctx.roundRect(btn2X, btnY, (canvas.width - (leftX * 2) - 10) / 2, 34, 30);
-    ctx.stroke();
-    ctx.fillText('← Back to home', btn2X + ((canvas.width - (leftX * 2) - 10) / 4), btnY + 20);
-    
-    return canvas.toDataURL('image/png');
-    
-  } catch (error) {
-    console.error('Payout fallback failed:', error);
-    return null;
-  }
-}
 window.showWeeklyPayoutReceiptModal = function(
     beneficiary, weeklyGross, deduction, netPayout,
     onConfirmShare, onConfirmNoShare, onPrint, onCancel
@@ -6733,33 +6631,7 @@ async function updateLoanRepaidStatus(phone) {
     console.log(`Outstanding not zero: ${outstanding}`);
   }
 }
-async function getOrCreateActiveLoan(memberId, memberPhone, memberName) {
-  // Find an existing active (approved, not repaid) loan for this member
-  let activeLoan = loans.find(l => l.memberId === memberId && l.status === 'approved' && !l.repaid);
-  if (activeLoan) return activeLoan;
-  
-  // Create a new loan record if none exists
-  const newLoanRef = db.ref('loans').push();
-  const newLoan = {
-    id: newLoanRef.key,
-    memberId: memberId,
-    memberName: memberName,
-    memberPhone: memberPhone,
-    amount: 0,
-    interestRate: 0,
-    totalRepay: 0,
-    reason: 'Combined loan',
-    status: 'approved',
-    requestedAt: Date.now(),
-    approvedAt: Date.now(),
-    dueDate: Date.now() + 30 * 86400000, // default 30 days
-    repaid: false,
-    penaltyApplied: false
-  };
-  await newLoanRef.set(newLoan);
-  loans.push(newLoan);
-  return newLoan;
-}
+
 function refreshUI() {
   computePots();
   updateHomeUI();
@@ -8611,7 +8483,29 @@ function getDateRange(startDate, endDate) {
     }
     return dates;
 }
-
+/**
+ * Checks if a member has any transaction (deposit, welfare, debt, loan, etc.) for today.
+ * @param {Object} member - The member object
+ * @returns {boolean} - True if the member has any transaction today
+ */
+function memberHasActionToday(member) {
+    if (!member || !member.phone) return false;
+    const todayStart = new Date().setHours(0, 0, 0, 0);
+    const todayEnd = todayStart + 86400000 - 1;
+    
+    const actionTypes = ['deposit', 'welfare', 'fine', 'debt', 'debt_cleared', 
+                         'loan_disbursement', 'loan_repayment', 'loan_interest', 
+                         'loan_adjustment', 'expense', 'payout', 'profit_dist'];
+    
+    for (let tx of transactions) {
+        if (tx.memberPhone === member.phone && tx.date >= todayStart && tx.date <= todayEnd) {
+            if (actionTypes.includes(tx.type)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
 // ─── Check if a member already has a deposit for a date ──
 function memberHasDepositOnDate(member, dateObj) {
     const dayStart = new Date(dateObj);
@@ -12317,7 +12211,16 @@ function openFullLoanRequestModal() {
   
   openOv('ov-loan-request');
 }
-
+function openReminderModal() {
+    populateReminderDropdown();
+    document.getElementById('reminder-member').value = '';
+    document.getElementById('reminder-type').value = 'debt';
+    document.getElementById('reminder-from-date').value = '';
+    document.getElementById('reminder-to-date').value = '';
+    document.getElementById('reminder-custom-msg').value = '';
+    document.getElementById('reminder-preview').style.display = 'none';
+    openOv('ov-reminder');
+}
 function openLoanRequestModal() {
     if (!currentUser || currentUser.isAdmin) {
         toast('Members only', '#ef4444');
@@ -13280,418 +13183,384 @@ window.confirmDailySavings = async function() {
 };
 window.switchAdminTab=function(tab){currentAdminTab=tab;document.querySelectorAll('.admin-tab').forEach(t=>t.classList.remove('active'));document.querySelector(`.admin-tab[data-tab="${tab}"]`)?.classList.add('active');renderAdminTab();};
 function renderAdminTab() {
-  if (adminShowGrid) {
-    showAdminGrid();
-    return;
-  }
-
-  const c = document.getElementById('admin-content');
-  if (!c) return;
-
-  // Back button
-  if (!c.querySelector('.admin-back-btn')) {
-    const backBtn = document.createElement('div');
-    backBtn.className = 'admin-back-btn';
-    backBtn.innerHTML = '← Back to Admin Menu';
-    backBtn.onclick = function() {
-      adminShowGrid = true;
-      showAdminGrid();
-    };
-    c.insertBefore(backBtn, c.firstChild);
-  }
-
-  // ─── Compute warnings (overdue loans) ───────────────────
-  const overdueWithDays = loans.filter(l => 
-    l.status === 'approved' && 
-    !l.repaid && 
-    l.dueDate && 
-    l.dueDate < Date.now() &&
-    l.loanQuestions && 
-    l.loanQuestions.length > 0
-  ).map(l => ({
-    ...l,
-    daysOverdue: Math.floor((Date.now() - l.dueDate) / (1000 * 60 * 60 * 24))
-  }));
-
-  let warningsHtml = '';
-  if (overdueWithDays.length) {
-    warningsHtml = `
-      <div style="background: linear-gradient(135deg, rgba(239,68,68,0.12), rgba(245,158,11,0.08)); border: 2px solid var(--red); border-radius: 12px; padding: 12px 16px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="font-size: 1.8rem;">🚨</span>
-          <div>
-            <div style="font-weight: 800; color: var(--red); font-size: 0.9rem;">${overdueWithDays.length} overdue application loan(s)</div>
-            <div style="font-size: 0.7rem; color: var(--t2);">
-              ${overdueWithDays.map(l => `${escapeHtml(l.memberName)} (${l.daysOverdue}d)`).join(' • ')}
-            </div>
-          </div>
-        </div>
-        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-          ${overdueWithDays.map(l => `
-            <button class="btn btn-sm btn-red" onclick="sendHarshReminder('${l.memberId}')" style="font-size: 0.65rem; padding: 4px 10px;">
-              📧 ${escapeHtml(l.memberName)}
-            </button>
-          `).join('')}
-        </div>
-      </div>
-    `;
-  }
-
-  // ─── POLLS TAB ────────────────────────────────────────────
-  if (currentAdminTab === 'polls') {
-    document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
-    const pollTab = document.querySelector('.admin-tab[data-tab="polls"]');
-    if (pollTab) pollTab.classList.add('active');
-    if (typeof renderAdminPollsTab === 'function') {
-      renderAdminPollsTab();
-    } else {
-      c.innerHTML = '<div class="empty-state">Polls manager not loaded. Please refresh.</div>';
-    }
-    return;
-  }
-
-  // ─── SAVINGS TAB ──────────────────────────────────────────
-  if (currentAdminTab === 'savings') {
-    const { notDeposited, allCount } = getTodaysDepositStatus();
-
-    let pendingActivityHtml = '';
-    if (notDeposited.length === 0) {
-      pendingActivityHtml = `
-        <div style="background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; display: flex; align-items: center; gap: 10px;">
-          <span style="font-size: 1.2rem;">✅</span>
-          <span style="font-size: 0.8rem; color: var(--t2);">All ${allCount} members are up to date today</span>
-        </div>
-      `;
-    } else {
-      pendingActivityHtml = `
-        <div style="background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 1.2rem;">⚠️</span>
-            <span style="font-size: 0.8rem; color: var(--t2);"><strong>${notDeposited.length}</strong> pending deposits</span>
-          </div>
-          <div style="display: flex; flex-wrap: wrap; gap: 4px;">
-            ${notDeposited.map(m => `<span style="background: rgba(245,158,11,0.15); padding: 2px 8px; border-radius: 12px; font-size: 0.65rem; color: var(--gold);">${escapeHtml(m.name)}</span>`).join('')}
-          </div>
-        </div>
-      `;
+    if (adminShowGrid) {
+        showAdminGrid();
+        return;
     }
 
-    const financialSummaryHtml = `
-      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px;">
-        <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px; text-align: center;">
-          <div style="font-size: 0.6rem; color: var(--t3); text-transform: uppercase; letter-spacing: 0.5px;">Admin Balance</div>
-          <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; font-weight: 700; color: ${cashFromDeposits < 0 ? 'var(--red)' : 'var(--teal)'};">${money(cashFromDeposits)}</div>
-        </div>
-        <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px; text-align: center;">
-          <div style="font-size: 0.6rem; color: var(--t3); text-transform: uppercase; letter-spacing: 0.5px;">Profit Pool</div>
-          <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; font-weight: 700; color: ${groupProfit < 0 ? 'var(--red)' : 'var(--green)'};">${money(groupProfit)}</div>
-        </div>
-        <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px; text-align: center;">
-          <div style="font-size: 0.6rem; color: var(--t3); text-transform: uppercase; letter-spacing: 0.5px;">Pending Loans</div>
-          <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; font-weight: 700; color: var(--gold);">${loans.filter(l => l.status === 'pending').length}</div>
-        </div>
-      </div>
-    `;
+    const c = document.getElementById('admin-content');
+    if (!c) return;
 
-    // Pending loans
-    const pendingLoans = loans.filter(l => l.status === 'pending');
-    let pendingLoansHtml = '';
-    if (pendingLoans.length) {
-      pendingLoansHtml = `
-        <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px; margin-bottom: 12px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <span style="font-size: 0.75rem; font-weight: 700; color: var(--t2);">📋 Pending Requests</span>
-            <span class="pill-badge pill-amber">${pendingLoans.length}</span>
-          </div>
-          <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-            ${pendingLoans.map(l => `
-              <div style="background: rgba(255,255,255,0.04); border: 1px solid var(--br); border-radius: 8px; padding: 8px 12px; display: flex; align-items: center; gap: 8px; flex: 1; min-width: 140px;">
-                <span style="font-size: 1rem;">${l.loanQuestions && l.loanQuestions.length > 0 ? '⭐' : '📋'}</span>
-                <div style="flex: 1; min-width: 0;">
-                  <div style="font-size: 0.75rem; font-weight: 600; color: var(--t);">${escapeHtml(l.memberName)}</div>
-                  <div style="font-size: 0.6rem; color: var(--t3);">${money(l.amount)} @ ${l.interestRate}%</div>
+    if (!c.querySelector('.admin-back-btn')) {
+        const backBtn = document.createElement('div');
+        backBtn.className = 'admin-back-btn';
+        backBtn.innerHTML = '← Back to Admin Menu';
+        backBtn.onclick = function() {
+            adminShowGrid = true;
+            showAdminGrid();
+        };
+        c.insertBefore(backBtn, c.firstChild);
+    }
+
+    const overdueWithDays = loans.filter(l => 
+        l.status === 'approved' && 
+        !l.repaid && 
+        l.dueDate && 
+        l.dueDate < Date.now() &&
+        l.loanQuestions && 
+        l.loanQuestions.length > 0
+    ).map(l => ({
+        ...l,
+        daysOverdue: Math.floor((Date.now() - l.dueDate) / (1000 * 60 * 60 * 24))
+    }));
+
+    let warningsHtml = '';
+    if (overdueWithDays.length) {
+        warningsHtml = `
+            <div style="background: linear-gradient(135deg, rgba(239,68,68,0.12), rgba(245,158,11,0.08)); border: 2px solid var(--red); border-radius: 12px; padding: 12px 16px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 1.8rem;">🚨</span>
+                    <div>
+                        <div style="font-weight: 800; color: var(--red); font-size: 0.9rem;">${overdueWithDays.length} overdue application loan(s)</div>
+                        <div style="font-size: 0.7rem; color: var(--t2);">
+                            ${overdueWithDays.map(l => `${escapeHtml(l.memberName)} (${l.daysOverdue}d)`).join(' • ')}
+                        </div>
+                    </div>
                 </div>
-                <div style="display: flex; gap: 4px;">
-                  <button class="btn btn-sm btn-green" onclick="openApproveLoanModal('${l.id}')" style="padding: 2px 8px; font-size: 0.6rem;">✅</button>
-                  <button class="btn btn-sm btn-red" onclick="rejectLoan('${l.id}')" style="padding: 2px 8px; font-size: 0.6rem;">✕</button>
+                <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                    ${overdueWithDays.map(l => `
+                        <button class="btn btn-sm btn-red" onclick="sendHarshReminder('${l.memberId}')" style="font-size: 0.65rem; padding: 4px 10px;">
+                            📧 ${escapeHtml(l.memberName)}
+                        </button>
+                    `).join('')}
                 </div>
-              </div>
-            `).join('')}
-          </div>
-        </div>
-      `;
-    }
-
-    // Active loans (simplified)
-    const activeByMember = {};
-    loans.forEach(l => {
-      if (l.status === 'approved' && !l.repaid) {
-        const memberExists = members.some(m => m.id === l.memberId && m.approved !== false);
-        if (!memberExists) return;
-        if (!activeByMember[l.memberId]) {
-          activeByMember[l.memberId] = {
-            memberName: l.memberName,
-            memberPhone: l.memberPhone,
-            member: members.find(m => m.id === l.memberId),
-            totalPrincipal: 0, totalRepay: 0, count: 0, loans: [],
-            appLoanCount: 0, assignedLoanCount: 0,
-            appLoanBalance: 0, assignedLoanBalance: 0,
-            isOverdue: false, daysOverdue: 0
-          };
-        }
-        activeByMember[l.memberId].totalPrincipal += l.amount;
-        activeByMember[l.memberId].totalRepay += l.totalRepay;
-        activeByMember[l.memberId].count++;
-        activeByMember[l.memberId].loans.push(l);
-        if (l.loanQuestions && l.loanQuestions.length > 0) {
-          activeByMember[l.memberId].appLoanCount++;
-          activeByMember[l.memberId].appLoanBalance += (l.totalRepay - (l.repaidAmount || 0));
-          if (l.dueDate && l.dueDate < Date.now()) {
-            const daysOverdue = Math.floor((Date.now() - l.dueDate) / (1000*60*60*24));
-            if (daysOverdue > activeByMember[l.memberId].daysOverdue) {
-              activeByMember[l.memberId].daysOverdue = daysOverdue;
-              activeByMember[l.memberId].isOverdue = true;
-            }
-          }
-        } else {
-          activeByMember[l.memberId].assignedLoanCount++;
-          activeByMember[l.memberId].assignedLoanBalance += (l.totalRepay - (l.repaidAmount || 0));
-        }
-      }
-    });
-
-    let entries = Object.entries(activeByMember);
-    entries = entries.filter(([memberId, data]) => {
-      const totalBalance = memberLoans[data.memberPhone] || 0;
-      return totalBalance > 0;
-    });
-
-    let activeLoansHtml = '';
-    if (entries.length) {
-      activeLoansHtml = `
-        <div id="activeLoansContainer" style="display: none;">
-          <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-              <span style="font-size: 0.75rem; font-weight: 700; color: var(--t2);">💳 Active Loans</span>
-              <span class="pill-badge pill-green">${entries.length} members</span>
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px;">
-              ${entries.map(([memberId, data]) => {
-                const member = data.member;
-                const totalBalance = memberLoans[data.memberPhone] || 0;
-                const paid = Math.max(0, data.totalRepay - totalBalance);
-                const isOverdue = data.isOverdue;
-                const daysOverdue = data.daysOverdue;
-                const avatarColor = getAvatarColor(data.memberName);
-                const initials = data.memberName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-                return `
-                  <div style="background: rgba(255,255,255,0.04); border: 1px solid ${isOverdue ? 'var(--red)' : 'var(--br)'}; border-radius: 12px; padding: 12px; cursor: pointer; transition: all 0.2s ease; position: relative; ${isOverdue ? 'animation: pulse 2s infinite;' : ''}"
-                    onclick="showMemberLoanDetails('${memberId}')"
-                    onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='var(--sh)';"
-                    onmouseout="this.style.transform='none'; this.style.boxShadow='none';"
-                  >
-                    ${isOverdue ? `<div style="position: absolute; top: -6px; right: -6px; background: var(--red); color: white; font-size: 0.5rem; font-weight: 800; padding: 2px 8px; border-radius: 10px; animation: pulse 1.5s infinite;">${daysOverdue}d overdue</div>` : ''}
-                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                      <div style="width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg, ${avatarColor}, ${avatarColor}cc); display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: 800; color: white; flex-shrink: 0;">${initials || '?'}</div>
-                      <div style="flex: 1; min-width: 0;"><div style="font-size: 0.8rem; font-weight: 700; color: var(--t); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(data.memberName)}</div><div style="font-size: 0.55rem; color: var(--t3);">${data.count} loan(s)</div></div>
-                    </div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; font-size: 0.65rem;">
-                      <div style="color: var(--t3);">Total</div><div style="font-weight: 600; text-align: right; color: var(--gold);">${money(data.totalRepay)}</div>
-                      <div style="color: var(--t3);">Paid</div><div style="font-weight: 600; text-align: right; color: var(--green);">${money(paid)}</div>
-                      <div style="color: var(--t3);">Balance</div><div style="font-weight: 600; text-align: right; color: ${totalBalance > 0 ? 'var(--red)' : 'var(--green)'};">${money(totalBalance)}</div>
-                    </div>
-                    <div style="text-align: center; margin-top: 8px; font-size: 0.5rem; color: var(--t3);">👆 Click for details</div>
-                  </div>
-                `;
-              }).join('')}
-            </div>
-          </div>
-        </div>
-        <button class="btn btn-purple btn-full" onclick="toggleActiveLoans()" style="margin-top: 8px; padding: 8px; font-size: 0.75rem;">📋 Show Active Loans</button>
-      `;
-    }
-  
-     c.innerHTML = `
-      ${warningsHtml}
-      ${financialSummaryHtml}
-      ${pendingActivityHtml}
-      ${pendingLoansHtml}
-      ${activeLoansHtml}
-    `;
-    return;
-  }
-
-  // ─── NOTICE TAB ────────────────────────────────────────────
-  else if (currentAdminTab === 'notice') {
-    let noticesHtml = '';
-    if (mainCarouselNotifs.length === 0) {
-        noticesHtml = '<div class="empty-state" style="padding:20px; text-align:center; color:var(--t3);">No notices yet. Add one below.</div>';
-    } else {
-        noticesHtml = `
-            <div style="margin-bottom: 12px;">
-                <div style="font-size:0.7rem; font-weight:700; color:var(--t3); margin-bottom:6px;">Current Notices (${mainCarouselNotifs.length})</div>
-                ${mainCarouselNotifs.map((notice, index) => `
-                    <div style="display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(255,255,255,0.04); border-radius:8px; margin-bottom:4px; border:1px solid rgba(255,255,255,0.06);">
-                        <span style="font-size:1.2rem;">${notice.icon || '📢'}</span>
-                        <div style="flex:1; font-size:0.8rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(notice.text)}</div>
-                        <button class="btn btn-sm btn-red" onclick="deleteCarouselNotice('${notice.key}')" style="padding:2px 8px; font-size:0.6rem;">🗑️</button>
-                    </div>
-                `).join('')}
             </div>
         `;
     }
 
-    c.innerHTML = `
-        ${warningsHtml}
-        <div class="card">
-            <div class="sec-h">📢 Notice Management</div>
-            <button class="btn btn-gold btn-full" onclick="openOv('ov-carousel-compose')" style="margin-bottom:10px;">➕ Add Carousel Notice</button>
-            ${noticesHtml}
-            <div class="micro muted" style="margin-top:8px; text-align:center;">Notices appear in the carousel on the home screen.</div>
-        </div>
-    `;
-    return;
-}
+    // ─── SAVINGS TAB ──────────────────────────────────────────
+    if (currentAdminTab === 'savings') {
+        const { notDeposited, allCount } = getTodaysDepositStatus();
 
-  // ─── HARVEST TAB ────────────────────────────────────────────
-  else if (currentAdminTab === 'harvest') {
-    const rotationList = (rotation.order || []);
-    let currentReceiver = 'None';
-    if (rotationList.length > 0) {
-      const idx = rotation.currentIndex || 0;
-      const receiverId = rotationList[idx];
-      const receiver = members.find(m => m.id === receiverId);
-      currentReceiver = receiver ? receiver.name : 'Unknown';
-    }
-
-    c.innerHTML = `
-      ${warningsHtml}
-      <div class="card">
-        <div class="sec-h">🌾 Harvest Actions</div>
-        <button class="btn btn-teal btn-full" onclick="openAddTransaction()">➕ Add Transaction</button>
-        <button class="btn btn-red btn-full" onclick="openOv('ov-assign-debt');populateMemberDropdowns()">🧾 Assign Debt</button>
-        <button class="btn btn-purple btn-full" onclick="openOv('ov-group-transaction')">📦 Group Transaction</button>
-        <button class="btn btn-green btn-full" onclick="openOv('ov-mark-paid')">✅ Mark Weekly Payout</button>
-        <button class="btn btn-gold btn-full" onclick="previewProfitDistribution()">🎉 Distribute Profit Pool</button>
-        <button class="btn btn-purple btn-full" onclick="openOv('ov-rot-manage'); buildDragRotation();">🔄 Manage Payout Rotation</button>
-        
-      </div>
-      <div class="card">
-        <div class="sec-h">📊 Current Status</div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-          <div><div class="micro muted">Current Payout Receiver</div><div style="font-weight: 700; font-size: 1.1rem; color: var(--gold);">${escapeHtml(currentReceiver)}</div></div>
-          <div><div class="micro muted">Members in Rotation</div><div style="font-weight: 700; font-size: 1.1rem; color: var(--teal);">${rotationList.length}</div></div>
-          <div><div class="micro muted">Admin Balance</div><div style="font-weight: 700; font-size: 1.1rem; color: ${cashFromDeposits < 0 ? 'var(--red)' : 'var(--green)'};">${money(cashFromDeposits)}</div></div>
-          <div><div class="micro muted">Profit Pool</div><div style="font-weight: 700; font-size: 1.1rem; color: ${groupProfit < 0 ? 'var(--red)' : 'var(--green)'};">${money(groupProfit)}</div></div>
-        </div>
-      </div>
-    `;
-    return;
-  }
-
-  // ─── USERS TAB ──────────────────────────────────────────────
-  else if (currentAdminTab === 'users') {
-    let pendingCount = 0;
-    if (db) {
-      db.ref('applications').orderByChild('status').equalTo('pending').once('value', snap => {
-        pendingCount = snap.val() ? Object.keys(snap.val()).length : 0;
-        const badgeWrap = document.getElementById('apps-badge-wrap');
-        const badgeSpan = document.getElementById('apps-count');
-        if (badgeWrap && badgeSpan) {
-          if (pendingCount > 0) {
-            badgeWrap.style.display = 'inline-flex';
-            badgeSpan.textContent = pendingCount;
-          } else {
-            badgeWrap.style.display = 'none';
-          }
-        }
-      });
-    }
-
-     const membersListHtml = `
-        <div id="allMembersContainer" style="display: none;">
-            <div class="card">
-                <div class="sec-h" style="display: flex; justify-content: space-between; align-items: center;">
-                    <span>👥 All Members <span class="pill-badge pill-green">${members.length}</span></span>
+        let pendingActivityHtml = '';
+        if (notDeposited.length === 0) {
+            pendingActivityHtml = `
+                <div style="background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; display: flex; align-items: center; gap: 10px;">
+                    <span style="font-size: 1.2rem;">✅</span>
+                    <span style="font-size: 0.8rem; color: var(--t2);">All ${allCount} members are up to date today</span>
                 </div>
-                <div id="admin-members-list"></div>
+            `;
+        } else {
+            pendingActivityHtml = `
+                <div style="background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 1.2rem;">⚠️</span>
+                        <span style="font-size: 0.8rem; color: var(--t2);"><strong>${notDeposited.length}</strong> pending deposits</span>
+                    </div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                        ${notDeposited.map(m => `<span style="background: rgba(245,158,11,0.15); padding: 2px 8px; border-radius: 12px; font-size: 0.65rem; color: var(--gold);">${escapeHtml(m.name)}</span>`).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        const financialSummaryHtml = `
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px;">
+                <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px; text-align: center;">
+                    <div style="font-size: 0.6rem; color: var(--t3); text-transform: uppercase; letter-spacing: 0.5px;">Admin Balance</div>
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; font-weight: 700; color: ${cashFromDeposits < 0 ? 'var(--red)' : 'var(--teal)'};">${money(cashFromDeposits)}</div>
+                </div>
+                <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px; text-align: center;">
+                    <div style="font-size: 0.6rem; color: var(--t3); text-transform: uppercase; letter-spacing: 0.5px;">Profit Pool</div>
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; font-weight: 700; color: ${groupProfit < 0 ? 'var(--red)' : 'var(--green)'};">${money(groupProfit)}</div>
+                </div>
+                <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px; text-align: center;">
+                    <div style="font-size: 0.6rem; color: var(--t3); text-transform: uppercase; letter-spacing: 0.5px;">Pending Loans</div>
+                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; font-weight: 700; color: var(--gold);">${loans.filter(l => l.status === 'pending').length}</div>
+                </div>
             </div>
-        </div>
-        <button class="btn btn-purple btn-full" onclick="toggleAllMembers()" style="margin-top: 8px;">👥 Show/Hide All Members</button>
-    `;
+        `;
 
-     c.innerHTML = `
-      ${warningsHtml}
-      <div class="card">
-        <div class="sec-h">⚡ Quick Actions</div>
-        <button class="btn btn-teal btn-full" onclick="openReceiptLookup()">🔍 Find Receipt</button>
-        <button class="btn btn-gold btn-full" onclick="openOv('ov-add-mbr')">👤 Add New Member</button>
-        <button class="btn btn-teal btn-full" onclick="loadApplications()">📝 View Applications<span id="apps-badge-wrap" style="display:none;background:var(--red);color:#fff;border-radius:99px;padding:1px 7px;font-size:0.65rem;font-weight:800;margin-left:4px"><span id="apps-count">0</span></span></button>
-        <button class="btn btn-purple btn-full" onclick="generateGroupReport()">📊 Generate Group Report</button>
-      </div>
-      <div id="allMembersContainer" style="display: none;">
-        <div class="card">
-          <div class="sec-h" style="display: flex; justify-content: space-between; align-items: center;">
-            <span>👥 All Members <span class="pill-badge pill-green">${members.length}</span></span>
-          </div>
-          <div id="admin-members-list"></div>
-        </div>
-      </div>
-      <button class="btn btn-purple btn-full" onclick="toggleAllMembers()" style="margin-top: 8px;">👥 Show/Hide All Members</button>
-    `;
-    updateAdminMembersList();
-    return;
-  }
+        const pendingLoans = loans.filter(l => l.status === 'pending');
+        let pendingLoansHtml = '';
+        if (pendingLoans.length) {
+            pendingLoansHtml = `
+                <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px; margin-bottom: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-size: 0.75rem; font-weight: 700; color: var(--t2);">📋 Pending Loan Requests</span>
+                        <span class="pill-badge pill-amber">${pendingLoans.length}</span>
+                    </div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                        ${pendingLoans.map(l => `
+                            <div style="background: rgba(255,255,255,0.04); border: 1px solid var(--br); border-radius: 8px; padding: 8px 12px; display: flex; align-items: center; gap: 8px; flex: 1; min-width: 140px;">
+                                <span style="font-size: 1rem;">${l.loanQuestions && l.loanQuestions.length > 0 ? '⭐' : '📋'}</span>
+                                <div style="flex: 1; min-width: 0;">
+                                    <div style="font-size: 0.75rem; font-weight: 600; color: var(--t);">${escapeHtml(l.memberName)}</div>
+                                    <div style="font-size: 0.6rem; color: var(--t3);">${money(l.amount)} @ ${l.interestRate}%</div>
+                                </div>
+                                <div style="display: flex; gap: 4px;">
+                                    <button class="btn btn-sm btn-green" onclick="openApproveLoanModal('${l.id}')" style="padding: 2px 8px; font-size: 0.6rem;">✅</button>
+                                    <button class="btn btn-sm btn-red" onclick="rejectLoan('${l.id}')" style="padding: 2px 8px; font-size: 0.6rem;">✕</button>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
 
-  // ─── SETTINGS TAB ───────────────────────────────────────────
-  else if (currentAdminTab === 'settings') {
-    c.innerHTML = `
-      ${warningsHtml}
-      <div class="card">
-        <div class="sec-h">⚙️ Configuration</div>
-        <button class="btn btn-gold btn-full" onclick="openSettingsModal()">⚙️ Group Settings</button>
-        <button class="btn btn-purple btn-full" onclick="openEditTermsModal()">📝 Edit Terms</button>
-        <button class="btn btn-amber btn-full" onclick="openOv('ov-loan-settings');loadLoanSettings()">💰 Loan Settings</button>
-        <button class="btn btn-teal btn-full" onclick="generateGroupReport()">📊 Group Report</button>
-        <button class="btn btn-green btn-full" onclick="openMemberStatusMessages()">📨 Send Status Messages</button>
-      </div>
-      <div class="danger-zone">
-        <div class="danger-zone-label">⚠️ Danger Zone</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn btn-sm btn-sec" onclick="resetGroup()">🗑️ Full Reset</button>
-          <button class="btn btn-sm btn-sec" onclick="resetDataKeepMembers()">🔄 Reset Data</button>
-        </div>
-      </div>
-    `;
-    return;
-  }
+        const activeByMember = {};
+        loans.forEach(l => {
+            if (l.status === 'approved' && !l.repaid) {
+                const memberExists = members.some(m => m.id === l.memberId && m.approved !== false);
+                if (!memberExists) return;
+                if (!activeByMember[l.memberId]) {
+                    activeByMember[l.memberId] = {
+                        memberName: l.memberName,
+                        memberPhone: l.memberPhone,
+                        member: members.find(m => m.id === l.memberId),
+                        totalPrincipal: 0, totalRepay: 0, count: 0, loans: [],
+                        appLoanCount: 0, assignedLoanCount: 0,
+                        appLoanBalance: 0, assignedLoanBalance: 0,
+                        isOverdue: false, daysOverdue: 0
+                    };
+                }
+                activeByMember[l.memberId].totalPrincipal += l.amount;
+                activeByMember[l.memberId].totalRepay += l.totalRepay;
+                activeByMember[l.memberId].count++;
+                activeByMember[l.memberId].loans.push(l);
+                if (l.loanQuestions && l.loanQuestions.length > 0) {
+                    activeByMember[l.memberId].appLoanCount++;
+                    activeByMember[l.memberId].appLoanBalance += (l.totalRepay - (l.repaidAmount || 0));
+                    if (l.dueDate && l.dueDate < Date.now()) {
+                        const daysOverdue = Math.floor((Date.now() - l.dueDate) / (1000*60*60*24));
+                        if (daysOverdue > activeByMember[l.memberId].daysOverdue) {
+                            activeByMember[l.memberId].daysOverdue = daysOverdue;
+                            activeByMember[l.memberId].isOverdue = true;
+                        }
+                    }
+                } else {
+                    activeByMember[l.memberId].assignedLoanCount++;
+                    activeByMember[l.memberId].assignedLoanBalance += (l.totalRepay - (l.repaidAmount || 0));
+                }
+            }
+        });
 
-  // ─── LOGS TAB ───────────────────────────────────────────────
-  else if (currentAdminTab === 'logs') {
-    // Show both logs side by side
-    c.innerHTML = `
-      ${warningsHtml}
-      <div class="sec-h">📋 Activity Logs</div>
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:8px;">
-        <div class="card">
-          <div class="sec-h" style="color:var(--teal); font-size:0.8rem;">💰 Bulk Deposits</div>
-          <div id="admin-bulk-tx-logs" style="max-height:400px; overflow-y:auto;"></div>
-        </div>
-        <div class="card">
-          <div class="sec-h" style="color:var(--red); font-size:0.8rem;">🧾 Bulk Debts</div>
-          <div id="admin-bulk-debt-logs" style="max-height:400px; overflow-y:auto;"></div>
-        </div>
-      </div>
-    `;
-    // Render both log types
-    renderBulkTxLogs();
-    renderBulkDebtLogs();
-    // Mark any viewed logs – handled inside the render functions
-    return;
-  }
+        let entries = Object.entries(activeByMember);
+        entries = entries.filter(([memberId, data]) => {
+            const totalBalance = memberLoans[data.memberPhone] || 0;
+            return totalBalance > 0;
+        });
 
-  // ─── FALLBACK ──────────────────────────────────────────────
-  c.innerHTML = '<div class="empty-state">Select a tab above</div>';
+        let activeLoansHtml = '';
+        if (entries.length) {
+            activeLoansHtml = `
+                <div id="activeLoansContainer" style="display: none;">
+                    <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <span style="font-size: 0.75rem; font-weight: 700; color: var(--t2);">💳 Active Loans</span>
+                            <span class="pill-badge pill-green">${entries.length} members</span>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px;">
+                            ${entries.map(([memberId, data]) => {
+                                const member = data.member;
+                                const totalBalance = memberLoans[data.memberPhone] || 0;
+                                const paid = Math.max(0, data.totalRepay - totalBalance);
+                                const isOverdue = data.isOverdue;
+                                const daysOverdue = data.daysOverdue;
+                                const avatarColor = getAvatarColor(data.memberName);
+                                const initials = data.memberName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+                                return `
+                                    <div style="background: rgba(255,255,255,0.04); border: 1px solid ${isOverdue ? 'var(--red)' : 'var(--br)'}; border-radius: 12px; padding: 12px; cursor: pointer; transition: all 0.2s ease; position: relative; ${isOverdue ? 'animation: pulse 2s infinite;' : ''}"
+                                        onclick="showMemberLoanDetails('${memberId}')"
+                                        onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='var(--sh)';"
+                                        onmouseout="this.style.transform='none'; this.style.boxShadow='none';"
+                                    >
+                                        ${isOverdue ? `<div style="position: absolute; top: -6px; right: -6px; background: var(--red); color: white; font-size: 0.5rem; font-weight: 800; padding: 2px 8px; border-radius: 10px; animation: pulse 1.5s infinite;">${daysOverdue}d overdue</div>` : ''}
+                                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                                            <div style="width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg, ${avatarColor}, ${avatarColor}cc); display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: 800; color: white; flex-shrink: 0;">${initials || '?'}</div>
+                                            <div style="flex: 1; min-width: 0;"><div style="font-size: 0.8rem; font-weight: 700; color: var(--t); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(data.memberName)}</div><div style="font-size: 0.55rem; color: var(--t3);">${data.count} loan(s)</div></div>
+                                        </div>
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; font-size: 0.65rem;">
+                                            <div style="color: var(--t3);">Total</div><div style="font-weight: 600; text-align: right; color: var(--gold);">${money(data.totalRepay)}</div>
+                                            <div style="color: var(--t3);">Paid</div><div style="font-weight: 600; text-align: right; color: var(--green);">${money(paid)}</div>
+                                            <div style="color: var(--t3);">Balance</div><div style="font-weight: 600; text-align: right; color: ${totalBalance > 0 ? 'var(--red)' : 'var(--green)'};">${money(totalBalance)}</div>
+                                        </div>
+                                        <div style="text-align: center; margin-top: 8px; font-size: 0.5rem; color: var(--t3);">👆 Click for details</div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                </div>
+                <button class="btn btn-purple btn-full" onclick="toggleActiveLoans()" style="margin-top: 8px; padding: 8px; font-size: 0.75rem;">📋 Show Active Loans</button>
+            `;
+        }
+
+        c.innerHTML = `
+            ${warningsHtml}
+            ${financialSummaryHtml}
+            ${pendingActivityHtml}
+            ${pendingLoansHtml}
+            ${activeLoansHtml}
+        `;
+        return;
+    }
+
+    // ─── NOTICE TAB ───────────────────────────────────────────
+    else if (currentAdminTab === 'notice') {
+        let noticesHtml = '';
+        if (mainCarouselNotifs.length) {
+            noticesHtml = `
+                <div style="margin-top: 12px; max-height: 300px; overflow-y: auto;">
+                    ${mainCarouselNotifs.map((notice, idx) => `
+                        <div style="display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: rgba(255,255,255,0.04); border-radius: 8px; margin-bottom: 6px; border: 1px solid rgba(255,255,255,0.06);">
+                            <span style="font-size: 1.2rem;">${notice.icon || '📢'}</span>
+                            <div style="flex: 1; min-width: 0;">
+                                <div style="font-size: 0.75rem; color: var(--t); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(notice.text)}</div>
+                                ${notice.imageData ? `<div style="font-size: 0.55rem; color: var(--t3);">📸 Has image</div>` : ''}
+                            </div>
+                            <button class="btn btn-sm btn-red" onclick="removeCarouselNotice('${notice.key}')" style="padding: 2px 8px; font-size: 0.6rem;">🗑️</button>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        } else {
+            noticesHtml = `<div class="empty-state" style="padding: 20px;">No carousel notices yet. Add one below.</div>`;
+        }
+
+        c.innerHTML = `
+            ${warningsHtml}
+            <div class="card">
+                <div class="sec-h">📋 Carousel Notices</div>
+                <button class="btn btn-teal btn-full" onclick="openReminderGenerator()">📨 Generate Reminder Image</button>
+                <button class="btn btn-gold btn-full" onclick="openOv('ov-carousel-compose'); attachMsgCounterListener();">➕ Add Carousel Notice</button>
+                ${noticesHtml}
+            </div>
+        `;
+        return;
+    }
+
+    // ─── HARVEST TAB ──────────────────────────────────────────
+    else if (currentAdminTab === 'harvest') {
+        const rotationList = (rotation.order || []);
+        let currentReceiver = 'None';
+        if (rotationList.length > 0) {
+            const idx = rotation.currentIndex || 0;
+            const receiverId = rotationList[idx];
+            const receiver = members.find(m => m.id === receiverId);
+            currentReceiver = receiver ? receiver.name : 'Unknown';
+        }
+
+        c.innerHTML = `
+            ${warningsHtml}
+            <div class="card">
+                <div class="sec-h">🌾 Harvest Actions</div>
+                <button class="btn btn-teal btn-full" onclick="openAddTransaction()">➕ Add Transaction</button>
+                <button class="btn btn-green btn-full" onclick="openOv('ov-mark-paid')">✅ Mark Weekly Payout</button>
+                <button class="btn btn-gold btn-full" onclick="previewProfitDistribution()">🎉 Distribute Profit Pool</button>
+                <button class="btn btn-purple btn-full" onclick="openOv('ov-rot-manage'); buildDragRotation();">🔄 Manage Payout Rotation</button>
+            </div>
+            <div class="card">
+                <div class="sec-h">📊 Current Status</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                    <div><div class="micro muted">Current Payout Receiver</div><div style="font-weight: 700; font-size: 1.1rem; color: var(--gold);">${escapeHtml(currentReceiver)}</div></div>
+                    <div><div class="micro muted">Members in Rotation</div><div style="font-weight: 700; font-size: 1.1rem; color: var(--teal);">${rotationList.length}</div></div>
+                    <div><div class="micro muted">Admin Balance</div><div style="font-weight: 700; font-size: 1.1rem; color: ${cashFromDeposits < 0 ? 'var(--red)' : 'var(--green)'};">${money(cashFromDeposits)}</div></div>
+                    <div><div class="micro muted">Profit Pool</div><div style="font-weight: 700; font-size: 1.1rem; color: ${groupProfit < 0 ? 'var(--red)' : 'var(--green)'};">${money(groupProfit)}</div></div>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    // ─── USERS TAB ────────────────────────────────────────────
+    else if (currentAdminTab === 'users') {
+        let pendingCount = 0;
+        if (db) {
+            db.ref('applications').orderByChild('status').equalTo('pending').once('value', snap => {
+                pendingCount = snap.val() ? Object.keys(snap.val()).length : 0;
+                const badgeWrap = document.getElementById('apps-badge-wrap');
+                const badgeSpan = document.getElementById('apps-count');
+                if (badgeWrap && badgeSpan) {
+                    if (pendingCount > 0) {
+                        badgeWrap.style.display = 'inline-flex';
+                        badgeSpan.textContent = pendingCount;
+                    } else {
+                        badgeWrap.style.display = 'none';
+                    }
+                }
+            });
+        }
+
+        c.innerHTML = `
+            ${warningsHtml}
+            <div class="card">
+                <div class="sec-h">⚡ Quick Actions</div>
+                <button class="btn btn-teal btn-full" onclick="openReceiptLookup()">🔍 Find Receipt</button>
+                <button class="btn btn-gold btn-full" onclick="openOv('ov-add-mbr')">👤 Add New Member</button>
+                <button class="btn btn-amber btn-full" onclick="loadApplications()">📝 View Applications<span id="apps-badge-wrap" style="display:none;background:var(--red);color:#fff;border-radius:99px;padding:1px 7px;font-size:0.65rem;font-weight:800;margin-left:4px"><span id="apps-count">0</span></span></button>
+                <button class="btn btn-purple btn-full" onclick="generateGroupReport()">📊 Generate Group Report</button>
+            </div>
+            <div id="allMembersContainer" style="display: none;">
+                <div class="card">
+                    <div class="sec-h" style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>👥 All Members <span class="pill-badge pill-green">${members.length}</span></span>
+                    </div>
+                    <div id="admin-members-list"></div>
+                </div>
+            </div>
+            <button class="btn btn-purple btn-full" onclick="toggleAllMembers()" style="margin-top: 8px;">👥 Show/Hide All Members</button>
+        `;
+        updateAdminMembersList();
+        return;
+    }
+
+    // ─── LOGS TAB ─────────────────────────────────────────────
+    else if (currentAdminTab === 'logs') {
+        c.innerHTML = `
+            ${warningsHtml}
+            <div class="sec-h">📋 Activity Logs</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:8px;">
+                <div class="card">
+                    <div class="sec-h" style="color:var(--teal); font-size:0.8rem;">💰 Bulk Deposits</div>
+                    <div id="admin-bulk-tx-logs" style="max-height:400px; overflow-y:auto;"></div>
+                </div>
+                <div class="card">
+                    <div class="sec-h" style="color:var(--red); font-size:0.8rem;">🧾 Bulk Debts</div>
+                    <div id="admin-bulk-debt-logs" style="max-height:400px; overflow-y:auto;"></div>
+                </div>
+            </div>
+        `;
+        renderBulkTxLogs();
+        renderBulkDebtLogs();
+        return;
+    }
+
+    // ─── SETTINGS TAB ─────────────────────────────────────────
+    else if (currentAdminTab === 'settings') {
+        c.innerHTML = `
+            ${warningsHtml}
+            <div class="card">
+                <div class="sec-h">⚙️ Configuration</div>
+                <button class="btn btn-gold btn-full" onclick="openSettingsModal()">⚙️ Group Settings</button>
+                <button class="btn btn-purple btn-full" onclick="openEditTermsModal()">📝 Edit Terms</button>
+                <button class="btn btn-amber btn-full" onclick="openOv('ov-loan-settings');loadLoanSettings()">💰 Loan Settings</button>
+                <button class="btn btn-teal btn-full" onclick="generateGroupReport()">📊 Group Report</button>
+                <button class="btn btn-green btn-full" onclick="openMemberStatusMessages()">📨 Send Status Messages</button>
+            </div>
+            <div class="danger-zone">
+                <div class="danger-zone-label">⚠️ Danger Zone</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <button class="btn btn-sm btn-sec" onclick="resetGroup()">🗑️ Full Reset</button>
+                    <button class="btn btn-sm btn-sec" onclick="resetDataKeepMembers()">🔄 Reset Data</button>
+                </div>
+            </div>
+        `;
+        return;
+    }
+
+    c.innerHTML = '<div class="empty-state">Select a tab above</div>';
 }
 
 function truncateText(text, maxLength) {
@@ -13766,43 +13635,7 @@ function getSelectedMembers() {
   });
   return selected;
 }
-function getSingleMemberDailyStatus(member, dateTimestamp) {
-  const dayStart = new Date(dateTimestamp);
-  dayStart.setHours(0, 0, 0, 0);
-  const dayEnd = dayStart.getTime() + 86400000 - 1;
-  
-  const dailyAmount = settings.dailyAmount || 2500;
-  const welfareAmount = settings.welfareAmount || 500;
-  
-  let depositTotal = 0;
-  let welfarePaid = false;
-  
-  transactions.forEach(tx => {
-    if (tx.memberPhone === member.phone && tx.date >= dayStart && tx.date <= dayEnd) {
-      if (tx.type === 'deposit') depositTotal += tx.amount;
-      if (tx.type === 'welfare') welfarePaid = true;
-    }
-  });
-  
-  const neededDaily = dailyAmount;
-  const neededWelfare = welfarePaid ? 0 : welfareAmount;
-  const totalRequired = neededDaily + neededWelfare;
-  const totalPaid = depositTotal + (welfarePaid ? welfareAmount : 0);
-  const deficit = Math.max(0, totalRequired - totalPaid);
-  const surplus = Math.max(0, totalPaid - totalRequired);
-  const status = deficit === 0 ? (totalPaid >= totalRequired ? 'FULL' : 'PARTIAL') : 'DEFICIT';
-  
-  return {
-    deposit: depositTotal,
-    welfarePaid,
-    welfareAmountUsed: welfarePaid ? welfareAmount : 0,
-    totalPaid,
-    required: totalRequired,
-    deficit,
-    surplus,
-    status
-  };
-}
+
 
 async function assignDebtToSingleMember(member, principal, interestRate, dueDate, reason, timestamp) {
     const totalRepay = Math.floor(principal * (1 + interestRate / 100));
@@ -14444,7 +14277,7 @@ window.updateTxPreview = function() {
 
     const isCover = document.getElementById('tx-cover-toggle')?.checked || false;
 
-    // ─── COVER PAST DAYS MODE (unchanged) ──────────────
+    // ─── COVER PAST DAYS MODE ──────────────────────────────
     if (isCover) {
         const selectedMembers = getCheckedMembers('tx');
         const startDate = document.getElementById('tx-cover-start')?.value;
@@ -14508,18 +14341,28 @@ window.updateTxPreview = function() {
                 if (tx.type === 'welfare') welfarePaidToday = true;
             }
         });
-        const neededDaily = Math.max(0, dailyAmount - paidDailyToday);
-        const neededWelfare = welfarePaidToday ? 0 : welfareAmount;
-        const deficitToday = neededDaily + neededWelfare;
 
-        let remaining = amount;
-        let usedToday = 0;
-        if (deficitToday > 0 && remaining > 0) {
-            usedToday = Math.min(remaining, deficitToday);
-            remaining -= usedToday;
+        // ─── Check if member already has an action today ──
+        let deficitToday = 0;
+        if (memberHasActionToday(member)) {
+            deficitToday = 0;
+        } else {
+            const neededDaily = Math.max(0, dailyAmount - paidDailyToday);
+            const neededWelfare = welfarePaidToday ? 0 : welfareAmount;
+            deficitToday = neededDaily + neededWelfare;
         }
 
-        // Loan and debt repayment
+        const prepaidBalance = 0; // Prepaid is disabled
+        let remaining = amount;
+        let usedToday = 0, usedPrepaid = 0;
+
+        if (deficitToday > 0) {
+            if (remaining > 0) {
+                usedToday = Math.min(remaining, deficitToday);
+                remaining -= usedToday;
+            }
+        }
+
         const appBalance = memberApplicationLoans[member.phone] || 0;
         const assignedBalance = memberAssignedLoans[member.phone] || 0;
         const totalLoanBalance = memberLoans[member.phone] || 0;
@@ -14547,7 +14390,6 @@ window.updateTxPreview = function() {
         const loanRepaymentTotal = usedApp + usedAssigned + extraLoanRepay;
         const projectedRemainingLoan = Math.max(0, totalLoanBalance - loanRepaymentTotal);
 
-        // Future days projection
         let projectedPrepaidDate = null;
         let prepaidUntil = 'Not prepaid';
         if (remaining > 0) {
@@ -14558,22 +14400,27 @@ window.updateTxPreview = function() {
             }
         }
 
-        // Deposit message
         const loanBefore = totalLoanBalance;
         const depositMsg = getDepositMessage(member, amount, loanBefore, projectedRemainingLoan);
+
+        let todayStatusText = `Today's requirement: ${money(usedToday + usedPrepaid)}`;
+        if (memberHasActionToday(member) && usedToday === 0 && usedPrepaid === 0) {
+            todayStatusText = '✅ Already covered by an action today';
+        }
 
         previewEl.innerHTML = `
             <div style="padding:12px; background:rgba(255,255,255,0.04); border-radius:12px; border:1px solid var(--br);">
                 <div style="font-weight:700; font-size:0.9rem; color:var(--gold); margin-bottom:6px;">💰 Deposit Preview – ${escapeHtml(member.name)}</div>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px; font-size:0.8rem;">
                     <span style="color:var(--t3);">Amount</span><span>${money(amount)}</span>
-                    <span style="color:var(--t3);">Today's requirement</span><span>${money(usedToday)}</span>
+                    <span style="color:var(--t3);">${todayStatusText}</span>
                     <span style="color:var(--t3);">Loan repayment</span><span>${money(loanRepaymentTotal)}</span>
                     <span style="color:var(--t3);">Debt cleared</span><span>${money(usedDebt)}</span>
                     <span style="color:var(--t3);">Remaining Loan</span><span style="font-weight:700; color:var(--teal);">${money(projectedRemainingLoan)}</span>
-                    <span style="color:var(--t3);">Prepaid until</span><span style="font-weight:600; color:var(--green);">${prepaidUntil}</span>
+                    ${remaining > 0 ? `<span style="color:var(--t3);">Prepaid days</span><span style="font-weight:600; color:var(--green);">${prepaidUntil}</span>` : ''}
                     ${remaining > 0 ? `<span style="color:var(--t3);">Unallocated (future days)</span><span style="color:var(--gold);">${money(remaining)}</span>` : ''}
                 </div>
+                <!-- Deposit status message -->
                 <div style="margin-top: 8px; padding: 8px; background: rgba(245,158,11,0.08); border-radius: 8px; text-align: center; font-weight: 700; font-size: 0.8rem; color: var(--gold);">
                     ${depositMsg}
                 </div>
@@ -14590,11 +14437,35 @@ window.updateTxPreview = function() {
     let rowsHtml = selectedMembers.map(m => {
         const loan = memberLoans[m.phone] || 0;
         const debt = memberDebts[m.phone] || 0;
+        // Calculate projected loan after this deposit (simplified)
+        let remaining = amount;
+        const dailyAmount = settings.dailyAmount || 2000;
+        const welfareAmount = settings.welfareAmount || 500;
+        const requiredToday = dailyAmount + welfareAmount;
+        const todayStart = new Date().setHours(0,0,0,0);
+        let paidDailyToday = 0;
+        transactions.forEach(tx => {
+            if (tx.memberPhone === m.phone && tx.type === 'deposit' && tx.date >= todayStart && tx.date < todayStart + 86400000) {
+                paidDailyToday += tx.amount;
+            }
+        });
+        let deficitToday = 0;
+        if (memberHasActionToday(m)) {
+            deficitToday = 0;
+        } else {
+            deficitToday = Math.max(0, requiredToday - paidDailyToday);
+        }
+        let usedForToday = Math.min(remaining, deficitToday);
+        remaining -= usedForToday;
+        let usedForLoan = Math.min(remaining, loan);
+        const projectedLoan = Math.max(0, loan - usedForLoan);
+        
         return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
-            <td style="padding:4px;">${escapeHtml(m.name)}</td>
-            <td style="padding:4px; text-align:right;">${money(perMemberAmount)}</td>
-            <td style="padding:4px; text-align:right;">${money(loan)}</td>
-            <td style="padding:4px; text-align:right;">${money(debt)}</td>
+            <td style="padding:6px; font-size:0.8rem;">${escapeHtml(m.name)}</td>
+            <td style="padding:6px; font-size:0.8rem; text-align:right;">${money(amount)}</td>
+            <td style="padding:6px; font-size:0.8rem; text-align:right;">${money(loan)}</td>
+            <td style="padding:6px; font-size:0.8rem; text-align:right; color:${projectedLoan > 0 ? 'var(--red)' : 'var(--green)'};">${money(projectedLoan)}</td>
+            <td style="padding:6px; font-size:0.8rem; text-align:right;">${money(debt)}</td>
         </tr>`;
     }).join('');
 
@@ -14605,10 +14476,10 @@ window.updateTxPreview = function() {
                 <span style="color:var(--t3);">Per Member Amount</span><span>${money(perMemberAmount)}</span>
                 <span style="color:var(--t3);">Total Amount</span><span style="font-weight:700; color:var(--teal);">${money(totalAmount)}</span>
             </div>
-            <div style="font-size:0.7rem; color:var(--t3); margin-bottom:4px;">Member Details</div>
+            <div style="font-size:0.7rem; color:var(--t3); margin-bottom:4px;">Member Details (projected loan after deposit)</div>
             <div style="max-height:150px; overflow-y:auto; border:1px solid var(--br); border-radius:8px; padding:4px;">
                 <table style="width:100%; font-size:0.7rem;">
-                    <thead><tr style="background:rgba(255,255,255,0.05);"><th style="padding:4px; text-align:left;">Member</th><th style="padding:4px; text-align:right;">Amount</th><th style="padding:4px; text-align:right;">Loan</th><th style="padding:4px; text-align:right;">Debt</th></tr></thead>
+                    <thead><tr style="background:rgba(255,255,255,0.05);"><th style="padding:4px; text-align:left;">Member</th><th style="padding:4px; text-align:right;">Amount</th><th style="padding:4px; text-align:right;">Current Loan</th><th style="padding:4px; text-align:right;">Projected Loan</th><th style="padding:4px; text-align:right;">Debt</th></tr></thead>
                     <tbody>${rowsHtml}</tbody>
                 </table>
             </div>
@@ -14616,6 +14487,7 @@ window.updateTxPreview = function() {
     `;
     previewEl.style.display = 'block';
 };
+
 function getPrepaidPeriod(member) {
   if (!member) return null;
   const todayStart = new Date().setHours(0, 0, 0, 0);
@@ -14659,72 +14531,111 @@ window.addTransactionWithPreview = async function() {
     }
 
     // ─── COVER PAST DAYS ──────────────────────────────────────
-    if (isCover) {
-        const startDate = document.getElementById('tx-cover-start').value;
-        const endDate = document.getElementById('tx-cover-end').value;
-        if (!startDate || !endDate) {
-            toast('Select date range', '#ef4444');
-            return;
-        }
-        if (new Date(endDate) < new Date(startDate)) {
-            toast('End date must be after start', '#ef4444');
-            return;
-        }
-
-        const dates = getDateRange(startDate, endDate);
-        const dailyAmount = settings.dailyAmount || 2500;
-        const welfareAmount = settings.welfareAmount || 500;
-        const requiredPerDay = dailyAmount + welfareAmount;
-        const skipExisting = document.getElementById('tx-cover-override').checked;
-
-        let writes = [];
-        let totalDays = 0;
-        for (const member of selectedMembers) {
-            for (const dateObj of dates) {
-                const hasDeposit = skipExisting ? memberHasDepositOnDate(member, dateObj) : false;
-                if (!hasDeposit) {
-                    totalDays++;
-                    writes.push(db.ref('transactions').push({
-                        memberPhone: member.phone,
-                        memberName: member.name,
-                        type: 'deposit',
-                        amount: dailyAmount,
-                        receiptNumber: generateReceiptNumber(),
-                        description: `Cover past day (${dateObj.toISOString().slice(0,10)}) – ${desc}`,
-                        date: dateObj.getTime(),
-                        isDailySavings: true,
-                        isCovered: true
-                    }));
-                    writes.push(db.ref('transactions').push({
-                        memberPhone: member.phone,
-                        memberName: member.name,
-                        type: 'welfare',
-                        amount: welfareAmount,
-                        receiptNumber: generateReceiptNumber(),
-                        description: `Welfare for covered day (${dateObj.toISOString().slice(0,10)})`,
-                        date: dateObj.getTime() + 500,
-                        autoDeduction: true,
-                        isCovered: true
-                    }));
-                }
-            }
-        }
-
-        if (!writes.length) {
-            toast('All selected days already covered.', '#f59e0b');
-            return;
-        }
-
-        if (!confirm(`Cover ${totalDays} day(s) for ${selectedMembers.length} member(s)?`)) return;
-
-        await Promise.all(writes);
-        toast(`✅ Covered ${totalDays} day(s) for ${selectedMembers.length} member(s)`, '#10b981');
-        await reloadAllData();
-        refreshUI();
-        closeOv('ov-add-tx');
+    // ─── COVER PAST DAYS ──────────────────────────────────────
+if (isCover) {
+    const startDate = document.getElementById('tx-cover-start').value;
+    const endDate = document.getElementById('tx-cover-end').value;
+    if (!startDate || !endDate) {
+        toast('Select date range', '#ef4444');
+        return;
+    }
+    if (new Date(endDate) < new Date(startDate)) {
+        toast('End date must be after start', '#ef4444');
         return;
     }
 
+    const dates = getDateRange(startDate, endDate);
+    const dailyAmount = settings.dailyAmount || 2500;
+    const welfareAmount = settings.welfareAmount || 500;
+    const requiredPerDay = dailyAmount + welfareAmount;
+    const skipExisting = document.getElementById('tx-cover-override').checked;
+
+    let writes = [];
+    let totalDays = 0;
+    const memberDayCount = {};
+
+    for (const member of selectedMembers) {
+        memberDayCount[member.phone] = 0;
+        for (const dateObj of dates) {
+            const hasDeposit = skipExisting ? memberHasDepositOnDate(member, dateObj) : false;
+            if (!hasDeposit) {
+                memberDayCount[member.phone]++;
+                totalDays++;
+                writes.push(db.ref('transactions').push({
+                    memberPhone: member.phone,
+                    memberName: member.name,
+                    type: 'deposit',
+                    amount: dailyAmount,
+                    receiptNumber: generateReceiptNumber(),
+                    description: `Cover past day (${dateObj.toISOString().slice(0,10)}) – ${desc}`,
+                    date: dateObj.getTime(),
+                    isDailySavings: true,
+                    isCovered: true
+                }));
+                writes.push(db.ref('transactions').push({
+                    memberPhone: member.phone,
+                    memberName: member.name,
+                    type: 'welfare',
+                    amount: welfareAmount,
+                    receiptNumber: generateReceiptNumber(),
+                    description: `Welfare for covered day (${dateObj.toISOString().slice(0,10)})`,
+                    date: dateObj.getTime() + 500,
+                    autoDeduction: true,
+                    isCovered: true
+                }));
+            }
+        }
+    }
+
+    if (!writes.length) {
+        toast('All selected days already covered.', '#f59e0b');
+        return;
+    }
+
+    if (!confirm(`Cover ${totalDays} day(s) for ${selectedMembers.length} member(s)?`)) return;
+
+    await Promise.all(writes);
+
+    // ─── Generate consolidated receipt images for each member ──
+    const logMembers = [];
+    for (const member of selectedMembers) {
+        const days = memberDayCount[member.phone] || 0;
+        if (days === 0) continue;
+        
+        const totalAmount = days * requiredPerDay;
+        const receiptNumber = generateReceiptNumber();
+        
+        // Generate a consolidated receipt showing date range and days covered
+        const receiptImage = await generateCoverDaysReceiptImage(
+            member,
+            startDate,
+            endDate,
+            days,
+            totalAmount,
+            receiptNumber
+        );
+        
+        logMembers.push({
+            name: member.name,
+            phone: member.phone,
+            amount: totalAmount,
+            days: days,
+            receiptImage: receiptImage,
+            receiptNumber: receiptNumber,
+            sent: false
+        });
+    }
+
+    if (logMembers.length) {
+        await createBulkTxLog(logMembers, totalDays * requiredPerDay * selectedMembers.length, `Covered ${totalDays} days (${startDate} to ${endDate})`);
+    }
+
+    toast(`✅ Covered ${totalDays} day(s) for ${selectedMembers.length} member(s)`, '#10b981');
+    await reloadAllData();
+    refreshUI();
+    closeOv('ov-add-tx');
+    return;
+}
     // ─── REGULAR TRANSACTION ──────────────────────────────────
     const type = document.getElementById('tx-type')?.value;
     const amount = parseFloat(document.getElementById('tx-amount')?.value);
@@ -14737,12 +14648,13 @@ window.addTransactionWithPreview = async function() {
     if (type === 'deposit') {
         computePots();
 
-        // ─── SINGLE MEMBER – show receipt modal ─────────────
+        // ─── SINGLE MEMBER ──────────────────────────────────
         if (selectedMembers.length === 1) {
             const member = selectedMembers[0];
+            
+            // Calculate projected loan balance after deposit
             const loanBefore = memberLoans[member.phone] || 0;
-            // Calculate projected remaining loan (simulate deposit)
-            // We'll do a quick approximation using the same logic as preview
+            // Simulate the allocation to get projected remaining loan
             let remaining = amount;
             const dailyAmount = settings.dailyAmount || 2000;
             const welfareAmount = settings.welfareAmount || 500;
@@ -14754,33 +14666,57 @@ window.addTransactionWithPreview = async function() {
                     paidDailyToday += tx.amount;
                 }
             });
-            const deficit = Math.max(0, requiredToday - paidDailyToday);
-            let usedToday = Math.min(remaining, deficit);
+            let deficitToday = 0;
+            if (memberHasActionToday(member)) {
+                deficitToday = 0;
+            } else {
+                deficitToday = Math.max(0, requiredToday - paidDailyToday);
+            }
+            let usedToday = Math.min(remaining, deficitToday);
             remaining -= usedToday;
-            // Loan repayments
-            let loanRepayment = 0;
-            const appBalance = memberApplicationLoans[member.phone] || 0;
-            const assignedBalance = memberAssignedLoans[member.phone] || 0;
+            
+            // Repay application loans
+            const appLoans = loans.filter(l =>
+                l.memberPhone === member.phone &&
+                l.status === 'approved' && !l.repaid &&
+                l.loanQuestions && l.loanQuestions.length > 0
+            ).sort((a, b) => a.approvedAt - b.approvedAt);
+            for (let loan of appLoans) {
+                if (remaining <= 0) break;
+                const loanBalance = loan.totalRepay - (loan.repaidAmount || 0);
+                if (loanBalance <= 0) continue;
+                const repay = Math.min(remaining, loanBalance);
+                remaining -= repay;
+            }
+            // Repay assigned loans
+            const assignedLoans = loans.filter(l =>
+                l.memberPhone === member.phone &&
+                l.status === 'approved' && !l.repaid &&
+                (!l.loanQuestions || l.loanQuestions.length === 0)
+            ).sort((a, b) => a.approvedAt - b.approvedAt);
+            for (let loan of assignedLoans) {
+                if (remaining <= 0) break;
+                const loanBalance = loan.totalRepay - (loan.repaidAmount || 0);
+                if (loanBalance <= 0) continue;
+                const repay = Math.min(remaining, loanBalance);
+                remaining -= repay;
+            }
+            // Clear debts
+            const debtBal = memberDebts[member.phone] || 0;
+            if (debtBal > 0 && remaining > 0) {
+                const used = Math.min(remaining, debtBal);
+                remaining -= used;
+            }
+            // Extra loan repayment
             const totalLoan = memberLoans[member.phone] || 0;
-            if (remaining > 0 && appBalance > 0) {
-                const used = Math.min(remaining, appBalance);
-                loanRepayment += used;
-                remaining -= used;
+            if (totalLoan > 0 && remaining > 0) {
+                const extra = Math.min(remaining, totalLoan);
+                remaining -= extra;
             }
-            if (remaining > 0 && assignedBalance > 0) {
-                const used = Math.min(remaining, assignedBalance);
-                loanRepayment += used;
-                remaining -= used;
-            }
-            if (remaining > 0 && totalLoan > 0) {
-                const used = Math.min(remaining, totalLoan - loanRepayment);
-                loanRepayment += used;
-                remaining -= used;
-            }
-            const projectedRemainingLoan = Math.max(0, totalLoan - loanRepayment);
+            const projectedRemainingLoan = Math.max(0, memberLoans[member.phone] || 0);
 
             const onSave = async () => {
-                const depositTxs = await processDeposit(member, amount, Date.now(), desc || 'Manual deposit');
+                const depositTxs = await processDepositWithFutureDays(member, amount, Date.now(), desc || 'Manual deposit');
                 const writes = depositTxs.map(tx => db.ref('transactions').push(tx));
                 await Promise.all(writes);
                 await reloadAllData();
@@ -14788,6 +14724,7 @@ window.addTransactionWithPreview = async function() {
                 return true;
             };
 
+            // Show receipt modal
             showTransactionReceiptModal(
                 member,
                 type,
@@ -14804,45 +14741,34 @@ window.addTransactionWithPreview = async function() {
 
         // ─── MULTIPLE MEMBERS – show bulk preview modal ────
         const totalAmount = amount * selectedMembers.length;
+        const dailyAmount = settings.dailyAmount || 2000;
+        const welfareAmount = settings.welfareAmount || 500;
+        const requiredToday = dailyAmount + welfareAmount;
+        const todayStart = new Date().setHours(0,0,0,0);
 
+        // Build breakdown rows
         let rowsHtml = selectedMembers.map(m => {
             const loan = memberLoans[m.phone] || 0;
             const debt = memberDebts[m.phone] || 0;
-            // Projected loan after deposit (simplified)
+            // Simulate allocation to get projected loan
             let remaining = amount;
-            const dailyAmount = settings.dailyAmount || 2000;
-            const welfareAmount = settings.welfareAmount || 500;
-            const requiredToday = dailyAmount + welfareAmount;
-            const todayStart = new Date().setHours(0,0,0,0);
             let paidDailyToday = 0;
             transactions.forEach(tx => {
                 if (tx.memberPhone === m.phone && tx.type === 'deposit' && tx.date >= todayStart && tx.date < todayStart + 86400000) {
                     paidDailyToday += tx.amount;
                 }
             });
-            const deficit = Math.max(0, requiredToday - paidDailyToday);
-            let usedToday = Math.min(remaining, deficit);
+            let deficitToday = 0;
+            if (memberHasActionToday(m)) {
+                deficitToday = 0;
+            } else {
+                deficitToday = Math.max(0, requiredToday - paidDailyToday);
+            }
+            let usedToday = Math.min(remaining, deficitToday);
             remaining -= usedToday;
-            let loanRepayment = 0;
-            const appBalance = memberApplicationLoans[m.phone] || 0;
-            const assignedBalance = memberAssignedLoans[m.phone] || 0;
-            const totalLoan = memberLoans[m.phone] || 0;
-            if (remaining > 0 && appBalance > 0) {
-                const used = Math.min(remaining, appBalance);
-                loanRepayment += used;
-                remaining -= used;
-            }
-            if (remaining > 0 && assignedBalance > 0) {
-                const used = Math.min(remaining, assignedBalance);
-                loanRepayment += used;
-                remaining -= used;
-            }
-            if (remaining > 0 && totalLoan > 0) {
-                const used = Math.min(remaining, totalLoan - loanRepayment);
-                loanRepayment += used;
-                remaining -= used;
-            }
-            const projectedLoan = Math.max(0, totalLoan - loanRepayment);
+            let usedForLoan = Math.min(remaining, loan);
+            const projectedLoan = Math.max(0, loan - usedForLoan);
+            
             return `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
                 <td style="padding:6px; font-size:0.8rem;">${escapeHtml(m.name)}</td>
                 <td style="padding:6px; font-size:0.8rem; text-align:right;">${money(amount)}</td>
@@ -14883,13 +14809,15 @@ window.addTransactionWithPreview = async function() {
             async function() {
                 closeOv('ov-bulk-preview');
                 
+                // Save deposits for all members
                 let allWrites = [];
                 for (const m of selectedMembers) {
-                    const depositTxs = await processDeposit(m, amount, Date.now(), desc || 'Manual deposit');
+                    const depositTxs = await processDepositWithFutureDays(m, amount, Date.now(), desc || 'Manual deposit');
                     allWrites = allWrites.concat(depositTxs.map(tx => db.ref('transactions').push(tx)));
                 }
                 await Promise.all(allWrites);
 
+                // Generate receipt images for each member and store in log
                 const logMembers = [];
                 for (const m of selectedMembers) {
                     const receiptNumber = generateReceiptNumber();
@@ -14914,7 +14842,7 @@ window.addTransactionWithPreview = async function() {
         return;
     }
 
-    // ─── OTHER TRANSACTION TYPES (welfare) ──────────────────
+    // ─── OTHER TRANSACTION TYPES (welfare, withdrawal) ─────
     let writes = [];
     for (const member of selectedMembers) {
         writes.push(db.ref('transactions').push({
@@ -15223,176 +15151,54 @@ window.addGroupTransaction = async function() {
 };
 
 async function executeDebtAssignment(member, principal, interestRate, interest, totalRepay, reason, dueDate, timestamp) {
-  const loanRef = db.ref('loans').push();
-  const loanId = loanRef.key;
-  const loanData = {
-    id: loanId,
-    memberId: member.id,
-    memberName: member.name,
-    memberPhone: member.phone,
-    amount: principal,
-    interestRate: interestRate,
-    totalRepay: totalRepay,
-    reason: reason,
-    status: 'approved',
-    requestedAt: Date.now(),
-    approvedAt: Date.now(),
-    dueDate: dueDate,
-    repaid: false,
-    penaltyApplied: false,
-    repaidAmount: 0,
-    loanQuestions: [],
-    weeks: 1
-  };
-  await loanRef.set(loanData);
+    const loanRef = db.ref('loans').push();
+    const loanId = loanRef.key;
+    const loanData = {
+        id: loanId,
+        memberId: member.id,
+        memberName: member.name,
+        memberPhone: member.phone,
+        amount: principal,
+        interestRate: interestRate,
+        totalRepay: totalRepay,
+        reason: reason,
+        status: 'approved',
+        requestedAt: Date.now(),
+        approvedAt: Date.now(),
+        dueDate: null, // No due date
+        repaid: false,
+        penaltyApplied: false,
+        repaidAmount: 0,
+        loanQuestions: [],
+        weeks: 1
+    };
+    await loanRef.set(loanData);
 
-  await db.ref('transactions').push({
-    memberPhone: member.phone,
-    memberName: member.name,
-    type: 'loan_disbursement',
-    amount: principal,
-    receiptNumber: generateReceiptNumber(),
-    description: `${reason} (principal) - Debt assigned by admin`,
-    date: Date.now(),
-    loanId: loanId
-  });
-
-  if (interest > 0) {
     await db.ref('transactions').push({
-      memberPhone: member.phone,
-      memberName: member.name,
-      type: 'loan_interest',
-      amount: interest,
-      receiptNumber: generateReceiptNumber(),
-      description: `Interest (${interestRate}%) on assigned debt`,
-      date: Date.now() + 1,
-      loanId: loanId
+        memberPhone: member.phone,
+        memberName: member.name,
+        type: 'loan_disbursement',
+        amount: principal,
+        receiptNumber: generateReceiptNumber(),
+        description: `${reason} (principal) - Debt assigned by admin`,
+        date: Date.now(),
+        loanId: loanId
     });
-  }
-  // Data will be reloaded by the caller
+
+    if (interest > 0) {
+        await db.ref('transactions').push({
+            memberPhone: member.phone,
+            memberName: member.name,
+            type: 'loan_interest',
+            amount: interest,
+            receiptNumber: generateReceiptNumber(),
+            description: `Interest (${interestRate}%) on assigned debt`,
+            date: Date.now() + 1,
+            loanId: loanId
+        });
+    }
 }
 
-function previewTransactionReceipt() {
-  const phone = document.getElementById('tx-member')?.value;
-  const type = document.getElementById('tx-type')?.value;
-  const amount = parseFloat(document.getElementById('tx-amount')?.value);
-  const desc = document.getElementById('tx-desc')?.value;
-  const member = members.find(m => m.phone === phone);
-
-  if (!member || !amount || amount <= 0) {
-    toast('Select a member and enter a valid amount', '#ef4444');
-    return;
-  }
-
-  computePots();
-
-  const dailyAmount = settings.dailyAmount || 2000;
-  const welfareAmount = settings.welfareAmount || 500;
-  const requiredToday = dailyAmount + welfareAmount;
-  const todayStart = new Date().setHours(0, 0, 0, 0);
-
-  let paidDailyToday = 0, welfarePaidToday = false;
-  transactions.forEach(tx => {
-    if (tx.memberPhone === member.phone && tx.date >= todayStart && tx.date < todayStart + 86400000) {
-      if (tx.type === 'deposit') paidDailyToday += tx.amount;
-      if (tx.type === 'welfare') welfarePaidToday = true;
-    }
-  });
-  const neededDaily = Math.max(0, dailyAmount - paidDailyToday);
-  const neededWelfare = welfarePaidToday ? 0 : welfareAmount;
-  const deficitToday = neededDaily + neededWelfare;
-
-  const prepaidBalance = memberPrepaid[member.phone] || 0;
-  let remaining = amount;
-  let usedToday = 0, usedPrepaid = 0;
-
-  if (deficitToday > 0) {
-    if (prepaidBalance > 0) {
-      usedPrepaid = Math.min(prepaidBalance, deficitToday);
-      remaining -= usedPrepaid;
-    }
-    if (remaining > 0) {
-      usedToday = Math.min(remaining, deficitToday - usedPrepaid);
-      remaining -= usedToday;
-    }
-  }
-
-  const appBalance = memberApplicationLoans[member.phone] || 0;
-  const assignedBalance = memberAssignedLoans[member.phone] || 0;
-  const totalLoanBalance = memberLoans[member.phone] || 0;
-  const debtBalance = memberDebts[member.phone] || 0;
-
-  let usedApp = 0, usedAssigned = 0, usedDebt = 0, extraLoanRepay = 0;
-
-  if (remaining > 0 && appBalance > 0) {
-    usedApp = Math.min(remaining, appBalance);
-    remaining -= usedApp;
-  }
-  if (remaining > 0 && assignedBalance > 0) {
-    usedAssigned = Math.min(remaining, assignedBalance);
-    remaining -= usedAssigned;
-  }
-  if (remaining > 0 && debtBalance > 0) {
-    usedDebt = Math.min(remaining, debtBalance);
-    remaining -= usedDebt;
-  }
-  if (remaining > 0 && totalLoanBalance > 0) {
-    extraLoanRepay = Math.min(remaining, totalLoanBalance - usedApp - usedAssigned);
-    remaining -= extraLoanRepay;
-  }
-
-  const loanRepaymentTotal = usedApp + usedAssigned + extraLoanRepay;
-  const projectedRemainingLoan = Math.max(0, totalLoanBalance - loanRepaymentTotal);
-
-  let projectedPrepaidDate = null;
-  if (remaining > 0) {
-    const daysCovered = Math.floor(remaining / requiredToday);
-    if (daysCovered > 0) {
-      projectedPrepaidDate = new Date(todayStart + (daysCovered + 1) * 86400000);
-    }
-  }
-
-  // ===== SAVE FUNCTION =====
-  const onSave = async function() {
-    try {
-      const depositTxs = await processDepositWithFutureDays(member, amount, Date.now(), desc || 'Manual deposit');
-      const writes = depositTxs.map(tx => db.ref('transactions').push(tx));
-      await Promise.all(writes);
-
-      const [txSnap, loansSnap] = await Promise.all([
-        db.ref('transactions').once('value'),
-        db.ref('loans').once('value')
-      ]);
-      transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
-      loans = loansSnap.val() ? Object.entries(loansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
-
-      computePots();
-      refreshUI();
-      if (isLedgerActive()) loadLedger(window.currentLedgerFilter || 'all');
-      if (currentAdminTab === 'savings' && adminUnlocked) renderAdminTab();
-
-      toast(`Deposit saved! ${money(amount)} applied.`, '#10b981');
-      return true;
-    } catch (err) {
-      console.error('Save error:', err);
-      toast('Failed to save transaction.', '#ef4444');
-      return false;
-    }
-  };
-
-  // ===== OPEN RECEIPT MODAL =====
-  showTransactionReceiptModal(
-    member,
-    type,
-    amount,
-    desc || type,
-    null, null, null, null,
-    true,                      // isPreview
-    projectedPrepaidDate,
-    projectedRemainingLoan,
-    onSave                     // pass the save function
-  );
-}
 window.showTransactionReceiptModal = function(
     member, txType, amount, description,
     onConfirmSend, onConfirmNoSend, onCancel, onPrint,
@@ -15666,154 +15472,6 @@ window.showTransactionReceiptModal = function(
         }
     });
 }; 
-function generateSimpleReceiptFallback(member, txType, amount, description, accountBalance, appBalance, projectedRemainingLoan, prepaidBalance) {
-  try {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = 360;
-    canvas.height = 580;
-
-    ctx.fillStyle = '#ffffff';
-    ctx.shadowColor = 'rgba(0,0,0,0.08)';
-    ctx.shadowBlur = 40;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 10;
-    ctx.beginPath();
-    ctx.roundRect(0, 0, canvas.width, canvas.height, 28);
-    ctx.fill();
-    ctx.shadowColor = 'transparent';
-
-    let y = 30;
-    const cx = canvas.width / 2;
-    const leftX = 24;
-
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#1a202c';
-    ctx.font = '10px -apple-system, sans-serif';
-    ctx.fillText('9:41', leftX, y);
-    ctx.textAlign = 'right';
-    ctx.fillText('●●●●●  📶  🔋', canvas.width - leftX, y);
-    y += 22;
-
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#e8f5e9';
-    ctx.beginPath();
-    ctx.roundRect(cx - 60, y - 8, 120, 20, 20);
-    ctx.fill();
-    ctx.fillStyle = '#2e7d32';
-    ctx.font = '9px -apple-system, sans-serif';
-    ctx.fillText('✅ Payment Success!', cx, y + 3);
-    y += 22;
-
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#4a5568';
-    ctx.font = '11px -apple-system, sans-serif';
-    ctx.fillText('Your payment was successful.', cx, y);
-    y += 28;
-
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#a0aec0';
-    ctx.font = '9px -apple-system, sans-serif';
-    ctx.fillText('Amount', leftX, y);
-    ctx.fillStyle = '#1a202c';
-    ctx.font = 'bold 28px -apple-system, sans-serif';
-    y += 28;
-    ctx.fillText(`UGX ${amount.toLocaleString()}`, leftX, y);
-    y += 20;
-
-    ctx.strokeStyle = 'rgba(0,0,0,0.04)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(leftX, y);
-    ctx.lineTo(canvas.width - leftX, y);
-    ctx.stroke();
-    y += 12;
-
-    const details = [
-      ['Status', 'Success', '#2e7d32'],
-      ['Transaction', `Qwerty${Date.now().toString().slice(-6)}`, '#4a5568'],
-      ['Sender', member?.name || 'Unknown', '#2d3748'],
-      ['Receiver', 'Harvest Trust Group', '#2d3748'],
-      ['Payment Method', txType === 'deposit' ? 'Deposit' : (txType || 'Transaction'), '#2d3748'],
-      ['Payment Time', new Date().toLocaleDateString() + ', ' + new Date().toLocaleTimeString(), '#2d3748']
-    ];
-
-    details.forEach(([label, value, color]) => {
-      ctx.textAlign = 'left';
-      ctx.fillStyle = '#a0aec0';
-      ctx.font = '9px -apple-system, sans-serif';
-      ctx.fillText(label, leftX, y);
-      ctx.textAlign = 'right';
-      ctx.fillStyle = color;
-      ctx.font = '9px -apple-system, sans-serif';
-      ctx.fillText(value, canvas.width - leftX, y);
-      y += 18;
-    });
-
-    y += 6;
-    ctx.strokeStyle = '#6b46c1';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(cx - 20, y);
-    ctx.lineTo(cx + 20, y);
-    ctx.stroke();
-    y += 16;
-
-    const items = [];
-    if (appBalance > 0) items.push(['⭐ Application', `UGX ${appBalance.toLocaleString()}`, '#b45309']);
-    if (projectedRemainingLoan > 0) items.push(['💰 Remaining Loan (after deposit)', `UGX ${projectedRemainingLoan.toLocaleString()}`, '#6b46c1']);
-    else if (memberLoans[member?.phone] > 0) items.push(['💰 Remaining Loan (after deposit)', 'UGX 0 ✅', '#10b981']);
-    if (prepaidBalance > 0) items.push(['💠 Prepaid', `UGX ${prepaidBalance.toLocaleString()}`, '#0891b2']);
-    items.push(['💰 Available', `UGX ${accountBalance.toLocaleString()}`, '#6b46c1']);
-
-    items.forEach(([label, value, color], i) => {
-      const lineY = y + (i * 18);
-      ctx.textAlign = 'left';
-      ctx.fillStyle = '#6b46c1';
-      ctx.font = '9px -apple-system, sans-serif';
-      ctx.fillText(label, leftX, lineY);
-      ctx.textAlign = 'right';
-      ctx.fillStyle = color;
-      ctx.font = 'bold 9px -apple-system, sans-serif';
-      ctx.fillText(value, canvas.width - leftX, lineY);
-    });
-
-    y += (items.length * 18) + 10;
-
-    ctx.fillStyle = '#f7f5fa';
-    ctx.beginPath();
-    ctx.roundRect(leftX, y - 4, canvas.width - (leftX * 2), 24, 8);
-    ctx.fill();
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#a0aec0';
-    ctx.font = '8px -apple-system, sans-serif';
-    ctx.fillText('💳 Loan Limit', leftX + 10, y + 11);
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#2d3748';
-    ctx.font = 'bold 8px -apple-system, sans-serif';
-    ctx.fillText(`UGX ${0}`, canvas.width - leftX - 10, y + 11);
-    y += 32;
-
-    const btnY = y;
-    ctx.strokeStyle = '#6b46c1';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(leftX, btnY, (canvas.width - (leftX * 2) - 10) / 2, 34, 30);
-    ctx.stroke();
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#6b46c1';
-    ctx.font = '10px -apple-system, sans-serif';
-    ctx.fillText('📋 Share Receipt', leftX + ((canvas.width - (leftX * 2) - 10) / 4), btnY + 20);
-
-    const btn2X = leftX + (canvas.width - (leftX * 2) - 10) / 2 + 10;
-    ctx.beginPath();
-    ctx.roundRect(btn2X, btnY, (canvas.width - (leftX * 2) - 10) / 2, 34, 30);
-    ctx.stroke();
-    ctx.fillText('← Back to home', btn2X + ((canvas.width - (leftX * 2) - 10) / 4), btnY + 20);
-
-    return canvas.toDataURL('image/png');
-  } catch (e) {
-    return null;}}
 
 window.showDebtReceiptModal = function(
     member, principal, interestRate, interest, totalRepay,
@@ -15831,64 +15489,52 @@ window.showDebtReceiptModal = function(
 
     const existingLoan = memberLoans[member?.phone] || 0;
     const totalLoanAfter = existingLoan + safeTotal;
-    const dueDateLabel = new Date(dueDate).toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' });
+    const dueDateLabel = dueDate ? new Date(dueDate).toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' }) : 'No due date';
     const receiptNumber = generateReceiptNumber();
     const quote = getReceiptQuote(member);
 
     function buildReceiptHTML() {
-    const date = new Date();
-    const dateLabel = date.toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' });
-    const timeLabel = date.toLocaleTimeString('en-UG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    const txTypeUpper = (txType || 'transaction').toUpperCase();
-    return `
-    <div id="receipt-content" style="max-width:360px;margin:0 auto;background:#ffffff;border-radius:24px;padding:24px 20px 20px;font-family:'DM Sans',sans-serif;text-align:center;color:#111827;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
-        <div style="font-size:1.1rem;font-weight:900;color:#111827;letter-spacing:-0.5px;">🌾 Harvest Trust Finance</div>
-        <div style="width:40px;height:3px;background:#f59e0b;margin:8px auto 12px;border-radius:99px;"></div>
-        <div style="font-size:2.8rem;font-weight:900;color:#16a34a;line-height:1.2;margin:8px 0;">UGX ${safeAmount.toLocaleString()}</div>
-        <div style="font-size:0.75rem;color:#9ca3af;font-weight:600;margin-bottom:16px;">${txTypeUpper} Successful</div>
-        <div style="border-top:1px solid #f3f4f6;margin-bottom:14px;"></div>
-        <div style="text-align:left;font-size:0.85rem;">
-            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-                <span style="color:#6b7280;">Member</span>
-                <span style="font-weight:600;">${escapeHtml(member?.name || 'Unknown')}</span>
+        return `
+        <div id="receipt-content" style="max-width:360px;margin:0 auto;background:#ffffff;border-radius:24px;padding:24px 20px 20px;font-family:'DM Sans',sans-serif;text-align:center;color:#111827;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+            <div style="font-size:1.1rem;font-weight:900;color:#111827;letter-spacing:-0.5px;">🌾 Harvest Trust Finance</div>
+            <div style="width:40px;height:3px;background:#f59e0b;margin:8px auto 12px;border-radius:99px;"></div>
+            <div style="font-size:2.8rem;font-weight:900;color:#ef4444;line-height:1.2;margin:8px 0;">UGX ${safeTotal.toLocaleString()}</div>
+            <div style="font-size:0.75rem;color:#9ca3af;font-weight:600;margin-bottom:16px;">Debt Assigned</div>
+            <div style="border-top:1px solid #f3f4f6;margin-bottom:14px;"></div>
+            <div style="text-align:left;font-size:0.85rem;">
+                <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                    <span style="color:#6b7280;">Member</span>
+                    <span style="font-weight:600;">${escapeHtml(member?.name || 'Unknown')}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                    <span style="color:#6b7280;">Principal</span>
+                    <span style="font-weight:600;">UGX ${safePrincipal.toLocaleString()}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                    <span style="color:#6b7280;">Interest (${interestRate}%)</span>
+                    <span style="font-weight:600;">UGX ${safeInterest.toLocaleString()}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:6px 0;background:#fef3c7;border-radius:6px;padding:8px 12px;margin:6px 0;border:1px solid #f59e0b;">
+                    <span style="color:#92400e;font-weight:700;">💰 Total Loan Balance</span>
+                    <span style="color:#92400e;font-weight:900;">UGX ${totalLoanAfter.toLocaleString()}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
+                    <span style="color:#6b7280;">Reason</span>
+                    <span style="font-weight:600;">${escapeHtml(reason || 'N/A')}</span>
+                </div>
             </div>
-            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-                <span style="color:#6b7280;">Payment Method</span>
-                <span style="font-weight:600;">${txType === 'deposit' ? 'Deposit' : txTypeUpper}</span>
+            <div style="margin-top:14px;padding:10px;background:#f7fafc;border-radius:8px;font-size:0.75rem;color:#4a5568;font-style:italic;border-left:3px solid #f59e0b;text-align:left;">
+                ${escapeHtml(quote)}
             </div>
-            <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;">
-                <span style="color:#6b7280;">Date & Time</span>
-                <span style="font-weight:600;">${dateLabel}, ${timeLabel}</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;padding:6px 0;background:#e8f4fd;border-radius:6px;padding:8px 12px;margin:6px 0;border:1px solid #06b6d4;">
-                <span style="color:#0e7490;font-weight:700;">💰 Remaining Loan Balance</span>
-                <span style="color:#0e7490;font-weight:900;">UGX ${displayLoanBalance.toLocaleString()}</span>
-            </div>
-            ${(txType === 'deposit' && description) ? `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f3f4f6;"><span style="color:#6b7280;">Note</span><span style="font-weight:600;">${escapeHtml(description)}</span></div>` : ''}
-            ${runsTillDisplay ? `
-            <div style="display:flex;justify-content:space-between;padding:6px 0;background:#fef3c7;border-radius:6px;padding:8px 12px;margin:6px 0;border:1px solid #f59e0b;">
-                <span style="color:#92400e;font-weight:700;">${runsTillDisplay.split(' ')[0]}</span>
-                <span style="color:#92400e;font-weight:900;">${runsTillDisplay.split(' ').slice(2).join(' ')}</span>
-            </div>
-            ` : ''}
-            <!-- ✅ Fixed Status Row -->
-            <div style="display: grid; grid-template-columns: auto 1fr; gap: 12px; padding: 8px 12px; background:#fef3c7; border-radius:6px; margin:6px 0; border:1px solid #f59e0b;">
-                <span style="color:#92400e;font-weight:900; text-align: right; word-break: break-word;">${escapeHtml(depositMsg)}</span>
+            <div style="margin-top:16px;padding-top:12px;border-top:1px solid #f3f4f6;">
+                <div style="font-size:0.85rem;font-weight:700;color:#1a202c;letter-spacing:0.5px;font-family:monospace;">
+                    Receipt #: ${receiptNumber}
+                </div>
+                <div style="font-size:0.5rem;color:#9ca3af;margin-top:4px;">${new Date().toLocaleString()}</div>
             </div>
         </div>
-        <div style="margin-top:14px;padding:10px;background:#f7fafc;border-radius:8px;font-size:0.75rem;color:#4a5568;font-style:italic;border-left:3px solid #f59e0b;text-align:left;">
-            ${escapeHtml(quote)}
-        </div>
-        <div style="margin-top:16px;padding-top:12px;border-top:1px solid #f3f4f6;">
-            <div style="font-size:0.85rem;font-weight:700;color:#1a202c;letter-spacing:0.5px;font-family:monospace;">
-                Receipt #: ${receiptNumber}
-            </div>
-            <div style="font-size:0.5rem;color:#9ca3af;margin-top:4px;">${new Date().toLocaleString()}</div>
-        </div>
-    </div>
-    `;
-}
-
+        `;
+    }
 
     const receiptHTML = buildReceiptHTML();
     const modal = document.createElement('div');
@@ -15909,7 +15555,6 @@ window.showDebtReceiptModal = function(
 
     const receiptElement = modal.querySelector('#receipt-content');
 
-    // ─── Helper: generate image using html2canvas ──────────
     async function generateReceiptImage() {
         const clone = receiptElement.cloneNode(true);
         clone.style.position = 'absolute';
@@ -15938,7 +15583,6 @@ window.showDebtReceiptModal = function(
         }
     }
 
-    // ─── Helper: save if needed ─────────────────────────────
     async function ensureSaved() {
         if (typeof onSave === 'function') {
             const success = await onSave();
@@ -15951,13 +15595,12 @@ window.showDebtReceiptModal = function(
         return true;
     }
 
-    // ─── Helper: close modal ────────────────────────────────
     function closeModal(callback) {
         modal.classList.remove('on');
         setTimeout(() => { modal.remove(); if (callback) callback(); }, 300);
     }
 
-    // ─── Button: WhatsApp ────────────────────────────────────
+    // ─── WhatsApp Button ────────────────────────────────────
     document.getElementById('debt-whatsapp').addEventListener('click', async function() {
         if (this.disabled) return;
         this.disabled = true;
@@ -15974,7 +15617,6 @@ window.showDebtReceiptModal = function(
             if (formattedPhone.startsWith('0')) formattedPhone = '256' + formattedPhone.slice(1);
             if (!formattedPhone.startsWith('256')) formattedPhone = '256' + formattedPhone;
 
-            // Try native share
             if (navigator.share) {
                 const blob = await (await fetch(dataUrl)).blob();
                 const file = new File([blob], `debt_${receiptNumber}.png`, { type: 'image/png' });
@@ -15984,8 +15626,7 @@ window.showDebtReceiptModal = function(
                 return;
             }
 
-            // Fallback: open WhatsApp with text + download
-            const message = `🌾 *Harvest Trust Finance* 🌾\n\n📄 *Debt Receipt*\nMember: ${member?.name}\nAmount: UGX ${safeTotal.toLocaleString()}\nDue: ${dueDateLabel}\nReceipt #: ${receiptNumber}`;
+            const message = `🌾 *Harvest Trust Finance* 🌾\n\n📄 *Debt Receipt*\nMember: ${member?.name}\nAmount: UGX ${safeTotal.toLocaleString()}\nReceipt #: ${receiptNumber}`;
             window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
             const a = document.createElement('a');
             a.href = dataUrl;
@@ -16002,69 +15643,41 @@ window.showDebtReceiptModal = function(
         }
     });
 
-    // ─── Button: Copy Image (PC) ────────────────────────────
-document.getElementById('debt-copy-pc').addEventListener('click', async function() {
-    if (this.disabled) return;
-    this.disabled = true;
-    this.style.opacity = '0.6';
+    // ─── Copy Image (PC) ──────────────────────────────────
+    document.getElementById('debt-copy-pc').addEventListener('click', async function() {
+        if (this.disabled) return;
+        this.disabled = true;
+        this.style.opacity = '0.6';
 
-    try {
-        // 1. Save first
-        if (!await ensureSaved()) { this.disabled = false; this.style.opacity = '1'; return; }
-
-        // 2. Generate image using html2canvas
-        const clone = receiptElement.cloneNode(true);
-        clone.style.position = 'absolute';
-        clone.style.top = '-9999px';
-        clone.style.left = '-9999px';
-        clone.style.boxShadow = 'none';
-        clone.style.transform = 'none';
-        clone.style.width = receiptElement.offsetWidth + 'px';
-        document.body.appendChild(clone);
-        await new Promise(r => setTimeout(r, 150));
-
-        const canvas = await html2canvas(clone, {
-            scale: 2.5,
-            backgroundColor: '#ffffff',
-            logging: false,
-            useCORS: true,
-            allowTaint: true
-        });
-        document.body.removeChild(clone);
-
-        // 3. Get blob from canvas
-        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-
-        // 4. Try to copy to clipboard
         try {
-            await navigator.clipboard.write([
-                new ClipboardItem({
-                    [blob.type]: blob
-                })
-            ]);
-            toast('📋 Image copied to clipboard!', '#06b6d4');
-            closeModal(() => { if (onConfirmSend) onConfirmSend(); });
-        } catch (clipErr) {
-            // Clipboard failed – show error, do NOT auto‑download
-            console.warn('Clipboard API failed:', clipErr);
-            toast('❌ Copy failed. Please use the "Save" button to download.', '#ef4444');
-            // Keep modal open so user can try Save button
-            this.disabled = false;
-            this.style.opacity = '1';
-        }
-    } catch (err) {
-        console.error('Copy error:', err);
-        toast('❌ Copy failed. Please use "Save" button.', '#ef4444');
-    } finally {
-        // Only re-enable if modal is still open
-        if (modal.parentNode) {
-            this.disabled = false;
-            this.style.opacity = '1';
-        }
-    }
-});
+            if (!await ensureSaved()) { this.disabled = false; this.style.opacity = '1'; return; }
 
-    // ─── Button: Save Without Sharing ───────────────────────
+            const dataUrl = await generateReceiptImage();
+            if (!dataUrl) { toast('Failed to generate image', '#ef4444'); this.disabled = false; this.style.opacity = '1'; return; }
+
+            const blob = await (await fetch(dataUrl)).blob();
+            try {
+                await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+                toast('📋 Image copied to clipboard!', '#06b6d4');
+                closeModal(() => { if (onConfirmSend) onConfirmSend(); });
+            } catch (clipErr) {
+                console.warn('Clipboard API failed:', clipErr);
+                toast('❌ Copy failed. Please use the "Save" button to download.', '#ef4444');
+                this.disabled = false;
+                this.style.opacity = '1';
+            }
+        } catch (err) {
+            console.error('Copy error:', err);
+            toast('❌ Copy failed. Please use the "Save" button.', '#ef4444');
+        } finally {
+            if (modal.parentNode) {
+                this.disabled = false;
+                this.style.opacity = '1';
+            }
+        }
+    });
+
+    // ─── Save Without Sharing ──────────────────────────────
     document.getElementById('debt-save-only').addEventListener('click', async function() {
         if (this.disabled) return;
         this.disabled = true;
@@ -16092,7 +15705,7 @@ document.getElementById('debt-copy-pc').addEventListener('click', async function
         }
     });
 
-    // ─── Button: Cancel ──────────────────────────────────────
+    // ─── Cancel ────────────────────────────────────────────
     document.getElementById('debt-cancel').addEventListener('click', function() {
         if (this.disabled) return;
         closeModal(() => {
@@ -16101,7 +15714,6 @@ document.getElementById('debt-copy-pc').addEventListener('click', async function
         });
     });
 
-    // ─── Click on backdrop closes ────────────────────────────
     modal.addEventListener('click', function(e) {
         if (e.target === modal) {
             closeModal(() => {
@@ -16111,6 +15723,7 @@ document.getElementById('debt-copy-pc').addEventListener('click', async function
         }
     });
 };
+
 function generateDepositReceiptHTML(member, amount, description, receiptNumber) {
     const date = new Date();
     const dateLabel = date.toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' });
@@ -16334,6 +15947,7 @@ async function generateDepositReceiptImage(member, amount, description, receiptN
         return canvas.toDataURL('image/png');
     }
 }
+
 // ==========================================
 // DEBT ASSIGNMENT RECEIPT - PHONE STYLE
 // ==========================================
@@ -17455,38 +17069,7 @@ function updateUpcomingNetDaily() {
   const dailyInput = document.getElementById('upcoming-daily-amount');
   if (dailyInput) dailyInput.value = settings.dailyAmount || 2500;
 }
-function getMemberPaymentStatus(member) {
-  // Count missed days (outstanding debts)
-  const missedDays = memberDebts[member.phone] || 0;
-  
-  // Count ahead days (surplus full days paid beyond today)
-  const todayStart = new Date().setHours(0, 0, 0, 0);
-  let futureDays = 0;
-  let day = todayStart;
-  const dailyRequired = (settings.dailyAmount || 2000) + (settings.welfareAmount || 500);
-  let totalFutureCovered = 0;
-  
-  // Check how many full days in the future have been fully paid
-  while (futureDays < 30) {
-    let dayStart = day + futureDays * 86400000;
-    let paidThisDay = 0;
-    transactions.forEach(tx => {
-      if (tx.memberPhone === member.phone && tx.type === 'deposit' && tx.date >= dayStart && tx.date < dayStart + 86400000) {
-        paidThisDay += tx.amount;
-      }
-    });
-    if (paidThisDay >= dailyRequired) {
-      totalFutureCovered += dailyRequired;
-      futureDays++;
-    } else {
-      break;
-    }
-  }
-  // Count how many full days ahead (each day requires dailyRequired)
-  const aheadDays = Math.floor(totalFutureCovered / dailyRequired);
-  
-  return { missedDays, aheadDays };
-}
+
 window.updateDepositCoverage = function() {
     const input = document.getElementById('deposit-amount-input');
     const amount = parseFloat(input.value) || 0;
@@ -17535,10 +17118,34 @@ window.updateDebtPreview = function() {
         const existingLoan = memberLoans[member.phone] || 0;
         const newOverall = existingLoan + totalRepayPerMember;
         
+        // Check if member has action today
+        let todayStatus, todayColor;
+        const requiredToday = (settings.dailyAmount || 2000) + (settings.welfareAmount || 500);
+        let paidDailyToday = 0;
+        const todayStart = new Date().setHours(0, 0, 0, 0);
+        transactions.forEach(tx => {
+            if (tx.memberPhone === member.phone && tx.type === 'deposit' && tx.date >= todayStart && tx.date < todayStart + 86400000) {
+                paidDailyToday += tx.amount;
+            }
+        });
+        
+        if (memberHasActionToday(member)) {
+            todayStatus = '✅ Covered by action';
+            todayColor = 'var(--green)';
+        } else if (paidDailyToday < requiredToday) {
+            todayStatus = `⚠️ Short by ${money(requiredToday - paidDailyToday)}`;
+            todayColor = 'var(--gold)';
+        } else {
+            todayStatus = '✅ Covered';
+            todayColor = 'var(--green)';
+        }
+
         previewDiv.innerHTML = `
             <div style="padding:12px; background:rgba(255,255,255,0.04); border-radius:12px; border:1px solid var(--br);">
                 <div style="font-weight:700; font-size:0.9rem; color:var(--gold); margin-bottom:6px;">🧾 Debt Preview – ${escapeHtml(member.name)}</div>
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px; font-size:0.8rem;">
+                    <span style="color:var(--t3);">Days Active</span><span>${getDaysActive(member)} days</span>
+                    <span style="color:var(--t3);">Today's Status</span><span style="color:${todayColor};">${todayStatus}</span>
                     <span style="color:var(--t3);">Principal</span><span>${money(principal)}</span>
                     <span style="color:var(--t3);">Interest (${interestRate}%)</span><span>${money(interestAmount)}</span>
                     <span style="color:var(--t3);">Total to Repay</span><span style="font-weight:700; color:var(--red);">${money(totalRepayPerMember)}</span>
@@ -17589,6 +17196,16 @@ window.updateDebtPreview = function() {
     `;
     previewDiv.style.display = 'block';
 };
+// ─── Populate reminder dropdown ─────────────────────────────
+function populateReminderDropdown() {
+    const select = document.getElementById('reminder-member');
+    if (!select) return;
+    const activeMembers = members.filter(m => m.approved !== false);
+    select.innerHTML = '<option value="">-- Select Member --</option>' +
+        activeMembers.map(m => `<option value="${m.phone}">${escapeHtml(m.name)}</option>`).join('');
+    // Clear preview
+    document.getElementById('reminder-preview').style.display = 'none';
+}
 
 // ─── Populate member checkboxes for a given modal type ───
 function populateMemberCheckboxes(type) {
@@ -19008,353 +18625,242 @@ window.cancelGroupReset = cancelGroupReset;
 window.submitGroupSetup = submitGroupSetup;
 window.handleSetupFile = handleSetupFile;
 window.checkSetupNeeded = checkSetupNeeded;
-///////////////////////////////////////////////
-function previewUpcoming() {
-  const phone = document.getElementById('upcoming-member').value;
-  const start = document.getElementById('upcoming-start').value;
-  const end = document.getElementById('upcoming-end').value;
-  if (!phone || !start || !end) {
-    toast('Select member and date range', '#ef4444');
-    return;
-  }
-  const member = members.find(m => m.phone === phone);
-  if (!member) return;
-  
-  // Check if member has any debt (memberDebts + memberLoans)
-  const totalDebt = (memberDebts[phone] || 0) + (memberLoans[phone] || 0);
-  if (totalDebt > 0) {
-    toast('Cannot save upcoming days because member has outstanding debt. Clear debt first.', '#ef4444');
-    document.getElementById('upcoming-summary').innerHTML = `<div class="error">❌ Member has debt of ${money(totalDebt)}. Please clear debt before allowing prepayment.</div>`;
-    document.getElementById('confirm-upcoming-btn').style.display = 'none';
-    return;
-  }
-  
-  // Calculate days between start and end (inclusive)
-  const startDate = new Date(start);
-  const endDate = new Date(end);
-  if (startDate > endDate) {
-    toast('End date must be after start date', '#ef4444');
-    return;
-  }
-  if (startDate < new Date()) {
-    toast('Cannot prepay for past days', '#ef4444');
-    return;
-  }
-  
-  const days = [];
-  for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-    days.push(new Date(d));
-  }
-  const dailyAmount = settings.dailyAmount || 2500;
-  const totalPrincipal = dailyAmount * days.length;
-  
-  document.getElementById('upcoming-summary').style.display = 'block';
-  document.getElementById('upcoming-summary').innerHTML = `
-    <div><strong>Member:</strong> ${escapeHtml(member.name)}</div>
-    <div><strong>Days to prepay:</strong> ${days.length}</div>
-    <div><strong>Daily amount:</strong> ${formatMoney(dailyAmount)}</div>
-    <div><strong>Total to pay:</strong> ${formatMoney(totalPrincipal)}</div>
-    <div class="micro muted">No interest. Only daily amount (welfare/fine deductions apply automatically).</div>
-  `;
-  document.getElementById('confirm-upcoming-btn').style.display = 'block';
-  // Store data for confirmation
-  window.upcomingData = { phone, days, dailyAmount, totalPrincipal };
-}
 
-function confirmUpcoming() {
-  if (!window.upcomingData) return;
-  const { phone, days, dailyAmount } = window.upcomingData;
-  const member = members.find(m => m.phone === phone);
-  if (!member) return;
-  
-  // Re-check debt before proceeding
-  const totalDebt = (memberDebts[phone] || 0) + (memberLoans[phone] || 0);
-  if (totalDebt > 0) {
-    toast('Debt detected. Cannot prepay.', '#ef4444');
-    closeOv('ov-upcoming');
-    return;
-  }
-  
-  const writes = [];
-  days.forEach(d => {
-    const depositTxs = buildDepositTransactions(member, dailyAmount, d.getTime(), `Prepay for ${d.toISOString().slice(0,10)}`);
-    depositTxs.forEach(tx => writes.push(db.ref('transactions').push(tx)));
-  });
-  
-  Promise.all(writes).then(() => {
-    toast(`Prepaid ${days.length} days for ${member.name}`, '#10b981');
-    closeOv('ov-upcoming');
-    computePots();
-    refreshUI();
-  }).catch(err => {
-    console.error(err);
-    toast('Failed to save prepayments', '#ef4444');
-  });
-}
+
 async function processDepositWithFutureDays(member, depositAmount, depositTimestamp, description) {
-  const writes = [];
-  let remaining = depositAmount;
-  const now = depositTimestamp || Date.now();
-  const todayStart = new Date(now).setHours(0, 0, 0, 0);
+    const writes = [];
+    let remaining = depositAmount;
+    const now = depositTimestamp || Date.now();
+    const todayStart = new Date(now).setHours(0, 0, 0, 0);
 
-  const dailyAmount = settings.dailyAmount || 2000;
-  const welfareAmount = settings.welfareAmount || 500;
-  const requiredToday = dailyAmount + welfareAmount;
-  const todayStr = new Date(todayStart).toLocaleDateString();
+    const dailyAmount = settings.dailyAmount || 2000;
+    const welfareAmount = settings.welfareAmount || 500;
+    const requiredToday = dailyAmount + welfareAmount;
+    const todayStr = new Date(todayStart).toLocaleDateString();
 
-  // 1. Today's requirement
-  let paidDailyToday = 0, welfarePaidToday = false;
-  transactions.forEach(tx => {
-    if (tx.memberPhone === member.phone && tx.date >= todayStart && tx.date < todayStart + 86400000) {
-      if (tx.type === 'deposit') paidDailyToday += tx.amount;
-      if (tx.type === 'welfare') welfarePaidToday = true;
-    }
-  });
-  const neededDaily = Math.max(0, dailyAmount - paidDailyToday);
-  const neededWelfare = welfarePaidToday ? 0 : welfareAmount;
-  const deficitToday = neededDaily + neededWelfare;
-
-  const prepaidBalance = memberPrepaid[member.phone] || 0;
-  let usedPrepaidToday = 0, prepaidRemaining = prepaidBalance;
-  if (deficitToday > 0 && prepaidRemaining > 0) {
-    usedPrepaidToday = Math.min(prepaidRemaining, deficitToday);
-    prepaidRemaining -= usedPrepaidToday;
-    if (usedPrepaidToday > 0) {
-      writes.push({
-        memberPhone: member.phone,
-        memberName: member.name,
-        type: 'prepaid_used',
-        amount: usedPrepaidToday,
-        receiptNumber: generateReceiptNumber(),
-        description: `💠 Prepaid used for today's requirement (${money(usedPrepaidToday)})`,
-        date: now + 500
-      });
-    }
-  }
-
-  const remainingDeficit = deficitToday - usedPrepaidToday;
-  let usedToday = 0, dailyPortion = 0, welfarePortion = 0;
-  if (remainingDeficit > 0 && remaining > 0) {
-    usedToday = Math.min(remaining, remainingDeficit);
-    remaining -= usedToday;
-    dailyPortion = Math.min(usedToday, neededDaily - Math.min(usedPrepaidToday, neededDaily));
-    welfarePortion = usedToday - dailyPortion;
-    if (dailyPortion > 0) {
-      writes.push({
-        memberPhone: member.phone,
-        memberName: member.name,
-        type: 'deposit',
-        amount: dailyPortion,
-        receiptNumber: generateReceiptNumber(),
-        isDailySavings: true,
-        description: `📆 Daily savings for ${todayStr}`,
-        date: todayStart + 1500
-      });
-    }
-    if (welfarePortion > 0) {
-      writes.push({
-        memberPhone: member.phone,
-        memberName: member.name,
-        type: 'welfare',
-        amount: welfarePortion,
-        receiptNumber: generateReceiptNumber(),
-        description: `🤝 Welfare for ${todayStr}`,
-        date: todayStart + 500,
-        autoDeduction: true
-      });
-    }
-  }
-
-  // 2. Repay application loans
-  const appLoans = loans.filter(l =>
-    l.memberPhone === member.phone &&
-    l.status === 'approved' && !l.repaid &&
-    l.loanQuestions && l.loanQuestions.length > 0
-  ).sort((a, b) => a.approvedAt - b.approvedAt);
-
-  for (let loan of appLoans) {
-    if (remaining <= 0) break;
-    const loanBalance = loan.totalRepay - (loan.repaidAmount || 0);
-    if (loanBalance <= 0) continue;
-    const repaymentAmount = Math.min(remaining, loanBalance);
-    remaining -= repaymentAmount;
-    if (repaymentAmount > 0) {
-      const newRepaidAmount = (loan.repaidAmount || 0) + repaymentAmount;
-      writes.push({
-        memberPhone: member.phone,
-        memberName: member.name,
-        type: 'loan_repayment',
-        amount: repaymentAmount,
-        receiptNumber: generateReceiptNumber(),
-        description: `⭐ Loan repayment (application) – ${money(repaymentAmount)}`,
-        date: now + 2,
-        loanId: loan.id
-      });
-      await db.ref('loans/' + loan.id).update({ repaidAmount: newRepaidAmount });
-      if (newRepaidAmount >= loan.totalRepay) {
-        await db.ref('loans/' + loan.id).update({ repaid: true, repaidAt: Date.now() });
-        if (loanRotationOrder.length > 0) {
-          loanReceiverIndex = (loanReceiverIndex + 1) % loanRotationOrder.length;
-          await db.ref('settings/loanReceiverIndex').set(loanReceiverIndex);
+    // 1. Today's requirement
+    let paidDailyToday = 0, welfarePaidToday = false;
+    transactions.forEach(tx => {
+        if (tx.memberPhone === member.phone && tx.date >= todayStart && tx.date < todayStart + 86400000) {
+            if (tx.type === 'deposit') paidDailyToday += tx.amount;
+            if (tx.type === 'welfare') welfarePaidToday = true;
         }
-      }
-    }
-  }
+    });
 
-  // 3. Repay assigned loans
-  const assignedLoans = loans.filter(l =>
-    l.memberPhone === member.phone &&
-    l.status === 'approved' && !l.repaid &&
-    (!l.loanQuestions || l.loanQuestions.length === 0)
-  ).sort((a, b) => a.approvedAt - b.approvedAt);
-
-  for (let loan of assignedLoans) {
-    if (remaining <= 0) break;
-    const loanBalance = loan.totalRepay - (loan.repaidAmount || 0);
-    if (loanBalance <= 0) continue;
-    const repaymentAmount = Math.min(remaining, loanBalance);
-    remaining -= repaymentAmount;
-    if (repaymentAmount > 0) {
-      const newRepaidAmount = (loan.repaidAmount || 0) + repaymentAmount;
-      writes.push({
-        memberPhone: member.phone,
-        memberName: member.name,
-        type: 'loan_repayment',
-        amount: repaymentAmount,
-        receiptNumber: generateReceiptNumber(),
-        description: `📋 Loan repayment (assigned) – ${money(repaymentAmount)}`,
-        date: now + 3,
-        loanId: loan.id
-      });
-      await db.ref('loans/' + loan.id).update({ repaidAmount: newRepaidAmount });
-      if (newRepaidAmount >= loan.totalRepay) {
-        await db.ref('loans/' + loan.id).update({ repaid: true, repaidAt: Date.now() });
-      }
-    }
-  }
-
-  // 4. Clear debts
-  let debtOwed = memberDebts[member.phone] || 0;
-  if (debtOwed > 0 && remaining > 0) {
-    const usedForDebt = Math.min(remaining, debtOwed);
-    remaining -= usedForDebt;
-    if (usedForDebt > 0) {
-      writes.push({
-        memberPhone: member.phone,
-        memberName: member.name,
-        type: 'debt_cleared',
-        amount: usedForDebt,
-        receiptNumber: generateReceiptNumber(),
-        description: `🧾 Debt cleared – ${money(usedForDebt)}`,
-        date: now + 4
-      });
-    }
-  }
-
-  // 5. Extra loan repayment (for Frank/Hajjarah)
-  const totalLoanBalance = memberLoans[member.phone] || 0;
-  if (remaining > 0 && totalLoanBalance > 0) {
-    const extraRepay = Math.min(remaining, totalLoanBalance);
-    remaining -= extraRepay;
-    if (extraRepay > 0) {
-      writes.push({
-        memberPhone: member.phone,
-        memberName: member.name,
-        type: 'loan_repayment',
-        amount: extraRepay,
-        receiptNumber: generateReceiptNumber(),
-        description: `💪 Extra loan repayment – ${money(extraRepay)}`,
-        date: now + 5
-      });
-    }
-  }
-
-  // 6. Prepay future days
-  if (remaining > 0) {
-    let currentDay = todayStart + 86400000;
-    const maxDays = 30;
-    let daysProcessed = 0;
-    let remainingPrepay = remaining;
-
-    while (remainingPrepay >= requiredToday && daysProcessed < maxDays) {
-      const dateStr = new Date(currentDay).toLocaleDateString();
-      writes.push({
-        memberPhone: member.phone,
-        memberName: member.name,
-        type: 'deposit',
-        amount: dailyAmount,
-        receiptNumber: generateReceiptNumber(),
-        isPrepaid: true,
-        description: `📆 Prepaid daily savings for ${dateStr}`,
-        date: currentDay + 1500
-      });
-      writes.push({
-        memberPhone: member.phone,
-        memberName: member.name,
-        type: 'welfare',
-        amount: welfareAmount,
-        isPrepaid: true,
-        receiptNumber: generateReceiptNumber(),
-        description: `🤝 Prepaid welfare for ${dateStr}`,
-        date: currentDay + 500,
-        autoDeduction: true
-      });
-      remainingPrepay -= requiredToday;
-      currentDay += 86400000;
-      daysProcessed++;
+    let deficitToday = 0;
+    if (memberHasActionToday(member)) {
+        deficitToday = 0; // Already covered by an action today
+    } else {
+        const neededDaily = Math.max(0, dailyAmount - paidDailyToday);
+        const neededWelfare = welfarePaidToday ? 0 : welfareAmount;
+        deficitToday = neededDaily + neededWelfare;
     }
 
-    if (remainingPrepay > 0 && daysProcessed < maxDays) {
-      const dateStr = new Date(currentDay).toLocaleDateString();
-      const dailyPortionPartial = Math.min(remainingPrepay, dailyAmount);
-      const welfarePortionPartial = remainingPrepay - dailyPortionPartial;
-      if (dailyPortionPartial > 0) {
-        writes.push({
-          memberPhone: member.phone,
-          memberName: member.name,
-          type: 'deposit',
-          amount: dailyPortionPartial,
-          isPrepaid: true,
-          receiptNumber: generateReceiptNumber(),
-          description: `📆 Prepaid daily savings for ${dateStr} (partial)`,
-          date: currentDay + 1500
-        });
-      }
-      if (welfarePortionPartial > 0) {
-        writes.push({
-          memberPhone: member.phone,
-          memberName: member.name,
-          type: 'welfare',
-          amount: welfarePortionPartial,
-          isPrepaid: true,
-          receiptNumber: generateReceiptNumber(),
-          description: `🤝 Prepaid welfare for ${dateStr} (partial)`,
-          date: currentDay + 500,
-          autoDeduction: true
-        });
-      }
-      const remainingForDay = requiredToday - remainingPrepay;
-      if (remainingForDay > 0) {
-        memberPrepaid[member.phone] = (memberPrepaid[member.phone] || 0) + remainingForDay;
-        await db.ref('members/' + member.id + '/prepaid').set(memberPrepaid[member.phone]);
-        writes.push({
-          memberPhone: member.phone,
-          memberName: member.name,
-          type: 'prepaid_balance',
-          amount: remainingForDay,
-          receiptNumber: generateReceiptNumber(),
-          description: `💠 Prepaid balance for ${dateStr} (${money(remainingForDay)} remaining)`,
-          date: currentDay + 1000
-        });
-      }
+    let usedToday = 0, dailyPortion = 0, welfarePortion = 0;
+    if (deficitToday > 0 && remaining > 0) {
+        usedToday = Math.min(remaining, deficitToday);
+        remaining -= usedToday;
+        dailyPortion = Math.min(usedToday, neededDaily);
+        welfarePortion = usedToday - dailyPortion;
+        if (dailyPortion > 0) {
+            writes.push({
+                memberPhone: member.phone,
+                memberName: member.name,
+                type: 'deposit',
+                amount: dailyPortion,
+                receiptNumber: generateReceiptNumber(),
+                isDailySavings: true,
+                description: `📆 Daily savings for ${todayStr}`,
+                date: todayStart + 1500
+            });
+        }
+        if (welfarePortion > 0) {
+            writes.push({
+                memberPhone: member.phone,
+                memberName: member.name,
+                type: 'welfare',
+                amount: welfarePortion,
+                receiptNumber: generateReceiptNumber(),
+                description: `🤝 Welfare for ${todayStr}`,
+                date: todayStart + 500,
+                autoDeduction: true
+            });
+        }
     }
-  }
 
-  if (prepaidRemaining !== undefined && prepaidRemaining !== prepaidBalance) {
-    await db.ref('members/' + member.id + '/prepaid').set(prepaidRemaining);
-  }
+    // 2. Repay application loans
+    const appLoans = loans.filter(l =>
+        l.memberPhone === member.phone &&
+        l.status === 'approved' && !l.repaid &&
+        l.loanQuestions && l.loanQuestions.length > 0
+    ).sort((a, b) => a.approvedAt - b.approvedAt);
 
-  return writes;
+    for (let loan of appLoans) {
+        if (remaining <= 0) break;
+        const loanBalance = loan.totalRepay - (loan.repaidAmount || 0);
+        if (loanBalance <= 0) continue;
+        const repaymentAmount = Math.min(remaining, loanBalance);
+        remaining -= repaymentAmount;
+        if (repaymentAmount > 0) {
+            const newRepaidAmount = (loan.repaidAmount || 0) + repaymentAmount;
+            writes.push({
+                memberPhone: member.phone,
+                memberName: member.name,
+                type: 'loan_repayment',
+                amount: repaymentAmount,
+                receiptNumber: generateReceiptNumber(),
+                description: `⭐ Loan repayment (application) – ${money(repaymentAmount)}`,
+                date: now + 2,
+                loanId: loan.id
+            });
+            await db.ref('loans/' + loan.id).update({ repaidAmount: newRepaidAmount });
+            if (newRepaidAmount >= loan.totalRepay) {
+                await db.ref('loans/' + loan.id).update({ repaid: true, repaidAt: Date.now() });
+                if (loanRotationOrder.length > 0) {
+                    loanReceiverIndex = (loanReceiverIndex + 1) % loanRotationOrder.length;
+                    await db.ref('settings/loanReceiverIndex').set(loanReceiverIndex);
+                }
+            }
+        }
+    }
+
+    // 3. Repay assigned loans
+    const assignedLoans = loans.filter(l =>
+        l.memberPhone === member.phone &&
+        l.status === 'approved' && !l.repaid &&
+        (!l.loanQuestions || l.loanQuestions.length === 0)
+    ).sort((a, b) => a.approvedAt - b.approvedAt);
+
+    for (let loan of assignedLoans) {
+        if (remaining <= 0) break;
+        const loanBalance = loan.totalRepay - (loan.repaidAmount || 0);
+        if (loanBalance <= 0) continue;
+        const repaymentAmount = Math.min(remaining, loanBalance);
+        remaining -= repaymentAmount;
+        if (repaymentAmount > 0) {
+            const newRepaidAmount = (loan.repaidAmount || 0) + repaymentAmount;
+            writes.push({
+                memberPhone: member.phone,
+                memberName: member.name,
+                type: 'loan_repayment',
+                amount: repaymentAmount,
+                receiptNumber: generateReceiptNumber(),
+                description: `📋 Loan repayment (assigned) – ${money(repaymentAmount)}`,
+                date: now + 3,
+                loanId: loan.id
+            });
+            await db.ref('loans/' + loan.id).update({ repaidAmount: newRepaidAmount });
+            if (newRepaidAmount >= loan.totalRepay) {
+                await db.ref('loans/' + loan.id).update({ repaid: true, repaidAt: Date.now() });
+            }
+        }
+    }
+
+    // 4. Clear debts
+    let debtOwed = memberDebts[member.phone] || 0;
+    if (debtOwed > 0 && remaining > 0) {
+        const usedForDebt = Math.min(remaining, debtOwed);
+        remaining -= usedForDebt;
+        if (usedForDebt > 0) {
+            writes.push({
+                memberPhone: member.phone,
+                memberName: member.name,
+                type: 'debt_cleared',
+                amount: usedForDebt,
+                receiptNumber: generateReceiptNumber(),
+                description: `🧾 Debt cleared – ${money(usedForDebt)}`,
+                date: now + 4
+            });
+        }
+    }
+
+    // 5. Extra loan repayment
+    const totalLoanBalance = memberLoans[member.phone] || 0;
+    if (remaining > 0 && totalLoanBalance > 0) {
+        const extraRepay = Math.min(remaining, totalLoanBalance);
+        remaining -= extraRepay;
+        if (extraRepay > 0) {
+            writes.push({
+                memberPhone: member.phone,
+                memberName: member.name,
+                type: 'loan_repayment',
+                amount: extraRepay,
+                receiptNumber: generateReceiptNumber(),
+                description: `💪 Extra loan repayment – ${money(extraRepay)}`,
+                date: now + 5
+            });
+        }
+    }
+
+    // 6. Prepay future days (using internal prepaid mechanism)
+    if (remaining > 0) {
+        let currentDay = todayStart + 86400000;
+        const maxDays = 30;
+        let daysProcessed = 0;
+        let remainingPrepay = remaining;
+
+        while (remainingPrepay >= requiredToday && daysProcessed < maxDays) {
+            const dateStr = new Date(currentDay).toLocaleDateString();
+            writes.push({
+                memberPhone: member.phone,
+                memberName: member.name,
+                type: 'deposit',
+                amount: dailyAmount,
+                receiptNumber: generateReceiptNumber(),
+                isPrepaid: true,
+                description: `📆 Prepaid daily savings for ${dateStr}`,
+                date: currentDay + 1500
+            });
+            writes.push({
+                memberPhone: member.phone,
+                memberName: member.name,
+                type: 'welfare',
+                amount: welfareAmount,
+                isPrepaid: true,
+                receiptNumber: generateReceiptNumber(),
+                description: `🤝 Prepaid welfare for ${dateStr}`,
+                date: currentDay + 500,
+                autoDeduction: true
+            });
+            remainingPrepay -= requiredToday;
+            currentDay += 86400000;
+            daysProcessed++;
+        }
+
+        if (remainingPrepay > 0 && daysProcessed < maxDays) {
+            const dateStr = new Date(currentDay).toLocaleDateString();
+            const dailyPortionPartial = Math.min(remainingPrepay, dailyAmount);
+            const welfarePortionPartial = remainingPrepay - dailyPortionPartial;
+            if (dailyPortionPartial > 0) {
+                writes.push({
+                    memberPhone: member.phone,
+                    memberName: member.name,
+                    type: 'deposit',
+                    amount: dailyPortionPartial,
+                    isPrepaid: true,
+                    receiptNumber: generateReceiptNumber(),
+                    description: `📆 Prepaid daily savings for ${dateStr} (partial)`,
+                    date: currentDay + 1500
+                });
+            }
+            if (welfarePortionPartial > 0) {
+                writes.push({
+                    memberPhone: member.phone,
+                    memberName: member.name,
+                    type: 'welfare',
+                    amount: welfarePortionPartial,
+                    isPrepaid: true,
+                    receiptNumber: generateReceiptNumber(),
+                    description: `🤝 Prepaid welfare for ${dateStr} (partial)`,
+                    date: currentDay + 500,
+                    autoDeduction: true
+                });
+            }
+            // No prepaid balance stored – it's directly applied as transactions
+        }
+    }
+
+    return writes;
 }
 async function calculateProjectedLoanBalanceAfterDeposit(member, depositAmount) {
   // Simulate the deposit allocation without writing to database
@@ -20130,6 +19636,51 @@ function getRepaidLoanCount(memberId) {
 function getActivityCount(member) {
   return transactions.filter(tx => tx.memberPhone === member.phone).length;
 }
+function calculateMaxLoan(member) {
+    let totalDeposits = 0;
+    transactions.forEach(tx => {
+        if (tx.memberPhone === member.phone && tx.type === 'deposit') {
+            totalDeposits += tx.amount;
+        }
+    });
+    const disciplineMultiplier = loanSettings.disciplineMultiplier || 1.5;
+    const maxLoanByDiscipline = Math.floor(totalDeposits * disciplineMultiplier);
+    const maxLoanByProfit = Math.floor(groupProfit * (loanSettings.maxLoanPercent / 100));
+    return Math.min(maxLoanByDiscipline, maxLoanByProfit);
+}
+
+function getOverdueDays(member) {
+    const activeLoans = loans.filter(l => l.memberId === member.id && l.status === 'approved' && !l.repaid);
+    let maxOverdue = 0;
+    activeLoans.forEach(l => {
+        if (l.dueDate && l.dueDate < Date.now()) {
+            const days = Math.floor((Date.now() - l.dueDate) / (1000 * 60 * 60 * 24));
+            if (days > maxOverdue) maxOverdue = days;
+        }
+    });
+    return maxOverdue;
+}
+
+function getNextPayoutDateString() {
+    const nextPayout = getNextPayoutDate();
+    if (!nextPayout) return 'Not scheduled';
+    return new Date(nextPayout).toLocaleDateString('en-UG', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+function getWeeklyGross() {
+    const dailyNet = getNetDaily();
+    return dailyNet * 7 * members.filter(m => m.approved).length;
+}
+
+function getConsistencyDays(member) {
+    const days = new Set();
+    transactions.forEach(tx => {
+        if (tx.memberPhone === member.phone && tx.type === 'deposit') {
+            days.add(new Date(tx.date).toISOString().slice(0, 10));
+        }
+    });
+    return days.size;
+}
 
 // ========== REWARDS LOGIC (for Statistics tab) ==========
 function calculateRewards() {
@@ -20587,6 +20138,334 @@ window.shareGroupReportWhatsApp = function() {
   const adminPhone = '0770371720'; // Change to your group/admin WhatsApp number
   window.open(`https://wa.me/${adminPhone}?text=${encoded}`, '_blank');
 };
+
+// ─── Show Reminder Image Modal ──────────────────────────────
+function showReminderImageModal(imageData, member, message, receiptNumber) {
+    const modal = document.createElement('div');
+    modal.className = 'ov on receipt-modal-active';
+    modal.style.zIndex = '20020';
+    modal.innerHTML = `
+        <div class="bs" style="max-width: 420px; padding: 0; overflow: hidden; border-radius: 24px 24px 0 0; display: flex; flex-direction: column; max-height: 90vh;">
+            <div style="background: #fff; padding: 16px 20px 12px; overflow-y: auto; flex: 1; min-height: 0; text-align: center;">
+                <img src="${imageData}" style="max-width: 100%; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                <div class="micro muted" style="margin-top: 8px;">${escapeHtml(member.name)} · ${receiptNumber}</div>
+            </div>
+            <div style="background: #fff; padding: 12px 20px 20px; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; border-top: 1px solid #f3f4f6;">
+                <button id="reminder-whatsapp" class="receipt-btn" style="width:100%;padding:11px;border:none;border-radius:10px;background:#25D366;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">💬 Send on WhatsApp</button>
+                <button id="reminder-copy" class="receipt-btn" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">📋 Copy Image (PC)</button>
+                <button id="reminder-save" class="receipt-btn" style="width:100%;padding:11px;border:none;border-radius:10px;background:#6d28d9;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">💾 Save Image</button>
+                <button id="reminder-close" class="receipt-btn" style="width:100%;padding:9px;border:1px solid #e5e7eb;border-radius:10px;background:transparent;color:#6b7280;font-size:0.8rem;font-weight:600;cursor:pointer;">✕ Close</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    // ─── WhatsApp ────────────────────────────────────────────
+    document.getElementById('reminder-whatsapp').addEventListener('click', async function() {
+        try {
+            let phone = member.phone.replace(/\D/g, '');
+            if (phone.startsWith('0')) phone = '256' + phone.slice(1);
+            if (!phone.startsWith('256')) phone = '256' + phone;
+
+            if (navigator.share) {
+                const blob = await (await fetch(imageData)).blob();
+                const file = new File([blob], `reminder_${receiptNumber}.png`, { type: 'image/png' });
+                await navigator.share({ title: 'Reminder', text: `Reminder for ${member.name}`, files: [file] });
+                toast('✅ Shared!', '#10b981');
+                modal.remove();
+                return;
+            }
+
+            const text = `🌾 *Harvest Trust Finance* 🌾\n\n📄 *Reminder*\nMember: ${member.name}\nReceipt #: ${receiptNumber}`;
+            window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
+            const a = document.createElement('a');
+            a.href = imageData;
+            a.download = `reminder_${receiptNumber}.png`;
+            a.click();
+            toast('💬 WhatsApp opened. Image downloaded – attach manually.', '#25D366');
+            modal.remove();
+        } catch (err) {
+            console.error(err);
+            toast('❌ Failed to share', '#ef4444');
+        }
+    });
+
+    // ─── Copy Image ──────────────────────────────────────────
+    document.getElementById('reminder-copy').addEventListener('click', async function() {
+        try {
+            const blob = await (await fetch(imageData)).blob();
+            await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+            toast('📋 Image copied to clipboard!', '#06b6d4');
+            modal.remove();
+        } catch (err) {
+            toast('❌ Copy failed. Use the Save button.', '#ef4444');
+        }
+    });
+
+    // ─── Save Image ──────────────────────────────────────────
+    document.getElementById('reminder-save').addEventListener('click', function() {
+        const a = document.createElement('a');
+        a.href = imageData;
+        a.download = `reminder_${receiptNumber}.png`;
+        a.click();
+        toast('💾 Saved', '#10b981');
+        modal.remove();
+    });
+
+    // ─── Close ──────────────────────────────────────────────
+    document.getElementById('reminder-close').addEventListener('click', function() {
+        modal.remove();
+    });
+
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) modal.remove();
+    });
+}
+// ─── Open Reminder Generator ────────────────────────────────
+window.openReminderGenerator = function() {
+    // Populate member dropdown
+    const select = document.getElementById('reminder-member');
+    if (select) {
+        const activeMembers = members.filter(m => m.approved !== false);
+        select.innerHTML = '<option value="">-- Select Member --</option>' +
+            activeMembers.map(m => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('');
+    }
+
+    // Set default date to today
+    const dateInput = document.getElementById('reminder-date');
+    if (dateInput) {
+        const today = new Date().toISOString().slice(0, 10);
+        dateInput.value = today;
+    }
+
+    // Clear custom message
+    const customMsg = document.getElementById('reminder-custom-msg');
+    if (customMsg) customMsg.value = '';
+
+    // Reset preview
+    const preview = document.getElementById('reminder-preview');
+    if (preview) preview.style.display = 'none';
+
+    openOv('ov-reminder-generator');
+};
+
+// ─── Update Reminder Preview ─────────────────────────────────
+window.updateReminderPreview = function() {
+    const memberId = document.getElementById('reminder-member')?.value;
+    const type = document.getElementById('reminder-type')?.value;
+    const date = document.getElementById('reminder-date')?.value;
+    const customMsg = document.getElementById('reminder-custom-msg')?.value.trim();
+
+    const previewDiv = document.getElementById('reminder-preview');
+    const previewText = document.getElementById('reminder-preview-text');
+
+    if (!previewDiv || !previewText) return;
+
+    if (!memberId || !type || !date) {
+        previewDiv.style.display = 'none';
+        return;
+    }
+
+    const member = members.find(m => m.id === memberId);
+    if (!member) {
+        previewDiv.style.display = 'none';
+        return;
+    }
+
+    const templates = getReminderTemplates();
+    let message = '';
+
+    if (customMsg) {
+        message = customMsg;
+    } else if (templates[type]) {
+        const dateStr = new Date(date).toLocaleDateString('en-UG', { year: 'numeric', month: 'long', day: 'numeric' });
+        message = templates[type].template(member, dateStr);
+    } else {
+        previewDiv.style.display = 'none';
+        return;
+    }
+
+    previewText.textContent = message;
+    previewDiv.style.display = 'block';
+};
+
+// ─── Generate Reminder Image ─────────────────────────────────
+window.generateReminderImage = async function() {
+    const memberId = document.getElementById('reminder-member')?.value;
+    const type = document.getElementById('reminder-type')?.value;
+    const date = document.getElementById('reminder-date')?.value;
+    const customMsg = document.getElementById('reminder-custom-msg')?.value.trim();
+
+    if (!memberId) {
+        toast('Please select a member', '#ef4444');
+        return;
+    }
+    if (!type) {
+        toast('Please select a reminder type', '#ef4444');
+        return;
+    }
+    if (!date) {
+        toast('Please select a date', '#ef4444');
+        return;
+    }
+
+    const member = members.find(m => m.id === memberId);
+    if (!member) {
+        toast('Member not found', '#ef4444');
+        return;
+    }
+
+    const templates = getReminderTemplates();
+    let message = '';
+
+    if (customMsg) {
+        message = customMsg;
+    } else if (templates[type]) {
+        const dateStr = new Date(date).toLocaleDateString('en-UG', { year: 'numeric', month: 'long', day: 'numeric' });
+        message = templates[type].template(member, dateStr);
+    } else {
+        toast('Invalid reminder type', '#ef4444');
+        return;
+    }
+
+    // ─── Generate Image using html2canvas ──────────────────
+    const receiptNumber = generateReceiptNumber();
+    const dateLabel = new Date().toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' });
+    const timeLabel = new Date().toLocaleTimeString('en-UG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    // Build HTML for the reminder card
+    const reminderHtml = `
+        <div id="reminder-card" style="max-width: 380px; margin: 0 auto; background: #ffffff; border-radius: 24px; padding: 32px 24px 24px; font-family: 'DM Sans', sans-serif; text-align: center; color: #111827; box-shadow: 0 8px 40px rgba(0,0,0,0.08);">
+            <div style="font-size: 1.2rem; font-weight: 900; color: #111827; letter-spacing: -0.5px;">🌾 Harvest Trust Finance</div>
+            <div style="width: 40px; height: 3px; background: #f59e0b; margin: 8px auto 12px; border-radius: 99px;"></div>
+            <div style="font-size: 1.1rem; font-weight: 700; color: #6d28d9; margin-bottom: 6px;">${templates[type]?.title || 'Reminder'}</div>
+            <div style="border-top: 1px solid #f3f4f6; margin: 12px 0 16px;"></div>
+            <div style="text-align: left; font-size: 0.85rem; line-height: 1.7; white-space: pre-wrap; color: #1e293b;">
+                ${message.replace(/\n/g, '<br>')}
+            </div>
+            <div style="border-top: 1px solid #f3f4f6; margin: 16px 0 12px;"></div>
+            <div style="font-size: 0.7rem; color: #9ca3af; font-family: monospace;">
+                Receipt #: ${receiptNumber}
+            </div>
+            <div style="font-size: 0.5rem; color: #9ca3af; margin-top: 4px;">${dateLabel}, ${timeLabel}</div>
+        </div>
+    `;
+
+    // Create temporary element
+    const tempDiv = document.createElement('div');
+    tempDiv.style.position = 'absolute';
+    tempDiv.style.top = '-9999px';
+    tempDiv.style.left = '-9999px';
+    tempDiv.innerHTML = reminderHtml;
+    document.body.appendChild(tempDiv);
+
+    await new Promise(r => setTimeout(r, 200));
+
+    try {
+        const canvas = await html2canvas(tempDiv.firstChild, {
+            scale: 2.5,
+            backgroundColor: '#ffffff',
+            logging: false,
+            useCORS: true,
+            allowTaint: true
+        });
+        document.body.removeChild(tempDiv);
+
+        const imageData = canvas.toDataURL('image/png');
+
+        // ─── Share/Download Options ──────────────────────────
+        // Show a modal with the generated image and action buttons
+        showReminderImageModal(imageData, member, message, receiptNumber);
+
+    } catch (err) {
+        document.body.removeChild(tempDiv);
+        console.error('html2canvas error:', err);
+        toast('Failed to generate image. Please try again.', '#ef4444');
+    }
+};
+
+// ─── Show Reminder Image Modal ──────────────────────────────
+function showReminderImageModal(imageData, member, message, receiptNumber) {
+    const modal = document.createElement('div');
+    modal.className = 'ov on receipt-modal-active';
+    modal.style.zIndex = '20020';
+    modal.innerHTML = `
+        <div class="bs" style="max-width: 420px; padding: 0; overflow: hidden; border-radius: 24px 24px 0 0; display: flex; flex-direction: column; max-height: 90vh;">
+            <div style="background: #fff; padding: 16px 20px 12px; overflow-y: auto; flex: 1; min-height: 0; text-align: center;">
+                <img src="${imageData}" style="max-width: 100%; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                <div class="micro muted" style="margin-top: 8px;">${escapeHtml(member.name)} · ${receiptNumber}</div>
+            </div>
+            <div style="background: #fff; padding: 12px 20px 20px; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; border-top: 1px solid #f3f4f6;">
+                <button id="reminder-whatsapp" class="receipt-btn" style="width:100%;padding:11px;border:none;border-radius:10px;background:#25D366;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">💬 Send on WhatsApp</button>
+                <button id="reminder-copy" class="receipt-btn" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">📋 Copy Image (PC)</button>
+                <button id="reminder-save" class="receipt-btn" style="width:100%;padding:11px;border:none;border-radius:10px;background:#6d28d9;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">💾 Save Image</button>
+                <button id="reminder-close" class="receipt-btn" style="width:100%;padding:9px;border:1px solid #e5e7eb;border-radius:10px;background:transparent;color:#6b7280;font-size:0.8rem;font-weight:600;cursor:pointer;">✕ Close</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    // ─── WhatsApp ────────────────────────────────────────────
+    document.getElementById('reminder-whatsapp').addEventListener('click', async function() {
+        try {
+            let phone = member.phone.replace(/\D/g, '');
+            if (phone.startsWith('0')) phone = '256' + phone.slice(1);
+            if (!phone.startsWith('256')) phone = '256' + phone;
+
+            if (navigator.share) {
+                const blob = await (await fetch(imageData)).blob();
+                const file = new File([blob], `reminder_${receiptNumber}.png`, { type: 'image/png' });
+                await navigator.share({ title: 'Reminder', text: `Reminder for ${member.name}`, files: [file] });
+                toast('✅ Shared!', '#10b981');
+                modal.remove();
+                return;
+            }
+
+            const text = `🌾 *Harvest Trust Finance* 🌾\n\n📄 *Reminder*\nMember: ${member.name}\nReceipt #: ${receiptNumber}`;
+            window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
+            const a = document.createElement('a');
+            a.href = imageData;
+            a.download = `reminder_${receiptNumber}.png`;
+            a.click();
+            toast('💬 WhatsApp opened. Image downloaded – attach manually.', '#25D366');
+            modal.remove();
+        } catch (err) {
+            console.error(err);
+            toast('❌ Failed to share', '#ef4444');
+        }
+    });
+
+    // ─── Copy Image ──────────────────────────────────────────
+    document.getElementById('reminder-copy').addEventListener('click', async function() {
+        try {
+            const blob = await (await fetch(imageData)).blob();
+            await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+            toast('📋 Image copied to clipboard!', '#06b6d4');
+            modal.remove();
+        } catch (err) {
+            toast('❌ Copy failed. Use the Save button.', '#ef4444');
+        }
+    });
+
+    // ─── Save Image ──────────────────────────────────────────
+    document.getElementById('reminder-save').addEventListener('click', function() {
+        const a = document.createElement('a');
+        a.href = imageData;
+        a.download = `reminder_${receiptNumber}.png`;
+        a.click();
+        toast('💾 Saved', '#10b981');
+        modal.remove();
+    });
+
+    // ─── Close ──────────────────────────────────────────────
+    document.getElementById('reminder-close').addEventListener('click', function() {
+        modal.remove();
+    });
+
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) modal.remove();
+    });
+}
 window.openReceiptLookup = function() {
   const receiptNumber = prompt("Enter Receipt Number (e.g., HTF-...):");
   if (!receiptNumber) return;
@@ -21106,167 +20985,6 @@ window.generateTransactionReceipt = async function(member, txType, amount, descr
   }
 };
 
-// ==========================================
-// TRANSACTION FALLBACK - PHONE STYLE
-// ==========================================
-
-function generateTransactionFallbackPhone(member, txType, amount, description, appBalance, assignedBalance, accountBalance, maxBorrow, projectedRemainingLoan) {
-  try {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = 360;
-    canvas.height = 580;
-    
-    ctx.fillStyle = '#ffffff';
-    ctx.shadowColor = 'rgba(0,0,0,0.08)';
-    ctx.shadowBlur = 40;
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 10;
-    ctx.beginPath();
-    ctx.roundRect(0, 0, canvas.width, canvas.height, 28);
-    ctx.fill();
-    ctx.shadowColor = 'transparent';
-    
-    let y = 30;
-    const cx = canvas.width / 2;
-    const leftX = 24;
-    
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#1a202c';
-    ctx.font = '10px -apple-system, sans-serif';
-    ctx.fillText('9:41', leftX, y);
-    ctx.textAlign = 'right';
-    ctx.fillText('●●●●●  📶  🔋', canvas.width - leftX, y);
-    y += 22;
-    
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#e8f5e9';
-    ctx.beginPath();
-    ctx.roundRect(cx - 60, y - 8, 120, 20, 20);
-    ctx.fill();
-    ctx.fillStyle = '#2e7d32';
-    ctx.font = '9px -apple-system, sans-serif';
-    ctx.fillText('✅ Payment Success!', cx, y + 3);
-    y += 22;
-    
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#4a5568';
-    ctx.font = '11px -apple-system, sans-serif';
-    ctx.fillText('Your payment was successful.', cx, y);
-    y += 28;
-    
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#a0aec0';
-    ctx.font = '9px -apple-system, sans-serif';
-    ctx.fillText('Amount', leftX, y);
-    ctx.fillStyle = '#1a202c';
-    ctx.font = 'bold 28px -apple-system, sans-serif';
-    y += 28;
-    ctx.fillText(`UGX ${amount.toLocaleString()}`, leftX, y);
-    y += 20;
-    
-    ctx.strokeStyle = 'rgba(0,0,0,0.04)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(leftX, y);
-    ctx.lineTo(canvas.width - leftX, y);
-    ctx.stroke();
-    y += 12;
-    
-    const details = [
-      ['Status', 'Success', '#2e7d32'],
-      ['Transaction', `Qwerty${Date.now().toString().slice(-6)}`, '#4a5568'],
-      ['Sender', member?.name || 'Unknown', '#2d3748'],
-      ['Receiver', 'Harvest Trust Group', '#2d3748'],
-      ['Payment Method', txType === 'deposit' ? 'Deposit' : (txType || 'Transaction'), '#2d3748'],
-      ['Payment Time', new Date().toLocaleDateString() + ', ' + new Date().toLocaleTimeString(), '#2d3748']
-    ];
-    
-    details.forEach(([label, value, color]) => {
-      ctx.textAlign = 'left';
-      ctx.fillStyle = '#a0aec0';
-      ctx.font = '9px -apple-system, sans-serif';
-      ctx.fillText(label, leftX, y);
-      ctx.textAlign = 'right';
-      ctx.fillStyle = color;
-      ctx.font = '9px -apple-system, sans-serif';
-      ctx.fillText(value, canvas.width - leftX, y);
-      y += 18;
-    });
-    
-    y += 6;
-    ctx.strokeStyle = '#6b46c1';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(cx - 20, y);
-    ctx.lineTo(cx + 20, y);
-    ctx.stroke();
-    y += 16;
-    
-    // ===== ITEMS (NO DEBT LINE) =====
-    const items = [];
-    const appBal = memberApplicationLoans[member?.phone] || 0;
-    const prepaidBal = memberPrepaid[member?.phone] || 0;
-    const projLoan = (projectedRemainingLoan !== undefined && projectedRemainingLoan !== null) ? projectedRemainingLoan : (memberLoans[member?.phone] || 0);
-    
-    if (appBal > 0) items.push(['⭐ Application', `UGX ${appBal.toLocaleString()}`, '#b45309']);
-    if (projLoan > 0) items.push(['💰 Remaining Loan (after deposit)', `UGX ${projLoan.toLocaleString()}`, '#6b46c1']);
-    else if (memberLoans[member?.phone] > 0) items.push(['💰 Remaining Loan (after deposit)', 'UGX 0 ✅', '#10b981']);
-    if (prepaidBal > 0) items.push(['💠 Prepaid', `UGX ${prepaidBal.toLocaleString()}`, '#0891b2']);
-    items.push(['💰 Available', `UGX ${accountBalance.toLocaleString()}`, '#6b46c1']);
-    
-    items.forEach(([label, value, color], i) => {
-      const lineY = y + (i * 18);
-      ctx.textAlign = 'left';
-      ctx.fillStyle = '#6b46c1';
-      ctx.font = '9px -apple-system, sans-serif';
-      ctx.fillText(label, leftX, lineY);
-      ctx.textAlign = 'right';
-      ctx.fillStyle = color;
-      ctx.font = 'bold 9px -apple-system, sans-serif';
-      ctx.fillText(value, canvas.width - leftX, lineY);
-    });
-    
-    y += (items.length * 18) + 10;
-    
-    ctx.fillStyle = '#f7f5fa';
-    ctx.beginPath();
-    ctx.roundRect(leftX, y - 4, canvas.width - (leftX * 2), 24, 8);
-    ctx.fill();
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#a0aec0';
-    ctx.font = '8px -apple-system, sans-serif';
-    ctx.fillText('💳 Loan Limit', leftX + 10, y + 11);
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#2d3748';
-    ctx.font = 'bold 8px -apple-system, sans-serif';
-    ctx.fillText(`UGX ${maxBorrow.toLocaleString()}`, canvas.width - leftX - 10, y + 11);
-    y += 32;
-    
-    const btnY = y;
-    ctx.strokeStyle = '#6b46c1';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(leftX, btnY, (canvas.width - (leftX * 2) - 10) / 2, 34, 30);
-    ctx.stroke();
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#6b46c1';
-    ctx.font = '10px -apple-system, sans-serif';
-    ctx.fillText('📋 Share Receipt', leftX + ((canvas.width - (leftX * 2) - 10) / 4), btnY + 20);
-    
-    const btn2X = leftX + (canvas.width - (leftX * 2) - 10) / 2 + 10;
-    ctx.beginPath();
-    ctx.roundRect(btn2X, btnY, (canvas.width - (leftX * 2) - 10) / 2, 34, 30);
-    ctx.stroke();
-    ctx.fillText('← Back to home', btn2X + ((canvas.width - (leftX * 2) - 10) / 4), btnY + 20);
-    
-    return canvas.toDataURL('image/png');
-    
-  } catch (error) {
-    console.error('Transaction fallback failed:', error);
-    return null;
-  }
-}
 
 // ==========================================
 // ATTACH DEPOSIT PREVIEW HANDLER
