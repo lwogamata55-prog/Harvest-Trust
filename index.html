@@ -6081,50 +6081,6 @@ function generateReceiptNumber() {
     return "HTF-" + timestamp + "-" + random;
 }
 
-function getReminderTemplates() {
-    return {
-        debt: {
-            title: '💳 Pay Your Debt',
-            template: (member, date) => `Dear ${member.name},\n\nThis is a reminder that you have an outstanding debt of ${money(memberDebts[member.phone] || 0)}.\n\nPlease make arrangements to clear this debt as soon as possible to avoid additional penalties.\n\nIf you have any questions, please contact the admin.\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
-        },
-        loan_eligible: {
-            title: '💰 You Are Eligible for a Loan',
-            template: (member, date) => `Dear ${member.name},\n\nBased on your consistent savings and repayment history, you are now eligible to request a loan of up to ${money(calculateMaxLoan(member))}.\n\nTo apply, go to Account → Request Loan and fill out the application form.\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
-        },
-        overdue: {
-            title: '🚨 Loan Overdue',
-            template: (member, date) => `Dear ${member.name},\n\nThis is a FINAL NOTICE that your loan is ${getOverdueDays(member)} days overdue.\n\nOutstanding amount: ${money(memberLoans[member.phone] || 0)}\n\nImmediate repayment is required to avoid further penalties and legal action.\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
-        },
-        welcome: {
-            title: '👋 Welcome to the Group',
-            template: (member, date) => `Dear ${member.name},\n\nWelcome to Harvest Trust Finance! We are thrilled to have you as a member.\n\nYour daily savings of UGX ${settings.dailyAmount || 2000} + welfare of UGX ${settings.welfareAmount || 500} will be automatically tracked.\n\nWe look forward to growing together!\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
-        },
-        payout: {
-            title: '📅 Upcoming Payout',
-            template: (member, date) => `Dear ${member.name},\n\nYour weekly payout of ${money(getWeeklyGross())} is due on ${getNextPayoutDateString()}.\n\nPlease ensure your account is in good standing to receive the full amount.\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
-        },
-        consistency: {
-            title: '🏆 Consistency Encouragement',
-            template: (member, date) => `Dear ${member.name},\n\nYou have saved on ${getConsistencyDays(member)} days this month! Your discipline is building a strong financial future.\n\nKeep up the great work – consistency is key to achieving your goals.\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
-        },
-        late_fee: {
-            title: '⏰ Late Fee Reminder',
-            template: (member, date) => `Dear ${member.name},\n\nA late fee of ${money(settings.fineAmount || 5000)} has been applied to your account for missing your daily savings.\n\nPlease make your deposit today to avoid further penalties.\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
-        },
-        renewal: {
-            title: '🔄 Membership Renewal',
-            template: (member, date) => `Dear ${member.name},\n\nYour membership is due for renewal. The renewal fee is ${money(settings.renewalFee || 0)}.\n\nPlease pay this fee to continue enjoying the benefits of the group.\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
-        },
-        general: {
-            title: '📢 General Reminder',
-            template: (member, date) => `Dear ${member.name},\n\nThis is a general reminder to stay on top of your daily savings and loan obligations.\n\nIf you have any questions, please reach out to the admin.\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
-        },
-        good_standing: {
-            title: '✅ Good Standing',
-            template: (member, date) => `Dear ${member.name},\n\nCongratulations! You are in good standing with no outstanding debts or loans.\n\nThank you for your commitment to saving and repaying on time.\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
-        }
-    };
-}
 function getReceiptQuote(member, remainingLoan) {
     const phone = member?.phone || '';
     const loanBalance = remainingLoan !== undefined ? remainingLoan : (memberLoans[phone] || 0);
@@ -6171,6 +6127,66 @@ function generateRepaymentSchedule(principal, interestRate, weeks, startDate) {
     });
   }
   return schedule;
+}
+function getMemberStatus(member) {
+    if (!member) return 'unknown';
+    const phone = member.phone;
+    const loanBalance = memberLoans[phone] || 0;
+    const debtBalance = memberDebts[phone] || 0;
+    const totalOwed = loanBalance + debtBalance;
+    const isOverdue = loans.some(l => l.memberId === member.id && l.status === 'approved' && !l.repaid && l.dueDate && l.dueDate < Date.now());
+    const hasPendingLoan = loans.some(l => l.memberId === member.id && l.status === 'pending');
+    const daysActive = getDaysActive(member);
+    const totalDeposits = getTotalDeposits(member);
+    const maxLoan = calculateMaxLoan(member);
+    const hasLoan = loanBalance > 0;
+
+    if (totalOwed > 0 && isOverdue) {
+        return 'overdue';
+    } else if (totalOwed > 0) {
+        return 'has_debt';
+    } else if (hasPendingLoan) {
+        return 'pending_loan';
+    } else if (maxLoan > 0 && totalDeposits > 0 && !hasLoan) {
+        return 'eligible_for_loan';
+    } else if (totalOwed === 0 && daysActive > 0) {
+        return 'good_standing';
+    } else {
+        return 'general';
+    }
+}
+function getRelevantTemplates(member) {
+    const status = getMemberStatus(member);
+    const allTemplates = getReminderTemplates();
+    const relevant = [];
+
+    switch (status) {
+        case 'overdue':
+            relevant.push('overdue', 'debt', 'late_fee', 'general');
+            break;
+        case 'has_debt':
+            relevant.push('debt', 'late_fee', 'general');
+            break;
+        case 'pending_loan':
+            relevant.push('general');
+            break;
+        case 'eligible_for_loan':
+            relevant.push('loan_eligible', 'general');
+            break;
+        case 'good_standing':
+            relevant.push('good_standing', 'payout', 'consistency', 'general');
+            break;
+        default:
+            relevant.push('general');
+            break;
+    }
+
+    // Also allow admin to manually override if needed (show all templates as options)
+    // For now, we'll show all but mark some as suggested
+    return {
+        suggested: relevant,
+        all: Object.keys(allTemplates)
+    };
 }
 function getMemberStats(memberId) {
   const member = members.find(m => m.id === memberId);
@@ -6965,6 +6981,113 @@ window.handlePhotoInput=function(input,previewId,dataId){
   };
   reader.readAsDataURL(file);
 };
+/**
+ * Builds HTML for a reminder receipt (decorated style)
+ */
+function buildReminderReceiptHTML(member, message, receiptNumber, reminderType) {
+    const date = new Date();
+    const dateLabel = date.toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' });
+    const timeLabel = date.toLocaleTimeString('en-UG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+    // Get member's loan balance
+    const loanBalance = memberLoans[member?.phone] || 0;
+    const debtBalance = memberDebts[member?.phone] || 0;
+    const totalOwed = loanBalance + debtBalance;
+
+    // Determine icon based on reminder type
+    let iconColor = '#f59e0b';
+    let iconSvg = `<circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>`;
+    let statusTitle = 'Reminder';
+    let statusSub = 'Please take action';
+
+    switch (reminderType) {
+        case 'debt':
+            iconColor = '#dc2626';
+            statusTitle = '💳 Debt Reminder';
+            statusSub = 'Please clear your outstanding debt';
+            break;
+        case 'loan_eligible':
+            iconColor = '#22c55e';
+            statusTitle = '💰 Loan Eligibility';
+            statusSub = 'You are eligible for a loan';
+            break;
+        case 'overdue':
+            iconColor = '#dc2626';
+            statusTitle = '🚨 Overdue Loan';
+            statusSub = 'Your loan is overdue';
+            break;
+        case 'welcome':
+            iconColor = '#22c55e';
+            statusTitle = '👋 Welcome';
+            statusSub = 'Welcome to the group';
+            break;
+        case 'payout':
+            iconColor = '#6d28d9';
+            statusTitle = '📅 Upcoming Payout';
+            statusSub = 'Your payout is coming up';
+            break;
+        case 'consistency':
+            iconColor = '#06b6d4';
+            statusTitle = '🏆 Consistency';
+            statusSub = 'Keep up the good work';
+            break;
+        case 'late_fee':
+            iconColor = '#f59e0b';
+            statusTitle = '⏰ Late Fee';
+            statusSub = 'A late fee has been applied';
+            break;
+        case 'renewal':
+            iconColor = '#8b5cf6';
+            statusTitle = '🔄 Renewal';
+            statusSub = 'Your membership needs renewal';
+            break;
+        case 'general':
+            iconColor = '#3b82f6';
+            statusTitle = '📢 General Reminder';
+            statusSub = 'Please take note';
+            break;
+        case 'good_standing':
+            iconColor = '#22c55e';
+            statusTitle = '✅ Good Standing';
+            statusSub = 'You are in good standing';
+            break;
+        default:
+            iconColor = '#f59e0b';
+            statusTitle = '📢 Reminder';
+            statusSub = 'Please take action';
+    }
+
+    return `
+    <div class="receipt" style="max-width:360px;margin:0 auto;background:#ffffff;border-radius:24px;padding:28px 24px 22px;font-family:'DM Sans',sans-serif;text-align:center;color:#111827;box-shadow:0 8px 30px rgba(0,0,0,0.12);">
+        <div class="icon-circle" style="width:60px;height:60px;border-radius:50%;background:${iconColor};display:flex;align-items:center;justify-content:center;margin:0 auto 14px auto;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="width:28px;height:28px;">${iconSvg}</svg>
+        </div>
+        <div class="status-title" style="font-size:1.05rem;font-weight:700;color:#111827;margin-bottom:2px;">${statusTitle}</div>
+        <div class="status-sub" style="font-size:0.74rem;color:#9ca3af;margin-bottom:18px;">${statusSub}</div>
+        <div class="brand-row" style="display:flex;align-items:center;justify-content:center;gap:6px;font-size:0.72rem;font-weight:700;color:#b45309;letter-spacing:0.3px;margin-bottom:14px;">🌾 HARVEST TRUST FINANCE</div>
+        
+        <div style="text-align:left;font-size:0.85rem;line-height:1.7;padding:12px 0;border-top:1px solid #f3f4f6;border-bottom:1px solid #f3f4f6;margin-bottom:12px;">
+            ${message.replace(/\n/g, '<br>')}
+        </div>
+        
+        <div class="row" style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f9fafb;font-size:0.8rem;">
+            <span class="row-label" style="color:#6b7280;">Member</span>
+            <span class="row-val" style="font-weight:600;color:#111827;text-align:right;">${escapeHtml(member?.name || 'Unknown')}</span>
+        </div>
+        <div class="row" style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;font-size:0.8rem;">
+            <span class="row-label" style="color:#6b7280;">Current Loan Balance</span>
+            <span class="row-val" style="font-weight:700;color:${totalOwed > 0 ? '#dc2626' : '#16a34a'};text-align:right;">UGX ${totalOwed.toLocaleString()}</span>
+        </div>
+        
+        <div class="quote-box" style="margin-top:14px;padding:10px 12px;background:#f9fafb;border-radius:10px;font-size:0.72rem;color:#4b5563;font-style:italic;text-align:left;border-left:3px solid ${iconColor};">${escapeHtml(getReceiptQuote(member, totalOwed))}</div>
+        
+        <div class="footer" style="margin-top:16px;padding-top:12px;border-top:1px solid #f3f4f6;">
+            <div class="receipt-no" style="font-size:0.78rem;font-weight:700;color:#1f2937;font-family:'SFMono-Regular',Consolas,monospace;letter-spacing:0.4px;">Receipt #: ${receiptNumber}</div>
+            <div class="timestamp" style="font-size:0.6rem;color:#9ca3af;margin-top:3px;">${dateLabel}, ${timeLabel}</div>
+        </div>
+    </div>
+    `;
+}
 
 // ══════════════════════════════════════════════
 // SHARED RECEIPT CARD BUILDER — used by ALL receipts
@@ -15264,6 +15387,45 @@ window.showBulkTransactionReceiptModal = function(members, perMemberAmount, tota
     });
 };
 
+window.updateReminderPreview = function() {
+    const memberId = document.getElementById('reminder-member')?.value;
+    const type = document.getElementById('reminder-type')?.value;
+    const date = document.getElementById('reminder-date')?.value;
+    const customMsg = document.getElementById('reminder-custom-msg')?.value.trim();
+
+    const previewDiv = document.getElementById('reminder-preview');
+    const previewText = document.getElementById('reminder-preview-text');
+
+    if (!previewDiv || !previewText) return;
+
+    if (!memberId || !type || !date) {
+        previewDiv.style.display = 'none';
+        return;
+    }
+
+    const member = members.find(m => m.id === memberId);
+    if (!member) {
+        previewDiv.style.display = 'none';
+        return;
+    }
+
+    const templates = getReminderTemplates();
+    let message = '';
+
+    if (customMsg) {
+        message = customMsg;
+    } else if (templates[type]) {
+        const dateStr = new Date(date).toLocaleDateString('en-UG', { year: 'numeric', month: 'long', day: 'numeric' });
+        message = templates[type].template(member, dateStr);
+    } else {
+        previewDiv.style.display = 'none';
+        return;
+    }
+
+    previewText.textContent = message;
+    previewDiv.style.display = 'block';
+};
+
 // Update preview when type or amount changes
 window.updateGroupTxPreview = function() {
   const type = document.getElementById('group-tx-type').value;
@@ -16300,24 +16462,36 @@ async function renderReceiptImage(html, scale = 2.5) {
         return null;
     }
 
-    const tempDiv = document.createElement('div');
-    tempDiv.style.position = 'absolute';
-    tempDiv.style.top = '-9999px';
-    tempDiv.style.left = '-9999px';
-    tempDiv.style.background = '#ffffff';
-    tempDiv.style.width = '360px';
-    tempDiv.style.padding = '0';
-    tempDiv.innerHTML = html;
-    document.body.appendChild(tempDiv);
+    // Create a wrapper div
+    const wrapper = document.createElement('div');
+    wrapper.style.position = 'absolute';
+    wrapper.style.top = '-9999px';
+    wrapper.style.left = '-9999px';
+    wrapper.style.background = '#ffffff';
+    wrapper.style.width = '360px';
+    wrapper.style.padding = '0';
+    wrapper.style.margin = '0';
+    wrapper.innerHTML = html;
+    document.body.appendChild(wrapper);
 
-    await new Promise(resolve => setTimeout(resolve, 300));
+    // Wait for rendering
+    await new Promise(r => setTimeout(r, 300));
 
     try {
-        const element = tempDiv.firstElementChild;
+        // Get the first child element (the receipt)
+        const element = wrapper.firstElementChild;
         if (!element) {
-            console.warn('No element found in temp div');
-            document.body.removeChild(tempDiv);
+            document.body.removeChild(wrapper);
+            console.error('No element found in wrapper');
             return null;
+        }
+
+        // Ensure element has dimensions
+        if (element.offsetWidth === 0 || element.offsetHeight === 0) {
+            // Force reflow
+            element.style.display = 'block';
+            element.style.visibility = 'visible';
+            void element.offsetHeight;
         }
 
         const canvas = await html2canvas(element, {
@@ -16327,16 +16501,214 @@ async function renderReceiptImage(html, scale = 2.5) {
             useCORS: true,
             allowTaint: true,
             width: 360,
-            height: element.scrollHeight + 20
+            height: element.scrollHeight || 560,
+            onclone: function(clonedDoc) {
+                // Ensure cloned element has proper styles
+                const clonedEl = clonedDoc.querySelector('.receipt');
+                if (clonedEl) {
+                    clonedEl.style.display = 'block';
+                    clonedEl.style.visibility = 'visible';
+                }
+            }
         });
-        document.body.removeChild(tempDiv);
+        
+        document.body.removeChild(wrapper);
         return canvas.toDataURL('image/png');
     } catch (err) {
         console.error('html2canvas error:', err);
-        document.body.removeChild(tempDiv);
+        document.body.removeChild(wrapper);
         return null;
     }
 }
+
+window.generateReminderImage = async function() {
+    const memberId = document.getElementById('reminder-member')?.value;
+    const type = document.getElementById('reminder-type')?.value;
+    const date = document.getElementById('reminder-date')?.value;
+    const customMsg = document.getElementById('reminder-custom-msg')?.value.trim();
+
+    if (!memberId) {
+        toast('Please select a member', '#ef4444');
+        return;
+    }
+    if (!type) {
+        toast('Please select a reminder type', '#ef4444');
+        return;
+    }
+    if (!date) {
+        toast('Please select a date', '#ef4444');
+        return;
+    }
+
+    const member = members.find(m => m.id === memberId);
+    if (!member) {
+        toast('Member not found', '#ef4444');
+        return;
+    }
+
+    const templates = getReminderTemplates();
+    let message = '';
+
+    if (customMsg) {
+        message = customMsg;
+    } else if (templates[type]) {
+        const dateStr = new Date(date).toLocaleDateString('en-UG', { year: 'numeric', month: 'long', day: 'numeric' });
+        message = templates[type].template(member, dateStr);
+    } else {
+        toast('Invalid reminder type', '#ef4444');
+        return;
+    }
+
+    const receiptNumber = generateReceiptNumber();
+
+    // Build the reminder receipt using the new decorated format
+    const receiptHTML = buildReminderReceiptHTML(member, message, receiptNumber, type);
+
+    // Generate image
+    const imageData = await renderReceiptImage(receiptHTML);
+
+    if (!imageData) {
+        toast('Failed to generate image. Please try again.', '#ef4444');
+        return;
+    }
+
+    // Show the reminder image modal
+    showReminderImageModal(imageData, member, message, receiptNumber);
+};
+function showReminderImageModal(imageData, member, message, receiptNumber) {
+    const modal = document.createElement('div');
+    modal.className = 'ov on receipt-modal-active';
+    modal.style.zIndex = '20020';
+    modal.innerHTML = `
+        <div class="bs" style="max-width: 420px; padding: 0; overflow: hidden; border-radius: 24px 24px 0 0; display: flex; flex-direction: column; max-height: 90vh;">
+            <div style="background: #fff; padding: 16px 20px 12px; overflow-y: auto; flex: 1; min-height: 0; text-align: center;">
+                <img src="${imageData}" style="max-width: 100%; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                <div class="micro muted" style="margin-top: 8px;">${escapeHtml(member.name)} · ${receiptNumber}</div>
+            </div>
+            <div style="background: #fff; padding: 12px 20px 20px; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; border-top: 1px solid #f3f4f6;">
+                <button id="reminder-whatsapp" class="receipt-btn" style="width:100%;padding:11px;border:none;border-radius:10px;background:#25D366;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">💬 Send on WhatsApp</button>
+                <button id="reminder-copy" class="receipt-btn" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">📋 Copy Image (PC)</button>
+                <button id="reminder-save" class="receipt-btn" style="width:100%;padding:11px;border:none;border-radius:10px;background:#6d28d9;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">💾 Save Image</button>
+                <button id="reminder-close" class="receipt-btn" style="width:100%;padding:9px;border:1px solid #e5e7eb;border-radius:10px;background:transparent;color:#6b7280;font-size:0.8rem;font-weight:600;cursor:pointer;">✕ Close</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    // ─── WhatsApp Button ────────────────────────────────────
+    document.getElementById('reminder-whatsapp').addEventListener('click', async function() {
+        try {
+            let phone = member.phone.replace(/\D/g, '');
+            if (phone.startsWith('0')) phone = '256' + phone.slice(1);
+            if (!phone.startsWith('256')) phone = '256' + phone;
+
+            if (navigator.share) {
+                const blob = await (await fetch(imageData)).blob();
+                const file = new File([blob], `reminder_${receiptNumber}.png`, { type: 'image/png' });
+                await navigator.share({ title: 'Reminder', text: `Reminder for ${member.name}`, files: [file] });
+                toast('✅ Shared!', '#10b981');
+                modal.remove();
+                return;
+            }
+
+            const text = `🌾 *Harvest Trust Finance* 🌾\n\n📄 *Reminder*\nMember: ${member.name}\nReceipt #: ${receiptNumber}`;
+            window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
+            const a = document.createElement('a');
+            a.href = imageData;
+            a.download = `reminder_${receiptNumber}.png`;
+            a.click();
+            toast('💬 WhatsApp opened. Image downloaded – attach manually.', '#25D366');
+            modal.remove();
+        } catch (err) {
+            console.error(err);
+            toast('❌ Failed to share', '#ef4444');
+        }
+    });
+
+    // ─── Copy Image ──────────────────────────────────────────
+    document.getElementById('reminder-copy').addEventListener('click', async function() {
+        try {
+            const blob = await (await fetch(imageData)).blob();
+            await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+            toast('📋 Image copied to clipboard!', '#06b6d4');
+            modal.remove();
+        } catch (err) {
+            toast('❌ Copy failed. Use the Save button.', '#ef4444');
+        }
+    });
+
+    // ─── Save Image ──────────────────────────────────────────
+    document.getElementById('reminder-save').addEventListener('click', function() {
+        const a = document.createElement('a');
+        a.href = imageData;
+        a.download = `reminder_${receiptNumber}.png`;
+        a.click();
+        toast('💾 Saved', '#10b981');
+        modal.remove();
+    });
+
+    // ─── Close ──────────────────────────────────────────────
+    document.getElementById('reminder-close').addEventListener('click', function() {
+        modal.remove();
+    });
+
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) modal.remove();
+    });
+}
+function getReminderTemplates() {
+    return {
+        debt: {
+    title: '💳 Pay Your Debt',
+    template: (member, date) => {
+        const totalOwed = (memberLoans[member.phone] || 0) + (memberDebts[member.phone] || 0);
+        return `Dear ${member.name},\n\nThis is a reminder that you have an outstanding balance of ${money(totalOwed)}.\n\nPlease make arrangements to clear this balance as soon as possible to avoid additional penalties.\n\nIf you have any questions, please contact the admin.\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`;
+    }
+},
+        loan_eligible: {
+    title: '💰 You Are Eligible for a Loan',
+    template: (member, date) => {
+        const maxLoan = calculateMaxLoan(member);
+        const currentLoan = memberLoans[member.phone] || 0;
+        return `Dear ${member.name},\n\nBased on your consistent savings and repayment history, you are now eligible to request a loan of up to ${money(maxLoan)}.\n\nYour current loan balance is ${money(currentLoan)}.\n\nTo apply, go to Account → Request Loan and fill out the application form.\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`;
+    }
+},
+
+        overdue: {
+            title: '🚨 Loan Overdue',
+            template: (member, date) => `Dear ${member.name},\n\nThis is a FINAL NOTICE that your loan is ${getOverdueDays(member)} days overdue.\n\nOutstanding amount: ${money(memberLoans[member.phone] || 0)}\n\nImmediate repayment is required to avoid further penalties and legal action.\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
+        },
+        welcome: {
+            title: '👋 Welcome to the Group',
+            template: (member, date) => `Dear ${member.name},\n\nWelcome to Harvest Trust Finance! We are thrilled to have you as a member.\n\nYour daily savings of UGX ${settings.dailyAmount || 2000} + welfare of UGX ${settings.welfareAmount || 500} will be automatically tracked.\n\nWe look forward to growing together!\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
+        },
+        payout: {
+            title: '📅 Upcoming Payout',
+            template: (member, date) => `Dear ${member.name},\n\nYour weekly payout of ${money(getWeeklyGross())} is due on ${getNextPayoutDateString()}.\n\nPlease ensure your account is in good standing to receive the full amount.\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
+        },
+        consistency: {
+            title: '🏆 Consistency Encouragement',
+            template: (member, date) => `Dear ${member.name},\n\nYou have saved on ${getConsistencyDays(member)} days this month! Your discipline is building a strong financial future.\n\nKeep up the great work – consistency is key to achieving your goals.\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
+        },
+        late_fee: {
+            title: '⏰ Late Fee Reminder',
+            template: (member, date) => `Dear ${member.name},\n\nA late fee of ${money(settings.fineAmount || 5000)} has been applied to your account for missing your daily savings.\n\nPlease make your deposit today to avoid further penalties.\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
+        },
+        renewal: {
+            title: '🔄 Membership Renewal',
+            template: (member, date) => `Dear ${member.name},\n\nYour membership is due for renewal. The renewal fee is ${money(settings.renewalFee || 0)}.\n\nPlease pay this fee to continue enjoying the benefits of the group.\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
+        },
+        general: {
+            title: '📢 General Reminder',
+            template: (member, date) => `Dear ${member.name},\n\nThis is a general reminder to stay on top of your daily savings and loan obligations.\n\nIf you have any questions, please reach out to the admin.\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
+        },
+        good_standing: {
+            title: '✅ Good Standing',
+            template: (member, date) => `Dear ${member.name},\n\nCongratulations! You are in good standing with no outstanding debts or loans.\n\nThank you for your commitment to saving and repaying on time.\n\n📅 Date: ${date}\n\n🌾 Harvest Trust Finance\nLwogamata, Admin`
+        }
+    };
+}
+
 window.previewProfitDistribution = function() {
   if (groupProfit <= 0) {
     toast('No profit to distribute', '#ef4444');
@@ -20106,90 +20478,6 @@ window.shareGroupReportWhatsApp = function() {
   const adminPhone = '0770371720'; // Change to your group/admin WhatsApp number
   window.open(`https://wa.me/${adminPhone}?text=${encoded}`, '_blank');
 };
-
-// ─── Show Reminder Image Modal ──────────────────────────────
-function showReminderImageModal(imageData, member, message, receiptNumber) {
-    const modal = document.createElement('div');
-    modal.className = 'ov on receipt-modal-active';
-    modal.style.zIndex = '20020';
-    modal.innerHTML = `
-        <div class="bs" style="max-width: 420px; padding: 0; overflow: hidden; border-radius: 24px 24px 0 0; display: flex; flex-direction: column; max-height: 90vh;">
-            <div style="background: #fff; padding: 16px 20px 12px; overflow-y: auto; flex: 1; min-height: 0; text-align: center;">
-                <img src="${imageData}" style="max-width: 100%; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
-                <div class="micro muted" style="margin-top: 8px;">${escapeHtml(member.name)} · ${receiptNumber}</div>
-            </div>
-            <div style="background: #fff; padding: 12px 20px 20px; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; border-top: 1px solid #f3f4f6;">
-                <button id="reminder-whatsapp" class="receipt-btn" style="width:100%;padding:11px;border:none;border-radius:10px;background:#25D366;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">💬 Send on WhatsApp</button>
-                <button id="reminder-copy" class="receipt-btn" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">📋 Copy Image (PC)</button>
-                <button id="reminder-save" class="receipt-btn" style="width:100%;padding:11px;border:none;border-radius:10px;background:#6d28d9;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">💾 Save Image</button>
-                <button id="reminder-close" class="receipt-btn" style="width:100%;padding:9px;border:1px solid #e5e7eb;border-radius:10px;background:transparent;color:#6b7280;font-size:0.8rem;font-weight:600;cursor:pointer;">✕ Close</button>
-            </div>
-        </div>
-    `;
-    document.body.appendChild(modal);
-
-    // ─── WhatsApp ────────────────────────────────────────────
-    document.getElementById('reminder-whatsapp').addEventListener('click', async function() {
-        try {
-            let phone = member.phone.replace(/\D/g, '');
-            if (phone.startsWith('0')) phone = '256' + phone.slice(1);
-            if (!phone.startsWith('256')) phone = '256' + phone;
-
-            if (navigator.share) {
-                const blob = await (await fetch(imageData)).blob();
-                const file = new File([blob], `reminder_${receiptNumber}.png`, { type: 'image/png' });
-                await navigator.share({ title: 'Reminder', text: `Reminder for ${member.name}`, files: [file] });
-                toast('✅ Shared!', '#10b981');
-                modal.remove();
-                return;
-            }
-
-            const text = `🌾 *Harvest Trust Finance* 🌾\n\n📄 *Reminder*\nMember: ${member.name}\nReceipt #: ${receiptNumber}`;
-            window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
-            const a = document.createElement('a');
-            a.href = imageData;
-            a.download = `reminder_${receiptNumber}.png`;
-            a.click();
-            toast('💬 WhatsApp opened. Image downloaded – attach manually.', '#25D366');
-            modal.remove();
-        } catch (err) {
-            console.error(err);
-            toast('❌ Failed to share', '#ef4444');
-        }
-    });
-
-    // ─── Copy Image ──────────────────────────────────────────
-    document.getElementById('reminder-copy').addEventListener('click', async function() {
-        try {
-            const blob = await (await fetch(imageData)).blob();
-            await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-            toast('📋 Image copied to clipboard!', '#06b6d4');
-            modal.remove();
-        } catch (err) {
-            toast('❌ Copy failed. Use the Save button.', '#ef4444');
-        }
-    });
-
-    // ─── Save Image ──────────────────────────────────────────
-    document.getElementById('reminder-save').addEventListener('click', function() {
-        const a = document.createElement('a');
-        a.href = imageData;
-        a.download = `reminder_${receiptNumber}.png`;
-        a.click();
-        toast('💾 Saved', '#10b981');
-        modal.remove();
-    });
-
-    // ─── Close ──────────────────────────────────────────────
-    document.getElementById('reminder-close').addEventListener('click', function() {
-        modal.remove();
-    });
-
-    modal.addEventListener('click', function(e) {
-        if (e.target === modal) modal.remove();
-    });
-}
-// ─── Open Reminder Generator ────────────────────────────────
 window.openReminderGenerator = function() {
     // Populate member dropdown
     const select = document.getElementById('reminder-member');
@@ -20197,6 +20485,11 @@ window.openReminderGenerator = function() {
         const activeMembers = members.filter(m => m.approved !== false);
         select.innerHTML = '<option value="">-- Select Member --</option>' +
             activeMembers.map(m => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('');
+        // Add change listener to filter reminder types
+        select.onchange = function() {
+            filterReminderOptions();
+            updateReminderPreview();
+        };
     }
 
     // Set default date to today
@@ -20214,225 +20507,44 @@ window.openReminderGenerator = function() {
     const preview = document.getElementById('reminder-preview');
     if (preview) preview.style.display = 'none';
 
+    // Initial filter (no member selected → show all options)
+    filterReminderOptions();
+
     openOv('ov-reminder-generator');
 };
 
-// ─── Update Reminder Preview ─────────────────────────────────
-window.updateReminderPreview = function() {
-    const memberId = document.getElementById('reminder-member')?.value;
-    const type = document.getElementById('reminder-type')?.value;
-    const date = document.getElementById('reminder-date')?.value;
-    const customMsg = document.getElementById('reminder-custom-msg')?.value.trim();
+function updateReminderTypeOptions(memberId) {
+    const typeSelect = document.getElementById('reminder-type');
+    if (!typeSelect) return;
 
-    const previewDiv = document.getElementById('reminder-preview');
-    const previewText = document.getElementById('reminder-preview-text');
+    let templates = getReminderTemplates();
+    let options = [];
 
-    if (!previewDiv || !previewText) return;
-
-    if (!memberId || !type || !date) {
-        previewDiv.style.display = 'none';
-        return;
-    }
-
-    const member = members.find(m => m.id === memberId);
-    if (!member) {
-        previewDiv.style.display = 'none';
-        return;
-    }
-
-    const templates = getReminderTemplates();
-    let message = '';
-
-    if (customMsg) {
-        message = customMsg;
-    } else if (templates[type]) {
-        const dateStr = new Date(date).toLocaleDateString('en-UG', { year: 'numeric', month: 'long', day: 'numeric' });
-        message = templates[type].template(member, dateStr);
-    } else {
-        previewDiv.style.display = 'none';
-        return;
-    }
-
-    previewText.textContent = message;
-    previewDiv.style.display = 'block';
-};
-
-// ─── Generate Reminder Image ─────────────────────────────────
-window.generateReminderImage = async function() {
-    const memberId = document.getElementById('reminder-member')?.value;
-    const type = document.getElementById('reminder-type')?.value;
-    const date = document.getElementById('reminder-date')?.value;
-    const customMsg = document.getElementById('reminder-custom-msg')?.value.trim();
-
-    if (!memberId) {
-        toast('Please select a member', '#ef4444');
-        return;
-    }
-    if (!type) {
-        toast('Please select a reminder type', '#ef4444');
-        return;
-    }
-    if (!date) {
-        toast('Please select a date', '#ef4444');
-        return;
-    }
-
-    const member = members.find(m => m.id === memberId);
-    if (!member) {
-        toast('Member not found', '#ef4444');
-        return;
-    }
-
-    const templates = getReminderTemplates();
-    let message = '';
-
-    if (customMsg) {
-        message = customMsg;
-    } else if (templates[type]) {
-        const dateStr = new Date(date).toLocaleDateString('en-UG', { year: 'numeric', month: 'long', day: 'numeric' });
-        message = templates[type].template(member, dateStr);
-    } else {
-        toast('Invalid reminder type', '#ef4444');
-        return;
-    }
-
-    // ─── Generate Image using html2canvas ──────────────────
-    const receiptNumber = generateReceiptNumber();
-    const dateLabel = new Date().toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' });
-    const timeLabel = new Date().toLocaleTimeString('en-UG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
-    // Build HTML for the reminder card
-    const reminderHtml = `
-        <div id="reminder-card" style="max-width: 380px; margin: 0 auto; background: #ffffff; border-radius: 24px; padding: 32px 24px 24px; font-family: 'DM Sans', sans-serif; text-align: center; color: #111827; box-shadow: 0 8px 40px rgba(0,0,0,0.08);">
-            <div style="font-size: 1.2rem; font-weight: 900; color: #111827; letter-spacing: -0.5px;">🌾 Harvest Trust Finance</div>
-            <div style="width: 40px; height: 3px; background: #f59e0b; margin: 8px auto 12px; border-radius: 99px;"></div>
-            <div style="font-size: 1.1rem; font-weight: 700; color: #6d28d9; margin-bottom: 6px;">${templates[type]?.title || 'Reminder'}</div>
-            <div style="border-top: 1px solid #f3f4f6; margin: 12px 0 16px;"></div>
-            <div style="text-align: left; font-size: 0.85rem; line-height: 1.7; white-space: pre-wrap; color: #1e293b;">
-                ${message.replace(/\n/g, '<br>')}
-            </div>
-            <div style="border-top: 1px solid #f3f4f6; margin: 16px 0 12px;"></div>
-            <div style="font-size: 0.7rem; color: #9ca3af; font-family: monospace;">
-                Receipt #: ${receiptNumber}
-            </div>
-            <div style="font-size: 0.5rem; color: #9ca3af; margin-top: 4px;">${dateLabel}, ${timeLabel}</div>
-        </div>
-    `;
-
-    // Create temporary element
-    const tempDiv = document.createElement('div');
-    tempDiv.style.position = 'absolute';
-    tempDiv.style.top = '-9999px';
-    tempDiv.style.left = '-9999px';
-    tempDiv.innerHTML = reminderHtml;
-    document.body.appendChild(tempDiv);
-
-    await new Promise(r => setTimeout(r, 200));
-
-    try {
-        const canvas = await html2canvas(tempDiv.firstChild, {
-            scale: 2.5,
-            backgroundColor: '#ffffff',
-            logging: false,
-            useCORS: true,
-            allowTaint: true
-        });
-        document.body.removeChild(tempDiv);
-
-        const imageData = canvas.toDataURL('image/png');
-
-        // ─── Share/Download Options ──────────────────────────
-        // Show a modal with the generated image and action buttons
-        showReminderImageModal(imageData, member, message, receiptNumber);
-
-    } catch (err) {
-        document.body.removeChild(tempDiv);
-        console.error('html2canvas error:', err);
-        toast('Failed to generate image. Please try again.', '#ef4444');
-    }
-};
-
-// ─── Show Reminder Image Modal ──────────────────────────────
-function showReminderImageModal(imageData, member, message, receiptNumber) {
-    const modal = document.createElement('div');
-    modal.className = 'ov on receipt-modal-active';
-    modal.style.zIndex = '20020';
-    modal.innerHTML = `
-        <div class="bs" style="max-width: 420px; padding: 0; overflow: hidden; border-radius: 24px 24px 0 0; display: flex; flex-direction: column; max-height: 90vh;">
-            <div style="background: #fff; padding: 16px 20px 12px; overflow-y: auto; flex: 1; min-height: 0; text-align: center;">
-                <img src="${imageData}" style="max-width: 100%; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
-                <div class="micro muted" style="margin-top: 8px;">${escapeHtml(member.name)} · ${receiptNumber}</div>
-            </div>
-            <div style="background: #fff; padding: 12px 20px 20px; display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; border-top: 1px solid #f3f4f6;">
-                <button id="reminder-whatsapp" class="receipt-btn" style="width:100%;padding:11px;border:none;border-radius:10px;background:#25D366;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">💬 Send on WhatsApp</button>
-                <button id="reminder-copy" class="receipt-btn" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">📋 Copy Image (PC)</button>
-                <button id="reminder-save" class="receipt-btn" style="width:100%;padding:11px;border:none;border-radius:10px;background:#6d28d9;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">💾 Save Image</button>
-                <button id="reminder-close" class="receipt-btn" style="width:100%;padding:9px;border:1px solid #e5e7eb;border-radius:10px;background:transparent;color:#6b7280;font-size:0.8rem;font-weight:600;cursor:pointer;">✕ Close</button>
-            </div>
-        </div>
-    `;
-    document.body.appendChild(modal);
-
-    // ─── WhatsApp ────────────────────────────────────────────
-    document.getElementById('reminder-whatsapp').addEventListener('click', async function() {
-        try {
-            let phone = member.phone.replace(/\D/g, '');
-            if (phone.startsWith('0')) phone = '256' + phone.slice(1);
-            if (!phone.startsWith('256')) phone = '256' + phone;
-
-            if (navigator.share) {
-                const blob = await (await fetch(imageData)).blob();
-                const file = new File([blob], `reminder_${receiptNumber}.png`, { type: 'image/png' });
-                await navigator.share({ title: 'Reminder', text: `Reminder for ${member.name}`, files: [file] });
-                toast('✅ Shared!', '#10b981');
-                modal.remove();
-                return;
-            }
-
-            const text = `🌾 *Harvest Trust Finance* 🌾\n\n📄 *Reminder*\nMember: ${member.name}\nReceipt #: ${receiptNumber}`;
-            window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
-            const a = document.createElement('a');
-            a.href = imageData;
-            a.download = `reminder_${receiptNumber}.png`;
-            a.click();
-            toast('💬 WhatsApp opened. Image downloaded – attach manually.', '#25D366');
-            modal.remove();
-        } catch (err) {
-            console.error(err);
-            toast('❌ Failed to share', '#ef4444');
+    if (memberId) {
+        const member = members.find(m => m.id === memberId);
+        if (member) {
+            const relevant = getRelevantTemplates(member);
+            // Show suggested first, then the rest
+            const suggested = relevant.suggested;
+            const allKeys = Object.keys(templates);
+            const otherKeys = allKeys.filter(k => !suggested.includes(k));
+            options = [...suggested, ...otherKeys];
+        } else {
+            options = Object.keys(templates);
         }
-    });
+    } else {
+        options = Object.keys(templates);
+    }
 
-    // ─── Copy Image ──────────────────────────────────────────
-    document.getElementById('reminder-copy').addEventListener('click', async function() {
-        try {
-            const blob = await (await fetch(imageData)).blob();
-            await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-            toast('📋 Image copied to clipboard!', '#06b6d4');
-            modal.remove();
-        } catch (err) {
-            toast('❌ Copy failed. Use the Save button.', '#ef4444');
-        }
+    // Build dropdown
+    let html = '<option value="">-- Select Reminder Type --</option>';
+    options.forEach(key => {
+        const label = templates[key]?.title || key;
+        const isSuggested = memberId && getRelevantTemplates(members.find(m => m.id === memberId)).suggested.includes(key);
+        const suggestedText = isSuggested ? ' ⭐' : '';
+        html += `<option value="${key}">${label}${suggestedText}</option>`;
     });
-
-    // ─── Save Image ──────────────────────────────────────────
-    document.getElementById('reminder-save').addEventListener('click', function() {
-        const a = document.createElement('a');
-        a.href = imageData;
-        a.download = `reminder_${receiptNumber}.png`;
-        a.click();
-        toast('💾 Saved', '#10b981');
-        modal.remove();
-    });
-
-    // ─── Close ──────────────────────────────────────────────
-    document.getElementById('reminder-close').addEventListener('click', function() {
-        modal.remove();
-    });
-
-    modal.addEventListener('click', function(e) {
-        if (e.target === modal) modal.remove();
-    });
+    typeSelect.innerHTML = html;
 }
 window.openReceiptLookup = function() {
   const receiptNumber = prompt("Enter Receipt Number (e.g., HTF-...):");
@@ -20456,6 +20568,84 @@ window.openReceiptLookup = function() {
   `;
   showModal(html, 'Transaction Details');
 };
+function filterReminderOptions() {
+    const memberId = document.getElementById('reminder-member')?.value;
+    const typeSelect = document.getElementById('reminder-type');
+    if (!typeSelect) return;
+
+    // All possible options with their status requirements
+    const allOptions = [
+        { value: 'debt', label: '💳 Pay Your Debt', requiresDebt: true },
+        { value: 'loan_eligible', label: '💰 You Are Eligible for a Loan', requiresNoLoan: true },
+        { value: 'overdue', label: '🚨 Loan Overdue', requiresOverdue: true },
+        { value: 'prepaid', label: '💠 You Have Prepaid Balance', requiresPrepaid: true },
+        { value: 'welcome', label: '👋 Welcome to the Group', always: true },
+        { value: 'payout', label: '📅 Upcoming Payout', always: true },
+        { value: 'consistency', label: '🏆 Consistency Encouragement', always: true },
+        { value: 'late_fee', label: '⏰ Late Fee Reminder', always: true },
+        { value: 'renewal', label: '🔄 Membership Renewal', always: true },
+        { value: 'general', label: '📢 General Reminder', always: true },
+        { value: 'good_standing', label: '✅ Good Standing', requiresNoLoan: true }
+    ];
+
+    // If no member selected, show all options
+    if (!memberId) {
+        typeSelect.innerHTML = allOptions.map(opt => 
+            `<option value="${opt.value}">${opt.label}</option>`
+        ).join('');
+        return;
+    }
+
+    // Get member data
+    const member = members.find(m => m.id === memberId);
+    if (!member) {
+        typeSelect.innerHTML = allOptions.map(opt => 
+            `<option value="${opt.value}">${opt.label}</option>`
+        ).join('');
+        return;
+    }
+
+    const loanBalance = memberLoans[member.phone] || 0;
+    const debtBalance = memberDebts[member.phone] || 0;
+    const totalOwed = loanBalance + debtBalance;
+    const prepaidBalance = memberPrepaid[member.phone] || 0;
+
+    // Check overdue status
+    let isOverdue = false;
+    loans.forEach(l => {
+        if (l.memberId === member.id && l.status === 'approved' && !l.repaid && l.dueDate && l.dueDate < Date.now()) {
+            isOverdue = true;
+        }
+    });
+
+    // Filter options
+    const filteredOptions = allOptions.filter(opt => {
+        if (opt.always) return true;
+        if (opt.requiresDebt && totalOwed > 0) return true;
+        if (opt.requiresNoLoan && loanBalance === 0 && totalOwed === 0) return true;
+        if (opt.requiresOverdue && isOverdue) return true;
+        if (opt.requiresPrepaid && prepaidBalance > 0) return true;
+        return false;
+    });
+
+    // If no options match, show all (fallback)
+    if (filteredOptions.length === 0) {
+        typeSelect.innerHTML = allOptions.map(opt => 
+            `<option value="${opt.value}">${opt.label}</option>`
+        ).join('');
+        return;
+    }
+
+    typeSelect.innerHTML = filteredOptions.map(opt => 
+        `<option value="${opt.value}">${opt.label}</option>`
+    ).join('');
+
+    // Auto-select the first option
+    typeSelect.value = filteredOptions[0].value;
+
+    // Update preview
+    updateReminderPreview();
+}
 window.openHelpModal = function() {
   openOv('ov-help');
 };
