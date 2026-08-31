@@ -6412,11 +6412,12 @@ window.showWeeklyPayoutReceiptModal = function(
     computePots();
 
     const receiptNumber = generateReceiptNumber();
-
-    // Compute next payout date
     const nextPayout = getNextPayoutDate();
+    const date = new Date();
+    const dateLabel = date.toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' });
+    const timeLabel = date.toLocaleTimeString('en-UG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-    // Use the new builder
+    // Build receipt HTML using the payout builder
     const receiptHTML = buildPayoutReceiptHTML(
         beneficiary,
         safeGross,
@@ -6426,12 +6427,15 @@ window.showWeeklyPayoutReceiptModal = function(
         receiptNumber
     );
 
+    // Create modal
     const modal = document.createElement('div');
     modal.className = 'ov on receipt-modal-active';
     modal.style.zIndex = '20020';
     modal.innerHTML = `
         <div class="bs" style="max-width:420px;padding:0;overflow:hidden;border-radius:24px 24px 0 0;display:flex;flex-direction:column;max-height:90vh;">
-            <div style="background:#fff;padding:20px 24px 12px;overflow-y:auto;flex:1;min-height:0;">${receiptHTML}</div>
+            <div style="background:#fff;padding:20px 24px 12px;overflow-y:auto;flex:1;min-height:0;" id="receipt-container">
+                ${receiptHTML}
+            </div>
             <div style="background:#fff;padding:12px 20px 20px;display:flex;flex-direction:column;gap:8px;flex-shrink:0;border-top:1px solid #f3f4f6;">
                 <button id="payout-whatsapp" class="receipt-btn" style="width:100%;padding:11px;border:none;border-radius:10px;background:#25D366;color:#fff;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">💬 Send on WhatsApp</button>
                 <button id="payout-copy-pc" class="receipt-btn" style="width:100%;padding:11px;border:1.5px solid #6d28d9;border-radius:10px;background:transparent;color:#6d28d9;font-size:0.82rem;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">📋 Copy Image (PC)</button>
@@ -6442,18 +6446,41 @@ window.showWeeklyPayoutReceiptModal = function(
     `;
     document.body.appendChild(modal);
 
-    const receiptElement = modal.querySelector('#receipt-content');
+    const container = modal.querySelector('#receipt-container');
+    let receiptElement = container.querySelector('#receipt-content');
 
+    // Helper: get the current receipt element (re-fetch if needed)
+    function getReceiptElement() {
+        const el = container.querySelector('#receipt-content');
+        if (!el) {
+            // If element was removed, recreate it
+            container.innerHTML = receiptHTML;
+            return container.querySelector('#receipt-content');
+        }
+        return el;
+    }
+
+    // Generate receipt image
     async function generateReceiptImage() {
-        const clone = receiptElement.cloneNode(true);
+        const element = getReceiptElement();
+        if (!element) {
+            console.error('Receipt element not found');
+            return null;
+        }
+
+        // Clone the element
+        const clone = element.cloneNode(true);
         clone.style.position = 'absolute';
         clone.style.top = '-9999px';
         clone.style.left = '-9999px';
         clone.style.boxShadow = 'none';
         clone.style.transform = 'none';
-        clone.style.width = receiptElement.offsetWidth + 'px';
+        clone.style.width = '360px';
+        clone.style.background = '#ffffff';
+        clone.style.borderRadius = '24px';
+        clone.style.padding = '24px 20px 20px';
         document.body.appendChild(clone);
-        await new Promise(r => setTimeout(r, 150));
+        await new Promise(r => setTimeout(r, 200));
 
         try {
             const canvas = await html2canvas(clone, {
@@ -6461,7 +6488,9 @@ window.showWeeklyPayoutReceiptModal = function(
                 backgroundColor: '#ffffff',
                 logging: false,
                 useCORS: true,
-                allowTaint: true
+                allowTaint: true,
+                width: 360,
+                height: clone.scrollHeight || 560
             });
             document.body.removeChild(clone);
             return canvas.toDataURL('image/png');
@@ -6595,6 +6624,7 @@ window.showWeeklyPayoutReceiptModal = function(
         }
     });
 };
+
 async function updateLoanRepaidStatus(phone) {
   console.log(`updateLoanRepaidStatus called for phone ${phone}`);
   const member = members.find(m => m.phone === phone);
@@ -7406,15 +7436,26 @@ function buildPayoutReceiptHTML(member, gross, deduction, net, nextPayoutDate, r
     const netStr = 'UGX ' + Number(net).toLocaleString();
     const grossStr = 'UGX ' + Number(gross).toLocaleString();
     const deductionStr = Number(deduction).toLocaleString();
-    const nextPayoutStr = nextPayoutDate ? new Date(nextPayoutDate).toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: 'numeric' }) : 'Not scheduled';
+
+    let nextPayoutStr = 'Not scheduled';
+    if (nextPayoutDate) {
+        try {
+            nextPayoutStr = new Date(nextPayoutDate).toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: 'numeric' });
+        } catch (e) {
+            nextPayoutStr = 'Not scheduled';
+        }
+    }
 
     let deductionRow = '';
     if (deduction > 0) {
-        deductionRow = `<div class="row"><span class="row-label">Loan Deduction</span><span class="row-val red">− UGX ${deductionStr}</span></div>`;
+        deductionRow = `<div class="row" style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f9fafb;font-size:0.8rem;">
+            <span class="row-label" style="color:#6b7280;">Loan Deduction</span>
+            <span class="row-val red" style="font-weight:600;color:#dc2626;text-align:right;">− UGX ${deductionStr}</span>
+        </div>`;
     }
 
     return `
-    <div class="receipt" style="max-width:360px;margin:0 auto;background:#ffffff;border-radius:24px;padding:28px 24px 22px;font-family:'DM Sans',sans-serif;text-align:center;color:#111827;box-shadow:0 8px 30px rgba(0,0,0,0.12);">
+    <div id="receipt-content" style="max-width:360px;margin:0 auto;background:#ffffff;border-radius:24px;padding:28px 24px 22px;font-family:'DM Sans',sans-serif;text-align:center;color:#111827;box-shadow:0 8px 30px rgba(0,0,0,0.12);">
         <div class="icon-circle" style="width:60px;height:60px;border-radius:50%;background:#6d28d9;display:flex;align-items:center;justify-content:center;margin:0 auto 14px auto;">
             <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="width:28px;height:28px;"><polyline points="20 6 9 17 4 12"/></svg>
         </div>
@@ -7441,7 +7482,6 @@ function buildPayoutReceiptHTML(member, gross, deduction, net, nextPayoutDate, r
     </div>
     `;
 }
-
 /**
  * Builds HTML for a debt assignment receipt (Version C)
  */
@@ -14940,10 +14980,73 @@ window.addTransactionWithPreview = async function() {
 
     // ─── COVER PAST DAYS ──────────────────────────────────────
     if (isCover) {
-        // ... (existing code - unchanged)
+        const startDate = document.getElementById('tx-cover-start')?.value;
+        const endDate = document.getElementById('tx-cover-end')?.value;
+        if (!startDate || !endDate) {
+            toast('Select date range', '#ef4444');
+            return;
+        }
+        if (new Date(endDate) < new Date(startDate)) {
+            toast('End date must be after start', '#ef4444');
+            return;
+        }
+
+        const dates = getDateRange(startDate, endDate);
+        const dailyAmount = settings.dailyAmount || 2500;
+        const welfareAmount = settings.welfareAmount || 500;
+        const requiredPerDay = dailyAmount + welfareAmount;
+        const skipExisting = document.getElementById('tx-cover-override')?.checked || false;
+
+        let writes = [];
+        let totalDays = 0;
+        for (const member of selectedMembers) {
+            for (const dateObj of dates) {
+                const hasDeposit = skipExisting ? memberHasDepositOnDate(member, dateObj) : false;
+                if (!hasDeposit) {
+                    totalDays++;
+                    writes.push(db.ref('transactions').push({
+                        memberPhone: member.phone,
+                        memberName: member.name,
+                        type: 'deposit',
+                        amount: dailyAmount,
+                        receiptNumber: generateReceiptNumber(),
+                        description: `Cover past day (${dateObj.toISOString().slice(0,10)}) – ${desc}`,
+                        date: dateObj.getTime(),
+                        isDailySavings: true,
+                        isCovered: true
+                    }));
+                    writes.push(db.ref('transactions').push({
+                        memberPhone: member.phone,
+                        memberName: member.name,
+                        type: 'welfare',
+                        amount: welfareAmount,
+                        receiptNumber: generateReceiptNumber(),
+                        description: `Welfare for covered day (${dateObj.toISOString().slice(0,10)})`,
+                        date: dateObj.getTime() + 500,
+                        autoDeduction: true,
+                        isCovered: true
+                    }));
+                }
+            }
+        }
+
+        if (!writes.length) {
+            toast('All selected days already covered.', '#f59e0b');
+            return;
+        }
+
+        if (!confirm(`Cover ${totalDays} day(s) for ${selectedMembers.length} member(s)?`)) return;
+
+        await Promise.all(writes);
+        toast(`✅ Covered ${totalDays} day(s) for ${selectedMembers.length} member(s)`, '#10b981');
+        await reloadAllData();
+        refreshUI();
+        closeOv('ov-add-tx');
+        return;
     }
 
     // ─── REGULAR TRANSACTION ──────────────────────────────────
+    // Now we validate amount and type (only for non-cover transactions)
     const type = document.getElementById('tx-type')?.value;
     const amount = parseFloat(document.getElementById('tx-amount')?.value);
     if (!type || !amount || amount <= 0) {
@@ -14958,11 +15061,8 @@ window.addTransactionWithPreview = async function() {
         // ─── SINGLE MEMBER ──────────────────────────────────
         if (selectedMembers.length === 1) {
             const member = selectedMembers[0];
-            
-            // Compute projected remaining loan after deposit
             const projectedRemaining = computeProjectedLoanAfterDeposit(member, amount);
 
-            // Save function
             const onSave = async () => {
                 const depositTxs = await processDepositWithFutureDays(member, amount, Date.now(), desc || 'Manual deposit');
                 const writes = depositTxs.map(tx => db.ref('transactions').push(tx));
@@ -14972,7 +15072,6 @@ window.addTransactionWithPreview = async function() {
                 return true;
             };
 
-            // Show receipt modal with the projected balance
             showTransactionReceiptModal(
                 member,
                 type,
@@ -14980,7 +15079,7 @@ window.addTransactionWithPreview = async function() {
                 desc,
                 null, null, null, null,
                 true,
-                projectedRemaining, // ← Pass the projected balance
+                projectedRemaining,
                 onSave
             );
             return;
@@ -17084,109 +17183,124 @@ window.confirmAdvanceRotation = function() {
     });
 };
 window.confirmMarkPaid = function() {
-  const idx = rotation.currentIndex || 0;
-  const beneId = rotation.order?.[idx];
-  const beneficiary = members.find(m => m.id === beneId);
-  if (!beneficiary) {
-    toast('No valid beneficiary for payout. Check rotation order.', '#ef4444');
-    return;
-  }
+    const idx = rotation.currentIndex || 0;
+    const beneId = rotation.order?.[idx];
+    const beneficiary = members.find(m => m.id === beneId);
+    if (!beneficiary) {
+        toast('No valid beneficiary for payout. Check rotation order.', '#ef4444');
+        return;
+    }
 
-  const dailyNet = getNetDaily();
-  const weeklyGross = dailyNet * 7 * members.filter(m => m.approved).length;
-  const debt = memberLoans[beneficiary.phone] || 0;
-  const deduction = Math.min(debt, weeklyGross); // ✅ correct deduction
-  const netPayout = Math.max(0, weeklyGross - deduction);
+    const dailyNet = getNetDaily();
+    const weeklyGross = dailyNet * 7 * members.filter(m => m.approved).length;
+    const debt = memberLoans[beneficiary.phone] || 0;
+    const deduction = Math.min(debt, weeklyGross);
+    const netPayout = Math.max(0, weeklyGross - deduction);
 
-  // Pass deduction and netPayout to the receipt modal
-  showWeeklyPayoutReceiptModal(
-    beneficiary, weeklyGross, deduction, netPayout,
-    async () => { await executeWeeklyPayout(beneficiary, weeklyGross, deduction, netPayout); },
-    async () => { await executeWeeklyPayout(beneficiary, weeklyGross, deduction, netPayout); },
-    () => {
-      // Print action
-      generateWeeklyPayoutReceiptImage(beneficiary, weeklyGross, deduction, netPayout).then(img => {
-        if (!img) { toast('Failed to generate receipt', '#ef4444'); return; }
-        const w = window.open('', '_blank');
-        w.document.write(`<!DOCTYPE html><html><head><title>Weekly Payout Receipt</title><style>body{margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff;}img{max-width:100%;height:auto;}</style></head><body><img src="${img}"></body></html>`);
-        w.document.close(); w.focus(); w.print();
-      });
-    },
-    () => { /* cancel – do nothing */ }
-  );
+    showWeeklyPayoutReceiptModal(
+        beneficiary, weeklyGross, deduction, netPayout,
+        async () => { await executeWeeklyPayout(beneficiary, weeklyGross, deduction, netPayout); },
+        async () => { await executeWeeklyPayout(beneficiary, weeklyGross, deduction, netPayout); },
+        () => {
+            generateWeeklyPayoutReceiptImage(beneficiary, weeklyGross, deduction, netPayout).then(img => {
+                if (!img) { toast('Failed to generate receipt', '#ef4444'); return; }
+                const w = window.open('', '_blank');
+                w.document.write(`<!DOCTYPE html><html><head><title>Weekly Payout Receipt</title><style>body{margin:0;display:flex;justify-content:center;align-items:center;min-height:100vh;background:#fff;}img{max-width:100%;height:auto;}</style></head><body><img src="${img}"></body></html>`);
+                w.document.close(); w.focus(); w.print();
+            });
+        },
+        () => { /* cancel – do nothing */ }
+    );
 };
 async function executeWeeklyPayout(beneficiary, weeklyGross, deduction, netPayout) {
-  const writes = [
-    db.ref('transactions').push({
-      memberPhone: beneficiary.phone,
-      memberName: beneficiary.name,
-      type: 'payout',
-      amount: netPayout,
-      receiptNumber: generateReceiptNumber(),
-      description: 'Weekly payout',
-      date: Date.now()
-    })
-  ];
+    const writes = [
+        db.ref('transactions').push({
+            memberPhone: beneficiary.phone,
+            memberName: beneficiary.name,
+            type: 'payout',
+            amount: netPayout,
+            receiptNumber: generateReceiptNumber(),
+            description: 'Weekly payout',
+            date: Date.now()
+        })
+    ];
 
-  // ✅ Only clear the deduction amount (limited by weeklyGross)
-  if (deduction > 0) {
-    writes.push(db.ref('transactions').push({
-      memberPhone: beneficiary.phone,
-      memberName: beneficiary.name,
-      type: 'loan_repayment',
-      amount: deduction,
-      receiptNumber: generateReceiptNumber(),
-      description: `Loan repayment from payout (UGX ${deduction.toLocaleString()})`,
-      date: Date.now() + 2
-    }));
-  }
-
-  await Promise.all(writes);
-
-  // Reload fresh data
-  const [txSnap, loansSnap] = await Promise.all([
-    db.ref('transactions').once('value'),
-    db.ref('loans').once('value')
-  ]);
-  transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
-  loans = loansSnap.val() ? Object.entries(loansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
-
-  // ✅ Update loan records: apply the deduction to active loans (FIFO)
-  if (deduction > 0) {
-    const activeLoans = loans.filter(l =>
-      l.memberPhone === beneficiary.phone &&
-      l.status === 'approved' &&
-      !l.repaid
-    ).sort((a, b) => a.approvedAt - b.approvedAt);
-
-    let remainingDeduction = deduction;
-    for (const loanRec of activeLoans) {
-      if (remainingDeduction <= 0) break;
-      const currentBalance = loanRec.totalRepay - (loanRec.repaidAmount || 0);
-      if (currentBalance <= 0) continue;
-      const payAmount = Math.min(remainingDeduction, currentBalance);
-      const newRepaid = (loanRec.repaidAmount || 0) + payAmount;
-      await db.ref('loans/' + loanRec.id).update({ repaidAmount: newRepaid });
-      if (newRepaid >= loanRec.totalRepay) {
-        await db.ref('loans/' + loanRec.id).update({ repaid: true, repaidAt: Date.now() });
-      }
-      remainingDeduction -= payAmount;
+    // Deduct loan if applicable
+    if (deduction > 0) {
+        writes.push(db.ref('transactions').push({
+            memberPhone: beneficiary.phone,
+            memberName: beneficiary.name,
+            type: 'loan_repayment',
+            amount: deduction,
+            receiptNumber: generateReceiptNumber(),
+            description: `Loan repayment from payout (UGX ${deduction.toLocaleString()})`,
+            date: Date.now() + 2
+        }));
     }
-  }
 
-  // Recompute and update UI
-  computePots();
-  updateHomeUI();
-  updateAccountBalances();
-  if (isLedgerActive()) loadLedger('all');
-  if (currentAdminTab === 'savings') renderAdminTab();
+    await Promise.all(writes);
 
-  // Advance rotation
-  const nextIndex = (rotation.currentIndex + 1) % rotation.order.length;
-  await db.ref('rotation').update({ currentIndex: nextIndex });
-  rotation.currentIndex = nextIndex;
+    // Reload fresh data
+    const [txSnap, loansSnap] = await Promise.all([
+        db.ref('transactions').once('value'),
+        db.ref('loans').once('value')
+    ]);
+    transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
+    loans = loansSnap.val() ? Object.entries(loansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
 
-  toast(`Payout completed! ${deduction > 0 ? 'Deducted UGX ' + deduction.toLocaleString() + ' from debt.' : ''}`, '#10b981');
+    // Apply loan deductions to specific loans (FIFO)
+    if (deduction > 0) {
+        const activeLoans = loans.filter(l =>
+            l.memberPhone === beneficiary.phone &&
+            l.status === 'approved' &&
+            !l.repaid
+        ).sort((a, b) => a.approvedAt - b.approvedAt);
+
+        let remainingDeduction = deduction;
+        for (const loanRec of activeLoans) {
+            if (remainingDeduction <= 0) break;
+            const currentBalance = loanRec.totalRepay - (loanRec.repaidAmount || 0);
+            if (currentBalance <= 0) continue;
+            const payAmount = Math.min(remainingDeduction, currentBalance);
+            const newRepaid = (loanRec.repaidAmount || 0) + payAmount;
+            await db.ref('loans/' + loanRec.id).update({ repaidAmount: newRepaid });
+            if (newRepaid >= loanRec.totalRepay) {
+                await db.ref('loans/' + loanRec.id).update({ repaid: true, repaidAt: Date.now() });
+            }
+            remainingDeduction -= payAmount;
+        }
+    }
+
+    // Recompute and update UI
+    computePots();
+    updateHomeUI();
+    updateAccountBalances();
+    if (isLedgerActive()) loadLedger('all');
+    if (currentAdminTab === 'savings') renderAdminTab();
+
+    // ─── Advance rotation and update dates ────────────────
+    const nextIndex = (rotation.currentIndex + 1) % rotation.order.length;
+    const today = new Date();
+    const endDate = new Date(today);
+    endDate.setDate(endDate.getDate() + 7);
+
+    const updateData = {
+        currentIndex: nextIndex,
+        payoutStartDate: today.getTime(),
+        payoutEndDate: endDate.getTime(),
+        lastPayoutAt: Date.now()
+    };
+
+    await db.ref('rotation').update(updateData);
+    rotation.currentIndex = nextIndex;
+    rotation.payoutStartDate = updateData.payoutStartDate;
+    rotation.payoutEndDate = updateData.payoutEndDate;
+
+    toast(`Payout completed! ${deduction > 0 ? 'Deducted UGX ' + deduction.toLocaleString() + ' from debt.' : ''}`, '#10b981');
+
+    // Update home UI immediately
+    updateReceiverDisplay();
+    updatePayoutDateAndCountdown();
 }
 window.confirmApproveLoan = async function(loanId) {
   const loan = loans.find(l => l.id === loanId);
@@ -18982,10 +19096,10 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
 
     const dailyAmount = settings.dailyAmount || 2000;
     const welfareAmount = settings.welfareAmount || 500;
-    const requiredToday = dailyAmount + welfareAmount;
+    const requiredPerDay = dailyAmount + welfareAmount;
     const todayStr = new Date(todayStart).toLocaleDateString();
 
-    // 1. Today's requirement
+    // 1. Check today's status
     let paidDailyToday = 0, welfarePaidToday = false;
     transactions.forEach(tx => {
         if (tx.memberPhone === member.phone && tx.date >= todayStart && tx.date < todayStart + 86400000) {
@@ -18994,24 +19108,45 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
         }
     });
 
-    // Corrected section
-let deficitToday = 0;
-if (memberHasActionToday(member)) {
-    deficitToday = 0;
-} else {
-    const neededDaily = Math.max(0, dailyAmount - paidDailyToday);
-    const neededWelfare = welfarePaidToday ? 0 : welfareAmount;
-    deficitToday = neededDaily + neededWelfare;
-}
+    // 2. Determine if member already has an action today
+    let deficitToday = 0;
+    if (memberHasActionToday(member)) {
+        deficitToday = 0;
+    } else {
+        const neededDaily = Math.max(0, dailyAmount - paidDailyToday);
+        const neededWelfare = welfarePaidToday ? 0 : welfareAmount;
+        deficitToday = neededDaily + neededWelfare;
+    }
 
+    // 3. Use prepaid balance first (if available)
+    let prepaidBalance = memberPrepaid[member.phone] || 0;
+    let usedPrepaidToday = 0;
+
+    if (deficitToday > 0 && prepaidBalance > 0) {
+        usedPrepaidToday = Math.min(prepaidBalance, deficitToday);
+        prepaidBalance -= usedPrepaidToday;
+        remaining -= usedPrepaidToday;
+        deficitToday -= usedPrepaidToday;
+        if (usedPrepaidToday > 0) {
+            writes.push({
+                memberPhone: member.phone,
+                memberName: member.name,
+                type: 'prepaid_used',
+                amount: usedPrepaidToday,
+                receiptNumber: generateReceiptNumber(),
+                description: `💠 Prepaid used for today's savings (UGX ${usedPrepaidToday.toLocaleString()})`,
+                date: now + 500
+            });
+        }
+    }
+
+    // 4. If there's still a deficit today, use the new deposit
     let usedToday = 0, dailyPortion = 0, welfarePortion = 0;
     if (deficitToday > 0 && remaining > 0) {
         usedToday = Math.min(remaining, deficitToday);
         remaining -= usedToday;
-        // Split into daily and welfare portions
-        const remainingDeficit = deficitToday;
-        const dailyDeficit = Math.max(0, dailyAmount - paidDailyToday);
-        const welfareDeficit = welfarePaidToday ? 0 : welfareAmount;
+        const dailyDeficit = Math.max(0, dailyAmount - paidDailyToday - Math.min(usedPrepaidToday, dailyAmount));
+        const welfareDeficit = welfarePaidToday ? 0 : welfareAmount - Math.min(usedPrepaidToday, welfareAmount);
         dailyPortion = Math.min(usedToday, dailyDeficit);
         welfarePortion = usedToday - dailyPortion;
         if (dailyPortion > 0) {
@@ -19144,70 +19279,26 @@ if (memberHasActionToday(member)) {
         }
     }
 
-    // 6. Prepay future days (using internal prepaid mechanism – no UI display)
+    // 6. Any remaining deposit becomes prepaid
     if (remaining > 0) {
-        let currentDay = todayStart + 86400000;
-        const maxDays = 30;
-        let daysProcessed = 0;
-        let remainingPrepay = remaining;
-
-        while (remainingPrepay >= requiredToday && daysProcessed < maxDays) {
-            const dateStr = new Date(currentDay).toLocaleDateString();
-            writes.push({
-                memberPhone: member.phone,
-                memberName: member.name,
-                type: 'deposit',
-                amount: dailyAmount,
-                receiptNumber: generateReceiptNumber(),
-                isPrepaid: true,
-                description: `📆 Prepaid daily savings for ${dateStr}`,
-                date: currentDay + 1500
-            });
-            writes.push({
-                memberPhone: member.phone,
-                memberName: member.name,
-                type: 'welfare',
-                amount: welfareAmount,
-                isPrepaid: true,
-                receiptNumber: generateReceiptNumber(),
-                description: `🤝 Prepaid welfare for ${dateStr}`,
-                date: currentDay + 500,
-                autoDeduction: true
-            });
-            remainingPrepay -= requiredToday;
-            currentDay += 86400000;
-            daysProcessed++;
-        }
-
-        if (remainingPrepay > 0 && daysProcessed < maxDays) {
-            const dateStr = new Date(currentDay).toLocaleDateString();
-            const dailyPortionPartial = Math.min(remainingPrepay, dailyAmount);
-            const welfarePortionPartial = remainingPrepay - dailyPortionPartial;
-            if (dailyPortionPartial > 0) {
-                writes.push({
-                    memberPhone: member.phone,
-                    memberName: member.name,
-                    type: 'deposit',
-                    amount: dailyPortionPartial,
-                    isPrepaid: true,
-                    receiptNumber: generateReceiptNumber(),
-                    description: `📆 Prepaid daily savings for ${dateStr} (partial)`,
-                    date: currentDay + 1500
-                });
-            }
-            if (welfarePortionPartial > 0) {
-                writes.push({
-                    memberPhone: member.phone,
-                    memberName: member.name,
-                    type: 'welfare',
-                    amount: welfarePortionPartial,
-                    isPrepaid: true,
-                    receiptNumber: generateReceiptNumber(),
-                    description: `🤝 Prepaid welfare for ${dateStr} (partial)`,
-                    date: currentDay + 500,
-                    autoDeduction: true
-                });
-            }
+        prepaidBalance += remaining;
+        await db.ref('members/' + member.id + '/prepaid').set(prepaidBalance);
+        writes.push({
+            memberPhone: member.phone,
+            memberName: member.name,
+            type: 'prepaid_balance',
+            amount: remaining,
+            receiptNumber: generateReceiptNumber(),
+            description: `💠 Prepaid balance (UGX ${remaining.toLocaleString()}) added for future days`,
+            date: now + 1000
+        });
+        // Update local state
+        memberPrepaid[member.phone] = prepaidBalance;
+    } else {
+        // Update prepaid balance in local state if it changed
+        if (memberPrepaid[member.phone] !== prepaidBalance) {
+            memberPrepaid[member.phone] = prepaidBalance;
+            await db.ref('members/' + member.id + '/prepaid').set(prepaidBalance);
         }
     }
 
