@@ -5571,61 +5571,86 @@ const debouncedUpdateHomeRecent = updateHomeRecent;
 // COMPUTE POTS - WITH PREPAID BALANCE
 // ==========================================
 function computePots() {
-  let cash = 0, profit = 0;
+    let cash = 0, profit = 0;
 
-  memberBalances = {};
-  memberLoans = {};
-  memberApplicationLoans = {};
-  memberAssignedLoans = {};
-  memberDebts = {};
+    // Reset all balances
+    memberBalances = {};
+    memberLoans = {};
+    memberApplicationLoans = {};
+    memberAssignedLoans = {};
+    memberPrepaid = {};
+    memberActiveLoanIds = {};
+    memberDebts = {};
 
-  transactions.forEach(tx => {
-    const a = +(tx.amount) || 0;
-    const phone = tx.memberPhone;
+    transactions.forEach(tx => {
+        const a = +(tx.amount) || 0;
+        const phone = tx.memberPhone;
 
-    if (tx.type === 'deposit') {
-      memberBalances[phone] = (memberBalances[phone] || 0) + a;
-      cash += a;
-    } else if (tx.type === 'welfare') {
-      profit += a;
-    } else if (tx.type === 'fine') {
-      profit += a;
-    } else if (tx.type === 'debt') {
-      memberDebts[phone] = (memberDebts[phone] || 0) + a;
-    } else if (tx.type === 'debt_cleared') {
-      memberDebts[phone] = Math.max(0, (memberDebts[phone] || 0) - a);
-    } else if (tx.type === 'expense') {
-      profit -= a;
-    } else if (tx.type === 'payout') {
-      cash -= a;
-    } else if (tx.type === 'profit_dist') {
-      profit -= a;
-      memberBalances[phone] = (memberBalances[phone] || 0) + a;
-      cash += a;
-    } else if (tx.type === 'loan_disbursement') {
-      cash -= a;
-      memberLoans[phone] = (memberLoans[phone] || 0) + a;
-      profit -= a;
-      // also assign to specific loan types later
-    } else if (tx.type === 'loan_adjustment') {
-      memberLoans[phone] = (memberLoans[phone] || 0) + a;
-    } else if (tx.type === 'loan_repayment') {
-      cash += a;
-      const remaining = Math.max(0, (memberLoans[phone] || 0) - a);
-      memberLoans[phone] = remaining;
-      profit += a;
-    } else if (tx.type === 'loan_interest') {
-      profit += a;
-      memberLoans[phone] = (memberLoans[phone] || 0) + a;
-    }
-    // No prepaid_used or prepaid_balance anymore
-  });
+        if (tx.type === 'deposit') {
+            memberBalances[phone] = (memberBalances[phone] || 0) + a;
+            if (tx.isPrepaid) {
+                // Prepaid deposit: goes to prepaid balance
+                memberPrepaid[phone] = (memberPrepaid[phone] || 0) + a;
+                cash += a;
+            } else if (tx.isDailySavings) {
+                // Daily savings: goes to cash
+                cash += a;
+            } else if (tx.dailyPortion !== undefined) {
+                cash += tx.dailyPortion || 0;
+                profit += tx.welfarePortion || 0;
+            } else {
+                // Regular deposit: goes to cash
+                cash += a;
+            }
+        } else if (tx.type === 'welfare') {
+            profit += a;
+        } else if (tx.type === 'fine') {
+            profit += a;
+        } else if (tx.type === 'debt') {
+            memberDebts[phone] = (memberDebts[phone] || 0) + a;
+        } else if (tx.type === 'debt_cleared') {
+            memberDebts[phone] = Math.max(0, (memberDebts[phone] || 0) - a);
+        } else if (tx.type === 'expense') {
+            profit -= a;
+        } else if (tx.type === 'payout') {
+            cash -= a;
+        } else if (tx.type === 'profit_dist') {
+            profit -= a;
+            memberBalances[phone] = (memberBalances[phone] || 0) + a;
+            cash += a;
+        } else if (tx.type === 'loan_disbursement') {
+            cash -= a;
+            memberLoans[phone] = (memberLoans[phone] || 0) + a;
+            profit -= a;
+            if (tx.loanId) {
+                if (!memberActiveLoanIds[phone]) memberActiveLoanIds[phone] = [];
+                memberActiveLoanIds[phone].push(tx.loanId);
+            }
+        } else if (tx.type === 'loan_adjustment') {
+            memberLoans[phone] = (memberLoans[phone] || 0) + a;
+        } else if (tx.type === 'loan_repayment') {
+            cash += a;
+            const remaining = Math.max(0, (memberLoans[phone] || 0) - a);
+            memberLoans[phone] = remaining;
+            profit += a;
+        } else if (tx.type === 'loan_interest') {
+            profit += a;
+            memberLoans[phone] = (memberLoans[phone] || 0) + a;
+        } else if (tx.type === 'prepaid_used') {
+            memberPrepaid[phone] = Math.max(0, (memberPrepaid[phone] || 0) - a);
+        } else if (tx.type === 'prepaid_balance') {
+            memberPrepaid[phone] = (memberPrepaid[phone] || 0) + a;
+        }
+    });
 
-  cashFromDeposits = cash;
-  groupProfit = profit;
+    cashFromDeposits = cash;
+    groupProfit = profit;
 
-  // Recalculate loan balances from loans array
-  recalculateLoanBalances();
+    // Recalculate loan splits
+    recalculateLoanBalances();
+
+    // Update local arrays
+    // (loans and members are already up-to-date via listeners)
 }
 function computeProjectedLoanAfterDeposit(member, depositAmount) {
     if (!member) return 0;
@@ -5746,69 +5771,113 @@ function computeProjectedLoanAfterDeposit(member, depositAmount) {
 function computeDepositAllocation(member, depositAmount) {
     const dailyAmount = settings.dailyAmount || 2000;
     const welfareAmount = settings.welfareAmount || 500;
-    const requiredToday = dailyAmount + welfareAmount;
+    const requiredPerDay = dailyAmount + welfareAmount;
     const todayStart = new Date().setHours(0, 0, 0, 0);
 
+    // Today's paid amounts
     let paidDailyToday = 0, welfarePaidToday = false;
     transactions.forEach(tx => {
-        if (tx.memberPhone === member.phone && tx.date >= todayStart && tx.date < todayStart + 86400000) {
+        if (tx.memberPhone === member?.phone && tx.date >= todayStart && tx.date < todayStart + 86400000) {
             if (tx.type === 'deposit') paidDailyToday += tx.amount;
             if (tx.type === 'welfare') welfarePaidToday = true;
         }
     });
-    const neededDaily = Math.max(0, dailyAmount - paidDailyToday);
-    const neededWelfare = welfarePaidToday ? 0 : welfareAmount;
-    const deficitToday = neededDaily + neededWelfare;
 
-    const prepaidBalance = memberPrepaid[member.phone] || 0;
+    // Today's deficit
+    let deficitToday = 0;
+    if (memberHasActionToday(member)) {
+        deficitToday = 0;
+    } else {
+        const neededDaily = Math.max(0, dailyAmount - paidDailyToday);
+        const neededWelfare = welfarePaidToday ? 0 : welfareAmount;
+        deficitToday = neededDaily + neededWelfare;
+    }
+
+    // Existing prepaid
     let remaining = depositAmount;
-    let usedToday = 0, usedPrepaid = 0;
+    const existingPrepaid = memberPrepaid[member?.phone] || 0;
+    let usedPrepaidToday = 0;
 
-    if (deficitToday > 0) {
-        if (prepaidBalance > 0) {
-            usedPrepaid = Math.min(prepaidBalance, deficitToday);
-            remaining -= usedPrepaid;
+    if (deficitToday > 0 && existingPrepaid > 0) {
+        usedPrepaidToday = Math.min(existingPrepaid, deficitToday);
+        remaining -= usedPrepaidToday;
+        deficitToday -= usedPrepaidToday;
+    }
+
+    // Use deposit for today
+    if (deficitToday > 0 && remaining > 0) {
+        const usedToday = Math.min(remaining, deficitToday);
+        remaining -= usedToday;
+    }
+
+    // Loan repayments
+    let totalLoanRepaid = 0;
+    const loanBefore = memberLoans[member?.phone] || 0;
+
+    // Application loans
+    const appLoans = loans.filter(l =>
+        l.memberPhone === member?.phone &&
+        l.status === 'approved' && !l.repaid &&
+        l.loanQuestions && l.loanQuestions.length > 0
+    ).sort((a, b) => a.approvedAt - b.approvedAt);
+
+    for (let loan of appLoans) {
+        if (remaining <= 0) break;
+        const balance = loan.totalRepay - (loan.repaidAmount || 0);
+        if (balance <= 0) continue;
+        const repay = Math.min(remaining, balance);
+        remaining -= repay;
+        totalLoanRepaid += repay;
+    }
+
+    // Assigned loans
+    const assignedLoans = loans.filter(l =>
+        l.memberPhone === member?.phone &&
+        l.status === 'approved' && !l.repaid &&
+        (!l.loanQuestions || l.loanQuestions.length === 0)
+    ).sort((a, b) => a.approvedAt - b.approvedAt);
+
+    for (let loan of assignedLoans) {
+        if (remaining <= 0) break;
+        const balance = loan.totalRepay - (loan.repaidAmount || 0);
+        if (balance <= 0) continue;
+        const repay = Math.min(remaining, balance);
+        remaining -= repay;
+        totalLoanRepaid += repay;
+    }
+
+    // Clear debts
+    const debtBalance = memberDebts[member?.phone] || 0;
+    if (debtBalance > 0 && remaining > 0) {
+        const usedForDebt = Math.min(remaining, debtBalance);
+        remaining -= usedForDebt;
+    }
+
+    // Extra loan repayment
+    if (remaining > 0 && loanBefore > 0) {
+        const extra = Math.min(remaining, loanBefore - totalLoanRepaid);
+        totalLoanRepaid += extra;
+        remaining -= extra;
+    }
+
+    const remainingLoan = Math.max(0, loanBefore - totalLoanRepaid);
+    const loanReduction = totalLoanRepaid;
+
+    // Prepaid: full days and leftover
+    let prepaidDaysCovered = 0;
+    let prepaidBalance = 0;
+    if (remaining > 0) {
+        while (remaining >= requiredPerDay && prepaidDaysCovered < 30) {
+            remaining -= requiredPerDay;
+            prepaidDaysCovered++;
         }
-        if (remaining > 0) {
-            usedToday = Math.min(remaining, deficitToday - usedPrepaid);
-            remaining -= usedToday;
-        }
+        prepaidBalance = remaining;
     }
 
-    const appBalance = memberApplicationLoans[member.phone] || 0;
-    const assignedBalance = memberAssignedLoans[member.phone] || 0;
-    const totalLoanBalance = memberLoans[member.phone] || 0;
-    const debtBalance = memberDebts[member.phone] || 0;
-
-    let usedApp = 0, usedAssigned = 0, usedDebt = 0, extraLoanRepay = 0;
-
-    if (remaining > 0 && appBalance > 0) {
-        usedApp = Math.min(remaining, appBalance);
-        remaining -= usedApp;
-    }
-    if (remaining > 0 && assignedBalance > 0) {
-        usedAssigned = Math.min(remaining, assignedBalance);
-        remaining -= usedAssigned;
-    }
-    if (remaining > 0 && debtBalance > 0) {
-        usedDebt = Math.min(remaining, debtBalance);
-        remaining -= usedDebt;
-    }
-    if (remaining > 0 && totalLoanBalance > 0) {
-        extraLoanRepay = Math.min(remaining, totalLoanBalance - usedApp - usedAssigned);
-        remaining -= extraLoanRepay;
-    }
-
-    return {
-        usedToday,
-        usedPrepaid,
-        usedApp,
-        usedAssigned,
-        usedDebt,
-        extraLoanRepay,
-        remainingPrepay: remaining // this is the amount that goes to future days
-    };
+    return { remainingLoan, loanReduction, prepaidBalance, prepaidDaysCovered };
 }
+
+
 // ==========================================
 // RECALCULATE LOAN BALANCES
 // ==========================================
@@ -7382,13 +7451,25 @@ function renderReceiptFallbackCanvas(cfg) {
 /**
  * Builds HTML for a deposit receipt (Version A)
  */
-function buildDepositReceiptHTML(member, amount, description, receiptNumber, remainingLoan, loanReduction) {
+function buildDepositReceiptHTML(member, amount, description, receiptNumber, remainingLoan, loanReduction, prepaidBalance, prepaidDaysCovered) {
     const date = new Date();
     const dateLabel = date.toLocaleDateString('en-UG', { year: 'numeric', month: 'short', day: '2-digit' });
     const timeLabel = date.toLocaleTimeString('en-UG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const amountStr = 'UGX ' + Number(amount).toLocaleString();
     const remainingStr = 'UGX ' + Number(remainingLoan).toLocaleString();
     const reductionStr = loanReduction > 0 ? `UGX ${loanReduction.toLocaleString()}` : 'UGX 0';
+    const prepaidStr = prepaidBalance > 0 ? `UGX ${Number(prepaidBalance).toLocaleString()}` : 'UGX 0';
+
+    let coverageStr = '';
+    if (prepaidDaysCovered > 0) {
+        const coverageDate = new Date(date);
+        coverageDate.setDate(date.getDate() + prepaidDaysCovered);
+        coverageStr = `
+        <div class="row" style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;font-size:0.8rem;border-bottom:1px solid #f9fafb;">
+            <span class="row-label" style="color:#6b7280;">Prepaid covers until</span>
+            <span class="row-val blue" style="font-weight:600;color:#0e7490;text-align:right;">${coverageDate.toLocaleDateString('en-UG', { year:'numeric', month:'short', day:'numeric' })}</span>
+        </div>`;
+    }
 
     const quote = getReceiptQuote(member, remainingLoan);
 
@@ -7417,6 +7498,12 @@ function buildDepositReceiptHTML(member, amount, description, receiptNumber, rem
             <span class="row-label" style="color:#6b7280;">This deposit reduced loan by</span>
             <span class="row-val green" style="font-weight:600;color:#16a34a;">${reductionStr}</span>
         </div>` : ''}
+        ${prepaidBalance > 0 ? `
+        <div class="row" style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;font-size:0.8rem;border-bottom:1px solid #f9fafb;">
+            <span class="row-label" style="color:#6b7280;">💠 Prepaid Balance</span>
+            <span class="row-val blue" style="font-weight:600;color:#0e7490;text-align:right;">${prepaidStr}</span>
+        </div>` : ''}
+        ${coverageStr}
         <div class="quote-box" style="margin-top:14px;padding:10px 12px;background:#f9fafb;border-radius:10px;font-size:0.72rem;color:#4b5563;font-style:italic;text-align:left;border-left:3px solid #f59e0b;">${escapeHtml(quote)}</div>
         <div class="footer" style="margin-top:16px;padding-top:12px;border-top:1px solid #f3f4f6;">
             <div class="receipt-no" style="font-size:0.78rem;font-weight:700;color:#1f2937;font-family:'SFMono-Regular',Consolas,monospace;letter-spacing:0.4px;">Receipt #: ${receiptNumber}</div>
@@ -15045,8 +15132,7 @@ window.addTransactionWithPreview = async function() {
         return;
     }
 
-    // ─── REGULAR TRANSACTION ──────────────────────────────────
-    // Now we validate amount and type (only for non-cover transactions)
+     // ─── REGULAR TRANSACTION ──────────────────────────────────
     const type = document.getElementById('tx-type')?.value;
     const amount = parseFloat(document.getElementById('tx-amount')?.value);
     if (!type || !amount || amount <= 0) {
@@ -15058,11 +15144,12 @@ window.addTransactionWithPreview = async function() {
     if (type === 'deposit') {
         computePots();
 
-        // ─── SINGLE MEMBER ──────────────────────────────────
         if (selectedMembers.length === 1) {
             const member = selectedMembers[0];
-            const projectedRemaining = computeProjectedLoanAfterDeposit(member, amount);
+            // ─── Compute allocation once for the preview ───
+            const allocation = computeDepositAllocation(member, amount);
 
+            // ─── Save function ────────────────────────────────
             const onSave = async () => {
                 const depositTxs = await processDepositWithFutureDays(member, amount, Date.now(), desc || 'Manual deposit');
                 const writes = depositTxs.map(tx => db.ref('transactions').push(tx));
@@ -15072,6 +15159,7 @@ window.addTransactionWithPreview = async function() {
                 return true;
             };
 
+            // ─── Show receipt with the allocation object ────
             showTransactionReceiptModal(
                 member,
                 type,
@@ -15079,7 +15167,7 @@ window.addTransactionWithPreview = async function() {
                 desc,
                 null, null, null, null,
                 true,
-                projectedRemaining,
+                allocation,  // ← pass the whole allocation object
                 onSave
             );
             return;
@@ -15583,11 +15671,10 @@ async function executeDebtAssignment(member, principal, interestRate, interest, 
         });
     }
 }
-
 window.showTransactionReceiptModal = function(
     member, txType, amount, description,
     onConfirmSend, onConfirmNoSend, onCancel, onPrint,
-    isPreview = false, projectedRemainingLoan = null,
+    isPreview = false, allocation = null,
     onSave = null, prepaidAmount = 0
 ) {
     if (document.querySelector('.receipt-modal-active')) {
@@ -15598,27 +15685,23 @@ window.showTransactionReceiptModal = function(
     const safeAmount = Number(amount) || 0;
     const receiptNumber = generateReceiptNumber();
 
-    // Get the loan before save
-    const loanBeforeSave = memberLoans[member?.phone] || 0;
-    // Use the projected balance if provided, else fallback to current
-    let currentRemainingLoan = (projectedRemainingLoan !== null && projectedRemainingLoan !== undefined) 
-        ? projectedRemainingLoan 
-        : loanBeforeSave;
+    // ─── Store the allocation (use provided or compute) ───
+    const storedAllocation = allocation || computeDepositAllocation(member, safeAmount);
+    const { remainingLoan, loanReduction, prepaidBalance, prepaidDaysCovered } = storedAllocation;
 
-    // Calculate reduction for initial receipt
-    let loanReduction = Math.max(0, loanBeforeSave - currentRemainingLoan);
-
-    // Build initial receipt HTML
+    // Build initial receipt HTML with prepaid info
     let receiptHTML = buildDepositReceiptHTML(
         member,
         safeAmount,
         description || 'Deposit',
         receiptNumber,
-        currentRemainingLoan,
-        loanReduction
+        remainingLoan,
+        loanReduction,
+        prepaidBalance,
+        prepaidDaysCovered
     );
 
-    // Create modal
+    // ─── Create modal ──────────────────────────────────────
     const modal = document.createElement('div');
     modal.className = 'ov on receipt-modal-active';
     modal.style.zIndex = '20020';
@@ -15640,49 +15723,82 @@ window.showTransactionReceiptModal = function(
     const container = modal.querySelector('#receipt-container');
     let receiptElement = container.querySelector('#receipt-content');
 
-    // Refresh receipt with latest data after save
+    // ─── Helper: refresh receipt using the stored allocation ───
     function refreshReceiptHTML() {
-        const updatedLoan = memberLoans[member?.phone] || 0;
-        const reduction = Math.max(0, loanBeforeSave - updatedLoan);
+        // Use the stored allocation (from preview) – DO NOT recompute
+        const { remainingLoan, loanReduction, prepaidBalance, prepaidDaysCovered } = storedAllocation;
         const newHTML = buildDepositReceiptHTML(
             member,
             safeAmount,
             description || 'Deposit',
             receiptNumber,
-            updatedLoan,
-            reduction
+            remainingLoan,
+            loanReduction,
+            prepaidBalance,
+            prepaidDaysCovered
         );
         container.innerHTML = newHTML;
         receiptElement = container.querySelector('#receipt-content');
     }
 
-    // Generate image (saves first if needed)
+    // ─── Helper: get current receipt element ───────────────
+    function getReceiptElement() {
+        const el = container.querySelector('#receipt-content');
+        if (!el) {
+            // If element missing, recreate using stored allocation
+            const { remainingLoan, loanReduction, prepaidBalance, prepaidDaysCovered } = storedAllocation;
+            container.innerHTML = buildDepositReceiptHTML(
+                member,
+                safeAmount,
+                description || 'Deposit',
+                receiptNumber,
+                remainingLoan,
+                loanReduction,
+                prepaidBalance,
+                prepaidDaysCovered
+            );
+            return container.querySelector('#receipt-content');
+        }
+        return el;
+    }
+
+    // ─── Generate receipt image ─────────────────────────────
     async function generateReceiptImage() {
-        // 1. Save if needed
+        // 1. If there's an onSave function, call it (this saves the transaction)
         if (typeof onSave === 'function') {
             const success = await onSave();
             if (!success) {
                 toast('Failed to save transaction', '#ef4444');
                 return null;
             }
-            // 2. Recompute all financial data
+            // 2. Recompute all financial data (so the system knows about the new transactions)
             computePots();
-            // 3. Refresh the receipt HTML with the new data
+            // 3. Refresh the receipt HTML – but using the stored allocation, not recomputed
             refreshReceiptHTML();
             // 4. Allow DOM to update
             await new Promise(r => setTimeout(r, 100));
         }
 
-        // 5. Render the receipt to canvas
-        const clone = receiptElement.cloneNode(true);
+        // 5. Get the latest receipt element
+        const element = getReceiptElement();
+        if (!element) {
+            console.error('Receipt element not found');
+            return null;
+        }
+
+        // 6. Clone and render
+        const clone = element.cloneNode(true);
         clone.style.position = 'absolute';
         clone.style.top = '-9999px';
         clone.style.left = '-9999px';
         clone.style.boxShadow = 'none';
         clone.style.transform = 'none';
         clone.style.width = '360px';
+        clone.style.background = '#ffffff';
+        clone.style.borderRadius = '24px';
+        clone.style.padding = '24px 20px 20px';
         document.body.appendChild(clone);
-        await new Promise(r => setTimeout(r, 150));
+        await new Promise(r => setTimeout(r, 200));
 
         try {
             const canvas = await html2canvas(clone, {
@@ -15690,7 +15806,9 @@ window.showTransactionReceiptModal = function(
                 backgroundColor: '#ffffff',
                 logging: false,
                 useCORS: true,
-                allowTaint: true
+                allowTaint: true,
+                width: 360,
+                height: clone.scrollHeight || 560
             });
             document.body.removeChild(clone);
             return canvas.toDataURL('image/png');
@@ -15706,21 +15824,18 @@ window.showTransactionReceiptModal = function(
         setTimeout(() => { modal.remove(); if (callback) callback(); }, 300);
     }
 
-    // ─── WhatsApp ──────────────────────────────────────────
+    // ─── Button handlers ──────────────────────────────────
     document.getElementById('tx-whatsapp').addEventListener('click', async function() {
         if (this.disabled) return;
         this.disabled = true;
         this.style.opacity = '0.6';
-
         try {
             const dataUrl = await generateReceiptImage();
             if (!dataUrl) { toast('Failed to generate image', '#ef4444'); this.disabled = false; this.style.opacity = '1'; return; }
-
             let phone = member?.phone || '';
             let formattedPhone = phone.replace(/\D/g, '');
             if (formattedPhone.startsWith('0')) formattedPhone = '256' + formattedPhone.slice(1);
             if (!formattedPhone.startsWith('256')) formattedPhone = '256' + formattedPhone;
-
             if (navigator.share) {
                 const blob = await (await fetch(dataUrl)).blob();
                 const file = new File([blob], `receipt_${receiptNumber}.png`, { type: 'image/png' });
@@ -15729,7 +15844,6 @@ window.showTransactionReceiptModal = function(
                 closeModal(() => { if (onConfirmSend) onConfirmSend(); });
                 return;
             }
-
             const message = `🌾 *Harvest Trust Finance* 🌾\n\n📄 *Receipt*\nMember: ${member?.name}\nAmount: UGX ${safeAmount.toLocaleString()}\nReceipt #: ${receiptNumber}`;
             window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}`, '_blank');
             const a = document.createElement('a');
@@ -15747,16 +15861,13 @@ window.showTransactionReceiptModal = function(
         }
     });
 
-    // ─── Copy Image (PC) ──────────────────────────────────
     document.getElementById('tx-copy-pc').addEventListener('click', async function() {
         if (this.disabled) return;
         this.disabled = true;
         this.style.opacity = '0.6';
-
         try {
             const dataUrl = await generateReceiptImage();
             if (!dataUrl) { toast('Failed to generate image', '#ef4444'); this.disabled = false; this.style.opacity = '1'; return; }
-
             const blob = await (await fetch(dataUrl)).blob();
             try {
                 await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
@@ -15779,12 +15890,10 @@ window.showTransactionReceiptModal = function(
         }
     });
 
-    // ─── Save Without Sharing ──────────────────────────────
     document.getElementById('tx-save-only').addEventListener('click', async function() {
         if (this.disabled) return;
         this.disabled = true;
         this.style.opacity = '0.6';
-
         try {
             const dataUrl = await generateReceiptImage();
             if (dataUrl) {
@@ -15806,7 +15915,6 @@ window.showTransactionReceiptModal = function(
         }
     });
 
-    // ─── Cancel ────────────────────────────────────────────
     document.getElementById('tx-cancel').addEventListener('click', function() {
         if (this.disabled) return;
         closeModal(() => {
@@ -16067,62 +16175,36 @@ async function generateDepositReceiptImage(member, amount, description, receiptN
     try {
         computePots();
 
-        // Calculate remaining loan and reduction
-        const loanBefore = memberLoans[member?.phone] || 0;
-        // Simulate loan reduction for this deposit (simplified)
-        let remaining = amount;
-        const dailyAmount = settings.dailyAmount || 2000;
-        const welfareAmount = settings.welfareAmount || 500;
-        const requiredToday = dailyAmount + welfareAmount;
-        const todayStart = new Date().setHours(0, 0, 0, 0);
-        let paidDailyToday = 0;
-        transactions.forEach(tx => {
-            if (tx.memberPhone === member?.phone && tx.type === 'deposit' && tx.date >= todayStart && tx.date < todayStart + 86400000) {
-                paidDailyToday += tx.amount;
-            }
-        });
+        // Use the same allocation helper
+        const allocation = computeDepositAllocation(member, amount);
+        const { remainingLoan, loanReduction, prepaidBalance, prepaidDaysCovered } = allocation;
 
-        let deficitToday = 0;
-        if (memberHasActionToday(member)) {
-            deficitToday = 0;
-        } else {
-            deficitToday = Math.max(0, requiredToday - paidDailyToday);
-        }
-        let usedToday = Math.min(remaining, deficitToday);
-        remaining -= usedToday;
+        const finalReceiptNumber = receiptNumber || generateReceiptNumber();
 
-        // Apply to loans
-        const loanBalance = memberLoans[member?.phone] || 0;
-        let usedForLoan = Math.min(remaining, loanBalance);
-        remaining -= usedForLoan;
-        const projectedRemainingLoan = Math.max(0, loanBalance - usedForLoan);
-        const loanReduction = usedForLoan;
-
-        // Use the new receipt builder
         const receiptHTML = buildDepositReceiptHTML(
             member,
             amount,
             description || 'Deposit',
-            receiptNumber || generateReceiptNumber(),
-            projectedRemainingLoan,
-            loanReduction
+            finalReceiptNumber,
+            remainingLoan,
+            loanReduction,
+            prepaidBalance,
+            prepaidDaysCovered
         );
 
-        // Render image
         const imageData = await renderReceiptImage(receiptHTML);
         if (imageData) {
             return imageData;
         }
 
-        // Fallback: use canvas if html2canvas fails
-        return generateDepositFallbackCanvas(member, amount, description, receiptNumber, projectedRemainingLoan, loanReduction);
+        return generateDepositFallbackCanvas(member, amount, description, finalReceiptNumber, remainingLoan, loanReduction, prepaidBalance, prepaidDaysCovered);
 
     } catch (err) {
         console.error('generateDepositReceiptImage error:', err);
-        // Ultimate fallback
-        return generateDepositFallbackCanvas(member, amount, description, receiptNumber, 0, 0);
+        return null;
     }
 }
+
 function generateDepositFallbackCanvas(member, amount, description, receiptNumber, remainingLoan, loanReduction) {
     try {
         const canvas = document.createElement('canvas');
@@ -19099,7 +19181,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
     const requiredPerDay = dailyAmount + welfareAmount;
     const todayStr = new Date(todayStart).toLocaleDateString();
 
-    // 1. Check today's status
+    // ─── 1. Check today's status ──────────────────────────────────
     let paidDailyToday = 0, welfarePaidToday = false;
     transactions.forEach(tx => {
         if (tx.memberPhone === member.phone && tx.date >= todayStart && tx.date < todayStart + 86400000) {
@@ -19108,7 +19190,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
         }
     });
 
-    // 2. Determine if member already has an action today
+    // ─── 2. Determine today's deficit ────────────────────────────
     let deficitToday = 0;
     if (memberHasActionToday(member)) {
         deficitToday = 0;
@@ -19118,7 +19200,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
         deficitToday = neededDaily + neededWelfare;
     }
 
-    // 3. Use prepaid balance first (if available)
+    // ─── 3. Use existing prepaid balance first ───────────────────
     let prepaidBalance = memberPrepaid[member.phone] || 0;
     let usedPrepaidToday = 0;
 
@@ -19140,13 +19222,14 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
         }
     }
 
-    // 4. If there's still a deficit today, use the new deposit
+    // ─── 4. Use new deposit for remaining today's deficit ─────────
     let usedToday = 0, dailyPortion = 0, welfarePortion = 0;
     if (deficitToday > 0 && remaining > 0) {
         usedToday = Math.min(remaining, deficitToday);
         remaining -= usedToday;
+        // Split into daily and welfare
         const dailyDeficit = Math.max(0, dailyAmount - paidDailyToday - Math.min(usedPrepaidToday, dailyAmount));
-        const welfareDeficit = welfarePaidToday ? 0 : welfareAmount - Math.min(usedPrepaidToday, welfareAmount);
+        const welfareDeficit = welfarePaidToday ? 0 : Math.max(0, welfareAmount - Math.max(0, usedPrepaidToday - dailyAmount));
         dailyPortion = Math.min(usedToday, dailyDeficit);
         welfarePortion = usedToday - dailyPortion;
         if (dailyPortion > 0) {
@@ -19175,7 +19258,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
         }
     }
 
-    // 2. Repay application loans
+    // ─── 5. Repay application loans ──────────────────────────────
     const appLoans = loans.filter(l =>
         l.memberPhone === member.phone &&
         l.status === 'approved' && !l.repaid &&
@@ -19184,25 +19267,26 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
 
     for (let loan of appLoans) {
         if (remaining <= 0) break;
-        const loanBalance = loan.totalRepay - (loan.repaidAmount || 0);
-        if (loanBalance <= 0) continue;
-        const repaymentAmount = Math.min(remaining, loanBalance);
-        remaining -= repaymentAmount;
-        if (repaymentAmount > 0) {
-            const newRepaidAmount = (loan.repaidAmount || 0) + repaymentAmount;
+        const balance = loan.totalRepay - (loan.repaidAmount || 0);
+        if (balance <= 0) continue;
+        const repayAmount = Math.min(remaining, balance);
+        remaining -= repayAmount;
+        if (repayAmount > 0) {
+            const newRepaidAmount = (loan.repaidAmount || 0) + repayAmount;
             writes.push({
                 memberPhone: member.phone,
                 memberName: member.name,
                 type: 'loan_repayment',
-                amount: repaymentAmount,
+                amount: repayAmount,
                 receiptNumber: generateReceiptNumber(),
-                description: `⭐ Loan repayment (application) – ${money(repaymentAmount)}`,
+                description: `⭐ Loan repayment (application) – ${money(repayAmount)}`,
                 date: now + 2,
                 loanId: loan.id
             });
             await db.ref('loans/' + loan.id).update({ repaidAmount: newRepaidAmount });
             if (newRepaidAmount >= loan.totalRepay) {
                 await db.ref('loans/' + loan.id).update({ repaid: true, repaidAt: Date.now() });
+                // Advance loan rotation if applicable
                 if (loanRotationOrder.length > 0) {
                     loanReceiverIndex = (loanReceiverIndex + 1) % loanRotationOrder.length;
                     await db.ref('settings/loanReceiverIndex').set(loanReceiverIndex);
@@ -19211,7 +19295,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
         }
     }
 
-    // 3. Repay assigned loans
+    // ─── 6. Repay assigned loans ──────────────────────────────────
     const assignedLoans = loans.filter(l =>
         l.memberPhone === member.phone &&
         l.status === 'approved' && !l.repaid &&
@@ -19220,19 +19304,19 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
 
     for (let loan of assignedLoans) {
         if (remaining <= 0) break;
-        const loanBalance = loan.totalRepay - (loan.repaidAmount || 0);
-        if (loanBalance <= 0) continue;
-        const repaymentAmount = Math.min(remaining, loanBalance);
-        remaining -= repaymentAmount;
-        if (repaymentAmount > 0) {
-            const newRepaidAmount = (loan.repaidAmount || 0) + repaymentAmount;
+        const balance = loan.totalRepay - (loan.repaidAmount || 0);
+        if (balance <= 0) continue;
+        const repayAmount = Math.min(remaining, balance);
+        remaining -= repayAmount;
+        if (repayAmount > 0) {
+            const newRepaidAmount = (loan.repaidAmount || 0) + repayAmount;
             writes.push({
                 memberPhone: member.phone,
                 memberName: member.name,
                 type: 'loan_repayment',
-                amount: repaymentAmount,
+                amount: repayAmount,
                 receiptNumber: generateReceiptNumber(),
-                description: `📋 Loan repayment (assigned) – ${money(repaymentAmount)}`,
+                description: `📋 Loan repayment (assigned) – ${money(repayAmount)}`,
                 date: now + 3,
                 loanId: loan.id
             });
@@ -19243,7 +19327,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
         }
     }
 
-    // 4. Clear debts
+    // ─── 7. Clear debts ──────────────────────────────────────────
     let debtOwed = memberDebts[member.phone] || 0;
     if (debtOwed > 0 && remaining > 0) {
         const usedForDebt = Math.min(remaining, debtOwed);
@@ -19261,7 +19345,7 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
         }
     }
 
-    // 5. Extra loan repayment
+    // ─── 8. Extra loan repayment (if remaining) ──────────────────
     const totalLoanBalance = memberLoans[member.phone] || 0;
     if (remaining > 0 && totalLoanBalance > 0) {
         const extraRepay = Math.min(remaining, totalLoanBalance);
@@ -19279,7 +19363,40 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
         }
     }
 
-    // 6. Any remaining deposit becomes prepaid
+    // ─── 9. Prepay future days (break into individual day txs) ──
+    let daysCovered = 0;
+    let currentDay = todayStart + 86400000; // tomorrow
+    while (remaining >= requiredPerDay && daysCovered < 30) {
+        const dateStr = new Date(currentDay).toLocaleDateString();
+        // Daily savings
+        writes.push({
+            memberPhone: member.phone,
+            memberName: member.name,
+            type: 'deposit',
+            amount: dailyAmount,
+            receiptNumber: generateReceiptNumber(),
+            isPrepaid: true,
+            description: `📆 Prepaid daily savings for ${dateStr}`,
+            date: currentDay + 1500
+        });
+        // Welfare
+        writes.push({
+            memberPhone: member.phone,
+            memberName: member.name,
+            type: 'welfare',
+            amount: welfareAmount,
+            receiptNumber: generateReceiptNumber(),
+            isPrepaid: true,
+            description: `🤝 Prepaid welfare for ${dateStr}`,
+            date: currentDay + 500,
+            autoDeduction: true
+        });
+        remaining -= requiredPerDay;
+        currentDay += 86400000;
+        daysCovered++;
+    }
+
+    // ─── 10. Remaining becomes prepaid balance ──────────────────
     if (remaining > 0) {
         prepaidBalance += remaining;
         await db.ref('members/' + member.id + '/prepaid').set(prepaidBalance);
@@ -19289,13 +19406,13 @@ async function processDepositWithFutureDays(member, depositAmount, depositTimest
             type: 'prepaid_balance',
             amount: remaining,
             receiptNumber: generateReceiptNumber(),
-            description: `💠 Prepaid balance (UGX ${remaining.toLocaleString()}) added for future days`,
+            description: `💠 Prepaid balance (UGX ${remaining.toLocaleString()}) for future days`,
             date: now + 1000
         });
         // Update local state
         memberPrepaid[member.phone] = prepaidBalance;
     } else {
-        // Update prepaid balance in local state if it changed
+        // Update local prepaid state if changed
         if (memberPrepaid[member.phone] !== prepaidBalance) {
             memberPrepaid[member.phone] = prepaidBalance;
             await db.ref('members/' + member.id + '/prepaid').set(prepaidBalance);
