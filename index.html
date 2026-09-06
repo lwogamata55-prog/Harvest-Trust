@@ -10627,6 +10627,25 @@ window.submitFinalSignup = function() {
     });
   });
 };
+window.showMemberTransferOption = function(memberId) {
+    const member = members.find(m => m.id === memberId);
+    if (!member) {
+        toast('Member not found', '#ef4444');
+        return;
+    }
+
+    // Check if member has outstanding balance
+    const debt = (memberLoans[member.phone] || 0) + (memberDebts[member.phone] || 0);
+    if (debt === 0) {
+        if (confirm(`Delete ${member.name}? They have no outstanding balance.`)) {
+            deleteMember(memberId);
+        }
+        return;
+    }
+
+    // Show transfer option
+    showTransferMembershipModal(member, null);
+};
 // ==========================================
 // SHOW MEMBER LOAN DETAILS
 // ==========================================
@@ -11432,199 +11451,472 @@ window.submitSignupWithSecurity = function() {
   }).catch(err => console.error(err));
 };
 window.leaveGroup = function() {
-  if (!currentUser) {
-    toast('Please login first', '#ef4444');
-    return;
-  }
-  if (currentUser.isAdmin) {
-    toast('Admins cannot leave the group. Use the admin panel to manage members.', '#ef4444');
-    return;
-  }
-
-  const loanBalance = memberLoans[currentUser.phone] || 0;
-
-  if (loanBalance > 0) {
-    // Show leave request modal with warning
-    const content = document.getElementById('leave-request-content');
-    content.innerHTML = `
-      <div style="background: rgba(239,68,68,0.1); border: 2px solid var(--red); border-radius: 12px; padding: 16px; margin-bottom: 12px;">
-        <div style="font-size: 1.2rem; font-weight: 700; color: var(--red);">⚠️ Outstanding Loan Balance</div>
-        <div style="font-size: 0.9rem; color: var(--t2); margin-top: 6px;">
-          You have an outstanding loan balance of <strong>UGX ${loanBalance.toLocaleString()}</strong>.
-        </div>
-        <div style="font-size: 0.8rem; color: var(--t3); margin-top: 8px;">
-          You must clear this loan before leaving the group.
-          <br><br>
-          You can send a <strong>leave request</strong> to the admin. If approved, your account will be deactivated and you will be logged out.
-        </div>
-      </div>
-      <div class="micro muted" style="text-align: center;">
-        The admin will review your request and may contact you regarding the outstanding balance.
-      </div>
-    `;
-    openOv('ov-leave-request');
-    window._leaveLoanBalance = loanBalance;
-  } else {
-    // No loan – immediate leave with password confirmation
-    if (confirm('🚪 You have no outstanding loans. Are you sure you want to leave the group permanently? This action cannot be undone.')) {
-      requirePasswordConfirmation(async function() {
-        await executeLeaveGroup(currentUser);
-      }, 'Leave Group');
+    if (!currentUser) {
+        toast('Please login first', '#ef4444');
+        return;
     }
-  }
+    if (currentUser.isAdmin) {
+        toast('Admins cannot leave the group. Use the admin panel to manage members.', '#ef4444');
+        return;
+    }
+
+    const loanBalance = memberLoans[currentUser.phone] || 0;
+    const debtBalance = memberDebts[currentUser.phone] || 0;
+    const totalOwed = loanBalance + debtBalance;
+
+    if (totalOwed > 0) {
+        // Show leave request modal with warning and transfer option
+        const content = document.getElementById('leave-request-content');
+        content.innerHTML = `
+            <div style="background: rgba(239,68,68,0.1); border: 2px solid var(--red); border-radius: 12px; padding: 16px; margin-bottom: 12px;">
+                <div style="font-size: 1.2rem; font-weight: 700; color: var(--red);">⚠️ Outstanding Balance</div>
+                <div style="font-size: 0.9rem; color: var(--t2); margin-top: 6px;">
+                    You have an outstanding balance of <strong>UGX ${totalOwed.toLocaleString()}</strong>.
+                </div>
+                <div style="font-size: 0.8rem; color: var(--t3); margin-top: 8px;">
+                    Loans: UGX ${loanBalance.toLocaleString()} · Debts: UGX ${debtBalance.toLocaleString()}
+                </div>
+            </div>
+            <div style="background: rgba(6,182,212,0.06); border: 1px solid rgba(6,182,212,0.15); border-radius: 12px; padding: 12px; margin-bottom: 12px;">
+                <div style="font-weight: 700; color: var(--teal); font-size: 0.85rem;">🔄 Transfer Option</div>
+                <div style="font-size: 0.75rem; color: var(--t2); margin-top: 4px;">
+                    Instead of leaving, you can transfer your membership to another member.
+                    The new member will inherit your debts, active days, and rotation position.
+                </div>
+            </div>
+            <div class="micro muted" style="text-align: center;">
+                Admin will review your request and may contact you regarding the outstanding balance.
+            </div>
+        `;
+        openOv('ov-leave-request');
+        window._leaveLoanBalance = totalOwed;
+        window._leaveMember = currentUser;
+    } else {
+        // No loan – immediate leave with password confirmation
+        if (confirm('🚪 You have no outstanding balances. Are you sure you want to leave the group permanently? This action cannot be undone.')) {
+            requirePasswordConfirmation(async function() {
+                await executeLeaveGroup(currentUser);
+            }, 'Leave Group');
+        }
+    }
 };
 window.sendLeaveRequest = async function() {
-  const loanBalance = window._leaveLoanBalance || 0;
-  if (!currentUser) {
-    toast('Please login first', '#ef4444');
-    return;
-  }
+    const totalOwed = window._leaveLoanBalance || 0;
+    const member = window._leaveMember || currentUser;
+    if (!member) {
+        toast('Please login first', '#ef4444');
+        return;
+    }
 
-  if (!confirm(`📨 Send leave request to admin with outstanding loan of UGX ${loanBalance.toLocaleString()}?`)) {
-    return;
-  }
+    if (!confirm(`📨 Send leave request to admin with outstanding balance of UGX ${totalOwed.toLocaleString()}?`)) {
+        return;
+    }
 
-  try {
-    const leaveRef = db.ref('leaveRequests').push();
-    await leaveRef.set({
-      memberId: currentUser.id,
-      memberName: currentUser.name,
-      memberPhone: currentUser.phone,
-      loanBalance: loanBalance,
-      status: 'pending',
-      requestedAt: Date.now(),
-      note: 'Member requested to leave with outstanding loan.'
-    });
+    try {
+        const leaveRef = db.ref('leaveRequests').push();
+        await leaveRef.set({
+            memberId: member.id,
+            memberName: member.name,
+            memberPhone: member.phone,
+            loanBalance: memberLoans[member.phone] || 0,
+            debtBalance: memberDebts[member.phone] || 0,
+            totalBalance: totalOwed,
+            daysActive: getDaysActive(member),
+            joinDate: member.joinDate || '',
+            status: 'pending',
+            requestedAt: Date.now(),
+            note: 'Member requested to leave with outstanding balance.'
+        });
 
-    // Notify admin
-    await db.ref('notifications/admin').push({
-      id: Date.now(),
-      text: `🚪 ${currentUser.name} (${currentUser.phone}) has requested to leave the group with an outstanding loan of UGX ${loanBalance.toLocaleString()}. Please review the leave request.`,
-      date: Date.now(),
-      read: false,
-      type: 'leave_request'
-    });
+        // Notify admin
+        await db.ref('notifications/admin').push({
+            id: Date.now(),
+            text: `🚪 ${member.name} (${member.phone}) has requested to leave with an outstanding balance of UGX ${totalOwed.toLocaleString()}. Please review the leave request.`,
+            date: Date.now(),
+            read: false,
+            type: 'leave_request'
+        });
 
-    toast('📨 Leave request sent to admin. You will be notified when approved.', '#f59e0b');
-    closeOv('ov-leave-request');
-    updateNotificationBadge();
-  } catch (err) {
-    console.error(err);
-    toast('Failed to send request. Please contact admin directly.', '#ef4444');
-  }
+        toast('📨 Leave request sent to admin. You will be notified when approved.', '#f59e0b');
+        closeOv('ov-leave-request');
+        updateNotificationBadge();
+    } catch (err) {
+        console.error(err);
+        toast('Failed to send request. Please contact admin directly.', '#ef4444');
+    }
 };
 async function executeLeaveGroup(user) {
-  if (!user) user = currentUser;
-  if (!user) {
-    toast('No user to remove', '#ef4444');
-    return;
-  }
-
-  try {
-    // 1. Set member approved to false
-    await db.ref('members/' + user.id).update({
-      approved: false,
-      leftAt: Date.now(),
-      leftReason: 'Member voluntarily left',
-      leftBalance: memberLoans[user.phone] || 0
-    });
-
-    // 2. Remove from payout rotation
-    const rotationOrder = rotation.order || [];
-    const newOrder = rotationOrder.filter(id => id !== user.id);
-    if (newOrder.length !== rotationOrder.length) {
-      await db.ref('rotation').update({ order: newOrder, currentIndex: 0 });
-      rotation.order = newOrder;
-      rotation.currentIndex = 0;
+    if (!user) user = currentUser;
+    if (!user) {
+        toast('No user to remove', '#ef4444');
+        return;
     }
 
-    // 4. Notify admin
-    await db.ref('notifications/admin').push({
-      id: Date.now(),
-      text: `✅ ${user.name} (${user.phone}) has left the group.`,
-      date: Date.now(),
-      read: false,
-      type: 'member_left'
+    try {
+        // 1. Set member approved to false
+        await db.ref('members/' + user.id).update({
+            approved: false,
+            leftAt: Date.now(),
+            leftReason: 'Member voluntarily left',
+            leftBalance: memberLoans[user.phone] || 0
+        });
+
+        // 2. Remove from payout rotation
+        const rotationOrder = rotation.order || [];
+        const newOrder = rotationOrder.filter(id => id !== user.id);
+        if (newOrder.length !== rotationOrder.length) {
+            await db.ref('rotation').update({ order: newOrder, currentIndex: 0 });
+            rotation.order = newOrder;
+            rotation.currentIndex = 0;
+        }
+
+        // 3. Notify admin
+        await db.ref('notifications/admin').push({
+            id: Date.now(),
+            text: `✅ ${user.name} (${user.phone}) has left the group.`,
+            date: Date.now(),
+            read: false,
+            type: 'member_left'
+        });
+
+        toast('You have left the group. You will be logged out.', '#f59e0b');
+
+        // 4. Logout
+        setTimeout(() => {
+            logout();
+        }, 1500);
+
+    } catch (err) {
+        console.error('Leave group error:', err);
+        toast('Failed to leave group. Please contact admin.', '#ef4444');
+    }
+}
+function showTransferMembershipModal(leavingMember, requestId) {
+    const modal = document.createElement('div');
+    modal.className = 'ov on';
+    modal.style.zIndex = '10003';
+    modal.style.display = 'flex';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+
+    // Get all active members except the leaving member
+    const availableMembers = members.filter(m => m.id !== leavingMember.id && m.approved !== false);
+
+    modal.innerHTML = `
+        <div class="bs" style="max-width: 520px; max-height: 85vh; overflow-y: auto;">
+            <div class="bs-title" style="font-size: 1.1rem;">🔄 Transfer Membership</div>
+            <div style="color: #9ca3af; font-size: 0.85rem; margin-bottom: 16px;">
+                Transfer ${leavingMember.name}'s membership to another member.
+            </div>
+
+            <div style="background: rgba(245,158,11,0.08); border-radius: 12px; padding: 12px; margin-bottom: 16px; border: 1px solid rgba(245,158,11,0.15);">
+                <div style="font-size: 0.7rem; font-weight: 700; color: var(--t3); text-transform: uppercase; letter-spacing: 0.5px;">Leaving Member</div>
+                <div style="font-weight: 700; font-size: 1rem;">${escapeHtml(leavingMember.name)}</div>
+                <div style="font-size: 0.8rem; color: var(--t2);">📞 ${leavingMember.phone}</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 6px; font-size: 0.75rem;">
+                    <span style="color: var(--t3);">Debt:</span><span style="font-weight: 600; color: var(--red);">UGX ${(memberLoans[leavingMember.phone] || 0 + memberDebts[leavingMember.phone] || 0).toLocaleString()}</span>
+                    <span style="color: var(--t3);">Days Active:</span><span style="font-weight: 600;">${getDaysActive(leavingMember)} days</span>
+                    <span style="color: var(--t3);">Join Date:</span><span style="font-weight: 600;">${leavingMember.joinDate || 'N/A'}</span>
+                </div>
+            </div>
+
+            <div class="fgrp">
+                <label class="flbl">Select Buying Member</label>
+                <select id="transfer-buyer-select" class="inp">
+                    <option value="">-- Select Member --</option>
+                    ${availableMembers.map(m => `
+                        <option value="${m.id}">${escapeHtml(m.name)} (${getDaysActive(m)} days, UGX ${(memberLoans[m.phone] || 0 + memberDebts[m.phone] || 0).toLocaleString()} debt)</option>
+                    `).join('')}
+                </select>
+            </div>
+
+            <div id="transfer-preview" style="display: none; background: rgba(6,182,212,0.06); border-radius: 12px; padding: 12px; border: 1px solid rgba(6,182,212,0.15); margin: 12px 0;"></div>
+
+            <div style="display: flex; gap: 12px; margin-top: 16px;">
+                <button class="btn btn-sec" onclick="this.closest('.ov').remove()" style="flex:1;">Cancel</button>
+                <button class="btn btn-gold" id="transfer-confirm-btn" style="flex:1;" disabled>✅ Confirm Transfer</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    // ─── Update preview when buyer is selected ─────────────
+    document.getElementById('transfer-buyer-select').addEventListener('change', function() {
+        const buyerId = this.value;
+        const previewDiv = document.getElementById('transfer-preview');
+        const confirmBtn = document.getElementById('transfer-confirm-btn');
+
+        if (!buyerId) {
+            previewDiv.style.display = 'none';
+            confirmBtn.disabled = true;
+            return;
+        }
+
+        const buyer = members.find(m => m.id === buyerId);
+        if (!buyer) return;
+
+        const leaverDebt = (memberLoans[leavingMember.phone] || 0) + (memberDebts[leavingMember.phone] || 0);
+        const buyerDebt = (memberLoans[buyer.phone] || 0) + (memberDebts[buyer.phone] || 0);
+        const newDebt = leaverDebt + buyerDebt;
+
+        const leaverDays = getDaysActive(leavingMember);
+        const buyerDays = getDaysActive(buyer);
+        const newDays = leaverDays + buyerDays;
+
+        // Determine earliest join date
+        const leaverDate = new Date(leavingMember.joinDate);
+        const buyerDate = new Date(buyer.joinDate);
+        const earliestDate = leaverDate < buyerDate ? leaverDate : buyerDate;
+
+        previewDiv.style.display = 'block';
+        previewDiv.innerHTML = `
+            <div style="font-weight: 700; font-size: 0.85rem; margin-bottom: 6px;">📊 Transfer Summary</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 0.8rem;">
+                <span style="color: var(--t3);">Buying Member:</span><span style="font-weight: 600;">${escapeHtml(buyer.name)}</span>
+                <span style="color: var(--t3);">Current Debt:</span><span style="color: var(--red);">UGX ${buyerDebt.toLocaleString()}</span>
+                <span style="color: var(--t3);">Current Days:</span><span>${buyerDays} days</span>
+                <span style="color: var(--t3);">─────────────────</span><span></span>
+                <span style="color: var(--gold); font-weight: 700;">New Debt:</span><span style="color: var(--red); font-weight: 700;">UGX ${newDebt.toLocaleString()}</span>
+                <span style="color: var(--gold); font-weight: 700;">New Days:</span><span style="font-weight: 700;">${newDays} days</span>
+                <span style="color: var(--gold); font-weight: 700;">New Join Date:</span><span style="font-weight: 700;">${earliestDate.toLocaleDateString()}</span>
+            </div>
+            <div class="micro muted" style="margin-top: 6px;">The buying member will inherit the leaving member's rotation position and leaderboard rank.</div>
+        `;
+        confirmBtn.disabled = false;
     });
 
-    toast('You have left the group. You will be logged out.', '#f59e0b');
+    // ─── Confirm Transfer ──────────────────────────────────
+    document.getElementById('transfer-confirm-btn').addEventListener('click', async function() {
+        const buyerId = document.getElementById('transfer-buyer-select').value;
+        if (!buyerId) {
+            toast('Please select a buying member', '#ef4444');
+            return;
+        }
 
-    // 5. Logout
-    setTimeout(() => {
-      logout();
-    }, 1500);
+        const buyer = members.find(m => m.id === buyerId);
+        if (!buyer) {
+            toast('Buyer not found', '#ef4444');
+            return;
+        }
 
-  } catch (err) {
-    console.error('Leave group error:', err);
-    toast('Failed to leave group. Please contact admin.', '#ef4444');
-  }
+        if (!confirm(`⚠️ Confirm transfer of ${leavingMember.name}'s membership to ${buyer.name}?\n\nThis will merge debts and active days. This action cannot be undone.`)) {
+            return;
+        }
+
+        await processMembershipTransfer(leavingMember, buyer, requestId);
+        modal.remove();
+    });
+}
+async function processMembershipTransfer(leavingMember, buyingMember, requestId) {
+    try {
+        // ─── 1. Calculate merged values ──────────────────────────
+        const leaverDebt = (memberLoans[leavingMember.phone] || 0) + (memberDebts[leavingMember.phone] || 0);
+        const buyerDebt = (memberLoans[buyingMember.phone] || 0) + (memberDebts[buyingMember.phone] || 0);
+        const newTotalDebt = leaverDebt + buyerDebt;
+
+        const leaverDays = getDaysActive(leavingMember);
+        const buyerDays = getDaysActive(buyingMember);
+        const newTotalDays = leaverDays + buyerDays;
+
+        // Earliest join date
+        const leaverDate = new Date(leavingMember.joinDate);
+        const buyerDate = new Date(buyingMember.joinDate);
+        const earliestDate = leaverDate < buyerDate ? leaverDate : buyerDate;
+
+        // ─── 2. Update buying member ─────────────────────────────
+        await db.ref('members/' + buyingMember.id).update({
+            joinDate: earliestDate.toISOString().split('T')[0],
+            daysActive: newTotalDays,
+            // We'll update debts/loans via transaction reassignment
+        });
+
+        // ─── 3. Reassign all transactions ────────────────────────
+        await reassignTransactions(leavingMember.phone, buyingMember.phone);
+
+        // ─── 4. Reassign all loans ──────────────────────────────
+        await reassignLoans(leavingMember.id, buyingMember.id);
+
+        // ─── 5. Update rotation order ────────────────────────────
+        const rotationOrder = rotation.order || [];
+        const newOrder = rotationOrder.filter(id => id !== leavingMember.id);
+        // If the buying member wasn't in rotation, add them at the leaver's position
+        if (!newOrder.includes(buyingMember.id)) {
+            const leaverIndex = rotationOrder.indexOf(leavingMember.id);
+            newOrder.splice(leaverIndex, 0, buyingMember.id);
+        }
+        await db.ref('rotation').update({ order: newOrder, currentIndex: 0 });
+        rotation.order = newOrder;
+        rotation.currentIndex = 0;
+
+        // ─── 6. Mark leave request as transferred ────────────────
+        if (requestId) {
+            await db.ref('leaveRequests/' + requestId).update({
+                status: 'transferred',
+                transferredTo: buyingMember.id,
+                transferredAt: Date.now(),
+                transferredBy: currentUser?.name || 'Admin'
+            });
+        }
+
+        // ─── 7. Delete leaving member ─────────────────────────────
+        await db.ref('members/' + leavingMember.id).remove();
+
+        // ─── 8. Notify both parties ──────────────────────────────
+        await db.ref('notifications/' + buyingMember.id).push({
+            id: Date.now(),
+            text: `🔄 Membership transferred! You have inherited ${leavingMember.name}'s membership. New debt: UGX ${newTotalDebt.toLocaleString()}, Active days: ${newTotalDays} days, Join date: ${earliestDate.toLocaleDateString()}.`,
+            date: Date.now(),
+            read: false,
+            type: 'transfer_complete'
+        });
+
+        await db.ref('notifications/admin').push({
+            id: Date.now(),
+            text: `🔄 Membership transferred from ${leavingMember.name} to ${buyingMember.name}. Debt merged: UGX ${newTotalDebt.toLocaleString()}, Days merged: ${newTotalDays} days.`,
+            date: Date.now(),
+            read: false,
+            type: 'admin_transfer'
+        });
+
+        toast(`✅ Membership transferred from ${leavingMember.name} to ${buyingMember.name}`, '#10b981');
+
+        // ─── 9. Refresh data ──────────────────────────────────────
+        await reloadAllData();
+        computePots();
+        updateHomeUI();
+        updateAccountUI();
+        renderAll();
+
+    } catch (err) {
+        console.error('Transfer error:', err);
+        toast('❌ Transfer failed. Please try again.', '#ef4444');
+    }
+}
+async function reassignTransactions(oldPhone, newPhone) {
+    const snap = await db.ref('transactions').once('value');
+    const allTxs = snap.val() || {};
+    const updates = {};
+
+    for (const [id, tx] of Object.entries(allTxs)) {
+        if (tx.memberPhone === oldPhone) {
+            updates[`transactions/${id}/memberPhone`] = newPhone;
+            updates[`transactions/${id}/memberName`] = getMemberName(newPhone);
+            // Add note to description
+            if (tx.description) {
+                updates[`transactions/${id}/description`] = `[Transferred] ${tx.description}`;
+            } else {
+                updates[`transactions/${id}/description`] = '[Transferred]';
+            }
+        }
+    }
+
+    if (Object.keys(updates).length) {
+        await db.ref().update(updates);
+    }
+    return Object.keys(updates).length;
+}
+async function reassignLoans(oldMemberId, newMemberId) {
+    const snap = await db.ref('loans').once('value');
+    const allLoans = snap.val() || {};
+    const updates = {};
+    const newMember = members.find(m => m.id === newMemberId);
+
+    for (const [id, loan] of Object.entries(allLoans)) {
+        if (loan.memberId === oldMemberId) {
+            updates[`loans/${id}/memberId`] = newMemberId;
+            if (newMember) {
+                updates[`loans/${id}/memberName`] = newMember.name;
+                updates[`loans/${id}/memberPhone`] = newMember.phone;
+            }
+            // Add note to loan reason
+            if (loan.reason) {
+                updates[`loans/${id}/reason`] = `[Transferred] ${loan.reason}`;
+            } else {
+                updates[`loans/${id}/reason`] = '[Transferred]';
+            }
+        }
+    }
+
+    if (Object.keys(updates).length) {
+        await db.ref().update(updates);
+    }
+    return Object.keys(updates).length;
+}
+function getMemberName(phone) {
+    const member = members.find(m => m.phone === phone);
+    return member ? member.name : 'Unknown';
+}
+
+function getMemberPhone(memberId) {
+    const member = members.find(m => m.id === memberId);
+    return member ? member.phone : '';
 }
 window.approveLeaveRequest = async function(requestId) {
-  if (!confirm('✅ Approve this leave request? The member will be removed from the group.')) return;
+    if (!confirm('✅ Approve this leave request? The member will be removed from the group.')) return;
 
-  try {
-    const snap = await db.ref('leaveRequests/' + requestId).once('value');
-    const request = snap.val();
-    if (!request) { toast('Request not found', '#ef4444'); return; }
-    if (request.status !== 'pending') { toast('This request has already been processed.', '#f59e0b'); return; }
+    try {
+        const snap = await db.ref('leaveRequests/' + requestId).once('value');
+        const request = snap.val();
+        if (!request) { toast('Request not found', '#ef4444'); return; }
+        if (request.status !== 'pending') { toast('This request has already been processed.', '#f59e0b'); return; }
 
-    const member = members.find(m => m.id === request.memberId);
-    if (!member) { toast('Member not found', '#ef4444'); return; }
+        const member = members.find(m => m.id === request.memberId);
+        if (!member) { toast('Member not found', '#ef4444'); return; }
 
-    await executeLeaveGroup(member);
+        await executeLeaveGroup(member);
 
-    await db.ref('leaveRequests/' + requestId).update({
-      status: 'approved',
-      approvedAt: Date.now(),
-      approvedBy: currentUser?.name || 'Admin'
-    });
+        await db.ref('leaveRequests/' + requestId).update({
+            status: 'approved',
+            approvedAt: Date.now(),
+            approvedBy: currentUser?.name || 'Admin'
+        });
 
-    toast('✅ Leave request approved. Member has been removed.', '#10b981');
-    if (document.getElementById('ov-apps')?.classList.contains('on')) {
-      loadAppsTab('leave');
+        toast('✅ Leave request approved. Member has been removed.', '#10b981');
+        if (document.getElementById('ov-apps')?.classList.contains('on')) {
+            loadAppsTab('leave');
+        }
+        updateNotificationBadge();
+    } catch (err) {
+        console.error(err);
+        toast('Failed to approve request.', '#ef4444');
     }
-    updateNotificationBadge();
-  } catch (err) {
-    console.error(err);
-    toast('Failed to approve request.', '#ef4444');
-  }
 };
 
 window.rejectLeaveRequest = async function(requestId) {
-  if (!confirm('❌ Reject this leave request? The member will remain in the group.')) return;
+    if (!confirm('❌ Reject this leave request? The member will remain in the group.')) return;
 
-  try {
-    const snap = await db.ref('leaveRequests/' + requestId).once('value');
-    const request = snap.val();
-    if (!request) { toast('Request not found', '#ef4444'); return; }
-    if (request.status !== 'pending') { toast('This request has already been processed.', '#f59e0b'); return; }
+    try {
+        const snap = await db.ref('leaveRequests/' + requestId).once('value');
+        const request = snap.val();
+        if (!request) { toast('Request not found', '#ef4444'); return; }
+        if (request.status !== 'pending') { toast('This request has already been processed.', '#f59e0b'); return; }
 
-    await db.ref('leaveRequests/' + requestId).update({
-      status: 'rejected',
-      rejectedAt: Date.now(),
-      rejectedBy: currentUser?.name || 'Admin'
-    });
+        await db.ref('leaveRequests/' + requestId).update({
+            status: 'rejected',
+            rejectedAt: Date.now(),
+            rejectedBy: currentUser?.name || 'Admin'
+        });
 
-    // Notify member
-    const member = members.find(m => m.id === request.memberId);
-    if (member) {
-      await db.ref('notifications/' + member.id).push({
-        id: Date.now(),
-        text: `❌ Your leave request was rejected by admin. Please clear your outstanding loan of UGX ${request.loanBalance.toLocaleString()} and try again.`,
-        date: Date.now(),
-        read: false
-      });
+        // Notify member
+        const member = members.find(m => m.id === request.memberId);
+        if (member) {
+            await db.ref('notifications/' + member.id).push({
+                id: Date.now(),
+                text: `❌ Your leave request was rejected by admin. Please clear your outstanding balance of UGX ${request.totalBalance.toLocaleString()} and try again, or arrange a membership transfer.`,
+                date: Date.now(),
+                read: false
+            });
+        }
+
+        toast('❌ Leave request rejected.', '#ef4444');
+        if (document.getElementById('ov-apps')?.classList.contains('on')) {
+            loadAppsTab('leave');
+        }
+        updateNotificationBadge();
+    } catch (err) {
+        console.error(err);
+        toast('Failed to reject request.', '#ef4444');
     }
-
-    toast('❌ Leave request rejected.', '#ef4444');
-    if (document.getElementById('ov-apps')?.classList.contains('on')) {
-      loadAppsTab('leave');
-    }
-    updateNotificationBadge();
-  } catch (err) {
-    console.error(err);
-    toast('Failed to reject request.', '#ef4444');
-  }
 };
 window.logout=function(){
   if(currentUser && !currentUser.isAdmin && db){
@@ -13475,30 +13767,32 @@ window.loadAppsTab = async function(tab) {
       container.innerHTML = html;
     }
     else if (tab === 'leave') {
-  const snap = await db.ref('leaveRequests').orderByChild('status').equalTo('pending').once('value');
-  const requests = snap.val() ? Object.entries(snap.val()).map(([k, v]) => ({ ...v, id: k })) : [];
-  if (!requests.length) {
-    container.innerHTML = '<div class="empty-state">No pending leave requests</div>';
-    return;
-  }
-  let html = '';
-  for (let req of requests) {
-    html += `
-      <div class="app-item">
-        <div style="flex:1">
-          <div class="app-name">${escapeHtml(req.memberName)}</div>
-          <div class="app-phone">📞 ${escapeHtml(req.memberPhone)}</div>
-          <div class="micro">💰 Loan Balance: UGX ${req.loanBalance.toLocaleString()}</div>
-          <div class="micro">📅 Requested: ${new Date(req.requestedAt).toLocaleString()}</div>
-        </div>
-        <div style="display:flex; gap:6px;">
-          <button class="btn btn-sm btn-green" onclick="approveLeaveRequest('${req.id}')">✅ Approve</button>
-          <button class="btn btn-sm btn-red" onclick="rejectLeaveRequest('${req.id}')">✕ Reject</button>
-        </div>
-      </div>
-    `;
-  }
-  container.innerHTML = html;
+    const snap = await db.ref('leaveRequests').orderByChild('status').equalTo('pending').once('value');
+    const requests = snap.val() ? Object.entries(snap.val()).map(([k, v]) => ({ ...v, id: k })) : [];
+    if (!requests.length) {
+        container.innerHTML = '<div class="empty-state">No pending leave requests</div>';
+        return;
+    }
+    let html = '';
+    for (let req of requests) {
+        html += `
+            <div class="app-item">
+                <div style="flex:1">
+                    <div class="app-name">${escapeHtml(req.memberName)}</div>
+                    <div class="app-phone">📞 ${escapeHtml(req.memberPhone)}</div>
+                    <div class="micro">💰 Total Balance: UGX ${req.totalBalance.toLocaleString()}</div>
+                    <div class="micro">📅 Days Active: ${req.daysActive || 0} days</div>
+                    <div class="micro">📅 Requested: ${new Date(req.requestedAt).toLocaleString()}</div>
+                </div>
+                <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                    <button class="btn btn-sm btn-green" onclick="approveLeaveRequest('${req.id}')">✅ Approve</button>
+                    <button class="btn btn-sm btn-red" onclick="rejectLeaveRequest('${req.id}')">✕ Reject</button>
+                    <button class="btn btn-sm btn-gold" onclick="showTransferMembershipModal(members.find(m => m.id === '${req.memberId}'), '${req.id}')">🔄 Transfer</button>
+                </div>
+            </div>
+        `;
+    }
+    container.innerHTML = html;
 }
     else if (tab === 'passwords') {
       const snap = await db.ref('passwordResetRequests').orderByChild('status').equalTo('pending').once('value');
@@ -14144,7 +14438,8 @@ function updateAdminMembersList() {
                 <div style="display:flex; gap:5px;">
                     <button class="btn btn-sm btn-teal" onclick="showMemberReceipt('${id}')">🧾 Receipt</button>
                     <button class="btn btn-sm btn-sec" onclick="openEditMember('${id}')">✏️</button>
-                    <button class="btn btn-sm btn-red" onclick="deleteMember('${id}')">🗑️</button>
+<button class="btn btn-sm btn-amber" onclick="showMemberTransferOption('${id}')">🔄 Transfer</button>
+<button class="btn btn-sm btn-red" onclick="deleteMember('${id}')">🗑️</button>
                     ${m.feeCleared === false ? `<button class="btn btn-sm btn-green" onclick="clearSignupFee('${id}')">💰 Clear Fee</button>` : ''}
                 </div>
             </div>
