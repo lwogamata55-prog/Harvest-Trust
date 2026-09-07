@@ -4936,7 +4936,12 @@ async function reloadAllData() {
     ]);
     transactions = txSnap.val() ? Object.entries(txSnap.val()).map(([id, tx]) => ({ ...tx, id })) : [];
     loans = loansSnap.val() ? Object.entries(loansSnap.val()).map(([id, l]) => ({ ...l, id })) : [];
-    members = membersSnap.val() ? Object.entries(membersSnap.val()).map(([id, m]) => ({ ...m, id, prepaid: m.prepaid || 0 })) : [];
+    members = membersSnap.val() ? Object.entries(membersSnap.val()).map(([id, m]) => ({ 
+        ...m, 
+        id, 
+        prepaid: m.prepaid || 0,
+        daysActive: m.daysActive || 0   // Ensure this is read
+    })) : [];
     computePots();
     refreshUI();
 }
@@ -5589,17 +5594,14 @@ function computePots() {
         if (tx.type === 'deposit') {
             memberBalances[phone] = (memberBalances[phone] || 0) + a;
             if (tx.isPrepaid) {
-                // Prepaid deposit: goes to prepaid balance
                 memberPrepaid[phone] = (memberPrepaid[phone] || 0) + a;
                 cash += a;
             } else if (tx.isDailySavings) {
-                // Daily savings: goes to cash
                 cash += a;
             } else if (tx.dailyPortion !== undefined) {
                 cash += tx.dailyPortion || 0;
                 profit += tx.welfarePortion || 0;
             } else {
-                // Regular deposit: goes to cash
                 cash += a;
             }
         } else if (tx.type === 'welfare') {
@@ -5648,9 +5650,6 @@ function computePots() {
 
     // Recalculate loan splits
     recalculateLoanBalances();
-
-    // Update local arrays
-    // (loans and members are already up-to-date via listeners)
 }
 function computeProjectedLoanAfterDeposit(member, depositAmount) {
     if (!member) return 0;
@@ -5956,12 +5955,18 @@ function getDepositMessage(member, depositAmount, remainingLoanBefore, remaining
     }
 }
 function getDaysActive(member) {
-  if (!member.joinDate) return 0;
-  const join = new Date(member.joinDate);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const diff = Math.floor((today - join) / (1000 * 60 * 60 * 24));
-  return Math.max(0, diff);
+    if (!member) return 0;
+    // If daysActive is explicitly stored, use it
+    if (member.daysActive !== undefined && member.daysActive !== null) {
+        return member.daysActive;
+    }
+    // Otherwise calculate from joinDate
+    if (!member.joinDate) return 0;
+    const join = new Date(member.joinDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diff = Math.floor((today - join) / (1000 * 60 * 60 * 24));
+    return Math.max(0, diff);
 }
 function getDailyRequiredForMember(memberId) {
   const dailySavings = (settings.dailyAmount || 2000) + (settings.welfareAmount || 500);
@@ -6329,6 +6334,12 @@ function generateRepaymentSchedule(principal, interestRate, weeks, startDate) {
     });
   }
   return schedule;
+}
+function getMemberTotalDebt(member) {
+    if (!member) return 0;
+    const loans = memberLoans[member.phone] || 0;
+    const debts = memberDebts[member.phone] || 0;
+    return loans + debts;
 }
 function getMemberStatus(member) {
     if (!member) return 'unknown';
@@ -10690,16 +10701,17 @@ window.showMemberLoanDetails = function(memberId) {
       </div>
     </div>
 
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px;">
-      <div style="background: rgba(255,255,255,0.04); border-radius: 8px; padding: 10px; text-align: center;">
-        <div style="font-size: 0.6rem; color: var(--t3);">Total Loan Balance</div>
-        <div style="font-size: 1rem; font-weight: 700; color: ${totalLoanBalance > 0 ? 'var(--red)' : 'var(--green)'};">${money(totalLoanBalance)}</div>
-      </div>
-      <div style="background: rgba(255,255,255,0.04); border-radius: 8px; padding: 10px; text-align: center;">
-        <div style="font-size: 0.6rem; color: var(--t3);">Active Loans</div>
-        <div style="font-size: 1rem; font-weight: 700; color: var(--teal);">${approvedLoans.length}</div>
-      </div>
+  
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px;">
+    <div style="background: rgba(255,255,255,0.04); border-radius: 8px; padding: 10px; text-align: center;">
+        <div style="font-size: 0.6rem; color: var(--t3); text-transform: uppercase; letter-spacing: 0.5px;">Total Owed</div>
+        <div style="font-size: 1.2rem; font-weight: 900; color: ${totalLoanBalance > 0 ? 'var(--gold)' : 'var(--green)'};">${money(totalLoanBalance)}</div>
     </div>
+    <div style="background: rgba(255,255,255,0.04); border-radius: 8px; padding: 10px; text-align: center;">
+        <div style="font-size: 0.6rem; color: var(--t3); text-transform: uppercase; letter-spacing: 0.5px;">Active Loans</div>
+        <div style="font-size: 1.2rem; font-weight: 900; color: var(--teal);">${approvedLoans.length}</div>
+    </div>
+</div>
     
     <!-- Show Application Loan balance if > 0 -->
     ${appBalance > 0 ? `
@@ -11614,7 +11626,7 @@ function showTransferMembershipModal(leavingMember, requestId) {
                 <div style="font-weight: 700; font-size: 1rem;">${escapeHtml(leavingMember.name)}</div>
                 <div style="font-size: 0.8rem; color: var(--t2);">📞 ${leavingMember.phone}</div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 6px; font-size: 0.75rem;">
-                    <span style="color: var(--t3);">Debt:</span><span style="font-weight: 600; color: var(--red);">UGX ${(memberLoans[leavingMember.phone] || 0 + memberDebts[leavingMember.phone] || 0).toLocaleString()}</span>
+                    <span style="color: var(--t3);">Total Debt:</span><span style="font-weight: 600; color: var(--red);">${money(getMemberTotalDebt(leavingMember))}</span>
                     <span style="color: var(--t3);">Days Active:</span><span style="font-weight: 600;">${getDaysActive(leavingMember)} days</span>
                     <span style="color: var(--t3);">Join Date:</span><span style="font-weight: 600;">${leavingMember.joinDate || 'N/A'}</span>
                 </div>
@@ -11625,7 +11637,7 @@ function showTransferMembershipModal(leavingMember, requestId) {
                 <select id="transfer-buyer-select" class="inp">
                     <option value="">-- Select Member --</option>
                     ${availableMembers.map(m => `
-                        <option value="${m.id}">${escapeHtml(m.name)} (${getDaysActive(m)} days, UGX ${(memberLoans[m.phone] || 0 + memberDebts[m.phone] || 0).toLocaleString()} debt)</option>
+                        <option value="${m.id}">${escapeHtml(m.name)} (${getDaysActive(m)} days, ${money(getMemberTotalDebt(m))} debt)</option>
                     `).join('')}
                 </select>
             </div>
@@ -11655,8 +11667,8 @@ function showTransferMembershipModal(leavingMember, requestId) {
         const buyer = members.find(m => m.id === buyerId);
         if (!buyer) return;
 
-        const leaverDebt = (memberLoans[leavingMember.phone] || 0) + (memberDebts[leavingMember.phone] || 0);
-        const buyerDebt = (memberLoans[buyer.phone] || 0) + (memberDebts[buyer.phone] || 0);
+        const leaverDebt = getMemberTotalDebt(leavingMember);
+        const buyerDebt = getMemberTotalDebt(buyer);
         const newDebt = leaverDebt + buyerDebt;
 
         const leaverDays = getDaysActive(leavingMember);
@@ -11673,10 +11685,10 @@ function showTransferMembershipModal(leavingMember, requestId) {
             <div style="font-weight: 700; font-size: 0.85rem; margin-bottom: 6px;">📊 Transfer Summary</div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 0.8rem;">
                 <span style="color: var(--t3);">Buying Member:</span><span style="font-weight: 600;">${escapeHtml(buyer.name)}</span>
-                <span style="color: var(--t3);">Current Debt:</span><span style="color: var(--red);">UGX ${buyerDebt.toLocaleString()}</span>
+                <span style="color: var(--t3);">Current Debt:</span><span style="color: var(--red);">${money(buyerDebt)}</span>
                 <span style="color: var(--t3);">Current Days:</span><span>${buyerDays} days</span>
                 <span style="color: var(--t3);">─────────────────</span><span></span>
-                <span style="color: var(--gold); font-weight: 700;">New Debt:</span><span style="color: var(--red); font-weight: 700;">UGX ${newDebt.toLocaleString()}</span>
+                <span style="color: var(--gold); font-weight: 700;">New Debt:</span><span style="color: var(--red); font-weight: 700;">${money(newDebt)}</span>
                 <span style="color: var(--gold); font-weight: 700;">New Days:</span><span style="font-weight: 700;">${newDays} days</span>
                 <span style="color: var(--gold); font-weight: 700;">New Join Date:</span><span style="font-weight: 700;">${earliestDate.toLocaleDateString()}</span>
             </div>
@@ -11707,48 +11719,92 @@ function showTransferMembershipModal(leavingMember, requestId) {
         modal.remove();
     });
 }
+
+/**
+ * Transfers membership from leaving member to buying member.
+ * Merges debts, active days, and updates all related records.
+ * 
+ * @param {Object} leavingMember - The member leaving the group
+ * @param {Object} buyingMember - The member taking over the slot
+ * @param {string|null} requestId - Optional leave request ID to mark as transferred
+ */
 async function processMembershipTransfer(leavingMember, buyingMember, requestId) {
     try {
-        // ─── 1. Calculate merged values ──────────────────────────
+        // ─── 1. Validate inputs ──────────────────────────────────
+        if (!leavingMember || !buyingMember) {
+            toast('Invalid members selected', '#ef4444');
+            return;
+        }
+        if (leavingMember.id === buyingMember.id) {
+            toast('Cannot transfer to the same member', '#ef4444');
+            return;
+        }
+
+        // ─── 2. Calculate merged values ──────────────────────────
+        // Total debt (loans + debts)
         const leaverDebt = (memberLoans[leavingMember.phone] || 0) + (memberDebts[leavingMember.phone] || 0);
         const buyerDebt = (memberLoans[buyingMember.phone] || 0) + (memberDebts[buyingMember.phone] || 0);
         const newTotalDebt = leaverDebt + buyerDebt;
 
+        // Active days
         const leaverDays = getDaysActive(leavingMember);
         const buyerDays = getDaysActive(buyingMember);
         const newTotalDays = leaverDays + buyerDays;
 
-        // Earliest join date
+        // Earliest join date (preserve seniority)
         const leaverDate = new Date(leavingMember.joinDate);
         const buyerDate = new Date(buyingMember.joinDate);
         const earliestDate = leaverDate < buyerDate ? leaverDate : buyerDate;
+        const earliestDateStr = earliestDate.toISOString().split('T')[0];
 
-        // ─── 2. Update buying member ─────────────────────────────
-        await db.ref('members/' + buyingMember.id).update({
-            joinDate: earliestDate.toISOString().split('T')[0],
-            daysActive: newTotalDays,
-            // We'll update debts/loans via transaction reassignment
+        console.log('📊 Transfer Summary:', {
+            leavingMember: leavingMember.name,
+            leaverDebt,
+            buyerDebt,
+            newTotalDebt,
+            leaverDays,
+            buyerDays,
+            newTotalDays,
+            earliestDate: earliestDateStr
         });
 
-        // ─── 3. Reassign all transactions ────────────────────────
-        await reassignTransactions(leavingMember.phone, buyingMember.phone);
+        // ─── 3. Reassign all transactions to buying member ──────
+        const txCount = await reassignTransactions(leavingMember.phone, buyingMember.phone);
+        console.log(`✅ Reassigned ${txCount} transactions`);
 
-        // ─── 4. Reassign all loans ──────────────────────────────
-        await reassignLoans(leavingMember.id, buyingMember.id);
+        // ─── 4. Reassign all loans to buying member ──────────────
+        const loanCount = await reassignLoans(leavingMember.id, buyingMember.id);
+        console.log(`✅ Reassigned ${loanCount} loans`);
 
-        // ─── 5. Update rotation order ────────────────────────────
+        // ─── 5. Update buying member's record ────────────────────
+        // Critical: Set joinDate to earliest date and store daysActive explicitly
+        await db.ref('members/' + buyingMember.id).update({
+            joinDate: earliestDateStr,
+            daysActive: newTotalDays,        // Explicit stored value for quick access
+            updatedAt: Date.now()
+        });
+
+        // ─── 6. Update rotation order ────────────────────────────
         const rotationOrder = rotation.order || [];
-        const newOrder = rotationOrder.filter(id => id !== leavingMember.id);
-        // If the buying member wasn't in rotation, add them at the leaver's position
+        let newOrder = rotationOrder.filter(id => id !== leavingMember.id);
+        // If buying member wasn't in rotation, insert at leaver's position
         if (!newOrder.includes(buyingMember.id)) {
             const leaverIndex = rotationOrder.indexOf(leavingMember.id);
-            newOrder.splice(leaverIndex, 0, buyingMember.id);
+            // If leaverIndex is -1, append at end; otherwise insert
+            if (leaverIndex === -1) {
+                newOrder.push(buyingMember.id);
+            } else {
+                newOrder.splice(leaverIndex, 0, buyingMember.id);
+            }
         }
-        await db.ref('rotation').update({ order: newOrder, currentIndex: 0 });
+        await db.ref('rotation').update({ 
+            order: newOrder, 
+            currentIndex: 0 
+        });
         rotation.order = newOrder;
         rotation.currentIndex = 0;
 
-        // ─── 6. Mark leave request as transferred ────────────────
+        // ─── 7. Mark leave request as transferred (if provided) ──
         if (requestId) {
             await db.ref('leaveRequests/' + requestId).update({
                 status: 'transferred',
@@ -11758,13 +11814,13 @@ async function processMembershipTransfer(leavingMember, buyingMember, requestId)
             });
         }
 
-        // ─── 7. Delete leaving member ─────────────────────────────
+        // ─── 8. Delete leaving member ─────────────────────────────
         await db.ref('members/' + leavingMember.id).remove();
 
-        // ─── 8. Notify both parties ──────────────────────────────
+        // ─── 9. Send notifications ──────────────────────────────
         await db.ref('notifications/' + buyingMember.id).push({
             id: Date.now(),
-            text: `🔄 Membership transferred! You have inherited ${leavingMember.name}'s membership. New debt: UGX ${newTotalDebt.toLocaleString()}, Active days: ${newTotalDays} days, Join date: ${earliestDate.toLocaleDateString()}.`,
+            text: `🔄 Membership transferred! You have inherited ${leavingMember.name}'s membership. New debt: UGX ${newTotalDebt.toLocaleString()}, Active days: ${newTotalDays} days, Join date: ${earliestDateStr}.`,
             date: Date.now(),
             read: false,
             type: 'transfer_complete'
@@ -11778,69 +11834,98 @@ async function processMembershipTransfer(leavingMember, buyingMember, requestId)
             type: 'admin_transfer'
         });
 
-        toast(`✅ Membership transferred from ${leavingMember.name} to ${buyingMember.name}`, '#10b981');
-
-        // ─── 9. Refresh data ──────────────────────────────────────
+        // ─── 10. FULL DATA RELOAD ──────────────────────────────────
+        // Reload members, transactions, loans from Firebase
         await reloadAllData();
+        // Recompute all balances (memberLoans, memberDebts, cash, profit)
         computePots();
+        // Refresh UI
         updateHomeUI();
         updateAccountUI();
         renderAll();
 
+        // ─── 11. Verify and log final state ──────────────────────
+        const updatedBuyer = members.find(m => m.id === buyingMember.id);
+        if (updatedBuyer) {
+            const finalDays = getDaysActive(updatedBuyer) || updatedBuyer.daysActive || 0;
+            const finalDebt = (memberLoans[updatedBuyer.phone] || 0) + (memberDebts[updatedBuyer.phone] || 0);
+            console.log('✅ Transfer complete:', {
+                member: updatedBuyer.name,
+                finalDays,
+                finalDebt,
+                joinDate: updatedBuyer.joinDate
+            });
+        }
+
+        toast(`✅ Membership transferred from ${leavingMember.name} to ${buyingMember.name}`, '#10b981');
+
     } catch (err) {
         console.error('Transfer error:', err);
         toast('❌ Transfer failed. Please try again.', '#ef4444');
+        // Optionally log the error to Firebase for debugging
+        try {
+            await db.ref('transferErrors').push({
+                error: err.message,
+                stack: err.stack,
+                timestamp: Date.now(),
+                leavingMember: leavingMember?.name,
+                buyingMember: buyingMember?.name
+            });
+        } catch (e) { /* ignore */ }
     }
 }
+
 async function reassignTransactions(oldPhone, newPhone) {
     const snap = await db.ref('transactions').once('value');
     const allTxs = snap.val() || {};
     const updates = {};
+    let count = 0;
+
+    const newMember = members.find(m => m.phone === newPhone);
+    const newName = newMember ? newMember.name : 'Unknown';
 
     for (const [id, tx] of Object.entries(allTxs)) {
         if (tx.memberPhone === oldPhone) {
             updates[`transactions/${id}/memberPhone`] = newPhone;
-            updates[`transactions/${id}/memberName`] = getMemberName(newPhone);
-            // Add note to description
-            if (tx.description) {
-                updates[`transactions/${id}/description`] = `[Transferred] ${tx.description}`;
-            } else {
-                updates[`transactions/${id}/description`] = '[Transferred]';
-            }
+            updates[`transactions/${id}/memberName`] = newName;
+            // Preserve original description with transfer note
+            const origDesc = tx.description || tx.type || 'Transaction';
+            updates[`transactions/${id}/description`] = `[Transferred from ${oldPhone}] ${origDesc}`;
+            count++;
         }
     }
 
-    if (Object.keys(updates).length) {
+    if (count > 0) {
         await db.ref().update(updates);
     }
-    return Object.keys(updates).length;
+    return count;
 }
 async function reassignLoans(oldMemberId, newMemberId) {
     const snap = await db.ref('loans').once('value');
     const allLoans = snap.val() || {};
     const updates = {};
+    let count = 0;
+
     const newMember = members.find(m => m.id === newMemberId);
+    const newName = newMember ? newMember.name : 'Unknown';
+    const newPhone = newMember ? newMember.phone : '';
 
     for (const [id, loan] of Object.entries(allLoans)) {
         if (loan.memberId === oldMemberId) {
             updates[`loans/${id}/memberId`] = newMemberId;
-            if (newMember) {
-                updates[`loans/${id}/memberName`] = newMember.name;
-                updates[`loans/${id}/memberPhone`] = newMember.phone;
-            }
-            // Add note to loan reason
-            if (loan.reason) {
-                updates[`loans/${id}/reason`] = `[Transferred] ${loan.reason}`;
-            } else {
-                updates[`loans/${id}/reason`] = '[Transferred]';
-            }
+            updates[`loans/${id}/memberName`] = newName;
+            updates[`loans/${id}/memberPhone`] = newPhone;
+            // Preserve original reason
+            const origReason = loan.reason || 'Loan';
+            updates[`loans/${id}/reason`] = `[Transferred] ${origReason}`;
+            count++;
         }
     }
 
-    if (Object.keys(updates).length) {
+    if (count > 0) {
         await db.ref().update(updates);
     }
-    return Object.keys(updates).length;
+    return count;
 }
 function getMemberName(phone) {
     const member = members.find(m => m.phone === phone);
@@ -14016,6 +14101,7 @@ function renderAdminTab() {
     const c = document.getElementById('admin-content');
     if (!c) return;
 
+    // ─── Back button ──────────────────────────────────────────
     if (!c.querySelector('.admin-back-btn')) {
         const backBtn = document.createElement('div');
         backBtn.className = 'admin-back-btn';
@@ -14027,6 +14113,7 @@ function renderAdminTab() {
         c.insertBefore(backBtn, c.firstChild);
     }
 
+    // ─── Compute warnings (overdue loans) ───────────────────
     const overdueWithDays = loans.filter(l => 
         l.status === 'approved' && 
         !l.repaid && 
@@ -14134,6 +14221,7 @@ function renderAdminTab() {
             `;
         }
 
+        // ─── BUILD ACTIVE LOANS (ONLY "TOTAL" – NO PAID/BALANCE) ───
         const activeByMember = {};
         loans.forEach(l => {
             if (l.status === 'approved' && !l.repaid) {
@@ -14171,6 +14259,7 @@ function renderAdminTab() {
             }
         });
 
+        // Filter to only those with outstanding balance
         let entries = Object.entries(activeByMember);
         entries = entries.filter(([memberId, data]) => {
             const totalBalance = memberLoans[data.memberPhone] || 0;
@@ -14189,12 +14278,13 @@ function renderAdminTab() {
                         <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px;">
                             ${entries.map(([memberId, data]) => {
                                 const member = data.member;
-                                const totalBalance = memberLoans[data.memberPhone] || 0;
-                                const paid = Math.max(0, data.totalRepay - totalBalance);
+                                // 🔥 CURRENT OUTSTANDING BALANCE (this is "Total")
+                                const currentBalance = memberLoans[data.memberPhone] || 0;
                                 const isOverdue = data.isOverdue;
                                 const daysOverdue = data.daysOverdue;
                                 const avatarColor = getAvatarColor(data.memberName);
                                 const initials = data.memberName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+
                                 return `
                                     <div style="background: rgba(255,255,255,0.04); border: 1px solid ${isOverdue ? 'var(--red)' : 'var(--br)'}; border-radius: 12px; padding: 12px; cursor: pointer; transition: all 0.2s ease; position: relative; ${isOverdue ? 'animation: pulse 2s infinite;' : ''}"
                                         onclick="showMemberLoanDetails('${memberId}')"
@@ -14204,12 +14294,17 @@ function renderAdminTab() {
                                         ${isOverdue ? `<div style="position: absolute; top: -6px; right: -6px; background: var(--red); color: white; font-size: 0.5rem; font-weight: 800; padding: 2px 8px; border-radius: 10px; animation: pulse 1.5s infinite;">${daysOverdue}d overdue</div>` : ''}
                                         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
                                             <div style="width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg, ${avatarColor}, ${avatarColor}cc); display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: 800; color: white; flex-shrink: 0;">${initials || '?'}</div>
-                                            <div style="flex: 1; min-width: 0;"><div style="font-size: 0.8rem; font-weight: 700; color: var(--t); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(data.memberName)}</div><div style="font-size: 0.55rem; color: var(--t3);">${data.count} loan(s)</div></div>
+                                            <div style="flex: 1; min-width: 0;">
+                                                <div style="font-size: 0.8rem; font-weight: 700; color: var(--t); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(data.memberName)}</div>
+                                                <div style="font-size: 0.55rem; color: var(--t3);">${data.count} loan(s)</div>
+                                            </div>
                                         </div>
-                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; font-size: 0.65rem;">
-                                            <div style="color: var(--t3);">Total</div><div style="font-weight: 600; text-align: right; color: var(--gold);">${money(data.totalRepay)}</div>
-                                            <div style="color: var(--t3);">Paid</div><div style="font-weight: 600; text-align: right; color: var(--green);">${money(paid)}</div>
-                                            <div style="color: var(--t3);">Balance</div><div style="font-weight: 600; text-align: right; color: ${totalBalance > 0 ? 'var(--red)' : 'var(--green)'};">${money(totalBalance)}</div>
+                                        <!-- ✅ ONLY "TOTAL" – current outstanding balance -->
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; padding: 8px 12px; background: linear-gradient(135deg, rgba(245,158,11,0.12), rgba(245,158,11,0.04)); border-radius: 8px; border-left: 3px solid var(--gold);">
+                                            <span style="font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--t3);">💰 Total</span>
+                                            <span style="font-size: 1.1rem; font-weight: 900; color: ${currentBalance > 0 ? 'var(--gold)' : 'var(--green)'}; text-shadow: 0 0 16px rgba(245,158,11,0.15); letter-spacing: 0.5px;">
+                                                ${money(currentBalance)}
+                                            </span>
                                         </div>
                                         <div style="text-align: center; margin-top: 8px; font-size: 0.5rem; color: var(--t3);">👆 Click for details</div>
                                     </div>
@@ -14222,20 +14317,16 @@ function renderAdminTab() {
             `;
         }
 
+        // ─── FINAL HTML FOR SAVINGS TAB ──────────────────────
         c.innerHTML = `
-        ${warningsHtml}
-        ${financialSummaryHtml}
-        <div class="card">
-            <div class="sec-h">⚡ Actions</div>
-            <button class="btn btn-red btn-full" onclick="openOv('ov-assign-debt'); populateMemberCheckboxes('debt');">🧾 Assign Debt</button>
-            <button class="btn btn-teal btn-full" onclick="openAddTransaction()">💰 Add Transaction</button>
-        </div>
-        ${pendingActivityHtml}
-        ${pendingLoansHtml}
-        ${activeLoansHtml}
-    `;
-    return;
-}
+            ${warningsHtml}
+            ${financialSummaryHtml}
+            ${pendingActivityHtml}
+            ${pendingLoansHtml}
+            ${activeLoansHtml}
+        `;
+        return;
+    }
 
     // ─── NOTICE TAB ───────────────────────────────────────────
     else if (currentAdminTab === 'notice') {
