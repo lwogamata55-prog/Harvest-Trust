@@ -14151,182 +14151,189 @@ function renderAdminTab() {
     }
 
     // ─── SAVINGS TAB ──────────────────────────────────────────
-    if (currentAdminTab === 'savings') {
-        const { notDeposited, allCount } = getTodaysDepositStatus();
+if (currentAdminTab === 'savings') {
+    const { notDeposited, allCount } = getTodaysDepositStatus();
 
-        let pendingActivityHtml = '';
-        if (notDeposited.length === 0) {
-            pendingActivityHtml = `
-                <div style="background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; display: flex; align-items: center; gap: 10px;">
-                    <span style="font-size: 1.2rem;">✅</span>
-                    <span style="font-size: 0.8rem; color: var(--t2);">All ${allCount} members are up to date today</span>
+    let pendingActivityHtml = '';
+    if (notDeposited.length === 0) {
+        pendingActivityHtml = `
+            <div style="background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 1.2rem;">✅</span>
+                <span style="font-size: 0.8rem; color: var(--t2);">All ${allCount} members are up to date today</span>
+            </div>
+        `;
+    } else {
+        pendingActivityHtml = `
+            <div style="background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 1.2rem;">⚠️</span>
+                    <span style="font-size: 0.8rem; color: var(--t2);"><strong>${notDeposited.length}</strong> pending deposits</span>
                 </div>
-            `;
-        } else {
-            pendingActivityHtml = `
-                <div style="background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <span style="font-size: 1.2rem;">⚠️</span>
-                        <span style="font-size: 0.8rem; color: var(--t2);"><strong>${notDeposited.length}</strong> pending deposits</span>
-                    </div>
-                    <div style="display: flex; flex-wrap: wrap; gap: 4px;">
-                        ${notDeposited.map(m => `<span style="background: rgba(245,158,11,0.15); padding: 2px 8px; border-radius: 12px; font-size: 0.65rem; color: var(--gold);">${escapeHtml(m.name)}</span>`).join('')}
-                    </div>
-                </div>
-            `;
-        }
-
-        const financialSummaryHtml = `
-            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px;">
-                <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px; text-align: center;">
-                    <div style="font-size: 0.6rem; color: var(--t3); text-transform: uppercase; letter-spacing: 0.5px;">Admin Balance</div>
-                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; font-weight: 700; color: ${cashFromDeposits < 0 ? 'var(--red)' : 'var(--teal)'};">${money(cashFromDeposits)}</div>
-                </div>
-                <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px; text-align: center;">
-                    <div style="font-size: 0.6rem; color: var(--t3); text-transform: uppercase; letter-spacing: 0.5px;">Profit Pool</div>
-                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; font-weight: 700; color: ${groupProfit < 0 ? 'var(--red)' : 'var(--green)'};">${money(groupProfit)}</div>
-                </div>
-                <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px; text-align: center;">
-                    <div style="font-size: 0.6rem; color: var(--t3); text-transform: uppercase; letter-spacing: 0.5px;">Pending Loans</div>
-                    <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; font-weight: 700; color: var(--gold);">${loans.filter(l => l.status === 'pending').length}</div>
+                <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                    ${notDeposited.map(m => `<span style="background: rgba(245,158,11,0.15); padding: 2px 8px; border-radius: 12px; font-size: 0.65rem; color: var(--gold);">${escapeHtml(m.name)}</span>`).join('')}
                 </div>
             </div>
         `;
-
-        const pendingLoans = loans.filter(l => l.status === 'pending');
-        let pendingLoansHtml = '';
-        if (pendingLoans.length) {
-            pendingLoansHtml = `
-                <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px; margin-bottom: 12px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <span style="font-size: 0.75rem; font-weight: 700; color: var(--t2);">📋 Pending Loan Requests</span>
-                        <span class="pill-badge pill-amber">${pendingLoans.length}</span>
-                    </div>
-                    <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-                        ${pendingLoans.map(l => `
-                            <div style="background: rgba(255,255,255,0.04); border: 1px solid var(--br); border-radius: 8px; padding: 8px 12px; display: flex; align-items: center; gap: 8px; flex: 1; min-width: 140px;">
-                                <span style="font-size: 1rem;">${l.loanQuestions && l.loanQuestions.length > 0 ? '⭐' : '📋'}</span>
-                                <div style="flex: 1; min-width: 0;">
-                                    <div style="font-size: 0.75rem; font-weight: 600; color: var(--t);">${escapeHtml(l.memberName)}</div>
-                                    <div style="font-size: 0.6rem; color: var(--t3);">${money(l.amount)} @ ${l.interestRate}%</div>
-                                </div>
-                                <div style="display: flex; gap: 4px;">
-                                    <button class="btn btn-sm btn-green" onclick="openApproveLoanModal('${l.id}')" style="padding: 2px 8px; font-size: 0.6rem;">✅</button>
-                                    <button class="btn btn-sm btn-red" onclick="rejectLoan('${l.id}')" style="padding: 2px 8px; font-size: 0.6rem;">✕</button>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            `;
-        }
-
-        // ─── BUILD ACTIVE LOANS (ONLY "TOTAL" – NO PAID/BALANCE) ───
-        const activeByMember = {};
-        loans.forEach(l => {
-            if (l.status === 'approved' && !l.repaid) {
-                const memberExists = members.some(m => m.id === l.memberId && m.approved !== false);
-                if (!memberExists) return;
-                if (!activeByMember[l.memberId]) {
-                    activeByMember[l.memberId] = {
-                        memberName: l.memberName,
-                        memberPhone: l.memberPhone,
-                        member: members.find(m => m.id === l.memberId),
-                        totalPrincipal: 0, totalRepay: 0, count: 0, loans: [],
-                        appLoanCount: 0, assignedLoanCount: 0,
-                        appLoanBalance: 0, assignedLoanBalance: 0,
-                        isOverdue: false, daysOverdue: 0
-                    };
-                }
-                activeByMember[l.memberId].totalPrincipal += l.amount;
-                activeByMember[l.memberId].totalRepay += l.totalRepay;
-                activeByMember[l.memberId].count++;
-                activeByMember[l.memberId].loans.push(l);
-                if (l.loanQuestions && l.loanQuestions.length > 0) {
-                    activeByMember[l.memberId].appLoanCount++;
-                    activeByMember[l.memberId].appLoanBalance += (l.totalRepay - (l.repaidAmount || 0));
-                    if (l.dueDate && l.dueDate < Date.now()) {
-                        const daysOverdue = Math.floor((Date.now() - l.dueDate) / (1000*60*60*24));
-                        if (daysOverdue > activeByMember[l.memberId].daysOverdue) {
-                            activeByMember[l.memberId].daysOverdue = daysOverdue;
-                            activeByMember[l.memberId].isOverdue = true;
-                        }
-                    }
-                } else {
-                    activeByMember[l.memberId].assignedLoanCount++;
-                    activeByMember[l.memberId].assignedLoanBalance += (l.totalRepay - (l.repaidAmount || 0));
-                }
-            }
-        });
-
-        // Filter to only those with outstanding balance
-        let entries = Object.entries(activeByMember);
-        entries = entries.filter(([memberId, data]) => {
-            const totalBalance = memberLoans[data.memberPhone] || 0;
-            return totalBalance > 0;
-        });
-
-        let activeLoansHtml = '';
-        if (entries.length) {
-            activeLoansHtml = `
-                <div id="activeLoansContainer" style="display: none;">
-                    <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                            <span style="font-size: 0.75rem; font-weight: 700; color: var(--t2);">💳 Active Loans</span>
-                            <span class="pill-badge pill-green">${entries.length} members</span>
-                        </div>
-                        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px;">
-                            ${entries.map(([memberId, data]) => {
-                                const member = data.member;
-                                // 🔥 CURRENT OUTSTANDING BALANCE (this is "Total")
-                                const currentBalance = memberLoans[data.memberPhone] || 0;
-                                const isOverdue = data.isOverdue;
-                                const daysOverdue = data.daysOverdue;
-                                const avatarColor = getAvatarColor(data.memberName);
-                                const initials = data.memberName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-
-                                return `
-                                    <div style="background: rgba(255,255,255,0.04); border: 1px solid ${isOverdue ? 'var(--red)' : 'var(--br)'}; border-radius: 12px; padding: 12px; cursor: pointer; transition: all 0.2s ease; position: relative; ${isOverdue ? 'animation: pulse 2s infinite;' : ''}"
-                                        onclick="showMemberLoanDetails('${memberId}')"
-                                        onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='var(--sh)';"
-                                        onmouseout="this.style.transform='none'; this.style.boxShadow='none';"
-                                    >
-                                        ${isOverdue ? `<div style="position: absolute; top: -6px; right: -6px; background: var(--red); color: white; font-size: 0.5rem; font-weight: 800; padding: 2px 8px; border-radius: 10px; animation: pulse 1.5s infinite;">${daysOverdue}d overdue</div>` : ''}
-                                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
-                                            <div style="width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg, ${avatarColor}, ${avatarColor}cc); display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: 800; color: white; flex-shrink: 0;">${initials || '?'}</div>
-                                            <div style="flex: 1; min-width: 0;">
-                                                <div style="font-size: 0.8rem; font-weight: 700; color: var(--t); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(data.memberName)}</div>
-                                                <div style="font-size: 0.55rem; color: var(--t3);">${data.count} loan(s)</div>
-                                            </div>
-                                        </div>
-                                        <!-- ✅ ONLY "TOTAL" – current outstanding balance -->
-                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; padding: 8px 12px; background: linear-gradient(135deg, rgba(245,158,11,0.12), rgba(245,158,11,0.04)); border-radius: 8px; border-left: 3px solid var(--gold);">
-                                            <span style="font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--t3);">💰 Total</span>
-                                            <span style="font-size: 1.1rem; font-weight: 900; color: ${currentBalance > 0 ? 'var(--gold)' : 'var(--green)'}; text-shadow: 0 0 16px rgba(245,158,11,0.15); letter-spacing: 0.5px;">
-                                                ${money(currentBalance)}
-                                            </span>
-                                        </div>
-                                        <div style="text-align: center; margin-top: 8px; font-size: 0.5rem; color: var(--t3);">👆 Click for details</div>
-                                    </div>
-                                `;
-                            }).join('')}
-                        </div>
-                    </div>
-                </div>
-                <button class="btn btn-purple btn-full" onclick="toggleActiveLoans()" style="margin-top: 8px; padding: 8px; font-size: 0.75rem;">📋 Show Active Loans</button>
-            `;
-        }
-
-        // ─── FINAL HTML FOR SAVINGS TAB ──────────────────────
-        c.innerHTML = `
-            ${warningsHtml}
-            ${financialSummaryHtml}
-            ${pendingActivityHtml}
-            ${pendingLoansHtml}
-            ${activeLoansHtml}
-        `;
-        return;
     }
+
+    const financialSummaryHtml = `
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px;">
+            <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 0.6rem; color: var(--t3); text-transform: uppercase; letter-spacing: 0.5px;">Admin Balance</div>
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; font-weight: 700; color: ${cashFromDeposits < 0 ? 'var(--red)' : 'var(--teal)'};">${money(cashFromDeposits)}</div>
+            </div>
+            <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 0.6rem; color: var(--t3); text-transform: uppercase; letter-spacing: 0.5px;">Profit Pool</div>
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; font-weight: 700; color: ${groupProfit < 0 ? 'var(--red)' : 'var(--green)'};">${money(groupProfit)}</div>
+            </div>
+            <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px; text-align: center;">
+                <div style="font-size: 0.6rem; color: var(--t3); text-transform: uppercase; letter-spacing: 0.5px;">Pending Loans</div>
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 1.1rem; font-weight: 700; color: var(--gold);">${loans.filter(l => l.status === 'pending').length}</div>
+            </div>
+        </div>
+    `;
+
+    // ─── ACTION BUTTONS (restored) ──────────────────────────
+    const actionButtonsHtml = `
+        <div style="display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap;">
+            <button class="btn btn-teal" style="flex:1; padding: 10px;" onclick="openAddTransaction()">💰 Add Transaction</button>
+            <button class="btn btn-red" style="flex:1; padding: 10px;" onclick="openOv('ov-assign-debt'); populateMemberCheckboxes('debt');">🧾 Assign Debt</button>
+        </div>
+    `;
+
+    // ─── PENDING LOANS ──────────────────────────────────────
+    const pendingLoans = loans.filter(l => l.status === 'pending');
+    let pendingLoansHtml = '';
+    if (pendingLoans.length) {
+        pendingLoansHtml = `
+            <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px; margin-bottom: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-size: 0.75rem; font-weight: 700; color: var(--t2);">📋 Pending Loan Requests</span>
+                    <span class="pill-badge pill-amber">${pendingLoans.length}</span>
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+                    ${pendingLoans.map(l => `
+                        <div style="background: rgba(255,255,255,0.04); border: 1px solid var(--br); border-radius: 8px; padding: 8px 12px; display: flex; align-items: center; gap: 8px; flex: 1; min-width: 140px;">
+                            <span style="font-size: 1rem;">${l.loanQuestions && l.loanQuestions.length > 0 ? '⭐' : '📋'}</span>
+                            <div style="flex: 1; min-width: 0;">
+                                <div style="font-size: 0.75rem; font-weight: 600; color: var(--t);">${escapeHtml(l.memberName)}</div>
+                                <div style="font-size: 0.6rem; color: var(--t3);">${money(l.amount)} @ ${l.interestRate}%</div>
+                            </div>
+                            <div style="display: flex; gap: 4px;">
+                                <button class="btn btn-sm btn-green" onclick="openApproveLoanModal('${l.id}')" style="padding: 2px 8px; font-size: 0.6rem;">✅</button>
+                                <button class="btn btn-sm btn-red" onclick="rejectLoan('${l.id}')" style="padding: 2px 8px; font-size: 0.6rem;">✕</button>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    // ─── ACTIVE LOANS (only "Total") ────────────────────────
+    const activeByMember = {};
+    loans.forEach(l => {
+        if (l.status === 'approved' && !l.repaid) {
+            const memberExists = members.some(m => m.id === l.memberId && m.approved !== false);
+            if (!memberExists) return;
+            if (!activeByMember[l.memberId]) {
+                activeByMember[l.memberId] = {
+                    memberName: l.memberName,
+                    memberPhone: l.memberPhone,
+                    member: members.find(m => m.id === l.memberId),
+                    totalPrincipal: 0, totalRepay: 0, count: 0, loans: [],
+                    appLoanCount: 0, assignedLoanCount: 0,
+                    appLoanBalance: 0, assignedLoanBalance: 0,
+                    isOverdue: false, daysOverdue: 0
+                };
+            }
+            activeByMember[l.memberId].totalPrincipal += l.amount;
+            activeByMember[l.memberId].totalRepay += l.totalRepay;
+            activeByMember[l.memberId].count++;
+            activeByMember[l.memberId].loans.push(l);
+            if (l.loanQuestions && l.loanQuestions.length > 0) {
+                activeByMember[l.memberId].appLoanCount++;
+                activeByMember[l.memberId].appLoanBalance += (l.totalRepay - (l.repaidAmount || 0));
+                if (l.dueDate && l.dueDate < Date.now()) {
+                    const daysOverdue = Math.floor((Date.now() - l.dueDate) / (1000*60*60*24));
+                    if (daysOverdue > activeByMember[l.memberId].daysOverdue) {
+                        activeByMember[l.memberId].daysOverdue = daysOverdue;
+                        activeByMember[l.memberId].isOverdue = true;
+                    }
+                }
+            } else {
+                activeByMember[l.memberId].assignedLoanCount++;
+                activeByMember[l.memberId].assignedLoanBalance += (l.totalRepay - (l.repaidAmount || 0));
+            }
+        }
+    });
+
+    let entries = Object.entries(activeByMember);
+    entries = entries.filter(([memberId, data]) => {
+        const totalBalance = memberLoans[data.memberPhone] || 0;
+        return totalBalance > 0;
+    });
+
+    let activeLoansHtml = '';
+    if (entries.length) {
+        activeLoansHtml = `
+            <div id="activeLoansContainer" style="display: none;">
+                <div style="background: var(--card); border: 1px solid var(--br); border-radius: 12px; padding: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <span style="font-size: 0.75rem; font-weight: 700; color: var(--t2);">💳 Active Loans</span>
+                        <span class="pill-badge pill-green">${entries.length} members</span>
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px;">
+                        ${entries.map(([memberId, data]) => {
+                            const member = data.member;
+                            const currentBalance = memberLoans[data.memberPhone] || 0;
+                            const isOverdue = data.isOverdue;
+                            const daysOverdue = data.daysOverdue;
+                            const avatarColor = getAvatarColor(data.memberName);
+                            const initials = data.memberName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+
+                            return `
+                                <div style="background: rgba(255,255,255,0.04); border: 1px solid ${isOverdue ? 'var(--red)' : 'var(--br)'}; border-radius: 12px; padding: 12px; cursor: pointer; transition: all 0.2s ease; position: relative; ${isOverdue ? 'animation: pulse 2s infinite;' : ''}"
+                                    onclick="showMemberLoanDetails('${memberId}')"
+                                    onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='var(--sh)';"
+                                    onmouseout="this.style.transform='none'; this.style.boxShadow='none';"
+                                >
+                                    ${isOverdue ? `<div style="position: absolute; top: -6px; right: -6px; background: var(--red); color: white; font-size: 0.5rem; font-weight: 800; padding: 2px 8px; border-radius: 10px; animation: pulse 1.5s infinite;">${daysOverdue}d overdue</div>` : ''}
+                                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                                        <div style="width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg, ${avatarColor}, ${avatarColor}cc); display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: 800; color: white; flex-shrink: 0;">${initials || '?'}</div>
+                                        <div style="flex: 1; min-width: 0;">
+                                            <div style="font-size: 0.8rem; font-weight: 700; color: var(--t); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(data.memberName)}</div>
+                                            <div style="font-size: 0.55rem; color: var(--t3);">${data.count} loan(s)</div>
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; padding: 8px 12px; background: linear-gradient(135deg, rgba(245,158,11,0.12), rgba(245,158,11,0.04)); border-radius: 8px; border-left: 3px solid var(--gold);">
+                                        <span style="font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--t3);">💰 Total</span>
+                                        <span style="font-size: 1.1rem; font-weight: 900; color: ${currentBalance > 0 ? 'var(--gold)' : 'var(--green)'}; text-shadow: 0 0 16px rgba(245,158,11,0.15); letter-spacing: 0.5px;">
+                                            ${money(currentBalance)}
+                                        </span>
+                                    </div>
+                                    <div style="text-align: center; margin-top: 8px; font-size: 0.5rem; color: var(--t3);">👆 Click for details</div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            </div>
+            <button class="btn btn-purple btn-full" onclick="toggleActiveLoans()" style="margin-top: 8px; padding: 8px; font-size: 0.75rem;">📋 Show Active Loans</button>
+        `;
+    }
+
+    // ─── FINAL HTML FOR SAVINGS TAB ──────────────────────────
+    c.innerHTML = `
+        ${warningsHtml}
+        ${financialSummaryHtml}
+        ${actionButtonsHtml}
+        ${pendingActivityHtml}
+        ${pendingLoansHtml}
+        ${activeLoansHtml}
+    `;
+    return;
+}
 
     // ─── NOTICE TAB ───────────────────────────────────────────
     else if (currentAdminTab === 'notice') {
