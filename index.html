@@ -5954,15 +5954,17 @@ function getDepositMessage(member, depositAmount, remainingLoanBefore, remaining
         return `📅 THIS DEPOSIT RUNS TILL ${dateStr} (${daysCovered} day${daysCovered > 1 ? 's' : ''})`;
     }
 }
+// ─── Get member's active days (robust) ────────────────────────────
 function getDaysActive(member) {
     if (!member) return 0;
-    // If daysActive is explicitly stored, use it
-    if (member.daysActive !== undefined && member.daysActive !== null) {
+    // If daysActive is explicitly stored (e.g., after transfer), use it
+    if (member.daysActive && typeof member.daysActive === 'number' && member.daysActive > 0) {
         return member.daysActive;
     }
-    // Otherwise calculate from joinDate
+    // Fallback: compute from joinDate
     if (!member.joinDate) return 0;
     const join = new Date(member.joinDate);
+    if (isNaN(join.getTime())) return 0;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const diff = Math.floor((today - join) / (1000 * 60 * 60 * 24));
@@ -10644,16 +10646,14 @@ window.showMemberTransferOption = function(memberId) {
         toast('Member not found', '#ef4444');
         return;
     }
-
     // Check if member has outstanding balance
-    const debt = (memberLoans[member.phone] || 0) + (memberDebts[member.phone] || 0);
+    const debt = computeMemberTotalDebt(member);
     if (debt === 0) {
         if (confirm(`Delete ${member.name}? They have no outstanding balance.`)) {
             deleteMember(memberId);
         }
         return;
     }
-
     // Show transfer option
     showTransferMembershipModal(member, null);
 };
@@ -11618,7 +11618,7 @@ function showTransferMembershipModal(leavingMember, requestId) {
         <div class="bs" style="max-width: 520px; max-height: 85vh; overflow-y: auto;">
             <div class="bs-title" style="font-size: 1.1rem;">🔄 Transfer Membership</div>
             <div style="color: #9ca3af; font-size: 0.85rem; margin-bottom: 16px;">
-                Transfer ${leavingMember.name}'s membership to another member.
+                Transfer ${escapeHtml(leavingMember.name)}'s membership to another member.
             </div>
 
             <div style="background: rgba(245,158,11,0.08); border-radius: 12px; padding: 12px; margin-bottom: 16px; border: 1px solid rgba(245,158,11,0.15);">
@@ -11626,9 +11626,12 @@ function showTransferMembershipModal(leavingMember, requestId) {
                 <div style="font-weight: 700; font-size: 1rem;">${escapeHtml(leavingMember.name)}</div>
                 <div style="font-size: 0.8rem; color: var(--t2);">📞 ${leavingMember.phone}</div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 6px; font-size: 0.75rem;">
-                    <span style="color: var(--t3);">Total Debt:</span><span style="font-weight: 600; color: var(--red);">${money(getMemberTotalDebt(leavingMember))}</span>
-                    <span style="color: var(--t3);">Days Active:</span><span style="font-weight: 600;">${getDaysActive(leavingMember)} days</span>
-                    <span style="color: var(--t3);">Join Date:</span><span style="font-weight: 600;">${leavingMember.joinDate || 'N/A'}</span>
+                    <span style="color: var(--t3);">Total Debt:</span>
+                    <span style="font-weight: 600; color: var(--red);">UGX ${computeMemberTotalDebt(leavingMember).toLocaleString()}</span>
+                    <span style="color: var(--t3);">Days Active:</span>
+                    <span style="font-weight: 600;">${getDaysActive(leavingMember)} days</span>
+                    <span style="color: var(--t3);">Join Date:</span>
+                    <span style="font-weight: 600;">${leavingMember.joinDate || 'N/A'}</span>
                 </div>
             </div>
 
@@ -11637,7 +11640,9 @@ function showTransferMembershipModal(leavingMember, requestId) {
                 <select id="transfer-buyer-select" class="inp">
                     <option value="">-- Select Member --</option>
                     ${availableMembers.map(m => `
-                        <option value="${m.id}">${escapeHtml(m.name)} (${getDaysActive(m)} days, ${money(getMemberTotalDebt(m))} debt)</option>
+                        <option value="${m.id}">
+                            ${escapeHtml(m.name)} (${getDaysActive(m)} days, UGX ${computeMemberTotalDebt(m).toLocaleString()} debt)
+                        </option>
                     `).join('')}
                 </select>
             </div>
@@ -11667,8 +11672,8 @@ function showTransferMembershipModal(leavingMember, requestId) {
         const buyer = members.find(m => m.id === buyerId);
         if (!buyer) return;
 
-        const leaverDebt = getMemberTotalDebt(leavingMember);
-        const buyerDebt = getMemberTotalDebt(buyer);
+        const leaverDebt = computeMemberTotalDebt(leavingMember);
+        const buyerDebt = computeMemberTotalDebt(buyer);
         const newDebt = leaverDebt + buyerDebt;
 
         const leaverDays = getDaysActive(leavingMember);
@@ -11679,18 +11684,19 @@ function showTransferMembershipModal(leavingMember, requestId) {
         const leaverDate = new Date(leavingMember.joinDate);
         const buyerDate = new Date(buyer.joinDate);
         const earliestDate = leaverDate < buyerDate ? leaverDate : buyerDate;
+        const earliestDateStr = earliestDate.toISOString().split('T')[0];
 
         previewDiv.style.display = 'block';
         previewDiv.innerHTML = `
             <div style="font-weight: 700; font-size: 0.85rem; margin-bottom: 6px;">📊 Transfer Summary</div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 0.8rem;">
                 <span style="color: var(--t3);">Buying Member:</span><span style="font-weight: 600;">${escapeHtml(buyer.name)}</span>
-                <span style="color: var(--t3);">Current Debt:</span><span style="color: var(--red);">${money(buyerDebt)}</span>
+                <span style="color: var(--t3);">Current Debt:</span><span style="color: var(--red);">UGX ${buyerDebt.toLocaleString()}</span>
                 <span style="color: var(--t3);">Current Days:</span><span>${buyerDays} days</span>
                 <span style="color: var(--t3);">─────────────────</span><span></span>
-                <span style="color: var(--gold); font-weight: 700;">New Debt:</span><span style="color: var(--red); font-weight: 700;">${money(newDebt)}</span>
+                <span style="color: var(--gold); font-weight: 700;">New Debt:</span><span style="color: var(--red); font-weight: 700;">UGX ${newDebt.toLocaleString()}</span>
                 <span style="color: var(--gold); font-weight: 700;">New Days:</span><span style="font-weight: 700;">${newDays} days</span>
-                <span style="color: var(--gold); font-weight: 700;">New Join Date:</span><span style="font-weight: 700;">${earliestDate.toLocaleDateString()}</span>
+                <span style="color: var(--gold); font-weight: 700;">New Join Date:</span><span style="font-weight: 700;">${earliestDateStr}</span>
             </div>
             <div class="micro muted" style="margin-top: 6px;">The buying member will inherit the leaving member's rotation position and leaderboard rank.</div>
         `;
@@ -11741,17 +11747,15 @@ async function processMembershipTransfer(leavingMember, buyingMember, requestId)
         }
 
         // ─── 2. Calculate merged values ──────────────────────────
-        // Total debt (loans + debts)
-        const leaverDebt = (memberLoans[leavingMember.phone] || 0) + (memberDebts[leavingMember.phone] || 0);
-        const buyerDebt = (memberLoans[buyingMember.phone] || 0) + (memberDebts[buyingMember.phone] || 0);
+        const leaverDebt = computeMemberTotalDebt(leavingMember);
+        const buyerDebt = computeMemberTotalDebt(buyingMember);
         const newTotalDebt = leaverDebt + buyerDebt;
 
-        // Active days
         const leaverDays = getDaysActive(leavingMember);
         const buyerDays = getDaysActive(buyingMember);
         const newTotalDays = leaverDays + buyerDays;
 
-        // Earliest join date (preserve seniority)
+        // Earliest join date
         const leaverDate = new Date(leavingMember.joinDate);
         const buyerDate = new Date(buyingMember.joinDate);
         const earliestDate = leaverDate < buyerDate ? leaverDate : buyerDate;
@@ -11768,43 +11772,36 @@ async function processMembershipTransfer(leavingMember, buyingMember, requestId)
             earliestDate: earliestDateStr
         });
 
-        // ─── 3. Reassign all transactions to buying member ──────
+        // ─── 3. Reassign transactions and loans ──────────────────
         const txCount = await reassignTransactions(leavingMember.phone, buyingMember.phone);
         console.log(`✅ Reassigned ${txCount} transactions`);
 
-        // ─── 4. Reassign all loans to buying member ──────────────
         const loanCount = await reassignLoans(leavingMember.id, buyingMember.id);
         console.log(`✅ Reassigned ${loanCount} loans`);
 
-        // ─── 5. Update buying member's record ────────────────────
-        // Critical: Set joinDate to earliest date and store daysActive explicitly
+        // ─── 4. Update buying member ─────────────────────────────
         await db.ref('members/' + buyingMember.id).update({
             joinDate: earliestDateStr,
-            daysActive: newTotalDays,        // Explicit stored value for quick access
+            daysActive: newTotalDays,        // Explicit stored value
             updatedAt: Date.now()
         });
 
-        // ─── 6. Update rotation order ────────────────────────────
+        // ─── 5. Update rotation order ────────────────────────────
         const rotationOrder = rotation.order || [];
         let newOrder = rotationOrder.filter(id => id !== leavingMember.id);
-        // If buying member wasn't in rotation, insert at leaver's position
         if (!newOrder.includes(buyingMember.id)) {
             const leaverIndex = rotationOrder.indexOf(leavingMember.id);
-            // If leaverIndex is -1, append at end; otherwise insert
             if (leaverIndex === -1) {
                 newOrder.push(buyingMember.id);
             } else {
                 newOrder.splice(leaverIndex, 0, buyingMember.id);
             }
         }
-        await db.ref('rotation').update({ 
-            order: newOrder, 
-            currentIndex: 0 
-        });
+        await db.ref('rotation').update({ order: newOrder, currentIndex: 0 });
         rotation.order = newOrder;
         rotation.currentIndex = 0;
 
-        // ─── 7. Mark leave request as transferred (if provided) ──
+        // ─── 6. Mark leave request as transferred ────────────────
         if (requestId) {
             await db.ref('leaveRequests/' + requestId).update({
                 status: 'transferred',
@@ -11814,13 +11811,13 @@ async function processMembershipTransfer(leavingMember, buyingMember, requestId)
             });
         }
 
-        // ─── 8. Delete leaving member ─────────────────────────────
+        // ─── 7. Delete leaving member ─────────────────────────────
         await db.ref('members/' + leavingMember.id).remove();
 
-        // ─── 9. Send notifications ──────────────────────────────
+        // ─── 8. Notify both parties ──────────────────────────────
         await db.ref('notifications/' + buyingMember.id).push({
             id: Date.now(),
-            text: `🔄 Membership transferred! You have inherited ${leavingMember.name}'s membership. New debt: UGX ${newTotalDebt.toLocaleString()}, Active days: ${newTotalDays} days, Join date: ${earliestDateStr}.`,
+            text: `🔄 Membership transferred! New debt: UGX ${newTotalDebt.toLocaleString()}, Active days: ${newTotalDays} days, Join date: ${earliestDateStr}.`,
             date: Date.now(),
             read: false,
             type: 'transfer_complete'
@@ -11828,36 +11825,34 @@ async function processMembershipTransfer(leavingMember, buyingMember, requestId)
 
         await db.ref('notifications/admin').push({
             id: Date.now(),
-            text: `🔄 Membership transferred from ${leavingMember.name} to ${buyingMember.name}. Debt merged: UGX ${newTotalDebt.toLocaleString()}, Days merged: ${newTotalDays} days.`,
+            text: `🔄 Membership transferred from ${leavingMember.name} to ${buyingMember.name}. Debt: UGX ${newTotalDebt.toLocaleString()}, Days: ${newTotalDays}.`,
             date: Date.now(),
             read: false,
             type: 'admin_transfer'
         });
 
-        // ─── 10. FULL DATA RELOAD ──────────────────────────────────
-        // Reload members, transactions, loans from Firebase
-        await reloadAllData();
-        // Recompute all balances (memberLoans, memberDebts, cash, profit)
-        computePots();
-        // Refresh UI
+        // ─── 9. FULL DATA RELOAD ──────────────────────────────────
+        await reloadAllData();     // Reload members, transactions, loans
+        computePots();             // Rebuild memberLoans, memberDebts, etc.
         updateHomeUI();
         updateAccountUI();
         renderAll();
 
-        // ─── 11. Verify and log final state ──────────────────────
+        // ─── 10. Verify and log final state ──────────────────────
         const updatedBuyer = members.find(m => m.id === buyingMember.id);
         if (updatedBuyer) {
-            const finalDays = getDaysActive(updatedBuyer) || updatedBuyer.daysActive || 0;
-            const finalDebt = (memberLoans[updatedBuyer.phone] || 0) + (memberDebts[updatedBuyer.phone] || 0);
+            const finalDays = getDaysActive(updatedBuyer);
+            const finalDebt = computeMemberTotalDebt(updatedBuyer);
             console.log('✅ Transfer complete:', {
                 member: updatedBuyer.name,
                 finalDays,
                 finalDebt,
                 joinDate: updatedBuyer.joinDate
             });
+            toast(`✅ Transferred to ${updatedBuyer.name}. Debt: ${money(finalDebt)}, Days: ${finalDays}`, '#10b981');
+        } else {
+            toast('✅ Transfer completed. Buyer found in updated data?', '#10b981');
         }
-
-        toast(`✅ Membership transferred from ${leavingMember.name} to ${buyingMember.name}`, '#10b981');
 
     } catch (err) {
         console.error('Transfer error:', err);
@@ -11875,12 +11870,12 @@ async function processMembershipTransfer(leavingMember, buyingMember, requestId)
     }
 }
 
+// ─── Reassign all transactions from old phone to new phone ────────
 async function reassignTransactions(oldPhone, newPhone) {
     const snap = await db.ref('transactions').once('value');
     const allTxs = snap.val() || {};
     const updates = {};
     let count = 0;
-
     const newMember = members.find(m => m.phone === newPhone);
     const newName = newMember ? newMember.name : 'Unknown';
 
@@ -11888,24 +11883,20 @@ async function reassignTransactions(oldPhone, newPhone) {
         if (tx.memberPhone === oldPhone) {
             updates[`transactions/${id}/memberPhone`] = newPhone;
             updates[`transactions/${id}/memberName`] = newName;
-            // Preserve original description with transfer note
             const origDesc = tx.description || tx.type || 'Transaction';
-            updates[`transactions/${id}/description`] = `[Transferred from ${oldPhone}] ${origDesc}`;
+            updates[`transactions/${id}/description`] = `[Transferred] ${origDesc}`;
             count++;
         }
     }
-
-    if (count > 0) {
-        await db.ref().update(updates);
-    }
+    if (count > 0) await db.ref().update(updates);
     return count;
 }
+// ─── Reassign all loans from old member ID to new member ID ──────
 async function reassignLoans(oldMemberId, newMemberId) {
     const snap = await db.ref('loans').once('value');
     const allLoans = snap.val() || {};
     const updates = {};
     let count = 0;
-
     const newMember = members.find(m => m.id === newMemberId);
     const newName = newMember ? newMember.name : 'Unknown';
     const newPhone = newMember ? newMember.phone : '';
@@ -11915,16 +11906,12 @@ async function reassignLoans(oldMemberId, newMemberId) {
             updates[`loans/${id}/memberId`] = newMemberId;
             updates[`loans/${id}/memberName`] = newName;
             updates[`loans/${id}/memberPhone`] = newPhone;
-            // Preserve original reason
             const origReason = loan.reason || 'Loan';
             updates[`loans/${id}/reason`] = `[Transferred] ${origReason}`;
             count++;
         }
     }
-
-    if (count > 0) {
-        await db.ref().update(updates);
-    }
+    if (count > 0) await db.ref().update(updates);
     return count;
 }
 function getMemberName(phone) {
@@ -14533,13 +14520,13 @@ function updateAdminMembersList() {
                     <div class="mc-phone">${escapeHtml(phone)}</div>
                     <span class="pill-badge ${m.approved === false ? 'pill-amber' : 'pill-green'}" style="margin-top:3px">${m.approved === false ? 'Pending' : 'Active'}</span>
                 </div>
-                <div style="display:flex; gap:5px;">
-                    <button class="btn btn-sm btn-teal" onclick="showMemberReceipt('${id}')">🧾 Receipt</button>
-                    <button class="btn btn-sm btn-sec" onclick="openEditMember('${id}')">✏️</button>
-<button class="btn btn-sm btn-amber" onclick="showMemberTransferOption('${id}')">🔄 Transfer</button>
-<button class="btn btn-sm btn-red" onclick="deleteMember('${id}')">🗑️</button>
-                    ${m.feeCleared === false ? `<button class="btn btn-sm btn-green" onclick="clearSignupFee('${id}')">💰 Clear Fee</button>` : ''}
-                </div>
+<div style="display:flex; gap:5px;">
+    <button class="btn btn-sm btn-teal" onclick="showMemberReceipt('${id}')">🧾 Receipt</button>
+    <button class="btn btn-sm btn-sec" onclick="openEditMember('${id}')">✏️</button>
+    <button class="btn btn-sm btn-amber" onclick="showMemberTransferOption('${id}')">🔄 Transfer</button>
+    <button class="btn btn-sm btn-red" onclick="deleteMember('${id}')">🗑️</button>
+    ${m.feeCleared === false ? `<button class="btn btn-sm btn-green" onclick="clearSignupFee('${id}')">💰 Clear Fee</button>` : ''}
+</div>
             </div>
         `;
     });
@@ -23562,7 +23549,11 @@ function sendLocalNotification(title, body) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   try { new Notification(title, { body: body, tag: 'htf-' + Date.now() }); } catch(e) {}
 }
-
+// ─── Compute member's total debt (loans + debts) ──────────────────
+function computeMemberTotalDebt(member) {
+    if (!member) return 0;
+    return (memberLoans[member.phone] || 0) + (memberDebts[member.phone] || 0);
+}
 // ─── Member of the Month ──────────────────────────────────────
 function computeMemberOfTheMonth() {
   const activeMembers = members.filter(m => m.approved);
