@@ -3354,7 +3354,7 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
 </div>
     <div id="t-home" class="tab on">
     <!-- ════════════════════════════════════════════════════════ -->
-    <!-- STATS STRIP (2 tiles)                                  -->
+    <!-- STATS STRIP                                            -->
     <!-- ════════════════════════════════════════════════════════ -->
     <div class="stats-strip" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; flex-shrink: 0;">
         <div class="ss-tile ss-t-gold" style="padding: 6px 4px; border-radius: 10px;">
@@ -3368,7 +3368,6 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
             <div class="ss-lbl" style="font-size: 0.45rem;">Available</div>
         </div>
     </div>
-
     <!-- ════════════════════════════════════════════════════════ -->
     <!-- MEMBER OF THE MONTH                                    -->
     <!-- ════════════════════════════════════════════════════════ -->
@@ -4539,7 +4538,7 @@ let settings = {
   noticeText: 'Welcome to Harvest Trust Finance!',
   noticeImageData: '',
   themeMode: 'light',
-  themeColor: 'facebook', // ✅ changed from 'facebook',
+  themeColor: 'facebook',
   penaltyInterestRate: 5,
   groupStartDate: '',
   signupFee: 0,
@@ -4548,7 +4547,11 @@ let settings = {
   termsAndConditions: ``,
   maintenanceMode: false,
   maintenanceMessage: '',
-  prepaidBalance: {}  
+  prepaidBalance: {},
+  nextAnniversary: '',               // ← add if missing
+  anniversaryActive: false,        // <-- NEW: true when overlay should be shown
+  anniversaryEndTime: 0,            // <-- NEW: timestamp when countdown ends
+  anniversaryResetDone: false        // ← new flag
 };
 let adminShowGrid = true;   
 let currentUser=null,adminUnlocked=false,currentAdminTab='savings';
@@ -4570,6 +4573,27 @@ let notifications = {};
 let memberApplicationLoans = {};  
 let memberAssignedLoans = {};  
 let memberPrepaid = {}; // Prepaid balances (kept for compatibility, but always empty)
+// ─── Anniversary Settings (with fallback) ────────────────────────
+let anniversarySettings = {
+    startDate: settings.groupStartDate || new Date().toISOString().slice(0, 10),
+    nextAnniversary: settings.nextAnniversary || (() => {
+        const d = new Date();
+        d.setFullYear(d.getFullYear() + 1);
+        return d.toISOString().slice(0, 10);
+    })(),
+    dailyAmount: settings.dailyAmount || 2500,
+    welfareAmount: settings.welfareAmount || 500,
+    loanInterest: loanSettings.interestRate || 5,
+    adminPassword: settings.adminPassword || 'admin123'
+};
+
+let distributionState = {
+    isCountingDown: false,
+    countdownInterval: null,
+    targetDate: null,
+    distributionData: null,
+    isPrepared: false
+};
 // ─── Translation helper (identity function) ──────────────
 function t(str) { return str; }
 
@@ -4647,6 +4671,43 @@ function getLastPayoutDate() {
     return Date.now() - (7 * 24 * 60 * 60 * 1000);
 }
 
+function checkAnniversaryOnLoad() {
+  // If active flag is set and end time is in the future, show overlay immediately
+  if (settings.anniversaryActive === true && settings.anniversaryEndTime > Date.now()) {
+    const data = calculateAnniversaryDistribution();
+    if (data) {
+      distributionState.distributionData = data;
+      distributionState.targetDate = settings.anniversaryEndTime;
+      distributionState.isCountingDown = true;
+      distributionState.isPrepared = true;
+      showCountdownOverlay();
+      if (distributionState.countdownInterval) clearInterval(distributionState.countdownInterval);
+      distributionState.countdownInterval = setInterval(() => {
+        const now = Date.now();
+        if (now >= distributionState.targetDate) {
+          clearInterval(distributionState.countdownInterval);
+          distributionState.countdownInterval = null;
+          distributionState.isCountingDown = false;
+          executeAnniversaryReset();
+        }
+        updateAnniversaryCountdown();
+      }, 1000);
+      toast('⏳ Anniversary reset in progress.', '#f59e0b');
+    } else {
+      // If no data, clear the flag
+      db.ref('settings/anniversaryActive').set(false);
+      settings.anniversaryActive = false;
+    }
+  } else if (settings.anniversaryActive === true) {
+    // End time passed – clear flag and run reset if not done
+    if (!settings.anniversaryResetDone) {
+      executeAnniversaryReset();
+    } else {
+      db.ref('settings/anniversaryActive').set(false);
+      settings.anniversaryActive = false;
+    }
+  }
+}
 // ──────────────────────────────────────────────────────────────
 // GET NEXT PAYMENT DUE DATE – Based on member's balance
 // ──────────────────────────────────────────────────────────────
@@ -4844,30 +4905,6 @@ function getDaysUntilProfitDistribution() {
     const diffTime = anniversaryThisYear - today;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays;
-}
-
-function updateAnniversaryCountdown() {
-    const badge = document.getElementById('anniversary-badge');
-    if (!badge) return;
-    
-    const days = getDaysUntilProfitDistribution();
-    let text;
-    if (days === null) {
-        text = '--';
-    } else if (days === 0) {
-        text = '🎉';
-    } else {
-        text = days.toString();
-    }
-    
-    if (badge.textContent !== text) {
-        badge.textContent = text;
-        // Auto‑adjust width for 2‑4 digits
-        const len = text.length;
-        if (len <= 2) badge.style.minWidth = '24px';
-        else if (len === 3) badge.style.minWidth = '34px';
-        else badge.style.minWidth = '44px';
-    }
 }
 
 // Get the start of today (local midnight)
@@ -5974,6 +6011,67 @@ function getDailyRequiredForMember(memberId) {
   const dailySavings = (settings.dailyAmount || 2000) + (settings.welfareAmount || 500);
   return dailySavings;}
 
+function checkAnniversaryAutoStart() {
+  if (window._anniversaryAutoChecked) return;
+  window._anniversaryAutoChecked = true;
+
+  let nextAnniv = settings.nextAnniversary;
+  if (!nextAnniv && settings.groupStartDate) {
+    const start = new Date(settings.groupStartDate);
+    start.setFullYear(start.getFullYear() + 1);
+    nextAnniv = start.toISOString().slice(0, 10);
+    settings.nextAnniversary = nextAnniv;
+    db.ref('settings/nextAnniversary').set(nextAnniv).catch(() => {});
+  }
+  if (!nextAnniv) return;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const annivDate = new Date(nextAnniv);
+  annivDate.setHours(0, 0, 0, 0);
+
+  if (settings.anniversaryResetDone === true) return;
+
+  if (today.getTime() >= annivDate.getTime()) {
+    if (settings.anniversaryActive === true) return;
+
+    const data = calculateAnniversaryDistribution();
+    if (!data) {
+      toast('No profit to distribute or no members.', '#f59e0b');
+      return;
+    }
+
+    const endTime = Date.now() + (30 * 60 * 1000);
+    db.ref('settings').update({
+      anniversaryActive: true,
+      anniversaryEndTime: endTime,
+      anniversaryResetDone: false
+    }).then(() => {
+      settings.anniversaryActive = true;
+      settings.anniversaryEndTime = endTime;
+      distributionState.distributionData = data;
+      distributionState.targetDate = endTime;
+      distributionState.isCountingDown = true;
+      distributionState.isPrepared = true;
+      showCountdownOverlay();
+      if (distributionState.countdownInterval) clearInterval(distributionState.countdownInterval);
+      distributionState.countdownInterval = setInterval(() => {
+        const now = Date.now();
+        if (now >= distributionState.targetDate) {
+          clearInterval(distributionState.countdownInterval);
+          distributionState.countdownInterval = null;
+          distributionState.isCountingDown = false;
+          executeAnniversaryReset();
+        }
+        updateAnniversaryCountdown();
+      }, 1000);
+      toast('🎉 Anniversary reached! Group reset will begin in 30 minutes.', '#f59e0b');
+    }).catch(err => {
+      console.error('Failed to set anniversary flags:', err);
+      toast('❌ Failed to start anniversary reset.', '#ef4444');
+    });
+  }
+}
 // ==========================================
 // LATE PAYMENT REMINDER - APPLICATION LOANS ONLY
 // ==========================================
@@ -10344,158 +10442,103 @@ function showMainApp() {
   }
 }
 
-// 10 group-relevant questions
-const securityQuestions = [
-  { text: "Why do you want to join this savings group?", required: true, type: "textarea" },
-  { text: "How did you hear about Harvest Trust Finance?", required: true, type: "dropdown", options: ['', 'Social media', 'Friend', 'WhatsApp group', 'Advertisement', 'Other'] },
-  { text: "How much are you able to save weekly (UGX)?", required: true, type: "dropdown", options: ['', 'UGX 10,000', 'UGX 20,000', 'UGX 30,000', 'UGX 40,000', 'UGX 50,000', 'More than UGX 50,000'] },
-  { text: "Have you ever taken a loan from a savings group before?", required: true, type: "dropdown", options: ['', 'Yes', 'No'] },
-  { text: "If yes, did you repay on time? (Skip if no)", required: false, type: "dropdown", options: ['', 'Yes, fully', 'Partially', 'No'] },
-  { text: "What would you use a loan for if you got one?", required: true, type: "dropdown", options: ['', 'Business', 'School fees', 'Medical', 'Home needs', 'Farming', 'Other'] },
-  { text: "How do you prefer to make your daily savings? (mobile money, cash, bank)", required: true, type: "dropdown", options: ['', 'Mobile money', 'Cash', 'Bank transfer', 'Agent collection'] },
-  { text: "What is your current occupation?", required: true, type: "textarea" },
-  { text: "Do you have any other source of income?", required: true, type: "dropdown", options: ['', 'Yes', 'No'] },
-  { text: "How many people in your household depend on your income?", required: true, type: "dropdown", options: ['', '1', '2', '3', '4', '5', '6+'] }
-];
 let currentQuestionIndex = 0;
-let signupAnswers = new Array(10).fill('');
 let signupExtra = { name: '', phone: '', why: '', photoData: '' };
 
-function showSignupPage() {
-  const container = document.getElementById('signup-question-container');
-  const extraDiv = document.getElementById('signup-extra-fields');
-  const stepTitle = document.getElementById('signup-step-title');
-  const stepSub = document.getElementById('signup-step-subtitle');
-  const prevBtn = document.getElementById('signup-prev-btn');
-  const nextBtn = document.getElementById('signup-next-btn');
+window.showSignupPage = function() {
+    const container = document.getElementById('signup-question-container');
+    const extraDiv = document.getElementById('signup-extra-fields');
+    const stepTitle = document.getElementById('signup-step-title');
+    const stepSub = document.getElementById('signup-step-subtitle');
+    const prevBtn = document.getElementById('signup-prev-btn');
+    const nextBtn = document.getElementById('signup-next-btn');
 
-  // Define the 5 steps
-  const steps = [
-    { name: 'Personal Info', indices: [0,1,2,3], type: 'questions' },
-    { name: 'Financial Habits', indices: [4,5,6], type: 'questions' },
-    { name: 'Goals & Details', indices: [7,8,9], type: 'questions' },
-    { name: 'Your Details', indices: [], type: 'details' },
-    { name: 'Terms & Submit', indices: [], type: 'terms' }
-  ];
+    // Define only 2 steps
+    const steps = [
+        { name: 'Your Details', type: 'details' },
+        { name: 'Terms & Submit', type: 'terms' }
+    ];
 
-  // Build stepper (single row, 5 circles)
-  let stepperHtml = '<div style="display: flex; align-items: center; justify-content: center; margin-bottom: 20px; overflow-x: auto; padding: 4px 2px;">' +
-    '<div style="display: flex; align-items: center; flex-wrap: nowrap; gap: 4px;">';
-  for (let s = 0; s < steps.length; s++) {
-    const step = steps[s];
-    let isCompleted = false;
-    if (step.type === 'questions') {
-      // All questions in this step have a non‑empty answer
-      isCompleted = step.indices.every(idx => signupAnswers[idx] && signupAnswers[idx] !== 'Skipped');
-    } else if (step.type === 'details') {
-      isCompleted = !!(signupExtra.name && signupExtra.phone);
-    } else if (step.type === 'terms') {
-      isCompleted = false; // only after submit
+    // Build stepper (2 circles)
+    let stepperHtml = '<div style="display: flex; align-items: center; justify-content: center; margin-bottom: 20px; overflow-x: auto; padding: 4px 2px;">' +
+        '<div style="display: flex; align-items: center; flex-wrap: nowrap; gap: 4px;">';
+    for (let s = 0; s < steps.length; s++) {
+        const step = steps[s];
+        let isCompleted = false;
+        if (step.type === 'details') {
+            isCompleted = !!(signupExtra.name && signupExtra.phone);
+        } else if (step.type === 'terms') {
+            isCompleted = false; // only after submit
+        }
+        const isCurrent = (currentStep === s);
+        let bgColor = isCompleted ? '#10b981' : (isCurrent ? '#f59e0b' : '#2d3748');
+        stepperHtml += `<div style="width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: ${bgColor}; color: #fff; font-weight: bold; font-size: 0.85rem; border: 1.5px solid rgba(255,255,255,0.2); box-shadow: ${isCurrent ? '0 0 0 2px rgba(245,158,11,0.4)' : 'none'};">${s+1}</div>`;
+        if (s < steps.length-1) {
+            stepperHtml += `<div style="width: 20px; height: 2px; background: #4a5568;"></div>`;
+        }
     }
-    const isCurrent = (currentStep === s);
-    let bgColor = isCompleted ? '#10b981' : (isCurrent ? '#f59e0b' : '#2d3748');
-    stepperHtml += `<div style="width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: ${bgColor}; color: #fff; font-weight: bold; font-size: 0.85rem; border: 1.5px solid rgba(255,255,255,0.2); box-shadow: ${isCurrent ? '0 0 0 2px rgba(245,158,11,0.4)' : 'none'};">${s+1}</div>`;
-    if (s < steps.length-1) {
-      stepperHtml += `<div style="width: 20px; height: 2px; background: #4a5568;"></div>`;
+    stepperHtml += '</div></div>';
+
+    // Insert or update stepper
+    let stepperDiv = document.getElementById('signup-stepper');
+    if (stepperDiv) {
+        stepperDiv.innerHTML = stepperHtml;
+    } else {
+        stepperDiv = document.createElement('div');
+        stepperDiv.id = 'signup-stepper';
+        stepperDiv.innerHTML = stepperHtml;
+        const authCard = document.querySelector('#signup-screen .auth-card');
+        if (authCard) authCard.insertBefore(stepperDiv, authCard.firstChild.nextSibling);
     }
-  }
-  stepperHtml += '</div></div>';
 
-  // Insert or update stepper
-  let stepperDiv = document.getElementById('signup-stepper');
-  if (stepperDiv) {
-    stepperDiv.innerHTML = stepperHtml;
-  } else {
-    stepperDiv = document.createElement('div');
-    stepperDiv.id = 'signup-stepper';
-    stepperDiv.innerHTML = stepperHtml;
-    const authCard = document.querySelector('#signup-screen .auth-card');
-    if (authCard) authCard.insertBefore(stepperDiv, authCard.firstChild.nextSibling);
-  }
+    stepTitle.style.display = 'none';
+    stepSub.style.display = 'block';
 
-  stepTitle.style.display = 'none';
-  stepSub.style.display = 'block';
+    const currentStepObj = steps[currentStep];
 
-  const currentStepObj = steps[currentStep];
-
-  // ───────────────────────────────────────────────────────────
-  // Step type: questions (1‑3)
-  // ───────────────────────────────────────────────────────────
-  if (currentStepObj.type === 'questions') {
-    container.style.display = 'block';
-    extraDiv.style.display = 'none';
-    stepSub.innerHTML = `<strong style="font-size:1rem; color:var(--gold);">${currentStepObj.name}</strong>`;
-    let html = '';
-    for (let idx of currentStepObj.indices) {
-      const q = securityQuestions[idx];
-      const requiredMark = q.required ? '<span style="color:#ef4444;">*</span>' : ' <span class="micro">(optional)</span>';
-      const currentAnswer = signupAnswers[idx] === 'Skipped' ? '' : (signupAnswers[idx] || '');
-      html += `<div class="fgrp"><label class="flbl">${idx+1}. ${q.text}${requiredMark}</label>`;
-      if (q.type === 'dropdown') {
-        let optionsHtml = `<select id="signup-answer-${idx}" class="inp">`;
-        q.options.forEach(opt => {
-          const selected = (currentAnswer === opt) ? 'selected' : '';
-          optionsHtml += `<option value="${opt}" ${selected}>${opt === '' ? '— Select —' : opt}</option>`;
-        });
-        optionsHtml += '</select>';
-        html += optionsHtml;
-      } else {
-        html += `<textarea id="signup-answer-${idx}" class="inp" rows="2" placeholder="Your answer...">${escapeHtml(currentAnswer)}</textarea>`;
-      }
-      html += `</div>`;
+    // ─── STEP: Details ───────────────────────────────────────────
+    if (currentStepObj.type === 'details') {
+        container.style.display = 'none';
+        extraDiv.style.display = 'block';
+        stepSub.innerHTML = '<strong style="font-size:1rem;">Your Details</strong>';
+        extraDiv.innerHTML = `
+            <div style="max-height:55vh;overflow-y:auto;padding-right:8px;">
+                <div class="fgrp"><label class="flbl">Full Name *</label><input type="text" id="signup-name" class="auth-input" value="${escapeHtml(signupExtra.name)}"></div>
+                <div class="fgrp"><label class="flbl">Phone Number *</label><input type="tel" id="signup-phone" class="auth-input" placeholder="+256770371720 or 0770371720" value="${escapeHtml(signupExtra.phone)}"><div class="micro">PIN = last 4 digits</div></div>
+                <div class="fgrp"><label class="flbl">Why join?</label><textarea id="signup-why" rows="2" class="auth-input">${escapeHtml(signupExtra.why)}</textarea></div>
+                <div class="drag-zone" onclick="document.getElementById('signup-photo-input').click()"><span>📸 Upload photo (optional)</span><input type="file" id="signup-photo-input" accept="image/*" style="display:none" onchange="handlePhotoInput(this,'signup-photo-preview',null)"><img id="signup-photo-preview" class="image-preview" style="display:none"></div>
+            </div>
+        `;
+        prevBtn.style.display = 'none'; // no previous step
+        nextBtn.innerText = 'Next →';
+        nextBtn.style.display = 'block';
     }
-    container.innerHTML = html;
-    prevBtn.style.display = currentStep === 0 ? 'none' : 'block';
-    nextBtn.innerText = currentStep === steps.length-1 ? 'Submit' : 'Next →';
-    nextBtn.style.display = 'block';
-  }
-  // ───────────────────────────────────────────────────────────
-  // Step type: details (name, phone, etc.)
-  // ───────────────────────────────────────────────────────────
-  else if (currentStepObj.type === 'details') {
-    container.style.display = 'none';
-    extraDiv.style.display = 'block';
-    stepSub.innerHTML = '<strong style="font-size:1rem;">Your Details</strong>';
-    extraDiv.innerHTML = `
-      <div style="max-height:55vh;overflow-y:auto;padding-right:8px;">
-        <div class="fgrp"><label class="flbl">Full Name *</label><input type="text" id="signup-name" class="auth-input" value="${escapeHtml(signupExtra.name)}"></div>
-        <div class="fgrp"><label class="flbl">Phone Number *</label><input type="tel" id="signup-phone" class="auth-input" placeholder="+256770371720 or 0770371720" value="${escapeHtml(signupExtra.phone)}"><div class="micro">PIN = last 4 digits</div></div>
-       
-        <div class="fgrp"><label class="flbl">Why join?</label><textarea id="signup-why" rows="2" class="auth-input">${escapeHtml(signupExtra.why)}</textarea></div>
-        <div class="drag-zone" onclick="document.getElementById('signup-photo-input').click()"><span>📸 Upload photo (optional)</span><input type="file" id="signup-photo-input" accept="image/*" style="display:none" onchange="handlePhotoInput(this,'signup-photo-preview',null)"><img id="signup-photo-preview" class="image-preview" style="display:none"></div>
-      </div>
-    `;
-    prevBtn.style.display = 'block';
-    nextBtn.innerText = 'Next →';
-    nextBtn.style.display = 'block';
-  }
-  // ───────────────────────────────────────────────────────────
-  // Step type: terms & submit
-  // ───────────────────────────────────────────────────────────
-  else if (currentStepObj.type === 'terms') {
-    container.style.display = 'none';
-    extraDiv.style.display = 'block';
-    stepSub.innerHTML = '<strong style="font-size:1rem;">Terms & Conditions</strong>';
-    const signupFee = settings.signupFee || 0;
-    const termsText = settings.termsAndConditions || 'No terms defined yet.';
-    extraDiv.innerHTML = `
-      <div style="max-height:55vh;overflow-y:auto;padding-right:8px;">
-        <div class="hint-box">💰 Signup Fee: ${money(signupFee)} – will be assigned as debt upon approval.</div>
-        <div style="margin: 12px 0; border:1px solid var(--br); border-radius:12px; padding:12px; max-height:200px; overflow-y:auto;">
-          ${escapeHtml(termsText)}
-        </div>
-        <div class="fgrp">
-          <label style="display:flex; align-items:center; gap:8px;">
-            <input type="checkbox" id="signup-terms-agree"> <span>I have read and agree to the terms and conditions</span>
-          </label>
-        </div>
-        <button class="btn btn-gold btn-full" onclick="submitFinalSignup()">✅ Submit Application</button>
-      </div>
-    `;
-    prevBtn.style.display = 'block';
-    nextBtn.style.display = 'none';
-  }
-}
+
+    // ─── STEP: Terms & Submit ──────────────────────────────────
+    else if (currentStepObj.type === 'terms') {
+        container.style.display = 'none';
+        extraDiv.style.display = 'block';
+        stepSub.innerHTML = '<strong style="font-size:1rem;">Terms & Conditions</strong>';
+        const signupFee = settings.signupFee || 0;
+        const termsText = settings.termsAndConditions || 'No terms defined yet.';
+        extraDiv.innerHTML = `
+            <div style="max-height:55vh;overflow-y:auto;padding-right:8px;">
+                <div class="hint-box">💰 Signup Fee: ${money(signupFee)} – will be assigned as debt upon approval.</div>
+                <div style="margin: 12px 0; border:1px solid var(--br); border-radius:12px; padding:12px; max-height:200px; overflow-y:auto;">
+                    ${escapeHtml(termsText)}
+                </div>
+                <div class="fgrp">
+                    <label style="display:flex; align-items:center; gap:8px;">
+                        <input type="checkbox" id="signup-terms-agree"> <span>I have read and agree to the terms and conditions</span>
+                    </label>
+                </div>
+                <button class="btn btn-gold btn-full" onclick="submitFinalSignup()">✅ Submit Application</button>
+            </div>
+        `;
+        prevBtn.style.display = 'block';
+        nextBtn.style.display = 'none';
+    }
+};
 function saveCurrentAnswer() {
   if (currentQuestionIndex >= 10) return;
   const el = document.getElementById('signup-answer');
@@ -10506,139 +10549,110 @@ function saveCurrentAnswer() {
   // Update stepper to reflect answered status
   showSignupPage();
 }
-function signupNext() {
-  const steps = [
-    { indices: [0,1,2,3], type: 'questions' },
-    { indices: [4,5,6], type: 'questions' },
-    { indices: [7,8,9], type: 'questions' },
-    { type: 'details' },
-    { type: 'terms' }
-  ];
-  const currentStepObj = steps[currentStep];
+window.signupNext = function() {
+    const steps = [
+        { type: 'details' },
+        { type: 'terms' }
+    ];
+    const currentStepObj = steps[currentStep];
 
-  if (currentStepObj.type === 'questions') {
-    // Save answers for current step
-    let allValid = true;
-    for (let idx of currentStepObj.indices) {
-      const el = document.getElementById(`signup-answer-${idx}`);
-      if (el) {
-        let val = el.value.trim();
-        if (val === '') val = 'Skipped';
-        signupAnswers[idx] = val;
-        const q = securityQuestions[idx];
-        if (q.required && (!val || val === 'Skipped')) {
-          toast(`Question ${idx+1} is required. Please answer.`, '#ef4444');
-          allValid = false;
+    // Save details from current step
+    if (currentStepObj.type === 'details') {
+        signupExtra.name = document.getElementById('signup-name')?.value.trim() || '';
+        signupExtra.phone = document.getElementById('signup-phone')?.value.trim() || '';
+        signupExtra.why = document.getElementById('signup-why')?.value.trim() || '';
+        const photoPreview = document.getElementById('signup-photo-preview');
+        signupExtra.photoData = (photoPreview && photoPreview.style.display !== 'none') ? photoPreview.src : '';
+
+        if (!signupExtra.name || !signupExtra.phone) {
+            toast('Full name and phone number are required', '#ef4444');
+            return;
         }
-      }
     }
-    if (!allValid) return;
-  } 
-  else if (currentStepObj.type === 'details') {
-    // Save details
-    signupExtra.name = document.getElementById('signup-name')?.value.trim() || '';
-    signupExtra.phone = document.getElementById('signup-phone')?.value.trim() || '';
-    
-    signupExtra.why = document.getElementById('signup-why')?.value.trim() || '';
-    const photoPreview = document.getElementById('signup-photo-preview');
-    signupExtra.photoData = (photoPreview && photoPreview.style.display !== 'none') ? photoPreview.src : '';
-    if (!signupExtra.name || !signupExtra.phone) {
-      toast('Full name and phone number are required', '#ef4444');
-      return;
+
+    if (currentStep < steps.length - 1) {
+        currentStep++;
+        showSignupPage();
     }
-  }
-
-  if (currentStep < steps.length - 1) {
-    currentStep++;
-    showSignupPage();
-  }
-}
-
-function signupPrev() {
-  if (currentStep > 0) {
-    currentStep--;
-    showSignupPage();
-  }
-}
+};
+window.signupPrev = function() {
+    if (currentStep > 0) {
+        currentStep--;
+        showSignupPage();
+    }
+};
 window.submitFinalSignup = function() {
-  // Use stored values from signupExtra (saved during details step)
-  const name = signupExtra.name;
-  const phone = signupExtra.phone;
-  const why = signupExtra.why;
-  const photoData = signupExtra.photoData;
-  const agree = document.getElementById('signup-terms-agree')?.checked;
+    const name = signupExtra.name;
+    const phone = signupExtra.phone;
+    const why = signupExtra.why;
+    const photoData = signupExtra.photoData;
+    const agree = document.getElementById('signup-terms-agree')?.checked;
 
-  if (!name) {
-    toast('Full name is required. Please go back to the details step.', '#ef4444');
-    // Go back to details step (index 3)
-    currentStep = 3;
-    showSignupPage();
-    return;
-  }
-  if (!phone) {
-    toast('Phone number is required. Please go back to the details step.', '#ef4444');
-    currentStep = 3;
-    showSignupPage();
-    return;
-  }
-  if (!agree) {
-    toast('You must agree to the terms and conditions', '#ef4444');
-    return;
-  }
-
-  // Format phone number
-  let formattedPhone = phone.replace(/[\s\-\(\)]/g, '');
-  if (formattedPhone.startsWith('0')) {
-    formattedPhone = '+256' + formattedPhone.slice(1);
-  } else if (!formattedPhone.startsWith('+256')) {
-    toast('Phone number must start with +256 or 0 (e.g., +256770371720 or 0770371720)', '#ef4444');
-    return;
-  }
-  if (!validatePhoneNumber(formattedPhone)) {
-    toast('Invalid phone number. Use +256 followed by exactly 9 digits (e.g., +256770371720)', '#ef4444');
-    return;
-  }
-  const finalPhone = formattedPhone;
-
-  // Check if phone already exists in approved members
-  if (members.some(m => m.phone === finalPhone)) {
-    toast('❌ This phone number is already registered. Please login.', '#ef4444');
-    return;
-  }
-
-  // Check for pending applications (rejected allowed to reapply)
-  db.ref('applications').orderByChild('phone').equalTo(finalPhone).once('value', snap => {
-    let hasPending = false;
-    snap.forEach(child => {
-      if (child.val().status === 'pending') hasPending = true;
-    });
-    if (hasPending) {
-      toast('❌ You already have a pending application. Please wait for admin approval.', '#ef4444');
-      return;
+    if (!name) {
+        toast('Full name is required. Please go back to the details step.', '#ef4444');
+        currentStep = 0;
+        showSignupPage();
+        return;
+    }
+    if (!phone) {
+        toast('Phone number is required. Please go back to the details step.', '#ef4444');
+        currentStep = 0;
+        showSignupPage();
+        return;
+    }
+    if (!agree) {
+        toast('You must agree to the terms and conditions', '#ef4444');
+        return;
     }
 
-    const encodedAnswers = signupAnswers.map(a => a === 'Skipped' ? btoa('skipped') : btoa(a.toLowerCase()));
+    let formattedPhone = phone.replace(/[\s\-\(\)]/g, '');
+    if (formattedPhone.startsWith('0')) {
+        formattedPhone = '+256' + formattedPhone.slice(1);
+    } else if (!formattedPhone.startsWith('+256')) {
+        toast('Phone number must start with +256 or 0 (e.g., +256770371720 or 0770371720)', '#ef4444');
+        return;
+    }
+    if (!validatePhoneNumber(formattedPhone)) {
+        toast('Invalid phone number. Use +256 followed by exactly 9 digits (e.g., +256770371720)', '#ef4444');
+        return;
+    }
+    const finalPhone = formattedPhone;
 
-    db.ref('applications').push({
-      name, phone: finalPhone, why, photoData,
-      securityAnswers: encodedAnswers,
-      referredBy,
-      status: 'pending',
-      date: Date.now(),
-      agreedToTerms: true
-    }).then(() => {
-      toast('✅ Application submitted! Admin will review.', '#10b981');
-      // Reset all signup state
-      currentStep = 0;
-      currentQuestionIndex = 0;
-      signupAnswers = new Array(10).fill('');
-      signupExtra = { name: '', phone: '',  why: '', photoData: '' };
-      backToLogin();
-    }).catch(err => {
-      console.error(err);
-      toast('❌ Submission failed. Please try again.', '#ef4444');
+    if (members.some(m => m.phone === finalPhone)) {
+        toast('❌ This phone number is already registered. Please login.', '#ef4444');
+        return;
+    }
+
+    db.ref('applications').orderByChild('phone').equalTo(finalPhone).once('value', snap => {
+        let hasPending = false;
+        snap.forEach(child => {
+            if (child.val().status === 'pending') hasPending = true;
+        });
+        if (hasPending) {
+            toast('❌ You already have a pending application. Please wait for admin approval.', '#ef4444');
+            return;
+        }
+
+        // No security answers anymore – just submit the application
+        db.ref('applications').push({
+            name,
+            phone: finalPhone,
+            why,
+            photoData,
+            status: 'pending',
+            date: Date.now(),
+            agreedToTerms: true
+        }).then(() => {
+            toast('✅ Application submitted! Admin will review.', '#10b981');
+            // Reset signup state
+            currentStep = 0;
+            signupExtra = { name: '', phone: '', why: '', photoData: '' };
+            backToLogin();
+        }).catch(err => {
+            console.error(err);
+            toast('❌ Submission failed. Please try again.', '#ef4444');
+        });
     });
-  });
 };
 window.showMemberTransferOption = function(memberId) {
     const member = members.find(m => m.id === memberId);
@@ -11372,6 +11386,728 @@ function resetSubmitButton() {
   const btn = document.getElementById('submit-signup-btn');
   if (btn) btn.disabled = false;
   isSubmitting = false;
+}
+/**
+ * Prepares the anniversary distribution: starts countdown, shows preview.
+ * Called when admin clicks "Prepare Distribution" button on home tab.
+ */
+window.prepareDistribution = function() {
+    if (distributionState.isCountingDown) {
+        toast('Countdown already running', '#f59e0b');
+        return;
+    }
+    if (!anniversarySettings.nextAnniversary) {
+        toast('No anniversary date set. Please update settings.', '#ef4444');
+        return;
+    }
+
+    const target = new Date(anniversarySettings.nextAnniversary);
+    if (isNaN(target.getTime()) || target.getTime() <= Date.now()) {
+        toast('Anniversary date is in the past. Please update settings.', '#ef4444');
+        return;
+    }
+
+    const data = calculateAnniversaryDistribution();
+    if (!data) {
+        toast('No profit to distribute or no members.', '#ef4444');
+        return;
+    }
+
+    distributionState.distributionData = data;
+    distributionState.targetDate = target.getTime();
+    distributionState.isCountingDown = true;
+    distributionState.isPrepared = true;
+
+    // Show overlay
+    showDistributionOverlay();
+
+    // Start timer
+    if (distributionState.countdownInterval) clearInterval(distributionState.countdownInterval);
+    distributionState.countdownInterval = setInterval(() => {
+        updateAnniversaryCountdown();
+        if (distributionState.targetDate && Date.now() >= distributionState.targetDate) {
+            clearInterval(distributionState.countdownInterval);
+            distributionState.countdownInterval = null;
+            distributionState.isCountingDown = false;
+            showAdminResetPrompt();
+        }
+    }, 1000);
+
+    updateAnniversaryCountdown();
+    toast('⚡ Distribution prepared! Countdown started.', '#10b981');
+
+    if (currentAdminTab === 'harvest') renderAdminTab();
+};
+/**
+ * Shows the distribution overlay on the home tab, hiding all other content.
+ */
+function showDistributionOverlay() {
+    const homeTab = document.getElementById('t-home');
+    if (!homeTab) return;
+
+    // ─── Hide all normal home content ──────────────────────────
+    // Get all direct children of homeTab except the overlay itself
+    const children = homeTab.children;
+    for (let child of children) {
+        if (child.id !== 'distribution-overlay') {
+            child.style.display = 'none';
+        }
+    }
+
+    // ─── Create overlay if not exists ──────────────────────────
+    let overlay = document.getElementById('distribution-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'distribution-overlay';
+        overlay.style.cssText = `
+            position: absolute;
+            inset: 0;
+            background: rgba(6,14,26,0.95);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            z-index: 20;
+            padding: 20px 16px;
+            overflow-y: auto;
+            display: none;
+            flex-direction: column;
+            gap: 12px;
+            border-radius: 0;
+            min-height: 100%;
+        `;
+        homeTab.style.position = 'relative';
+        homeTab.appendChild(overlay);
+    }
+
+    // ─── Populate overlay with content ────────────────────────
+    const data = distributionState.distributionData;
+    const targetDate = distributionState.targetDate;
+    const now = Date.now();
+    const diff = Math.max(0, targetDate - now);
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+    overlay.innerHTML = `
+        <div style="text-align:center; margin-bottom:4px;">
+            <div style="font-family:'Syne',sans-serif; font-size:1.4rem; font-weight:800; color:var(--gold);">🎉 Anniversary Distribution</div>
+            <div style="font-size:0.8rem; color:var(--t2);">The group is preparing for profit distribution</div>
+        </div>
+
+        <div style="background:rgba(245,158,11,0.1); border-radius:16px; padding:16px; text-align:center; border:1px solid rgba(245,158,11,0.3);">
+            <div style="font-size:0.6rem; text-transform:uppercase; letter-spacing:1px; color:#9ca3af;">Time Remaining</div>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:2.4rem; font-weight:800; color:#f59e0b; letter-spacing:2px;" id="anniversary-countdown-timer">
+                ${String(days).padStart(2,'0')}:${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}
+            </div>
+            <div style="font-size:0.7rem; color:#9ca3af; margin-top:4px;">Until the next anniversary</div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div class="card" style="border-left:3px solid #f59e0b; padding:12px; background:rgba(255,255,255,0.04);">
+                <div style="font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#9ca3af; margin-bottom:4px;">📊 Prorated Shares (95%)</div>
+                <div id="prorated-distribution-list" style="max-height:180px; overflow-y:auto; font-size:0.75rem;"></div>
+            </div>
+            <div class="card" style="border-left:3px solid #8b5cf6; padding:12px; background:rgba(255,255,255,0.04);">
+                <div style="font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:#9ca3af; margin-bottom:4px;">🏆 Rewards (5%)</div>
+                <div id="rewards-distribution-list" style="max-height:180px; overflow-y:auto; font-size:0.75rem;"></div>
+            </div>
+        </div>
+
+        <div style="padding:10px; background:rgba(6,182,212,0.06); border-radius:10px; border:1px solid rgba(6,182,212,0.15); text-align:center; font-size:0.75rem; color:#d1d5db;">
+            ⏳ During countdown: <strong style="color:#f59e0b;">clear all debts</strong> and <strong style="color:#f59e0b;">top up savings</strong> to maximize share.
+        </div>
+
+        <div style="font-size:0.6rem; color:#6b7280; text-align:center; margin-top:4px;">
+            Admin can cancel this process from the Admin Panel.
+        </div>
+    `;
+
+    // ─── Render the distribution data ──────────────────────────
+    if (data) {
+        renderDistributionPreview(data);
+    }
+
+    // ─── Show the overlay ──────────────────────────────────────
+    overlay.style.display = 'flex';
+}
+
+/**
+ * Hides the distribution overlay and restores normal home content.
+ */
+function hideDistributionOverlay() {
+    const overlay = document.getElementById('distribution-overlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
+
+    // ─── Restore all normal home content ──────────────────────
+    const homeTab = document.getElementById('t-home');
+    if (homeTab) {
+        const children = homeTab.children;
+        for (let child of children) {
+            if (child.id !== 'distribution-overlay') {
+                child.style.display = '';
+            }
+        }
+    }
+}
+/**
+ * Calculates the prorated shares (95%) and rewards (5%) for the anniversary distribution.
+ * @returns {Object|null} - Distribution data or null if no profit/members
+ */
+function calculateAnniversaryDistribution() {
+    if (groupProfit <= 0 || members.length === 0) return null;
+
+    const rewardsPercent = 5;
+    const rewardsPool = Math.floor(groupProfit * rewardsPercent / 100);
+    const proratedPool = groupProfit - rewardsPool;
+
+    // ─── 1. PRORATED SHARES (95%) ────────────────────────────────
+    const totalDays = members.reduce((sum, m) => sum + (getDaysActive(m) || 0), 0);
+
+    let shares = members.filter(m => m.approved !== false).map(m => {
+        const days = getDaysActive(m) || 0;
+        let share = 0;
+        if (totalDays === 0) {
+            share = Math.floor(proratedPool / members.length);
+        } else {
+            share = Math.floor(proratedPool * days / totalDays);
+        }
+        return { ...m, share, days };
+    });
+
+    // Sort by share descending
+    shares.sort((a, b) => b.share - a.share);
+
+    // ─── 2. REWARDS (5%) – 5 Categories, No Repeats ──────────────
+
+    // Compute metrics for all members
+    const memberMetrics = shares.map(m => {
+        let totalDeposits = 0;
+        let consistencyDays = new Set();
+        let transactionCount = 0;
+        let repaidLoans = 0;
+        let totalRepaidAmount = 0;
+        let loanRepaymentCount = 0;
+
+        transactions.forEach(tx => {
+            if (tx.memberPhone === m.phone) {
+                transactionCount++;
+                if (tx.type === 'deposit') {
+                    totalDeposits += tx.amount;
+                    consistencyDays.add(new Date(tx.date).toISOString().slice(0, 10));
+                }
+                if (tx.type === 'loan_repayment') {
+                    loanRepaymentCount++;
+                    totalRepaidAmount += tx.amount;
+                }
+            }
+        });
+
+        loans.forEach(loan => {
+            if (loan.memberId === m.id && loan.repaid === true) {
+                repaidLoans++;
+            }
+        });
+
+        // Composite score for Member of the Year
+        const score = totalDeposits + (consistencyDays.size * 1000) + (repaidLoans * 10000);
+
+        // Best Loan Repayer score
+        const loanRepayerScore = (repaidLoans * 2) + (loanRepaymentCount * 1.5) + (totalRepaidAmount / 100000);
+
+        return { 
+            ...m, 
+            totalDeposits, 
+            consistencyDays: consistencyDays.size,
+            transactionCount,
+            repaidLoans,
+            loanRepaymentCount,
+            totalRepaidAmount,
+            loanRepayerScore,
+            score
+        };
+    });
+
+    // Sort each category
+    const sortedByDeposits = [...memberMetrics].sort((a, b) => b.totalDeposits - a.totalDeposits);
+    const sortedByConsistency = [...memberMetrics].sort((a, b) => b.consistencyDays - a.consistencyDays);
+    const sortedByActivity = [...memberMetrics].sort((a, b) => b.transactionCount - a.transactionCount);
+    const sortedByScore = [...memberMetrics].sort((a, b) => b.score - a.score);
+    const sortedByLoanRepayer = [...memberMetrics].sort((a, b) => b.loanRepayerScore - a.loanRepayerScore);
+
+    const categories = [
+        { key: 'champion', label: 'Group Champion', list: sortedByDeposits, metricKey: 'totalDeposits', display: 'Total Deposits', percent: 0.40 },
+        { key: 'memberOfYear', label: 'Member of the Year', list: sortedByScore, metricKey: 'score', display: 'Overall Score', percent: 0.25 },
+        { key: 'mostConsistent', label: 'Most Consistent', list: sortedByConsistency, metricKey: 'consistencyDays', display: 'Days with Deposits', percent: 0.18 },
+        { key: 'mostActive', label: 'Most Active', list: sortedByActivity, metricKey: 'transactionCount', display: 'Total Transactions', percent: 0.12 },
+        { key: 'bestLoanRepayer', label: 'Best Loan Repayer', list: sortedByLoanRepayer, metricKey: 'loanRepayerScore', display: 'Repayment Consistency', percent: 0.05 }
+    ];
+
+    const usedIds = new Set();
+    let winners = [];
+
+    categories.forEach(cat => {
+        let selected = null;
+        for (let item of cat.list) {
+            if (!usedIds.has(item.id)) {
+                selected = item;
+                usedIds.add(item.id);
+                break;
+            }
+        }
+        if (selected) {
+            const amount = Math.floor(rewardsPool * cat.percent);
+            let metricValue = selected[cat.metricKey];
+            let displayValue = typeof metricValue === 'number' ? metricValue.toLocaleString() : metricValue;
+            winners.push({
+                category: cat.label,
+                member: selected,
+                amount: amount,
+                metric: `${cat.display}: ${displayValue}`,
+                eligible: true
+            });
+        } else {
+            winners.push({
+                category: cat.label,
+                member: null,
+                amount: 0,
+                metric: 'No eligible member',
+                eligible: false
+            });
+        }
+    });
+
+    return { shares, winners, proratedPool, rewardsPool, totalDays };
+}
+/**
+ * Renders the distribution preview on the home tab during the countdown.
+ * @param {Object} data - Distribution data from calculateAnniversaryDistribution()
+ */
+function renderDistributionPreview(data) {
+    // Prorated list
+    const proratedContainer = document.getElementById('prorated-distribution-list');
+    if (proratedContainer) {
+        proratedContainer.innerHTML = data.shares.map(m => `
+            <div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid rgba(255,255,255,0.04); font-size:0.75rem;">
+                <span>${escapeHtml(m.name)} (${m.days}d)</span>
+                <span style="font-weight:600; color:#f59e0b;">UGX ${m.share.toLocaleString()}</span>
+            </div>
+        `).join('');
+    }
+
+    // Rewards list
+    const rewardsContainer = document.getElementById('rewards-distribution-list');
+    if (rewardsContainer) {
+        rewardsContainer.innerHTML = data.winners.map(w => `
+            <div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid rgba(255,255,255,0.04); font-size:0.75rem;">
+                <span>🏆 ${w.category}: <strong>${w.member ? escapeHtml(w.member.name) : '—'}</strong></span>
+                <span style="font-weight:600; color:#8b5cf6;">${w.member ? 'UGX ' + w.amount.toLocaleString() : 'UGX 0'}</span>
+            </div>
+        `).join('');
+    }
+}
+/**
+ * Cancels the distribution process (admin only).
+ */
+window.cancelDistribution = function() {
+    if (!currentUser?.isAdmin) {
+        toast('Admin access required', '#ef4444');
+        return;
+    }
+    if (!distributionState.isCountingDown && !distributionState.isPrepared) {
+        toast('No active distribution to cancel', '#06b6d4');
+        return;
+    }
+
+    if (confirm('⚠️ Are you sure you want to cancel the anniversary distribution?')) {
+        if (distributionState.countdownInterval) {
+            clearInterval(distributionState.countdownInterval);
+            distributionState.countdownInterval = null;
+        }
+        distributionState.isCountingDown = false;
+        distributionState.isPrepared = false;
+        distributionState.targetDate = null;
+        distributionState.distributionData = null;
+
+        hideDistributionOverlay();
+        if (currentAdminTab === 'harvest') renderAdminTab();
+        toast('Distribution cancelled.', '#f59e0b');
+    }
+};
+/**
+ * Updates the countdown timer display on the home tab.
+ * Called every second during the countdown.
+ */
+function updateAnniversaryCountdown() {
+  const timerEl = document.getElementById('anniversary-countdown-timer');
+  if (!timerEl) return;
+  const target = distributionState.targetDate || settings.anniversaryEndTime;
+  if (!target) {
+    timerEl.textContent = '--:--:--:--';
+    return;
+  }
+  const diff = Math.max(0, target - Date.now());
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+  timerEl.textContent = `${String(days).padStart(2,'0')}:${String(hours).padStart(2,'0')}:${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}`;
+}
+
+/**
+ * Shows a modal prompting the admin for the password when the countdown reaches zero.
+ */
+function showAdminResetPrompt() {
+    // Remove any existing prompt
+    const existing = document.querySelector('.admin-reset-prompt');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.className = 'ov on admin-reset-prompt';
+    modal.style.zIndex = '10001';
+    modal.style.display = 'flex';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+    modal.innerHTML = `
+        <div class="bs" style="max-width:420px; text-align:center;">
+            <div style="font-size:3rem; margin-bottom:8px;">🔐</div>
+            <div class="bs-title" style="font-size:1.2rem;">Admin Authorization Required</div>
+            <div style="color:#d1d5db; font-size:0.9rem; margin-bottom:16px;">
+                The anniversary countdown has ended. Enter the admin password to distribute profits and reset the group.
+            </div>
+            <div class="fgrp">
+                <input type="password" id="reset-admin-password-input" class="inp" placeholder="Enter admin password" style="text-align:center; font-size:1.1rem;">
+            </div>
+            <div id="reset-password-error" style="color:#ef4444; font-size:0.8rem; display:none; margin-bottom:8px;">Incorrect password. Try again.</div>
+            <div style="display:flex; gap:12px;">
+                <button class="btn btn-sec" id="reset-password-cancel-btn" style="flex:1;">Cancel</button>
+                <button class="btn btn-danger" id="reset-password-confirm-btn" style="flex:1;">✅ Confirm Reset</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    // ─── Cancel button ──────────────────────────────────────────
+    document.getElementById('reset-password-cancel-btn').addEventListener('click', function() {
+        modal.remove();
+        // Reset countdown status
+        document.getElementById('distribution-status').textContent = '⏹️ Cancelled by admin';
+        document.getElementById('distribution-status').style.color = '#f59e0b';
+        distributionState.isCountingDown = false;
+        toast('Reset cancelled.', '#f59e0b');
+    });
+
+    // ─── Confirm button ─────────────────────────────────────────
+    document.getElementById('reset-password-confirm-btn').addEventListener('click', function() {
+        const pwd = document.getElementById('reset-admin-password-input').value;
+        const storedPwd = anniversarySettings.adminPassword || settings.adminPassword || 'admin123';
+        if (pwd === storedPwd) {
+            modal.remove();
+            executeAnniversaryReset();
+        } else {
+            document.getElementById('reset-password-error').style.display = 'block';
+            document.getElementById('reset-admin-password-input').value = '';
+            document.getElementById('reset-admin-password-input').focus();
+        }
+    });
+
+    // ─── Enter key ──────────────────────────────────────────────
+    document.getElementById('reset-admin-password-input').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            document.getElementById('reset-password-confirm-btn').click();
+        }
+    });
+
+    // ─── Click outside to close ────────────────────────────────
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) {
+            modal.remove();
+            document.getElementById('distribution-status').textContent = '⏹️ Cancelled by admin';
+            document.getElementById('distribution-status').style.color = '#f59e0b';
+            distributionState.isCountingDown = false;
+            toast('Reset cancelled.', '#f59e0b');
+        }
+    });
+}
+/**
+ * Executes the full anniversary reset: distributes profits, clears members, resets state.
+ * Called after admin password is verified.
+ */
+async function executeAnniversaryReset() {
+    const data = distributionState.distributionData || calculateAnniversaryDistribution();
+    if (!data) {
+        toast('No distribution data available.', '#ef4444');
+        return;
+    }
+
+    const writes = [];
+    // Prorated shares
+    data.shares.forEach(m => {
+        if (m.share > 0) {
+            writes.push(db.ref('transactions').push({
+                memberPhone: m.phone,
+                memberName: m.name,
+                type: 'profit_dist',
+                amount: m.share,
+                receiptNumber: generateReceiptNumber(),
+                description: `Anniversary prorated share (${m.days} days active)`,
+                date: Date.now(),
+                isAnniversary: true
+            }));
+        }
+    });
+    // Rewards
+    data.winners.forEach(w => {
+        if (w.eligible && w.member && w.amount > 0) {
+            writes.push(db.ref('transactions').push({
+                memberPhone: w.member.phone,
+                memberName: w.member.name,
+                type: 'profit_dist',
+                amount: w.amount,
+                receiptNumber: generateReceiptNumber(),
+                description: `${w.category} reward`,
+                date: Date.now() + 1000,
+                isAnniversary: true
+            }));
+        }
+    });
+    await Promise.all(writes);
+
+    // Archive
+    const archiveRef = db.ref('archives/' + Date.now());
+    await archiveRef.set({
+        type: 'anniversary_reset',
+        timestamp: Date.now(),
+        members: members,
+        transactions: transactions,
+        loans: loans,
+        profitPool: groupProfit,
+        distribution: data,
+        admin: currentUser?.name || 'Admin'
+    });
+
+    // Reset everything
+    await db.ref('members').remove();
+    const sysTxs = transactions.filter(tx => tx.type === 'system');
+    await db.ref('transactions').remove();
+    for (let tx of sysTxs) {
+        await db.ref('transactions').push(tx);
+    }
+    await db.ref('loans').remove();
+    await db.ref('rotation').remove();
+    await db.ref('notifications').remove();
+    groupProfit = 0;
+    cashFromDeposits = 0;
+
+    members = [];
+    transactions = sysTxs;
+    loans = [];
+    rotation = { order: [], currentIndex: 0, history: [] };
+    notifications = {};
+    memberBalances = {};
+    memberDebts = {};
+    memberLoans = {};
+    memberPrepaid = {};
+
+    // Clear persistent flags
+    settings.anniversaryActive = false;
+    settings.anniversaryEndTime = 0;
+    settings.anniversaryResetDone = true;
+    await db.ref('settings').update({
+        anniversaryActive: false,
+        anniversaryEndTime: 0,
+        anniversaryResetDone: true
+    });
+
+    const overlay = document.getElementById('countdown-overlay');
+    if (overlay) overlay.style.display = 'none';
+    if (distributionState.countdownInterval) {
+        clearInterval(distributionState.countdownInterval);
+        distributionState.countdownInterval = null;
+    }
+    distributionState.isCountingDown = false;
+    distributionState.isPrepared = false;
+    distributionState.distributionData = null;
+    distributionState.targetDate = null;
+
+    updateHomeUI();
+    updateAccountUI();
+    toast('🔄 Anniversary reset completed. New cycle started.', '#10b981');
+}
+
+/**
+ * Shows a modal for the admin to configure the new group cycle after reset.
+ */
+function showNewGroupSetupForm() {
+    // Remove any existing form
+    const existing = document.getElementById('setup-modal-container');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'setup-modal-container';
+    modal.className = 'ov on';
+    modal.style.zIndex = '10002';
+    modal.style.display = 'flex';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+
+    const today = new Date().toISOString().slice(0, 10);
+    const nextYear = new Date();
+    nextYear.setFullYear(nextYear.getFullYear() + 1);
+    const nextYearStr = nextYear.toISOString().slice(0, 10);
+
+    modal.innerHTML = `
+        <div class="bs" style="max-width:520px; max-height:85vh; overflow-y:auto;">
+            <div class="bs-title" style="font-size:1.1rem;">🌱 New Group Setup</div>
+            <div style="color:#9ca3af; font-size:0.85rem; margin-bottom:16px;">Configure the new group cycle after the anniversary reset.</div>
+            
+            <div class="fgrp">
+                <label class="flbl">Group Name</label>
+                <input type="text" id="setup-group-name" class="inp" value="Harvest Trust Finance">
+            </div>
+            <div class="fgrp">
+                <label class="flbl">Actual Start Date (Anniversary)</label>
+                <input type="date" id="setup-start-date" class="inp" value="${today}">
+                <div class="micro muted">Used for future anniversary calculations.</div>
+            </div>
+            <div class="fgrp">
+                <label class="flbl">Next Anniversary Date</label>
+                <input type="date" id="setup-next-anniversary" class="inp" value="${nextYearStr}">
+                <div class="micro muted">Auto-calculated as one year from start date.</div>
+            </div>
+            <div class="fgrp">
+                <label class="flbl">Daily Savings Amount (UGX)</label>
+                <input type="number" id="setup-daily-amount" class="inp" value="${settings.dailyAmount || 2500}">
+            </div>
+            <div class="fgrp">
+                <label class="flbl">Welfare Deduction (UGX)</label>
+                <input type="number" id="setup-welfare-amount" class="inp" value="${settings.welfareAmount || 500}">
+            </div>
+            <div class="fgrp">
+                <label class="flbl">Loan Interest Rate (%)</label>
+                <input type="number" id="setup-loan-interest" class="inp" step="0.5" value="${loanSettings.interestRate || 5}">
+            </div>
+            <div class="fgrp">
+                <label class="flbl">Admin Password</label>
+                <input type="password" id="setup-admin-password" class="inp" value="${anniversarySettings.adminPassword || 'admin123'}">
+                <div class="micro muted">Use this password for future admin actions.</div>
+            </div>
+
+            <div style="display:flex; gap:12px; margin-top:8px;">
+                <button class="btn btn-gold" id="setup-confirm-btn" style="flex:1;">✅ Start New Group</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    // ─── Auto-update next anniversary when start date changes ──
+    document.getElementById('setup-start-date').addEventListener('change', function() {
+        if (this.value) {
+            const d = new Date(this.value);
+            d.setFullYear(d.getFullYear() + 1);
+            document.getElementById('setup-next-anniversary').value = d.toISOString().slice(0, 10);
+        }
+    });
+
+    // ─── Confirm button ─────────────────────────────────────────
+    document.getElementById('setup-confirm-btn').addEventListener('click', function() {
+        const name = document.getElementById('setup-group-name').value.trim();
+        const startDate = document.getElementById('setup-start-date').value;
+        const nextAnniversary = document.getElementById('setup-next-anniversary').value;
+        const daily = parseFloat(document.getElementById('setup-daily-amount').value) || 2500;
+        const welfare = parseFloat(document.getElementById('setup-welfare-amount').value) || 500;
+        const interest = parseFloat(document.getElementById('setup-loan-interest').value) || 5;
+        const adminPwd = document.getElementById('setup-admin-password').value.trim() || 'admin123';
+
+        if (!name || !startDate || !nextAnniversary) {
+            toast('Please fill all required fields.', '#ef4444');
+            return;
+        }
+
+        // ─── Save settings ─────────────────────────────────────────
+        settings.groupName = name;
+        settings.groupStartDate = startDate;
+        settings.nextAnniversary = nextAnniversary;
+        settings.dailyAmount = daily;
+        settings.welfareAmount = welfare;
+        settings.adminPassword = adminPwd;
+        loanSettings.interestRate = interest;
+
+        // Update anniversary settings
+        anniversarySettings.startDate = startDate;
+        anniversarySettings.nextAnniversary = nextAnniversary;
+        anniversarySettings.dailyAmount = daily;
+        anniversarySettings.welfareAmount = welfare;
+        anniversarySettings.adminPassword = adminPwd;
+        anniversarySettings.loanInterest = interest;
+
+        // ─── Save to Firebase ──────────────────────────────────────
+        db.ref('settings').update({
+            groupName: name,
+            groupStartDate: startDate,
+            nextAnniversary: nextAnniversary,
+            dailyAmount: daily,
+            welfareAmount: welfare,
+            adminPassword: adminPwd
+        });
+        db.ref('loanSettings/interestRate').set(interest);
+
+        modal.remove();
+        toast('🎉 New group started successfully!', '#10b981');
+
+        // ─── Refresh UI ────────────────────────────────────────────
+        applySettings();
+        updateHomeUI();
+        updateAccountUI();
+        renderAll();
+
+        // Show completion modal
+        showSetupCompleteModal(name, startDate, nextAnniversary);
+    });
+
+    // ─── Enter key ──────────────────────────────────────────────
+    document.getElementById('setup-admin-password').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            document.getElementById('setup-confirm-btn').click();
+        }
+    });
+}
+/**
+ * Shows a completion modal after the new group is configured.
+ * @param {string} name - Group name
+ * @param {string} startDate - Start date
+ * @param {string} nextAnniversary - Next anniversary date
+ */
+function showSetupCompleteModal(name, startDate, nextAnniversary) {
+    const modal = document.createElement('div');
+    modal.className = 'ov on';
+    modal.style.zIndex = '10003';
+    modal.style.display = 'flex';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+    modal.innerHTML = `
+        <div class="bs" style="max-width:420px; text-align:center;">
+            <div style="font-size:4rem; margin-bottom:8px;">🎉</div>
+            <div style="font-size:1.4rem; font-weight:800; color:#10b981;">New Group Started!</div>
+            <div style="color:#9ca3af; font-size:0.9rem; margin-top:4px;">The group has been reset and a new cycle has begun.</div>
+            <div style="margin-top:16px; text-align:left; font-size:0.85rem; color:#d1d5db;">
+                <div><strong>Group Name:</strong> ${escapeHtml(name)}</div>
+                <div><strong>Start Date:</strong> ${startDate}</div>
+                <div><strong>Next Anniversary:</strong> ${nextAnniversary}</div>
+                <div><strong>Daily Amount:</strong> UGX ${(settings.dailyAmount || 2500).toLocaleString()}</div>
+                <div><strong>Welfare:</strong> UGX ${(settings.welfareAmount || 500).toLocaleString()}</div>
+            </div>
+            <div style="margin-top:16px;">
+                <button class="btn btn-primary" onclick="this.closest('.ov').remove()">Close</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    modal.addEventListener('click', function(e) {
+        if (e.target === modal) modal.remove();
+    });
 }
 window.showFullTermsModal = function() {
   console.log("showFullTermsModal called");
@@ -14357,36 +15093,56 @@ if (currentAdminTab === 'savings') {
     }
 
     // ─── HARVEST TAB ──────────────────────────────────────────
-    else if (currentAdminTab === 'harvest') {
-        const rotationList = (rotation.order || []);
-        let currentReceiver = 'None';
-        if (rotationList.length > 0) {
-            const idx = rotation.currentIndex || 0;
-            const receiverId = rotationList[idx];
-            const receiver = members.find(m => m.id === receiverId);
-            currentReceiver = receiver ? receiver.name : 'Unknown';
-        }
-
-        c.innerHTML = `
-            ${warningsHtml}
-            <div class="card">
-                <div class="sec-h">🌾 Harvest Actions</div>
-                <button class="btn btn-green btn-full" onclick="openOv('ov-mark-paid')">✅ Mark Weekly Payout</button>
-                <button class="btn btn-gold btn-full" onclick="previewProfitDistribution()">🎉 Distribute Profit Pool</button>
-                <button class="btn btn-purple btn-full" onclick="openOv('ov-rot-manage'); buildDragRotation();">🔄 Manage Payout Rotation</button>
-            </div>
-            <div class="card">
-                <div class="sec-h">📊 Current Status</div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                    <div><div class="micro muted">Current Payout Receiver</div><div style="font-weight: 700; font-size: 1.1rem; color: var(--gold);">${escapeHtml(currentReceiver)}</div></div>
-                    <div><div class="micro muted">Members in Rotation</div><div style="font-weight: 700; font-size: 1.1rem; color: var(--teal);">${rotationList.length}</div></div>
-                    <div><div class="micro muted">Admin Balance</div><div style="font-weight: 700; font-size: 1.1rem; color: ${cashFromDeposits < 0 ? 'var(--red)' : 'var(--green)'};">${money(cashFromDeposits)}</div></div>
-                    <div><div class="micro muted">Profit Pool</div><div style="font-weight: 700; font-size: 1.1rem; color: ${groupProfit < 0 ? 'var(--red)' : 'var(--green)'};">${money(groupProfit)}</div></div>
-                </div>
-            </div>
-        `;
-        return;
+else if (currentAdminTab === 'harvest') {
+    const rotationList = (rotation.order || []);
+    let currentReceiver = 'None';
+    if (rotationList.length > 0) {
+        const idx = rotation.currentIndex || 0;
+        const receiverId = rotationList[idx];
+        const receiver = members.find(m => m.id === receiverId);
+        currentReceiver = receiver ? receiver.name : 'Unknown';
     }
+
+    const isDistributionActive = distributionState.isCountingDown || distributionState.isPrepared;
+
+    c.innerHTML = `
+        ${warningsHtml}
+        <div class="card">
+            <div class="sec-h">🌾 Harvest Actions</div>
+            <button class="btn btn-teal btn-full" onclick="openAddTransaction()">➕ Add Transaction</button>
+            <button class="btn btn-green btn-full" onclick="openOv('ov-mark-paid')">✅ Mark Weekly Payout</button>
+            <button class="btn btn-purple btn-full" onclick="openOv('ov-rot-manage'); buildDragRotation();">🔄 Manage Payout Rotation</button>
+        </div>
+
+        <!-- ─── DISTRIBUTION SECTION ────────────────────── -->
+        <div class="card" style="border-left: 3px solid var(--gold);">
+            <div class="sec-h">🎉 Anniversary Distribution</div>
+            <div style="font-size:0.85rem; color:var(--t2); margin-bottom:10px;">
+                Prepare the group for the anniversary profit distribution and reset.
+                ${isDistributionActive ? '<span style="color:var(--gold); font-weight:700;">⏳ Distribution is active!</span>' : ''}
+            </div>
+            ${isDistributionActive ? `
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <button class="btn btn-amber" onclick="cancelDistribution()" style="flex:1;">⏹️ Cancel Distribution</button>
+                </div>
+            ` : `
+                <button class="btn btn-gold btn-full" onclick="adminPrepareDistribution()">⚡ Prepare Anniversary Distribution</button>
+            `}
+            <div class="micro muted" style="margin-top:6px;">This will start a countdown to the next anniversary date. Members will see their shares and rewards on the home tab.</div>
+        </div>
+
+        <div class="card">
+            <div class="sec-h">📊 Current Status</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                <div><div class="micro muted">Current Payout Receiver</div><div style="font-weight: 700; font-size: 1.1rem; color: var(--gold);">${escapeHtml(currentReceiver)}</div></div>
+                <div><div class="micro muted">Members in Rotation</div><div style="font-weight: 700; font-size: 1.1rem; color: var(--teal);">${rotationList.length}</div></div>
+                <div><div class="micro muted">Admin Balance</div><div style="font-weight: 700; font-size: 1.1rem; color: ${cashFromDeposits < 0 ? 'var(--red)' : 'var(--green)'};">${money(cashFromDeposits)}</div></div>
+                <div><div class="micro muted">Profit Pool</div><div style="font-weight: 700; font-size: 1.1rem; color: ${groupProfit < 0 ? 'var(--red)' : 'var(--green)'};">${money(groupProfit)}</div></div>
+            </div>
+        </div>
+    `;
+    return;
+}
 
     // ─── USERS TAB ────────────────────────────────────────────
     else if (currentAdminTab === 'users') {
@@ -15432,6 +16188,58 @@ function getPrepaidPeriod(member) {
   const lastDate = new Date(todayStart + (daysCovered + 1) * 86400000);
   return { days: daysCovered, lastDate };
 }
+/**
+ * Admin trigger: shows password prompt, then starts the distribution countdown.
+ */
+window.adminPrepareDistribution = function() {
+    // Show admin password prompt
+    const modal = document.createElement('div');
+    modal.className = 'ov on';
+    modal.style.zIndex = '10004';
+    modal.style.display = 'flex';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+    modal.innerHTML = `
+        <div class="bs" style="max-width:400px; text-align:center;">
+            <div style="font-size:3rem; margin-bottom:8px;">🔐</div>
+            <div class="bs-title" style="font-size:1.1rem;">Admin Authorization</div>
+            <div style="color:#d1d5db; font-size:0.9rem; margin-bottom:16px;">
+                Enter the admin password to prepare the anniversary distribution.
+            </div>
+            <div class="fgrp">
+                <input type="password" id="admin-prepare-password-input" class="inp" placeholder="Enter admin password" style="text-align:center; font-size:1.1rem;">
+            </div>
+            <div id="admin-prepare-password-error" style="color:#ef4444; font-size:0.8rem; display:none; margin-bottom:8px;">Incorrect password. Try again.</div>
+            <div style="display:flex; gap:12px;">
+                <button class="btn btn-sec" onclick="this.closest('.ov').remove()" style="flex:1;">Cancel</button>
+                <button class="btn btn-gold" id="admin-prepare-confirm-btn" style="flex:1;">✅ Confirm</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    // ─── Confirm button ─────────────────────────────────────────
+    document.getElementById('admin-prepare-confirm-btn').addEventListener('click', function() {
+        const pwd = document.getElementById('admin-prepare-password-input').value;
+        const storedPwd = anniversarySettings.adminPassword || settings.adminPassword || 'admin123';
+        if (pwd === storedPwd) {
+            modal.remove();
+            // Start the countdown
+            prepareDistribution();
+        } else {
+            document.getElementById('admin-prepare-password-error').style.display = 'block';
+            document.getElementById('admin-prepare-password-input').value = '';
+            document.getElementById('admin-prepare-password-input').focus();
+        }
+    });
+
+    // ─── Enter key ──────────────────────────────────────────────
+    document.getElementById('admin-prepare-password-input').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            document.getElementById('admin-prepare-confirm-btn').click();
+        }
+    });
+};
 // ==========================================
 // ADD TRANSACTION WITH PREVIEW
 // ==========================================
@@ -19119,41 +19927,27 @@ async function cleanupAfterReset() {
 function showCountdownOverlay() {
   const overlay = document.getElementById('countdown-overlay');
   if (!overlay) return;
-  
+
+  if (settings.anniversaryEndTime && settings.anniversaryEndTime > Date.now()) {
+    distributionState.targetDate = settings.anniversaryEndTime;
+  }
+
   overlay.style.display = 'flex';
-  resetState.countdown = 30 * 60;
-  updateCountdownDisplay();
-  
-  // Start countdown timer
-  if (resetState.timerInterval) clearInterval(resetState.timerInterval);
-  if (resetState.progressInterval) clearInterval(resetState.progressInterval);
-  
-  resetState.timerInterval = setInterval(() => {
-    resetState.countdown--;
-    updateCountdownDisplay();
-    
-    if (resetState.countdown <= 0) {
-      clearInterval(resetState.timerInterval);
-      clearInterval(resetState.progressInterval);
-      // If countdown reaches 0 and reset hasn't completed, show error
-      if (!resetState.completed) {
-        updateCountdownStatus('⚠️ Reset timed out. Please try again.');
-      }
-    }
-  }, 1000);
-  
-  // Progress bar animation
-  let progress = 0;
-  resetState.progressInterval = setInterval(() => {
-    if (resetState.completed) {
-      progress = 100;
-      updateCountdownProgress(progress);
-      clearInterval(resetState.progressInterval);
-      return;
-    }
-    progress = ((30 * 60 - resetState.countdown) / (30 * 60)) * 100;
-    updateCountdownProgress(Math.min(progress, 99));
-  }, 500);
+  overlay.style.zIndex = '99999';
+  overlay.style.position = 'fixed';
+  overlay.style.inset = '0';
+  overlay.style.background = 'rgba(0,0,0,0.92)';
+  overlay.style.backdropFilter = 'blur(16px)';
+  overlay.style.alignItems = 'center';
+  overlay.style.justifyContent = 'center';
+  overlay.style.flexDirection = 'column';
+
+  updateAnniversaryCountdown();
+
+  const cancelBtn = document.querySelector('#countdown-overlay .btn-red');
+  if (cancelBtn) {
+    cancelBtn.onclick = cancelGroupReset;
+  }
 }
 
 /**
@@ -19247,23 +20041,37 @@ function cancelGroupReset() {
     toast('⚠️ Admin access required', '#ef4444');
     return;
   }
-  
-  if (!resetState.inProgress) {
-    toast('No reset in progress', '#06b6d4');
+  if (!settings.anniversaryActive) {
+    toast('No active reset to cancel', '#06b6d4');
     return;
   }
-  
-  if (confirm('⚠️ Are you sure you want to cancel the group reset?\n\nThis will stop the process and may leave data in an inconsistent state.')) {
-    resetState.cancelled = true;
-    resetState.inProgress = false;
-    
-    if (resetState.timerInterval) clearInterval(resetState.timerInterval);
-    if (resetState.progressInterval) clearInterval(resetState.progressInterval);
-    
-    const overlay = document.getElementById('countdown-overlay');
-    if (overlay) overlay.style.display = 'none';
-    
-    toast('❌ Group reset cancelled', '#ef4444');
+  if (confirm('⚠️ Are you sure you want to cancel the anniversary reset?')) {
+    // Clear flags
+    settings.anniversaryActive = false;
+    settings.anniversaryEndTime = 0;
+    settings.anniversaryResetDone = false; // allow re-trigger next year
+    db.ref('settings').update({
+      anniversaryActive: false,
+      anniversaryEndTime: 0,
+      anniversaryResetDone: false
+    }).then(() => {
+      const overlay = document.getElementById('countdown-overlay');
+      if (overlay) overlay.style.display = 'none';
+      if (distributionState.countdownInterval) {
+        clearInterval(distributionState.countdownInterval);
+        distributionState.countdownInterval = null;
+      }
+      distributionState.isCountingDown = false;
+      distributionState.isPrepared = false;
+      distributionState.distributionData = null;
+      distributionState.targetDate = null;
+      toast('❌ Anniversary reset cancelled', '#ef4444');
+      // Refresh UI to remove blocking
+      updateHomeUI();
+    }).catch(err => {
+      console.error(err);
+      toast('Failed to cancel reset', '#ef4444');
+    });
   }
 }
 
@@ -20057,130 +20865,115 @@ window.lockAdmin=function(){adminUnlocked=false;document.getElementById('adm-loc
 // ════════════════════════════════════════════════════════════
 // goTab – Handles tab switching with book-flip animations
 // ════════════════════════════════════════════════════════════
-
-// ──────────────────────────────────────────────────────────────
-// goTab – Tab Switching with Book Flip & Timer Management
-// ──────────────────────────────────────────────────────────────
-
 window.goTab = function(tab, btn) {
-    // ── 1. Stop home updates if leaving home ──
-    if (tab !== 'home') {
-        stopHomeUpdates();          // Stops countdown timer
-        if (typingRAF) {
-            cancelAnimationFrame(typingRAF);
-            typingRAF = null;
-        }
-        if (receiverTypingTimer) {
-            clearTimeout(receiverTypingTimer);
-            receiverTypingTimer = null;
-        }
+  // Block all tabs except admin when anniversary is active
+  if (settings.anniversaryActive === true && settings.anniversaryEndTime > Date.now()) {
+    if (tab !== 'admin') {
+      toast('⏳ Anniversary reset in progress. Admin panel only.', '#f59e0b');
+      return;
     }
+    // Admin tab is allowed – but the overlay remains on top.
+    // Admin can still use the "Cancel Reset" button inside the overlay.
+  }
 
-    // ── 2. Store last non-admin tab ──
-    if (tab !== 'admin' && tab !== 'manage') {
-        localStorage.setItem('lastNonAdminTab', tab);
+  // ── 2. Stop home updates if leaving home ──
+  if (tab !== 'home') {
+    stopHomeUpdates();
+    if (typingRAF) {
+      cancelAnimationFrame(typingRAF);
+      typingRAF = null;
     }
+    if (receiverTypingTimer) {
+      clearTimeout(receiverTypingTimer);
+      receiverTypingTimer = null;
+    }
+  }
 
-    // ── 3. Get previous tab for book-flip animation ──
-    const prevTab = typeof currentScreen !== 'undefined' ? currentScreen : null;
-    const prevEl = prevTab ? document.getElementById('t-' + prevTab) : null;
-    const newEl = document.getElementById('t-' + tab);
+  // ── 3. Store last non-admin tab ──
+  if (tab !== 'admin' && tab !== 'manage') {
+    localStorage.setItem('lastNonAdminTab', tab);
+  }
 
-    // ── 4. Update tab classes ──
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
-    if (newEl) newEl.classList.add('on');
+  // ── 4. Get previous tab for book‑flip animation ──
+  const prevTab = typeof currentScreen !== 'undefined' ? currentScreen : null;
+  const prevEl = prevTab ? document.getElementById('t-' + prevTab) : null;
+  const newEl = document.getElementById('t-' + tab);
 
-    // ── 5. Update nav button state ──
-    if (btn) {
-        document.querySelectorAll('.ni').forEach(b => b.classList.remove('on'));
-        btn.classList.add('on');
+  // ── 5. Update tab classes ──
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
+  if (newEl) newEl.classList.add('on');
+
+  // ── 6. Update nav button state ──
+  if (btn) {
+    document.querySelectorAll('.ni').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+  } else {
+    const navBtn = document.getElementById('ni-' + tab);
+    if (navBtn) {
+      document.querySelectorAll('.ni').forEach(b => b.classList.remove('on'));
+      navBtn.classList.add('on');
+    }
+  }
+
+  // ── 7. Book‑flip animation ──
+  if (prevEl && newEl && prevEl !== newEl) {
+    const pi = ['home', 'statistics', 'account', 'admin'].indexOf(prevTab);
+    const ni = ['home', 'statistics', 'account', 'admin'].indexOf(tab);
+    const forward = (pi === -1 || ni === -1) ? true : (ni > pi);
+
+    prevEl.classList.remove('book-out-fwd', 'book-in-fwd', 'book-out-bwd', 'book-in-bwd');
+    newEl.classList.remove('book-out-fwd', 'book-in-fwd', 'book-out-bwd', 'book-in-bwd');
+    void prevEl.offsetWidth;
+
+    prevEl.classList.add(forward ? 'book-out-fwd' : 'book-out-bwd');
+    newEl.classList.add(forward ? 'book-in-fwd' : 'book-in-bwd');
+
+    setTimeout(function() {
+      prevEl.classList.remove('book-out-fwd', 'book-out-bwd');
+      newEl.classList.remove('book-in-fwd', 'book-in-bwd');
+    }, 620);
+  }
+
+  // ── 8. Update current screen state ──
+  currentScreen = tab;
+
+  // ── 9. Tab‑specific actions ──
+  if (tab === 'home') {
+    currentTypingName = '';
+    receiverCharIndex = 0;
+    if (receiverTypingTimer) {
+      clearTimeout(receiverTypingTimer);
+      receiverTypingTimer = null;
+    }
+    startHomeUpdates();
+    updateHomeRecent();
+    if (currentUser && currentUser.isAdmin) {
+      checkPayoutOverdue();
+    }
+  }
+  if (tab === 'account') {
+    updateAccountUI();
+    updateAccountBalances();
+  }
+  if (tab === 'admin') {
+    if (currentUser && currentUser.isAdmin && adminUnlocked) {
+      document.getElementById('adm-lock').classList.add('hidden');
+      document.getElementById('adm-panel').classList.remove('hidden');
+      adminShowGrid = true;
+      const adminTabs = document.querySelector('.admin-tabs');
+      if (adminTabs) adminTabs.style.display = 'none';
+      showAdminWelcome();
     } else {
-        // If no btn provided, try to find matching nav item
-        const navBtn = document.getElementById('ni-' + tab);
-        if (navBtn) {
-            document.querySelectorAll('.ni').forEach(b => b.classList.remove('on'));
-            navBtn.classList.add('on');
-        }
+      document.getElementById('adm-lock').classList.remove('hidden');
+      document.getElementById('adm-panel').classList.add('hidden');
     }
+  }
+  if (tab === 'statistics') {
+    renderStatistics();
+  }
 
-    // ── 6. Book-flip animation ──
-    if (prevEl && newEl && prevEl !== newEl) {
-        const pi = ['home', 'statistics', 'account', 'admin'].indexOf(prevTab);
-        const ni = ['home', 'statistics', 'account', 'admin'].indexOf(tab);
-        const forward = (pi === -1 || ni === -1) ? true : (ni > pi);
-
-        // Remove previous animation classes
-        ['book-out-fwd', 'book-in-fwd', 'book-out-bwd', 'book-in-bwd'].forEach(function(c) {
-            prevEl.classList.remove(c);
-            newEl.classList.remove(c);
-        });
-
-        // Trigger reflow to restart animation
-        void prevEl.offsetWidth;
-
-        // Add animation classes
-        prevEl.classList.add(forward ? 'book-out-fwd' : 'book-out-bwd');
-        newEl.classList.add(forward ? 'book-in-fwd' : 'book-in-bwd');
-
-        // Clean up after animation
-        setTimeout(function() {
-            prevEl.classList.remove('book-out-fwd', 'book-out-bwd');
-            newEl.classList.remove('book-in-fwd', 'book-in-bwd');
-        }, 620);
-    }
-
-    // ── 7. Update current screen state ──
-    currentScreen = tab;
-
-    // ── 8. Tab-specific actions ──
-    if (tab === 'home') {
-        // Reset typing state
-        currentTypingName = '';
-        receiverCharIndex = 0;
-        if (receiverTypingTimer) {
-            clearTimeout(receiverTypingTimer);
-            receiverTypingTimer = null;
-        }
-        // Start home updates (single timer)
-        startHomeUpdates();
-        // Also update recent transactions if needed
-        updateHomeRecent();
-        // Check for overdue payout (admin only)
-        if (currentUser && currentUser.isAdmin) {
-            checkPayoutOverdue();
-        }
-    }
-
-    if (tab === 'account') {
-        updateAccountUI();
-        updateAccountBalances();
-    }
-
-    if (tab === 'admin') {
-        if (currentUser && currentUser.isAdmin && adminUnlocked) {
-            document.getElementById('adm-lock').classList.add('hidden');
-            document.getElementById('adm-panel').classList.remove('hidden');
-            adminShowGrid = true;
-            const adminTabs = document.querySelector('.admin-tabs');
-            if (adminTabs) adminTabs.style.display = 'none';
-            showAdminWelcome();
-        } else {
-            document.getElementById('adm-lock').classList.remove('hidden');
-            document.getElementById('adm-panel').classList.add('hidden');
-        }
-    }
-
-    if (tab === 'statistics') {
-        renderStatistics();
-    }
-
-    // ── 9. Update notification badge ──
-    updateNotificationBadge();
-
-    // ── 10. Hide loading overlay if visible ──
-    if (typeof hideTabLoading === 'function') {
-        hideTabLoading();
-    }
+  updateNotificationBadge();
+  if (typeof hideTabLoading === 'function') hideTabLoading();
 };
 // ─── Settings menu items ──────────────────────────────────
 const SETTINGS_MENU = [
@@ -20620,7 +21413,413 @@ function getConsistencyDays(member) {
     });
     return days.size;
 }
+/**
+ * Calculates the transfer fee based on the seller's active days.
+ * Fee = full welfare amount per day (settings.welfareAmount || 500).
+ * @param {number} days - Seller's active days
+ * @returns {number} - Fee amount in UGX
+ */
+function calculateTransferFee(days) {
+    const welfarePerDay = settings.welfareAmount || 500;
+    return days * welfarePerDay;
+}
+/**
+ * Computes a member's total outstanding debt (loans + debts).
+ * @param {Object} member - Member object
+ * @returns {number} - Total debt in UGX
+ */
+function computeMemberTotalDebt(member) {
+    if (!member) return 0;
+    return (memberLoans[member.phone] || 0) + (memberDebts[member.phone] || 0);
+}
+/**
+ * Returns the number of active days for a member.
+ * First checks stored `daysActive`, then computes from `joinDate`.
+ * @param {Object} member - Member object
+ * @returns {number} - Active days
+ */
+function getDaysActive(member) {
+    if (!member) return 0;
+    // Use explicitly stored daysActive (e.g., after transfer)
+    if (member.daysActive && typeof member.daysActive === 'number' && member.daysActive > 0) {
+        return member.daysActive;
+    }
+    // Fallback: compute from joinDate
+    if (!member.joinDate) return 0;
+    const join = new Date(member.joinDate);
+    if (isNaN(join.getTime())) return 0;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diff = Math.floor((today - join) / (1000 * 60 * 60 * 24));
+    return Math.max(0, diff);
+}
+/**
+ * Reassigns all transactions from the old member to the new member.
+ * @param {string} oldPhone - Phone number of the leaving member
+ * @param {string} newPhone - Phone number of the buying member
+ * @returns {Promise<number>} - Count of reassigned transactions
+ */
+async function reassignTransactions(oldPhone, newPhone) {
+    const snap = await db.ref('transactions').once('value');
+    const allTxs = snap.val() || {};
+    const updates = {};
+    let count = 0;
+    const newMember = members.find(m => m.phone === newPhone);
+    const newName = newMember ? newMember.name : 'Unknown';
 
+    for (const [id, tx] of Object.entries(allTxs)) {
+        if (tx.memberPhone === oldPhone) {
+            updates[`transactions/${id}/memberPhone`] = newPhone;
+            updates[`transactions/${id}/memberName`] = newName;
+            const origDesc = tx.description || tx.type || 'Transaction';
+            updates[`transactions/${id}/description`] = `[Transferred] ${origDesc}`;
+            count++;
+        }
+    }
+    if (count > 0) await db.ref().update(updates);
+    return count;
+}
+/**
+ * Reassigns all loans from the old member to the new member.
+ * @param {string} oldMemberId - ID of the leaving member
+ * @param {string} newMemberId - ID of the buying member
+ * @returns {Promise<number>} - Count of reassigned loans
+ */
+async function reassignLoans(oldMemberId, newMemberId) {
+    const snap = await db.ref('loans').once('value');
+    const allLoans = snap.val() || {};
+    const updates = {};
+    let count = 0;
+    const newMember = members.find(m => m.id === newMemberId);
+    const newName = newMember ? newMember.name : 'Unknown';
+    const newPhone = newMember ? newMember.phone : '';
+
+    for (const [id, loan] of Object.entries(allLoans)) {
+        if (loan.memberId === oldMemberId) {
+            updates[`loans/${id}/memberId`] = newMemberId;
+            updates[`loans/${id}/memberName`] = newName;
+            updates[`loans/${id}/memberPhone`] = newPhone;
+            const origReason = loan.reason || 'Loan';
+            updates[`loans/${id}/reason`] = `[Transferred] ${origReason}`;
+            count++;
+        }
+    }
+    if (count > 0) await db.ref().update(updates);
+    return count;
+}
+/**
+ * Opens a modal for the admin to select a buying member and preview the transfer summary.
+ * @param {Object} leavingMember - The member leaving the group
+ * @param {string|null} requestId - Optional leave request ID to mark as transferred
+ */
+function showTransferMembershipModal(leavingMember, requestId) {
+    const modal = document.createElement('div');
+    modal.className = 'ov on';
+    modal.style.zIndex = '10003';
+    modal.style.display = 'flex';
+    modal.style.alignItems = 'center';
+    modal.style.justifyContent = 'center';
+
+    const availableMembers = members.filter(m => m.id !== leavingMember.id && m.approved !== false);
+
+    modal.innerHTML = `
+        <div class="bs" style="max-width: 520px; max-height: 85vh; overflow-y: auto;">
+            <div class="bs-title" style="font-size: 1.1rem;">🔄 Transfer Membership</div>
+            <div style="color: #9ca3af; font-size: 0.85rem; margin-bottom: 16px;">
+                Transfer ${escapeHtml(leavingMember.name)}'s membership to another member.
+            </div>
+
+            <div style="background: rgba(245,158,11,0.08); border-radius: 12px; padding: 12px; margin-bottom: 16px; border: 1px solid rgba(245,158,11,0.15);">
+                <div style="font-size: 0.7rem; font-weight: 700; color: var(--t3); text-transform: uppercase; letter-spacing: 0.5px;">Leaving Member</div>
+                <div style="font-weight: 700; font-size: 1rem;">${escapeHtml(leavingMember.name)}</div>
+                <div style="font-size: 0.8rem; color: var(--t2);">📞 ${leavingMember.phone}</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 6px; font-size: 0.75rem;">
+                    <span style="color: var(--t3);">Total Debt:</span>
+                    <span style="font-weight: 600; color: var(--red);">UGX ${computeMemberTotalDebt(leavingMember).toLocaleString()}</span>
+                    <span style="color: var(--t3);">Days Active:</span>
+                    <span style="font-weight: 600;">${getDaysActive(leavingMember)} days</span>
+                    <span style="color: var(--t3);">Join Date:</span>
+                    <span style="font-weight: 600;">${leavingMember.joinDate || 'N/A'}</span>
+                </div>
+            </div>
+
+            <div class="fgrp">
+                <label class="flbl">Select Buying Member</label>
+                <select id="transfer-buyer-select" class="inp">
+                    <option value="">-- Select Member --</option>
+                    ${availableMembers.map(m => `
+                        <option value="${m.id}">
+                            ${escapeHtml(m.name)} (${getDaysActive(m)} days, UGX ${computeMemberTotalDebt(m).toLocaleString()} debt)
+                        </option>
+                    `).join('')}
+                </select>
+            </div>
+
+            <div id="transfer-preview" style="display: none; background: rgba(6,182,212,0.06); border-radius: 12px; padding: 12px; border: 1px solid rgba(6,182,212,0.15); margin: 12px 0;"></div>
+
+            <div style="display: flex; gap: 12px; margin-top: 16px;">
+                <button class="btn btn-sec" onclick="this.closest('.ov').remove()" style="flex:1;">Cancel</button>
+                <button class="btn btn-gold" id="transfer-confirm-btn" style="flex:1;" disabled>✅ Confirm Transfer</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    // ─── Update preview when buyer is selected ─────────────
+    document.getElementById('transfer-buyer-select').addEventListener('change', function() {
+        const buyerId = this.value;
+        const previewDiv = document.getElementById('transfer-preview');
+        const confirmBtn = document.getElementById('transfer-confirm-btn');
+
+        if (!buyerId) {
+            previewDiv.style.display = 'none';
+            confirmBtn.disabled = true;
+            return;
+        }
+
+        const buyer = members.find(m => m.id === buyerId);
+        if (!buyer) return;
+
+        const leaverDebt = computeMemberTotalDebt(leavingMember);
+        const buyerDebt = computeMemberTotalDebt(buyer);
+        const newDebt = leaverDebt + buyerDebt;
+
+        const leaverDays = getDaysActive(leavingMember);
+        const buyerDays = getDaysActive(buyer);
+        const newDays = leaverDays + buyerDays;
+
+        // Calculate transfer fee (250 UGX per day)
+        const baseFee = calculateTransferFee(leaverDays);
+        const totalPayment = Math.max(leaverDebt, baseFee);
+        const transferFeeAmount = totalPayment - leaverDebt; // amount that goes to the group
+
+        // Earliest join date
+        const leaverDate = new Date(leavingMember.joinDate);
+        const buyerDate = new Date(buyer.joinDate);
+        const earliestDate = leaverDate < buyerDate ? leaverDate : buyerDate;
+        const earliestDateStr = earliestDate.toISOString().split('T')[0];
+
+        previewDiv.style.display = 'block';
+        previewDiv.innerHTML = `
+            <div style="font-weight: 700; font-size: 0.85rem; margin-bottom: 6px;">📊 Transfer Summary</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 0.8rem;">
+                <span style="color: var(--t3);">Buying Member:</span><span style="font-weight: 600;">${escapeHtml(buyer.name)}</span>
+                <span style="color: var(--t3);">Current Debt:</span><span style="color: var(--red);">UGX ${buyerDebt.toLocaleString()}</span>
+                <span style="color: var(--t3);">Current Days:</span><span>${buyerDays} days</span>
+                <span style="color: var(--t3);">─────────────────</span><span></span>
+                <span style="color: var(--gold); font-weight: 700;">New Debt:</span><span style="color: var(--red); font-weight: 700;">UGX ${newDebt.toLocaleString()}</span>
+                <span style="color: var(--gold); font-weight: 700;">New Days:</span><span style="font-weight: 700;">${newDays} days</span>
+                <span style="color: var(--gold); font-weight: 700;">New Join Date:</span><span style="font-weight: 700;">${earliestDateStr}</span>
+            </div>
+            <div style="margin-top: 8px; padding: 8px; background: rgba(245,158,11,0.08); border-radius: 8px; border-left: 3px solid var(--gold);">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-size: 0.8rem;">
+                    <span style="color: var(--t3);">Seller's Debt:</span><span style="font-weight: 600; color: var(--red);">UGX ${leaverDebt.toLocaleString()}</span>
+                    <span style="color: var(--t3);">Base Transfer Fee (full welfare/day):</span>
+                    <span style="color: var(--t3);">Total Payment:</span><span style="font-weight: 700; color: var(--gold);">UGX ${totalPayment.toLocaleString()}</span>
+                    ${transferFeeAmount > 0 ? `<span style="color: var(--t3);">Group Transfer Fee:</span><span style="font-weight: 600; color: var(--teal);">UGX ${transferFeeAmount.toLocaleString()}</span>` : `<span style="color: var(--t3);">Group Transfer Fee:</span><span style="font-weight: 600; color: var(--green);">Waived</span>`}
+                </div>
+                <div class="micro muted" style="margin-top: 4px;">The transfer fee goes to the group's profit pool.</div>
+            </div>
+            <div class="micro muted" style="margin-top: 6px;">The buying member will inherit the leaving member's rotation position and leaderboard rank.</div>
+        `;
+        confirmBtn.disabled = false;
+    });
+
+    // ─── Confirm Transfer ──────────────────────────────────
+    document.getElementById('transfer-confirm-btn').addEventListener('click', async function() {
+        const buyerId = document.getElementById('transfer-buyer-select').value;
+        if (!buyerId) {
+            toast('Please select a buying member', '#ef4444');
+            return;
+        }
+        const buyer = members.find(m => m.id === buyerId);
+        if (!buyer) {
+            toast('Buyer not found', '#ef4444');
+            return;
+        }
+        if (!confirm(`⚠️ Confirm transfer of ${leavingMember.name}'s membership to ${buyer.name}?\n\nThis will merge debts and active days. This action cannot be undone.`)) {
+            return;
+        }
+        await processMembershipTransfer(leavingMember, buyer, requestId);
+        modal.remove();
+    });
+}
+/**
+ * Executes the membership transfer: merges debt, days, transactions, loans, and rotation.
+ * Adds transfer fee transaction if applicable.
+ * @param {Object} leavingMember - The member leaving
+ * @param {Object} buyingMember - The member taking over
+ * @param {string|null} requestId - Optional leave request ID
+ */
+async function processMembershipTransfer(leavingMember, buyingMember, requestId) {
+    try {
+        // ─── 1. Validate ──────────────────────────────────────────
+        if (!leavingMember || !buyingMember) {
+            toast('Invalid members selected', '#ef4444');
+            return;
+        }
+        if (leavingMember.id === buyingMember.id) {
+            toast('Cannot transfer to the same member', '#ef4444');
+            return;
+        }
+
+        // ─── 2. Calculate values ──────────────────────────────────
+        const leaverDebt = computeMemberTotalDebt(leavingMember);
+        const buyerDebt = computeMemberTotalDebt(buyingMember);
+        const newTotalDebt = leaverDebt + buyerDebt;
+
+        const leaverDays = getDaysActive(leavingMember);
+        const buyerDays = getDaysActive(buyingMember);
+        const newTotalDays = leaverDays + buyerDays;
+
+        const baseFee = calculateTransferFee(leaverDays);
+        const totalPayment = Math.max(leaverDebt, baseFee);
+        const transferFeeAmount = totalPayment - leaverDebt; // amount that goes to group
+
+        // Earliest join date
+        const leaverDate = new Date(leavingMember.joinDate);
+        const buyerDate = new Date(buyer.joinDate);
+        const earliestDate = leaverDate < buyerDate ? leaverDate : buyerDate;
+        const earliestDateStr = earliestDate.toISOString().split('T')[0];
+
+        console.log('📊 Transfer Summary:', {
+            leavingMember: leavingMember.name,
+            leaverDebt,
+            buyerDebt,
+            newTotalDebt,
+            leaverDays,
+            buyerDays,
+            newTotalDays,
+            earliestDate: earliestDateStr,
+            baseFee,
+            transferFeeAmount,
+            totalPayment
+        });
+
+        // ─── 3. Reassign transactions and loans ──────────────────
+        const txCount = await reassignTransactions(leavingMember.phone, buyingMember.phone);
+        console.log(`✅ Reassigned ${txCount} transactions`);
+        const loanCount = await reassignLoans(leavingMember.id, buyingMember.id);
+        console.log(`✅ Reassigned ${loanCount} loans`);
+
+        // ─── 4. Update buying member ─────────────────────────────
+        await db.ref('members/' + buyingMember.id).update({
+            joinDate: earliestDateStr,
+            daysActive: newTotalDays,
+            updatedAt: Date.now()
+        });
+
+        // ─── 5. Update rotation ──────────────────────────────────
+        const rotationOrder = rotation.order || [];
+        let newOrder = rotationOrder.filter(id => id !== leavingMember.id);
+        if (!newOrder.includes(buyingMember.id)) {
+            const leaverIndex = rotationOrder.indexOf(leavingMember.id);
+            if (leaverIndex === -1) newOrder.push(buyingMember.id);
+            else newOrder.splice(leaverIndex, 0, buyingMember.id);
+        }
+        await db.ref('rotation').update({ order: newOrder, currentIndex: 0 });
+        rotation.order = newOrder;
+        rotation.currentIndex = 0;
+
+        // ─── 6. Mark leave request (if any) ──────────────────────
+        if (requestId) {
+            await db.ref('leaveRequests/' + requestId).update({
+                status: 'transferred',
+                transferredTo: buyingMember.id,
+                transferredAt: Date.now(),
+                transferredBy: currentUser?.name || 'Admin'
+            });
+        }
+
+        // ─── 7. Delete leaving member ─────────────────────────────
+        await db.ref('members/' + leavingMember.id).remove();
+
+        // ─── 8. Create transfer fee transaction (if > 0) ──────────
+        if (transferFeeAmount > 0) {
+            await db.ref('transactions').push({
+                type: 'transfer_fee',
+                amount: transferFeeAmount,
+                description: `Transfer fee from ${leavingMember.name} to ${buyingMember.name} (${leaverDays} days)`,
+                date: Date.now(),
+                receiptNumber: generateReceiptNumber(),
+                memberPhone: buyingMember.phone,
+                memberName: buyingMember.name
+            });
+        }
+
+        // ─── 9. Notify parties ────────────────────────────────────
+        await db.ref('notifications/' + buyingMember.id).push({
+            id: Date.now(),
+            text: `🔄 Membership transferred! New debt: UGX ${newTotalDebt.toLocaleString()}, Active days: ${newTotalDays} days, Join date: ${earliestDateStr}.`,
+            date: Date.now(),
+            read: false,
+            type: 'transfer_complete'
+        });
+
+        await db.ref('notifications/admin').push({
+            id: Date.now(),
+            text: `🔄 Membership transferred from ${leavingMember.name} to ${buyingMember.name}. Total payment: UGX ${totalPayment.toLocaleString()} (debt: UGX ${leaverDebt.toLocaleString()}, fee: UGX ${transferFeeAmount.toLocaleString()}).`,
+            date: Date.now(),
+            read: false,
+            type: 'admin_transfer'
+        });
+
+        // ─── 10. Full data reload ──────────────────────────────────
+        await reloadAllData();
+        computePots();
+        updateHomeUI();
+        updateAccountUI();
+        renderAll();
+
+        // ─── 11. Verify ──────────────────────────────────────────
+        const updatedBuyer = members.find(m => m.id === buyingMember.id);
+        if (updatedBuyer) {
+            const finalDays = getDaysActive(updatedBuyer);
+            const finalDebt = computeMemberTotalDebt(updatedBuyer);
+            console.log('✅ Transfer complete:', {
+                member: updatedBuyer.name,
+                finalDays,
+                finalDebt,
+                joinDate: updatedBuyer.joinDate
+            });
+            toast(`✅ Transferred to ${updatedBuyer.name}. Debt: ${money(finalDebt)}, Days: ${finalDays}`, '#10b981');
+        }
+
+    } catch (err) {
+        console.error('Transfer error:', err);
+        toast('❌ Transfer failed. Please try again.', '#ef4444');
+        try {
+            await db.ref('transferErrors').push({
+                error: err.message,
+                stack: err.stack,
+                timestamp: Date.now(),
+                leavingMember: leavingMember?.name,
+                buyingMember: buyingMember?.name
+            });
+        } catch (e) { /* ignore */ }
+    }
+}
+/**
+ * Admin action: opens transfer modal for a member from the member list.
+ * @param {string} memberId - ID of the member to transfer
+ */
+window.showMemberTransferOption = function(memberId) {
+    const member = members.find(m => m.id === memberId);
+    if (!member) {
+        toast('Member not found', '#ef4444');
+        return;
+    }
+    // Check if member has outstanding balance
+    const debt = computeMemberTotalDebt(member);
+    if (debt === 0) {
+        if (confirm(`Delete ${member.name}? They have no outstanding balance.`)) {
+            deleteMember(memberId);
+        }
+        return;
+    }
+    // Show transfer option
+    showTransferMembershipModal(member, null);
+};
 // ========== REWARDS LOGIC (for Statistics tab) ==========
 function calculateRewards() {
     const activeMembers = members.filter(m => m.approved);
@@ -22420,6 +23619,10 @@ function applySettings() {
   } else {
     hideMaintenanceOverlay();
   }
+   checkAnniversaryOnLoad();   // <-- ADD THIS
+  // NEW: auto-start anniversary if date matches
+  checkAnniversaryAutoStart();
+
 }
 // ==========================================
 // INITIALIZE MAINTENANCE MODE
@@ -23437,32 +24640,36 @@ window._adminChatName = 'Admin';     // admin display name
 // ──────────────────────────────────────────────────────────────
 // VISIBILITY CHANGE – Pause all updates when tab hidden
 // ──────────────────────────────────────────────────────────────
-
 document.addEventListener('visibilitychange', function() {
+    // Only run if functions are defined
+    if (typeof stopHomeUpdates !== 'function') return;
+    if (typeof currentScreen === 'undefined') return;
+
     if (document.hidden) {
-        // Tab hidden – stop EVERYTHING
         stopHomeUpdates();
-        if (typingRAF) {
+        if (typeof typingRAF !== 'undefined' && typingRAF) {
             cancelAnimationFrame(typingRAF);
             typingRAF = null;
         }
-        console.log('🔇 Home updates paused');
+        if (typeof receiverTypingTimer !== 'undefined' && receiverTypingTimer) {
+            clearTimeout(receiverTypingTimer);
+            receiverTypingTimer = null;
+        }
     } else {
-        // Tab visible – restart if on home
         if (currentScreen === 'home') {
-            startHomeUpdates();
-            // Restart typing
-            const order = rotation.order || [];
-            if (order.length) {
+            if (typeof startHomeUpdates === 'function') startHomeUpdates();
+            // Restart typing if needed
+            if (typeof rotation !== 'undefined' && rotation.order && rotation.order.length) {
                 const idx = rotation.currentIndex || 0;
-                const member = members.find(m => m.id === order[idx]);
-                if (member && currentTypingName !== member.name) {
-                    currentTypingName = '';
-                    receiverCharIndex = 0;
-                    typeReceiverName(member.name);
+                const member = (typeof members !== 'undefined') ? members.find(m => m.id === rotation.order[idx]) : null;
+                if (member && typeof typeReceiverName === 'function') {
+                    if (typeof currentTypingName !== 'undefined' && currentTypingName !== member.name) {
+                        currentTypingName = '';
+                        receiverCharIndex = 0;
+                        typeReceiverName(member.name);
+                    }
                 }
             }
-            console.log('🔄 Home updates resumed');
         }
     }
 });
@@ -23586,7 +24793,21 @@ function computeMemberOfTheMonth() {
   }
   return bestMember;
 }
-
+function renderAll() {
+    renderStats();
+    renderMembers();
+    if (distributionState.distributionData && distributionState.isCountingDown) {
+        renderDistributionPreview(distributionState.distributionData);
+    }
+    updateAnniversaryCountdown();
+    
+    // Update anniversary date display
+    const dateDisplay = document.getElementById('anniversary-date-display');
+    if (dateDisplay && anniversarySettings.nextAnniversary) {
+        const d = new Date(anniversarySettings.nextAnniversary);
+        dateDisplay.textContent = d.toLocaleDateString('en-UG', { year:'numeric', month:'long', day:'numeric' });
+    }
+}
 function renderMemberOfTheMonth() {
     const container = document.getElementById('motm-container');
     if (!container) return;
