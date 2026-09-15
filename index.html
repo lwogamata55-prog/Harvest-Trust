@@ -3591,7 +3591,14 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
     <input type="password" id="login-password" class="auth-input" placeholder="Enter Password" onkeydown="if(event.key==='Enter')doLogin()">
     <button class="auth-btn" onclick="doLogin()">🔓 Login</button>
     <div class="auth-link" onclick="showSignup()">Click here to sign up</div>
-    <div class="auth-link" onclick="openForgotPassword()">Forgot password?</div>
+    <button type="button"
+        class="auth-link"
+        onclick="openForgotPassword()"
+        style="background:transparent;border:none;width:100%;
+               text-align:center;padding:8px;cursor:pointer;
+               position:relative;z-index:10;pointer-events:auto;">
+  Forgot password?
+</button>
     <div id="login-error" class="micro" style="color:var(--red);text-align:center;margin-top:8px;min-height:16px;"></div>
     <div class="version-footer">v2.0.0 · Lwogamata</div>
   </div>
@@ -4075,7 +4082,12 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
       </div>
       <div class="menu-section">
         <div class="menu-item" onclick="openProfileModal()"><span class="menu-icon">👤</span><span class="menu-label">My Profile</span><span class="menu-arrow">›</span></div>
-        <div class="menu-item" onclick="openSecurityModal()"><span class="menu-icon">🔐</span><span class="menu-label">Security</span><span class="menu-value" id="account-pin-hint"></span><span class="menu-arrow">›</span></div>
+        <div class="menu-item" onclick="openSecurityModal()">
+  <span class="menu-icon">🔐</span>
+  <span class="menu-label">Security</span>
+  <span class="menu-value" id="account-pin-hint" style="font-size:0.7rem; color:var(--t3);">Change Password</span>
+  <span class="menu-arrow">›</span>
+</div>
         <div class="menu-item" onclick="openNotificationsModal()"><span class="menu-icon">🔔</span><span class="menu-label">Notifications</span><span class="menu-value" id="notif-count-label" style="color:var(--gold);font-size:0.7rem;font-weight:700;"></span><span class="menu-arrow">›</span></div>
         <div class="menu-item" id="loan-menu-item" onclick="openLoanRequestModal()"><span class="menu-icon">💰</span><span class="menu-label">Request Loan</span><span class="menu-arrow">›</span></div>
         <div class="menu-item" onclick="openHelpModal()"><span class="menu-icon">❓</span><span class="menu-label">Help & Support</span><span class="menu-arrow">›</span></div>
@@ -4690,6 +4702,16 @@ body::after{content:'';position:fixed;inset:-8%;z-index:0;pointer-events:none;op
     <img id="image-viewer-img" src="" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,0.6);transition:transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);transform:scale(0.8);">
   </div>
   <button id="image-viewer-close" style="position:absolute;top:20px;right:20px;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);color:#fff;font-size:1.5rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.2s;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10;" onclick="closeImageViewer()">✕</button>
+</div>
+<div class="ov" id="ov-forgot-password" onclick="maybeClose(event,'ov-forgot-password')">
+  <div class="bs" style="max-width: 460px; max-height: 92vh; overflow-y: auto;">
+    <div class="bs-title">🔐 Reset Password</div>
+    <div id="forgot-step-container"></div>
+    <button class="btn btn-sec btn-full" style="margin-top: 12px;"
+            onclick="closeOv('ov-forgot-password'); resetForgotState();">
+      Cancel
+    </button>
+  </div>
 </div>
 <!-- ========================================== -->
 <!-- MEMBER LOAN DETAILS MODAL                 -->
@@ -8946,7 +8968,7 @@ if (rb && !currentUser.isAdmin) {
 
   // ── PIN hint ────────────────────────────────────────────
   const ph = document.getElementById('account-pin-hint');
-  if (ph) ph.innerText = currentUser.isAdmin ? '' : 'Change PIN';
+if (ph) ph.innerText = currentUser.isAdmin ? '' : 'Change Password';
 
   // ── Optional hooks — safe to call only if they exist ────
   try { if (typeof updateAccountBalances === 'function') updateAccountBalances(); } catch (e) {}
@@ -11297,6 +11319,9 @@ function showMainApp() {
       updateAccountUI();
       checkMembershipRenewal(currentUser);
       goTab('home', document.getElementById('ni-home'));
+      if (typeof checkProfilePhoto === 'function') {
+  checkProfilePhoto();
+}
       // Profile photo gate
 if (typeof checkProfilePhoto === 'function') {
   checkProfilePhoto();
@@ -11334,6 +11359,9 @@ if (typeof checkProfilePhoto === 'function') {
     updateAccountUI();
     checkMembershipRenewal(currentUser);
     goTab('home', document.getElementById('ni-home'));
+    if (typeof checkProfilePhoto === 'function') {
+  checkProfilePhoto();
+}
     // Profile photo gate
 if (typeof checkProfilePhoto === 'function') {
   checkProfilePhoto();
@@ -13482,39 +13510,260 @@ window.saveProfile=async function(){
   currentUser.name=n;currentUser.phone=p;currentUser.password='HT'+p.slice(-4);
   updateAccountUI();closeModal();toast(t('save_changes'),'#10b981');
 };
-window.openSecurityModal = function() {
-  if (!currentUser) return;
-  if (currentUser.isAdmin) {
-    showModal('<div style="text-align:center;padding:16px 0"><div style="font-size:2.5rem;margin-bottom:10px">🔒</div><div style="color:var(--t2);font-size:0.84rem;line-height:1.6">Security</div><div style="margin-top:12px;background:rgba(255,255,255,0.04);border-radius:10px;padding:10px;font-family:JetBrains Mono,monospace;font-size:0.75rem;color:var(--t3)">Current: admin123</div></div>', 'Security');
+/* ═══════════════════════════════════════════════════════════
+   SECURITY MODAL — Change password
+   Self-contained. No external dependencies.
+   ═══════════════════════════════════════════════════════════ */
+window.openSecurityModal = function () {
+  if (!currentUser) {
+    toast('Not logged in', '#ef4444');
     return;
   }
-  let curPin = '', newPin = '', confPin = '', step = 'cur';
-  const buildPins = (title, sub, err) => `<div style="text-align:center;margin-bottom:14px"><div style="font-size:0.75rem;font-weight:700;color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin-bottom:3px">${title}</div><div style="font-size:0.8rem;color:var(--t2)">${sub}</div></div><div style="display:flex;gap:12px;justify-content:center;margin:14px 0" id="pin-dots">${[0,1,2,3].map(i => '<div style="width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,0.2);transition:all 0.2s" id="pd' + i + '"></div>').join('')}</div><div style="min-height:18px;text-align:center;font-size:0.74rem;color:var(--red);margin-bottom:10px">${err || ''}</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:240px;margin:0 auto">${[1,2,3,4,5,6,7,8,9, '', '0', '⌫'].map(k => `<button onclick="pKey('${k}')" style="padding:16px;border-radius:14px;background:rgba(255,255,255,0.06);border:1.5px solid rgba(255,255,255,0.1);font-size:1.2rem;font-weight:700;cursor:pointer;color:var(--t);transition:all 0.15s">${k}</button>`).join('')}</div>`;
-  const content = document.createElement('div');
-  content.innerHTML = buildPins('Enter Current PIN', 'Enter Current PIN', '');
-  window.pKey = function(k) {
-    const active = () => step === 'cur' ? curPin : step === 'new' ? newPin : confPin;
-    const set = (v) => { if (step === 'cur') curPin = v; else if (step === 'new') newPin = v; else confPin = v; };
-    if (k === '⌫') { set(active().slice(0, -1)); }
-    else if (k !== '' && active().length < 4) { set(active() + k); }
-    const len = active().length;
-    for (let i = 0; i < 4; i++) { const d = document.getElementById('pd' + i); if (d) { d.style.background = i < len ? 'var(--gold)' : 'transparent'; d.style.borderColor = i < len ? 'var(--gold)' : 'rgba(255,255,255,0.2)'; } }
-    if (active().length === 4) {
-      setTimeout(() => {
-        if (step === 'cur') {
-          const stored = (currentUser.password || '').slice(-4);
-          if (active() !== stored) { content.innerHTML = buildPins('Enter Current PIN', 'Enter Current PIN', 'Incorrect PIN – try again'); curPin = ''; }
-          else { step = 'new'; newPin = ''; content.innerHTML = buildPins('Enter New PIN', 'Enter New PIN', ''); }
-        } else if (step === 'new') { step = 'conf'; confPin = ''; content.innerHTML = buildPins('Confirm New PIN', 'Confirm New PIN', ''); }
-        else {
-          if (newPin !== confPin) { content.innerHTML = buildPins('Enter New PIN', 'Enter New PIN', 'PINs did not match – try again'); step = 'new'; newPin = ''; confPin = ''; }
-          else { db.ref('members/' + currentUser.id).update({ password: 'HT' + newPin }).then(() => { currentUser.password = 'HT' + newPin; closeModal(); toast('PIN changed! ✅', '#10b981'); }); }
-        }
-      }, 300);
-    }
-  };
-  showModalEl(content, 'Change PIN');
+
+  // Admin — show info only
+  if (currentUser.isAdmin) {
+    const html = `
+      <div style="text-align:center; padding:16px 0;">
+        <div style="font-size:2.5rem; margin-bottom:10px;">🔒</div>
+        <div style="color:var(--t2); font-size:0.84rem; line-height:1.6;">
+          Admin security is managed by the master password.
+        </div>
+        <div style="margin-top:12px; background:rgba(255,255,255,0.04);
+                    border-radius:10px; padding:10px;
+                    font-family:monospace; font-size:0.75rem;
+                    color:var(--t3);">
+          Current: <span id="admin-pwd-display">••••••••</span>
+        </div>
+        <button class="btn btn-sec btn-full" style="margin-top:14px;"
+                onclick="closeCurrentModal()">Close</button>
+      </div>
+    `;
+    showModal(html, 'Security');
+    return;
+  }
+
+  // Member — show change password form
+  const html = `
+    <div class="fgrp">
+      <label class="flbl">Current Password</label>
+      <input type="password" id="pwd-current" class="inp"
+             placeholder="Enter your current password"
+             autocomplete="current-password">
+    </div>
+
+    <div class="fgrp">
+      <label class="flbl">New Password</label>
+      <input type="password" id="pwd-new" class="inp"
+             placeholder="Create a strong new password"
+             autocomplete="new-password"
+             oninput="pwdChangeLiveCheck()">
+    </div>
+
+    <div class="fgrp">
+      <label class="flbl">Confirm New Password</label>
+      <input type="password" id="pwd-confirm" class="inp"
+             placeholder="Type the new password again"
+             autocomplete="new-password"
+             oninput="pwdChangeLiveCheck()">
+    </div>
+
+    <div id="pwd-change-rules"
+         style="background:rgba(255,255,255,0.03);
+                border:1px solid rgba(255,255,255,0.08);
+                border-radius:10px; padding:10px 12px;
+                margin-bottom:12px; font-size:0.72rem;
+                line-height:1.7;">
+      <div class="pwd-rule" data-rule="length"  style="color:#94a3b8;"><span class="pwd-rule-icon">○</span> At least 8 characters</div>
+      <div class="pwd-rule" data-rule="capital" style="color:#94a3b8;"><span class="pwd-rule-icon">○</span> At least 1 capital letter (A–Z)</div>
+      <div class="pwd-rule" data-rule="symbol"  style="color:#94a3b8;"><span class="pwd-rule-icon">○</span> At least 1 symbol (!@#$%…)</div>
+      <div class="pwd-rule" data-rule="digits"  style="color:#94a3b8;"><span class="pwd-rule-icon">○</span> At least 2 numbers (0–9)</div>
+      <div class="pwd-rule" data-rule="match"   style="color:#94a3b8;"><span class="pwd-rule-icon">○</span> New passwords match</div>
+    </div>
+
+    <div id="pwd-change-error"
+         style="min-height:18px; color:var(--red);
+                font-size:0.75rem; font-weight:700;
+                text-align:center; margin-bottom:8px;"></div>
+
+    <button class="btn btn-gold btn-full"
+            id="pwd-change-btn"
+            onclick="changeMyPassword()"
+            style="padding:13px; font-weight:700;">
+      🔐 Change Password
+    </button>
+    <button class="btn btn-sec btn-full"
+            onclick="closeCurrentModal()"
+            style="margin-top:8px;">
+      Cancel
+    </button>
+  `;
+
+  showModal(html, 'Security');
+
+  // Focus the first field after the modal renders
+  setTimeout(() => {
+    document.getElementById('pwd-current')?.focus();
+  }, 300);
 };
+
+/* ═══════════════════════════════════════════════════════════
+   LIVE VALIDATION — mirrors the setup modal
+   ═══════════════════════════════════════════════════════════ */
+window.pwdChangeLiveCheck = function () {
+  const pwd     = document.getElementById('pwd-new')?.value || '';
+  const confirm = document.getElementById('pwd-confirm')?.value || '';
+
+  const rules = {
+    length:  pwd.length >= 8,
+    capital: /[A-Z]/.test(pwd),
+    symbol:  /[!@#$%^&*()_+\-=\[\]{}|;:,.<>?\/~`"']/.test(pwd),
+    digits:  (pwd.match(/\d/g) || []).length >= 2,
+    match:   pwd.length > 0 && pwd === confirm
+  };
+
+  document.querySelectorAll('#pwd-change-rules .pwd-rule').forEach(el => {
+    const rule = el.getAttribute('data-rule');
+    const ok = rules[rule];
+    const icon = el.querySelector('.pwd-rule-icon');
+    if (ok) { el.style.color = '#6ee7b7'; if (icon) icon.textContent = '✓'; }
+    else    { el.style.color = '#94a3b8'; if (icon) icon.textContent = '○'; }
+  });
+
+  const btn = document.getElementById('pwd-change-btn');
+  const allOk = rules.length && rules.capital && rules.symbol &&
+                rules.digits && rules.match;
+  if (btn) btn.style.opacity = allOk ? '1' : '0.6';
+};
+
+
+/* ═══════════════════════════════════════════════════════════
+   CHANGE PASSWORD — inline hash, self-contained
+   ═══════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════
+   CHANGE PASSWORD — fully self-contained
+   Hashing and validation are inlined. No external dependencies.
+   ═══════════════════════════════════════════════════════════ */
+window.changeMyPassword = async function () {
+  if (!currentUser || currentUser.isAdmin) {
+    toast('Not allowed', '#ef4444');
+    return;
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // Inline hash helper
+  // ═══════════════════════════════════════════════════════
+  async function hashPwd(pwd, salt) {
+    const enc = new TextEncoder();
+    const data = enc.encode(String(salt) + '::' + String(pwd));
+    if (window.crypto && crypto.subtle && crypto.subtle.digest) {
+      const buf = await crypto.subtle.digest('SHA-256', data);
+      return Array.from(new Uint8Array(buf))
+        .map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+    let h = 5381;
+    for (let i = 0; i < data.length; i++) h = ((h << 5) + h) + data[i];
+    return 'fb' + Math.abs(h).toString(16).padStart(30, '0');
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // Inline password validator
+  // ═══════════════════════════════════════════════════════
+  function validatePassword(pwd) {
+    const errs = [];
+    if (!pwd) { errs.push('Password is required'); return errs; }
+    if (pwd.length < 8)              errs.push('At least 8 characters');
+    if (!/[A-Z]/.test(pwd))          errs.push('At least 1 capital letter');
+    if (!/[!@#$%^&*()_+\-=\[\]{}|;:,.<>?\/~`"']/.test(pwd))
+                                     errs.push('At least 1 symbol');
+    if ((pwd.match(/\d/g) || []).length < 2)
+                                     errs.push('At least 2 numbers');
+    return errs;
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // Read inputs
+  // ═══════════════════════════════════════════════════════
+  const errEl   = document.getElementById('pwd-change-error');
+  const setErr  = m => { if (errEl) errEl.innerText = m || ''; };
+
+  const curPwd  = document.getElementById('pwd-current')?.value || '';
+  const newPwd  = document.getElementById('pwd-new')?.value     || '';
+  const confPwd = document.getElementById('pwd-confirm')?.value || '';
+
+  setErr('');
+
+  // ═══════════════════════════════════════════════════════
+  // Validation
+  // ═══════════════════════════════════════════════════════
+  if (!curPwd)  { setErr('Enter your current password'); return; }
+  if (!newPwd)  { setErr('Enter a new password'); return; }
+  if (!confPwd) { setErr('Confirm the new password'); return; }
+  if (newPwd !== confPwd) { setErr('New passwords do not match'); return; }
+
+  const errs = validatePassword(newPwd);
+  if (errs.length) { setErr('Password: ' + errs[0]); return; }
+
+  if (newPwd === curPwd) {
+    setErr('New password must be different from current');
+    return;
+  }
+
+  const btn = document.getElementById('pwd-change-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Verifying…'; }
+
+  try {
+    const salt = String(currentUser.id || currentUser.phone || 'htf');
+
+    // ── Verify current password ─────────────────────────
+    const curHash = await hashPwd(curPwd, salt);
+    if (curHash !== currentUser.pinHash) {
+      setErr('Current password is incorrect');
+      if (btn) { btn.disabled = false; btn.textContent = '🔐 Change Password'; }
+      return;
+    }
+
+    if (btn) btn.textContent = '⏳ Saving…';
+
+    // ── Compute new hash + substring hashes ─────────────
+    const newHash = await hashPwd(newPwd, salt);
+    const subHashes = [];
+    try {
+      const subSalt = salt + ':sub';
+      for (let i = 0; i <= newPwd.length - 3; i++) {
+        subHashes.push(await hashPwd(newPwd.slice(i, i + 3), subSalt));
+      }
+    } catch (e) {
+      console.warn('Substring hashing failed (non-fatal):', e);
+    }
+
+    // ── Save to Firebase ────────────────────────────────
+    await db.ref('members/' + currentUser.id).update({
+      pinHash:       newHash,
+      pinSubstrings: subHashes,
+      pinSetAt:      Date.now()
+    });
+
+    // ── Update in-memory session ────────────────────────
+    currentUser.pinHash = newHash;
+    currentUser.pinSubstrings = subHashes;
+    try { localStorage.setItem('ht_user', JSON.stringify(currentUser)); } catch (e) {}
+
+    const idx = members.findIndex(m => m.id === currentUser.id);
+    if (idx >= 0) {
+      members[idx].pinHash = newHash;
+      members[idx].pinSubstrings = subHashes;
+    }
+
+    toast('✅ Password changed successfully', '#10b981');
+    if (typeof closeCurrentModal === 'function') closeCurrentModal();
+  } catch (err) {
+    console.error('Change password failed:', err);
+    setErr('Could not change password. Try again.');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔐 Change Password'; }
+  }
+};
+
 // Open modal and populate member dropdown
 window.openMemberStatusMessages = function() {
   const select = document.getElementById('status-member-select');
@@ -14853,6 +15102,725 @@ window.finalSubmitLoan = function() {
     toast('Failed to submit', '#ef4444');
   });
 };
+/* ═══════════════════════════════════════════════════════════
+   FORGOT PASSWORD — full flow
+   Step 0: phone number entry
+   Step 1: three identity questions (name, amount, date)
+   Step 2: three characters from the password
+   Fallback: admin reset request
+   On success: generate temp password, reveal once
+   ═══════════════════════════════════════════════════════════ */
+
+window.forgotState = {
+  step: 0,
+  phone: '',
+  member: null,
+  tempPassword: ''
+};
+
+window.resetForgotState = function () {
+  // Stop any running countdown
+  if (window._tempPasswordTimer) {
+    clearInterval(window._tempPasswordTimer);
+    window._tempPasswordTimer = null;
+  }
+  window.forgotState = { step: 0, phone: '', member: null, tempPassword: '' };
+  const c = document.getElementById('forgot-step-container');
+  if (c) c.innerHTML = '';
+};
+
+window.openForgotPassword = function () {
+  resetForgotState();
+  forgotState.step = 0;
+  renderForgotStep();
+  openOv('ov-forgot-password');
+};
+
+/* ═══════════════════════════════════════════════════════════
+   RENDER THE CURRENT STEP
+   ═══════════════════════════════════════════════════════════ */
+function renderForgotStep() {
+  const c = document.getElementById('forgot-step-container');
+  if (!c) return;
+
+  // ── Step 0: phone number ────────────────────────────────
+  if (forgotState.step === 0) {
+    c.innerHTML = `
+      <div class="hint-box" style="margin-bottom:12px;">
+        Enter the phone number you registered with.
+      </div>
+      <div class="fgrp">
+        <label class="flbl">Phone Number</label>
+        <input type="tel" id="forgot-phone" class="inp"
+               placeholder="0770371720 or +256770371720"
+               style="font-size:1.1rem; padding:14px; text-align:center;">
+      </div>
+      <button class="btn btn-gold btn-full" onclick="forgotStep0Next()"
+              style="padding:13px; font-weight:700; font-size:1rem;">
+        Next →
+      </button>
+    `;
+    setTimeout(() => document.getElementById('forgot-phone')?.focus(), 300);
+    return;
+  }
+
+  // ── Step 1: identity questions (4 questions, need 3 correct) ──
+  if (forgotState.step === 1) {
+    c.innerHTML = `
+      <div class="hint-box" style="margin-bottom:12px;">
+        Answer these questions to verify your identity.
+        <strong style="color:#fcd34d;">At least 3 of 4 must be correct.</strong>
+        <br><span style="font-size:0.72rem;">The join date is optional — but if you can fill it, it counts.</span>
+      </div>
+
+      <div class="fgrp">
+        <label class="flbl">1. Your full name(s)</label>
+        <input type="text" id="forgot-name" class="inp"
+               placeholder="Type your name as registered">
+      </div>
+
+      <div class="fgrp">
+        <label class="flbl">2. Last amount saved (UGX)</label>
+        <input type="number" id="forgot-amount" class="inp"
+               placeholder="Deposit + welfare for that day">
+        <div class="micro" style="margin-top:3px;">
+          Total of your last daily deposit plus welfare on that same day.
+        </div>
+      </div>
+
+      <div class="fgrp">
+        <label class="flbl">3. When did you last save?</label>
+        <input type="date" id="forgot-date" class="inp">
+        <div class="micro" style="margin-top:3px;">
+          Date of your last deposit. Must be filled.
+        </div>
+      </div>
+
+      <div class="fgrp">
+        <label class="flbl">4. When did you join the group? <span style="color:#94a3b8;font-weight:400;">(optional)</span></label>
+        <input type="date" id="forgot-join-date" class="inp">
+        <div class="micro" style="margin-top:3px;">
+          If you remember, enter the date you joined. Leave blank if unsure.
+        </div>
+      </div>
+
+      <button class="btn btn-gold btn-full" onclick="forgotStep1Submit()"
+              style="padding:13px; font-weight:700; font-size:1rem; margin-top:4px;">
+        Verify →
+      </button>
+    `;
+    return;
+  }
+
+  // ── Step 2: three letters from the password ─────────────
+  if (forgotState.step === 2) {
+    c.innerHTML = `
+      <div class="hint-box" style="margin-bottom:12px; background:rgba(245,158,11,0.1);">
+        ⚠️ Step 1 did not match. Try the second verification.
+      </div>
+      <div class="fgrp">
+        <label class="flbl">Enter 3 consecutive characters from your password</label>
+        <input type="text" id="forgot-substring" class="inp"
+               maxlength="3" placeholder="e.g. wor"
+               style="font-size:1.4rem; padding:14px; text-align:center; letter-spacing:6px; font-family:monospace;"
+               oninput="this.value=this.value.slice(0,3)">
+        <div class="micro" style="margin-top:6px; line-height:1.5;">
+          Any 3 characters that appear together, in order, somewhere in your password.
+          Example: password "Password1!" — you could enter <code>ass</code>, <code>wor</code>, or <code>d1!</code>.
+        </div>
+      </div>
+      <button class="btn btn-gold btn-full" onclick="forgotStep2Submit()"
+              style="padding:13px; font-weight:700; font-size:1rem;">
+        Verify →
+      </button>
+    `;
+    setTimeout(() => document.getElementById('forgot-substring')?.focus(), 300);
+    return;
+  }
+
+   // ── Result: show temp password with 5-min countdown ─────
+  if (forgotState.step === 'result') {
+    const remaining = forgotState.remainingAfterThis || 0;
+    const expiresAt = forgotState.tempPasswordExpiresAt || (Date.now() + 5 * 60 * 1000);
+
+    c.innerHTML = `
+      <div class="hint-box" style="background:rgba(16,185,129,0.12);
+                  border:1px solid rgba(16,185,129,0.35);
+                  text-align:center; padding:18px;">
+        <div style="font-size:2.5rem; margin-bottom:6px;">✅</div>
+        <div style="font-weight:800; color:#6ee7b7; margin-bottom:10px;">
+          Identity Verified
+        </div>
+        <div style="font-size:0.78rem; color:var(--t2); margin-bottom:6px;">
+          Your one-time temporary password is:
+        </div>
+        <div id="temp-password-code"
+             style="font-family:'JetBrains Mono',monospace;
+                    font-size:1.8rem; font-weight:900;
+                    color:#fbbf24; letter-spacing:4px;
+                    margin:10px 0; text-shadow:0 0 20px rgba(251,191,36,0.5);
+                    user-select:all;">
+          ${forgotState.tempPassword}
+        </div>
+        <div style="font-size:0.72rem; color:var(--t3); margin-top:8px; line-height:1.5;">
+          Write this down now. Log in with it and set a new password immediately.
+        </div>
+      </div>
+
+      <div style="margin-top:12px; padding:12px 14px;
+                  background:rgba(239,68,68,0.12);
+                  border:1.5px solid rgba(239,68,68,0.4);
+                  border-radius:12px; text-align:center;">
+        <div style="font-size:0.65rem; color:#fca5a5; font-weight:800;
+                    text-transform:uppercase; letter-spacing:1.2px;
+                    margin-bottom:4px;">
+          ⏱️ Code Expires In
+        </div>
+        <div id="temp-password-countdown"
+             style="font-family:'JetBrains Mono',monospace;
+                    font-size:1.6rem; font-weight:900;
+                    color:#f87171; letter-spacing:2px;
+                    text-shadow:0 0 16px rgba(248,113,113,0.6);">
+          05:00
+        </div>
+        <div style="font-size:0.65rem; color:#94a3b8; margin-top:4px;">
+          After this, the code stops working. Request a new one if needed.
+        </div>
+      </div>
+
+      <div style="margin-top:10px; padding:8px 12px;
+                  background:rgba(239,68,68,0.08);
+                  border:1px solid rgba(239,68,68,0.25);
+                  border-radius:10px; text-align:center;
+                  font-size:0.7rem; color:#fca5a5; line-height:1.5;">
+        ⚠️ Any previous code you received is now <strong>invalid</strong>.
+      </div>
+
+      <div style="margin-top:8px; padding:8px 12px;
+                  background:rgba(245,158,11,0.08);
+                  border:1px solid rgba(245,158,11,0.25);
+                  border-radius:10px; text-align:center;
+                  font-size:0.7rem; color:#fcd34d;">
+        ℹ️ You have <strong>${remaining}</strong> request${remaining === 1 ? '' : 's'} remaining today.
+      </div>
+
+      <button class="btn btn-teal btn-full"
+              onclick="closeOv('ov-forgot-password'); resetForgotState();"
+              style="margin-top:12px; padding:12px; font-weight:700;">
+        Got It, Close
+      </button>
+    `;
+
+    // ── Live countdown timer ─────────────────────────────
+    if (window._tempPasswordTimer) clearInterval(window._tempPasswordTimer);
+
+    const updateCountdown = () => {
+      const el = document.getElementById('temp-password-countdown');
+      const codeEl = document.getElementById('temp-password-code');
+      if (!el) { clearInterval(window._tempPasswordTimer); return; }
+
+      const msLeft = expiresAt - Date.now();
+
+      if (msLeft <= 0) {
+        el.textContent = 'EXPIRED';
+        el.style.color = '#ef4444';
+        el.style.textShadow = '0 0 20px rgba(239,68,68,0.7)';
+        if (codeEl) {
+          codeEl.style.textDecoration = 'line-through';
+          codeEl.style.opacity = '0.4';
+        }
+        clearInterval(window._tempPasswordTimer);
+        window._tempPasswordTimer = null;
+        return;
+      }
+
+      const totalSec = Math.floor(msLeft / 1000);
+      const min = Math.floor(totalSec / 60);
+      const sec = totalSec % 60;
+      el.textContent = String(min).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+
+      // Turn red as time runs out
+      if (totalSec <= 60) {
+        el.style.color = '#dc2626';
+        el.style.textShadow = '0 0 24px rgba(220,38,38,0.85)';
+        el.style.animation = 'pulse 1s ease-in-out infinite';
+      } else if (totalSec <= 120) {
+        el.style.color = '#f87171';
+      }
+    };
+
+    updateCountdown();
+    window._tempPasswordTimer = setInterval(updateCountdown, 1000);
+    return;
+  }
+
+  // ── Result: admin request sent ──────────────────────────
+  if (forgotState.step === 'sent') {
+    c.innerHTML = `
+      <div class="hint-box" style="background:rgba(6,182,212,0.12);
+                  border:1px solid rgba(6,182,212,0.35);
+                  text-align:center; padding:18px;">
+        <div style="font-size:2.5rem; margin-bottom:6px;">📨</div>
+        <div style="font-weight:800; color:#67e8f9; margin-bottom:10px;">
+          Request Sent to Admin
+        </div>
+        <div style="font-size:0.8rem; color:var(--t2); line-height:1.55;">
+          Both verification steps failed, so your reset request has been sent
+          to the admin for manual verification.
+        </div>
+        <div style="font-size:0.75rem; color:var(--t3); margin-top:10px;">
+          The admin will contact you with a new password.
+        </div>
+      </div>
+      <button class="btn btn-sec btn-full"
+              onclick="closeOv('ov-forgot-password'); resetForgotState();"
+              style="margin-top:12px; padding:12px; font-weight:700;">
+        Close
+      </button>
+    `;
+    return;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   STEP 0 — LOOK UP MEMBER BY PHONE
+   • Normalizes both sides to a 9-digit core
+   • Enforces 3-requests-per-day limit
+   • Does NOT block if a previous temp password is unused —
+     a new request simply invalidates the old one
+   ═══════════════════════════════════════════════════════════ */
+window.forgotStep0Next = function () {
+
+  const todayISO = (function () {
+    const d = new Date();
+    return d.getFullYear() + '-' +
+      String(d.getMonth() + 1).padStart(2, '0') + '-' +
+      String(d.getDate()).padStart(2, '0');
+  })();
+
+  const MAX_PER_DAY = 3;
+
+  const raw = (document.getElementById('forgot-phone')?.value || '').trim();
+  if (!raw) {
+    toast('Enter your phone number', '#ef4444');
+    return;
+  }
+
+  const core = v => String(v || '')
+    .replace(/[^\d]/g, '')
+    .replace(/^0+/, '')
+    .replace(/^256/, '');
+
+  const inputCore = core(raw);
+  if (inputCore.length !== 9) {
+    toast('Invalid phone number. Use 0XXXXXXXXX or +256XXXXXXXXX', '#ef4444');
+    return;
+  }
+
+  const member = members.find(m => core(m.phone) === inputCore);
+  if (!member) {
+    console.warn('❌ No member matched phone core:', inputCore);
+    toast('No member found with that phone number', '#ef4444');
+    return;
+  }
+
+  if (member.approved === false) {
+    toast('Your account is not approved yet', '#f59e0b');
+    return;
+  }
+
+  // ── Daily limit (still enforced) ────────────────────────
+  const rec = member.resetAttempts || {};
+  const sameDay = rec.date === todayISO;
+  const countToday = sameDay ? (Number(rec.count) || 0) : 0;
+  const remaining = Math.max(0, MAX_PER_DAY - countToday);
+
+  if (remaining <= 0) {
+    toast('❌ You have reached the maximum of ' + MAX_PER_DAY + ' reset requests for today. Please try again tomorrow.', '#ef4444');
+    return;
+  }
+
+  // ── Warn if the previous code is still unused ──────────
+  if (member.tempPassword === true) {
+    toast('⚠️ A previous code is still active. Requesting a new one will cancel it. You have ' + remaining + ' request(s) left today.', '#f59e0b');
+  } else {
+    toast('✅ Identity found. You have ' + remaining + ' request(s) remaining today.', '#10b981');
+  }
+
+  forgotState.phone = member.phone;
+  forgotState.member = member;
+  forgotState.todayISO = todayISO;
+  forgotState.maxPerDay = MAX_PER_DAY;
+  forgotState.step = 1;
+  renderForgotStep();
+};
+
+/* ═══════════════════════════════════════════════════════════
+   STEP 1 — IDENTITY QUESTIONS
+   4 questions. Pass threshold: 3 of 4 correct.
+   • Name    — required, lenient match
+   • Amount  — required, tolerance ±200 or ±5%
+   • Save dt — required, accepts exact day OR yesterday
+   • Join dt — OPTIONAL, accepts exact day OR ±7 days
+   ═══════════════════════════════════════════════════════════ */
+window.forgotStep1Submit = async function () {
+  const member = forgotState.member;
+  if (!member) { toast('Session expired. Start over.', '#ef4444'); return; }
+
+  // ── Read the four inputs ────────────────────────────────
+  const inputName      = (document.getElementById('forgot-name')?.value || '').trim();
+  const inputAmountRaw = document.getElementById('forgot-amount')?.value;
+  const inputSaveDate  = document.getElementById('forgot-date')?.value || '';
+  const inputJoinDate  = document.getElementById('forgot-join-date')?.value || '';
+
+  // Required fields
+  if (!inputName) { toast('Please enter your full name', '#ef4444'); return; }
+
+  const inputAmount = parseFloat(inputAmountRaw);
+  if (isNaN(inputAmount) || inputAmount <= 0) {
+    toast('Please enter your last saved amount', '#ef4444');
+    return;
+  }
+  if (!inputSaveDate) { toast('Please enter your last save date', '#ef4444'); return; }
+
+  // ── Build the truth from transaction history ───────────
+  const myTx = transactions.filter(tx => tx.memberPhone === member.phone);
+
+  // ═══════════════════════════════════════════════════════
+  // CHECK 1 — NAME (lenient)
+  // ═══════════════════════════════════════════════════════
+  const nameOk = namesMatch(inputName, member.name);
+
+  // ═══════════════════════════════════════════════════════
+  // CHECK 2 — AMOUNT
+  // ═══════════════════════════════════════════════════════
+  let expectedTotal = 0;
+  let isoDate = '';
+  let yestDate = '';
+  let dateOk = false;
+  let amountOk = false;
+
+  if (myTx.length > 0) {
+    // Latest transaction among deposits + welfare
+    const savingsTx = myTx.filter(tx =>
+      tx.type === 'deposit' || tx.type === 'welfare'
+    );
+    const relevantTx = savingsTx.length ? savingsTx : myTx;
+    relevantTx.sort((a, b) => (b.date || 0) - (a.date || 0));
+
+    const latestTs = relevantTx[0].date;
+    const latestDay = new Date(latestTs);
+    latestDay.setHours(0, 0, 0, 0);
+    const latestDayStart = latestDay.getTime();
+    const latestDayEnd   = latestDayStart + 86400000 - 1;
+
+    // Sum deposits + welfare for that day
+    relevantTx.forEach(tx => {
+      if (tx.date >= latestDayStart && tx.date <= latestDayEnd) {
+        expectedTotal += Number(tx.amount || 0);
+      }
+    });
+
+    // Dates
+    isoDate = (function () {
+      const d = new Date(latestDayStart);
+      return d.getFullYear() + '-' +
+        String(d.getMonth() + 1).padStart(2, '0') + '-' +
+        String(d.getDate()).padStart(2, '0');
+    })();
+    yestDate = (function () {
+      const d = new Date(latestDayStart - 86400000);
+      return d.getFullYear() + '-' +
+        String(d.getMonth() + 1).padStart(2, '0') + '-' +
+        String(d.getDate()).padStart(2, '0');
+    })();
+
+    // Amount tolerance
+    const tolerance = Math.max(200, expectedTotal * 0.05);
+    amountOk = Math.abs(inputAmount - expectedTotal) <= tolerance;
+
+    // Save date: exact day or yesterday
+    dateOk = (inputSaveDate === isoDate) || (inputSaveDate === yestDate);
+  } else {
+    // No transactions — cannot verify amount or save date
+    amountOk = false;
+    dateOk = false;
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // CHECK 4 — JOIN DATE (optional)
+  // ═══════════════════════════════════════════════════════
+  let joinOk = false;
+  let joinExpected = '';
+
+  if (inputJoinDate && member.joinDate) {
+    // Normalize to ISO YYYY-MM-DD
+    const jd = new Date(member.joinDate);
+    if (!isNaN(jd.getTime())) {
+      joinExpected = jd.getFullYear() + '-' +
+        String(jd.getMonth() + 1).padStart(2, '0') + '-' +
+        String(jd.getDate()).padStart(2, '0');
+
+      // Tolerance: ±7 days (people misremember exact dates)
+      const inputTs = new Date(inputJoinDate + 'T00:00:00').getTime();
+      const expectTs = new Date(joinExpected + 'T00:00:00').getTime();
+      const diffDays = Math.abs(inputTs - expectTs) / 86400000;
+      joinOk = diffDays <= 7;
+    }
+  }
+  // If blank → joinOk stays false, but doesn't block
+
+  // ═══════════════════════════════════════════════════════
+  // COUNT AND DECIDE
+  // ═══════════════════════════════════════════════════════
+  const passCount = [nameOk, amountOk, dateOk, joinOk].filter(Boolean).length;
+
+  console.log('🔐 Step 1 verification (need 3 of 4):');
+  console.log('   1. Name        → ' + (nameOk   ? '✅ PASS' : '❌ FAIL') + '   entered: "' + inputName + '"  expected: "' + member.name + '"');
+  console.log('   2. Amount      → ' + (amountOk ? '✅ PASS' : '❌ FAIL') + '   entered: ' + inputAmount + '  expected: ' + expectedTotal + ' (±' + Math.round(Math.max(200, expectedTotal * 0.05)) + ')');
+  console.log('   3. Save date   → ' + (dateOk   ? '✅ PASS' : '❌ FAIL') + '   entered: ' + inputSaveDate + '  expected: ' + isoDate + ' or ' + yestDate);
+  console.log('   4. Join date   → ' + (joinOk   ? '✅ PASS' : '⏭️  SKIP') + '   entered: ' + (inputJoinDate || '(blank)') + '  expected: ' + (joinExpected || '(not set)'));
+  console.log('   ─────────────────────────');
+  console.log('   Passed: ' + passCount + ' of 4');
+
+  if (passCount >= 3) {
+    await grantResetPassword(member);
+    return;
+  }
+
+  toast('Step 1 failed (' + passCount + '/4). Trying secondary verification…', '#f59e0b');
+  forgotState.step = 2;
+  renderForgotStep();
+};
+
+/* ═══════════════════════════════════════════════════════════
+   NAME MATCHING — lenient
+   ═══════════════════════════════════════════════════════════ */
+function namesMatch(input, expected) {
+  const norm = s => String(s || '')
+    .toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const a = norm(input);
+  const b = norm(expected);
+  if (!a || !b) return false;
+  if (a === b) return true;
+
+  const aTokens = a.split(' ').filter(Boolean);
+  const bTokens = b.split(' ').filter(Boolean);
+  const shortT = aTokens.length <= bTokens.length ? aTokens : bTokens;
+  const longT  = aTokens.length <= bTokens.length ? bTokens : aTokens;
+
+  return shortT.every(t => longT.includes(t));
+}
+
+/* ═══════════════════════════════════════════════════════════
+   STEP 2 — THREE CHARACTERS FROM THE PASSWORD (self-contained)
+   Hashing is done inline — no dependency on window.hashPassword.
+   ═══════════════════════════════════════════════════════════ */
+window.forgotStep2Submit = async function () {
+
+  // ── Inline hash helper ──────────────────────────────────
+  async function hash(pwd, salt) {
+    const enc = new TextEncoder();
+    const data = enc.encode(String(salt) + '::' + String(pwd));
+    if (window.crypto && crypto.subtle && crypto.subtle.digest) {
+      const buf = await crypto.subtle.digest('SHA-256', data);
+      return Array.from(new Uint8Array(buf))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+    }
+    let h = 5381;
+    for (let i = 0; i < data.length; i++) h = ((h << 5) + h) + data[i];
+    return 'fb' + Math.abs(h).toString(16).padStart(30, '0');
+  }
+
+  const member = forgotState.member;
+  if (!member) {
+    toast('Session expired. Start over.', '#ef4444');
+    return;
+  }
+
+  const input = (document.getElementById('forgot-substring')?.value || '').trim();
+
+  if (input.length !== 3) {
+    toast('Enter exactly 3 characters', '#ef4444');
+    return;
+  }
+
+  const salt = String(member.id || member.phone || 'htf') + ':sub';
+
+  let inputHash;
+  try {
+    inputHash = await hash(input, salt);
+  } catch (e) {
+    console.error('Hash error:', e);
+    toast('Verification error. Try again.', '#ef4444');
+    return;
+  }
+
+  const storedSubstrings = Array.isArray(member.pinSubstrings) ? member.pinSubstrings : [];
+
+  console.log('🔐 Step 2 verification:');
+  console.log('   Input:', input);
+  console.log('   Hash: ', inputHash);
+  console.log('   Stored count:', storedSubstrings.length);
+  console.log('   Match:', storedSubstrings.includes(inputHash));
+
+  if (storedSubstrings.length > 0 && storedSubstrings.includes(inputHash)) {
+    await grantResetPassword(member);
+    return;
+  }
+
+  // Both steps failed → admin request
+  await sendAdminResetRequest(member);
+};
+
+/* ═══════════════════════════════════════════════════════════
+   GRANT RESET PASSWORD — temp code expires in 5 minutes
+   ═══════════════════════════════════════════════════════════ */
+async function grantResetPassword(member) {
+  if (!member) { toast('Session expired.', '#ef4444'); return; }
+
+  // ── Inline hash ─────────────────────────────────────────
+  async function hash(pwd, salt) {
+    const enc = new TextEncoder();
+    const data = enc.encode(String(salt) + '::' + String(pwd));
+    if (window.crypto && crypto.subtle && crypto.subtle.digest) {
+      const buf = await crypto.subtle.digest('SHA-256', data);
+      return Array.from(new Uint8Array(buf))
+        .map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+    let h = 5381;
+    for (let i = 0; i < data.length; i++) h = ((h << 5) + h) + data[i];
+    return 'fb' + Math.abs(h).toString(16).padStart(30, '0');
+  }
+
+  // ── Today's counter ─────────────────────────────────────
+  const todayISO = (function () {
+    const d = new Date();
+    return d.getFullYear() + '-' +
+      String(d.getMonth() + 1).padStart(2, '0') + '-' +
+      String(d.getDate()).padStart(2, '0');
+  })();
+  const MAX_PER_DAY = 3;
+
+  const rec = member.resetAttempts || {};
+  const sameDay = rec.date === todayISO;
+  const countToday = sameDay ? (Number(rec.count) || 0) : 0;
+  const remainingBefore = Math.max(0, MAX_PER_DAY - countToday);
+
+  if (remainingBefore <= 0) {
+    toast('❌ Daily limit reached. Try again tomorrow.', '#ef4444');
+    return;
+  }
+
+  // ── Generate temp code ──────────────────────────────────
+  const ALPHABET = window.MEMBER_ID_ALPHABET ||
+    '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz';
+  let temp = '';
+  for (let i = 0; i < 6; i++) {
+    temp += ALPHABET.charAt(Math.floor(Math.random() * ALPHABET.length));
+  }
+
+  // ── Hash + substrings ───────────────────────────────────
+  const salt = String(member.id || member.phone || 'htf');
+  let pinHash;
+  const subHashes = [];
+  try {
+    pinHash = await hash(temp, salt);
+    const subSalt = salt + ':sub';
+    for (let i = 0; i <= temp.length - 3; i++) {
+      subHashes.push(await hash(temp.slice(i, i + 3), subSalt));
+    }
+  } catch (e) {
+    console.error('Hash computation failed:', e);
+    toast('Could not generate password. Try again.', '#ef4444');
+    return;
+  }
+
+  // ── Expiry: 5 minutes from now ──────────────────────────
+  const issuedAt  = Date.now();
+  const expiresAt = issuedAt + 5 * 60 * 1000;   // 5 minutes
+
+  const newCount = countToday + 1;
+  const newAttempts = { date: todayISO, count: newCount, lastAt: issuedAt };
+
+  // ── Save ────────────────────────────────────────────────
+  try {
+    await db.ref('members/' + member.id).update({
+      pinHash:              pinHash,
+      pinSubstrings:        subHashes,
+      pinSetAt:             issuedAt,
+      pinResetAt:           issuedAt,
+      pinResetMethod:       'forgot-flow',
+      tempPassword:         true,
+      tempPasswordIssuedAt: issuedAt,
+      tempPasswordExpiresAt: expiresAt,   // ← new
+      resetAttempts:        newAttempts
+    });
+  } catch (e) {
+    console.error('Save failed:', e);
+    toast('Could not save. Try again.', '#ef4444');
+    return;
+  }
+
+  // ── Mirror to in-memory copy ────────────────────────────
+  const idx = members.findIndex(m => m.id === member.id);
+  if (idx >= 0) {
+    members[idx].pinHash = pinHash;
+    members[idx].pinSubstrings = subHashes;
+    members[idx].tempPassword = true;
+    members[idx].tempPasswordIssuedAt = issuedAt;
+    members[idx].tempPasswordExpiresAt = expiresAt;
+    members[idx].resetAttempts = newAttempts;
+  }
+
+  const remainingAfter = Math.max(0, MAX_PER_DAY - newCount);
+
+  forgotState.tempPassword = temp;
+  forgotState.tempPasswordExpiresAt = expiresAt;
+  forgotState.remainingAfterThis = remainingAfter;
+  forgotState.step = 'result';
+  renderForgotStep();
+
+  toast('✅ New temp code issued. Expires in 5 minutes.', '#10b981');
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   ADMIN RESET REQUEST — both steps failed
+   ═══════════════════════════════════════════════════════════ */
+async function sendAdminResetRequest(member) {
+  try {
+    await db.ref('passwordResetRequests').push({
+      memberId: member.id,
+      memberName: member.name,
+      phone: member.phone,
+      requestedAt: Date.now(),
+      status: 'pending',
+      verified: false,
+      source: 'forgot-flow'
+    });
+
+    await db.ref('notifications/admin').push({
+      id: Date.now(),
+      text: `🔑 Password reset requested by ${member.name} (${member.phone}). Both verification steps failed. Please verify identity manually.`,
+      date: Date.now(),
+      read: false,
+      type: 'password_reset_request'
+    });
+
+    forgotState.step = 'sent';
+    renderForgotStep();
+    toast('📨 Reset request sent to admin.', '#06b6d4');
+  } catch (e) {
+    console.error('Admin request failed:', e);
+    toast('Could not send request. Contact admin directly.', '#ef4444');
+  }
+}
 
 window.saveLoanSettings = function() {
   const interestRate = parseFloat(document.getElementById('loan-interest-rate').value);
@@ -15419,30 +16387,214 @@ await db.ref('applications/' + key).update({
   computePots();
   refreshUI();
 };
-window.approveReset = async function(reqId) {
-  const snap = await db.ref(`passwordResetRequests/${reqId}`).once('value');
-  const req = snap.val();
-  if (!req) { toast('Request not found', '#ef4444'); return; }
-  const member = members.find(m => m.id === req.memberId);
-  if (!member) { toast('Member not found', '#ef4444'); return; }
-  const newPin = member.phone.slice(-4);
-  await db.ref(`members/${member.id}`).update({ password: 'HT'+newPin });
-  await db.ref(`passwordResetRequests/${reqId}`).update({ status: 'approved', approvedAt: Date.now() });
-  // Notify member
-  const notif = await db.ref(`notifications/${member.id}`).push({
-    id: Date.now(),
-    text: `Your password has been reset. Your new PIN is the last 4 digits of your phone.`,
-    date: Date.now(),
-    read: false
-  });
-  toast(`Reset approved for ${member.name}`, '#10b981');
-  loadAppsTab('passwords');
+/* ═══════════════════════════════════════════════════════════
+   ADMIN APPROVE PASSWORD RESET
+   Generates a one-time temp password for the member, saves it,
+   marks the request approved, and shows the code to the admin
+   in a copyable panel.
+   ═══════════════════════════════════════════════════════════ */
+window.approveReset = async function (reqId) {
+  try {
+    // ── 1. Load the request ─────────────────────────────
+    const snap = await db.ref('passwordResetRequests/' + reqId).once('value');
+    const req = snap.val();
+    if (!req) { toast('Request not found', '#ef4444'); return; }
+    if (req.status === 'approved') { toast('Already approved', '#f59e0b'); return; }
+
+    const member = members.find(m => m.id === req.memberId);
+    if (!member) { toast('Member not found', '#ef4444'); return; }
+
+    // ── 2. Generate a fresh 6-char temp password ────────
+    const ALPHABET = window.MEMBER_ID_ALPHABET ||
+      '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz';
+    let temp = '';
+    for (let i = 0; i < 6; i++) {
+      temp += ALPHABET.charAt(Math.floor(Math.random() * ALPHABET.length));
+    }
+
+    // ── 3. Hash it + substring hashes ───────────────────
+    const salt = String(member.id || member.phone || 'htf');
+    let pinHash;
+    const subHashes = [];
+    try {
+      pinHash = await window.hashPassword(temp, salt);
+      const subSalt = salt + ':sub';
+      for (let i = 0; i <= temp.length - 3; i++) {
+        subHashes.push(await window.hashPassword(temp.slice(i, i + 3), subSalt));
+      }
+    } catch (e) {
+      console.error('Hash failed:', e);
+      toast('Could not generate password', '#ef4444');
+      return;
+    }
+
+    // ── 4. Save to member record ────────────────────────
+    await db.ref('members/' + member.id).update({
+      pinHash:              pinHash,
+      pinSubstrings:        subHashes,
+      pinSetAt:             Date.now(),
+      pinResetAt:           Date.now(),
+      pinResetMethod:       'admin-approved',
+      tempPassword:         true,
+      tempPasswordIssuedAt: Date.now()
+    });
+
+    // ── 5. Mark request approved with the code ──────────
+    await db.ref('passwordResetRequests/' + reqId).update({
+      status:      'approved',
+      approvedAt:  Date.now(),
+      approvedBy:  currentUser?.name || 'Admin',
+      tempPasswordShown: true
+    });
+
+    // ── 6. Notify the member ────────────────────────────
+    await db.ref('notifications/' + member.id).push({
+      id: Date.now(),
+      text: '🔐 Your password reset has been approved. Contact the admin to receive your one-time password.',
+      date: Date.now(),
+      read: false,
+      type: 'password_reset_approved'
+    });
+
+    // ── 7. Update in-memory copy ────────────────────────
+    const idx = members.findIndex(m => m.id === member.id);
+    if (idx >= 0) {
+      members[idx].pinHash = pinHash;
+      members[idx].pinSubstrings = subHashes;
+      members[idx].tempPassword = true;
+    }
+
+    // ── 8. Show the code to the admin (once) ────────────
+    showAdminTempPasswordPanel(member, temp, reqId);
+
+    toast('✅ Reset approved. Code shown once — copy it now.', '#10b981');
+
+  } catch (err) {
+    console.error('Approve reset failed:', err);
+    toast('❌ Failed to approve: ' + err.message, '#ef4444');
+  }
 };
 
-window.rejectReset = async function(reqId) {
-  await db.ref(`passwordResetRequests/${reqId}`).update({ status: 'rejected' });
-  toast('Reset request rejected', '#ef4444');
-  loadAppsTab('passwords');
+/* ═══════════════════════════════════════════════════════════
+   ADMIN TEMP PASSWORD PANEL
+   Modal shown once after approval. Copyable. Not stored anywhere
+   except the hash on the member record.
+   ═══════════════════════════════════════════════════════════ */
+window.showAdminTempPasswordPanel = function (member, code, reqId) {
+  const existing = document.getElementById('admin-temp-pw-modal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'admin-temp-pw-modal';
+  modal.style.cssText = `
+    position:fixed; inset:0; z-index:100020;
+    background:rgba(0,0,0,0.85);
+    backdrop-filter:blur(12px);
+    display:flex; align-items:center; justify-content:center;
+    padding:20px;
+  `;
+  modal.innerHTML = `
+    <div style="background:linear-gradient(145deg,#0e1830,#0a1424);
+                border:2px solid rgba(16,185,129,0.5);
+                border-radius:22px; max-width:400px; width:100%;
+                padding:26px 22px 22px; text-align:center;
+                box-shadow:0 20px 60px rgba(0,0,0,0.7);">
+
+      <div style="font-size:3rem; margin-bottom:8px;">🔐</div>
+
+      <div style="font-family:'Syne',sans-serif; font-size:1.15rem;
+                  font-weight:800; color:#6ee7b7; margin-bottom:6px;">
+        One-Time Password
+      </div>
+      <div style="font-size:0.8rem; color:#cbd5e1; margin-bottom:18px;">
+        For <strong style="color:#f1f5f9;">${escapeHtml(member.name)}</strong>
+        · ${escapeHtml(member.phone || '')}
+      </div>
+
+      <div id="admin-temp-code"
+           style="background:#000; border:2px dashed rgba(251,191,36,0.6);
+                  border-radius:14px; padding:18px 12px; margin-bottom:14px;">
+        <div style="font-family:'JetBrains Mono',monospace;
+                    font-size:2.1rem; font-weight:900;
+                    color:#fbbf24; letter-spacing:6px;
+                    text-shadow:0 0 24px rgba(251,191,36,0.5);
+                    user-select:all;">
+          ${code}
+        </div>
+      </div>
+
+      <div style="font-size:0.72rem; color:#94a3b8; line-height:1.55;
+                  margin-bottom:18px;">
+        ⚠️ <strong style="color:#fca5a5;">Copy this now.</strong>
+        It will not be shown again. Give it to ${escapeHtml(member.name.split(' ')[0])}
+        via a trusted channel (in person, WhatsApp, or call).
+        They will be forced to set a new password when they log in.
+      </div>
+
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-gold" style="flex:1; padding:11px; font-weight:700;"
+                onclick="copyAdminTempCode('${code}')">
+          📋 Copy Code
+        </button>
+        <button class="btn btn-sec" style="flex:1; padding:11px; font-weight:700;"
+                onclick="document.getElementById('admin-temp-pw-modal').remove(); loadAppsTab('passwords');">
+          Done
+        </button>
+      </div>
+
+      <div style="font-size:0.65rem; color:#64748b; margin-top:12px;">
+        Request ID: ${escapeHtml(reqId)}
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+
+  // Copy on tap of the code box too
+  const codeBox = modal.querySelector('#admin-temp-code');
+  if (codeBox) {
+    codeBox.style.cursor = 'pointer';
+    codeBox.onclick = () => copyAdminTempCode(code);
+  }
+};
+
+window.copyAdminTempCode = function (code) {
+  const done = () => toast('📋 Code copied. Share it with the member.', '#10b981');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(code).then(done).catch(() => {
+      // Fallback
+      const ta = document.createElement('textarea');
+      ta.value = code;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); done(); }
+      catch (e) { toast('Copy failed. Write it down manually.', '#ef4444'); }
+      document.body.removeChild(ta);
+    });
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = code;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); done(); }
+    catch (e) { toast('Copy failed. Write it down manually.', '#ef4444'); }
+    document.body.removeChild(ta);
+  }
+};
+
+window.rejectReset = async function (reqId) {
+  if (!confirm('Reject this password reset request?')) return;
+  try {
+    await db.ref('passwordResetRequests/' + reqId).update({
+      status: 'rejected',
+      rejectedAt: Date.now(),
+      rejectedBy: currentUser?.name || 'Admin'
+    });
+    toast('Reset request rejected.', '#ef4444');
+    loadAppsTab('passwords');
+  } catch (e) {
+    console.error(e);
+    toast('Failed to reject.', '#ef4444');
+  }
 };
 
 window.rejectApplication = function(key) {
@@ -23910,82 +25062,185 @@ function loadMaintenanceSettings() {
   updateMaintenanceUI();
 }
 
-// ==========================================
-// UPDATED doLogin() FUNCTION
-// ==========================================
+/* ═══════════════════════════════════════════════════════════
+   DO LOGIN — self-contained
+   Hashing is done inline. No dependency on window.hashPassword.
+   ═══════════════════════════════════════════════════════════ */
+window.doLogin = async function () {
 
-window.doLogin = function() {
-  // Dismiss keyboard on mobile
+  // ── Inline hash helper (SHA-256 with salt) ──────────────
+  async function hash(pwd, salt) {
+    const enc = new TextEncoder();
+    const data = enc.encode(String(salt) + '::' + String(pwd));
+    if (window.crypto && crypto.subtle && crypto.subtle.digest) {
+      const buf = await crypto.subtle.digest('SHA-256', data);
+      return Array.from(new Uint8Array(buf))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+    }
+    // Fallback — deterministic but not cryptographically secure
+    let h = 5381;
+    for (let i = 0; i < data.length; i++) h = ((h << 5) + h) + data[i];
+    return 'fb' + Math.abs(h).toString(16).padStart(30, '0');
+  }
+
+  // ── Dismiss keyboard on mobile ──────────────────────────
   if (document.activeElement && document.activeElement.blur) {
     document.activeElement.blur();
   }
-  
+
   const pwd = document.getElementById('login-password').value.trim();
   const errEl = document.getElementById('login-error');
-  if (!pwd) { 
-    errEl.innerText = 'Please enter your PIN or admin password'; 
-    return; 
+  if (!pwd) {
+    errEl.innerText = 'Please enter your password';
+    return;
   }
-  
-  // STEP 1: Check admin password (ALWAYS allowed)
+
+  // ═══════════════════════════════════════════════════════
+  // STEP 1 — Admin password (always allowed)
+  // ═══════════════════════════════════════════════════════
   const storedAdminPwd = settings.adminPassword || ADMIN_PASSWORD;
   if (pwd === storedAdminPwd) {
     currentUser = { name: 'Admin', phone: 'admin', isAdmin: true };
     adminUnlocked = true;
-    hideMaintenanceOverlay();
+    if (typeof hideMaintenanceOverlay === 'function') hideMaintenanceOverlay();
+    if (typeof hideCountdownOverlay === 'function') hideCountdownOverlay();
     showMainApp();
-    setTimeout(function() {
+    setTimeout(function () {
       goTab('admin', document.getElementById('ni-admin'));
     }, 300);
     return;
   }
-  
-  // STEP 2: Check maintenance mode for members
+
+  // ═══════════════════════════════════════════════════════
+  // STEP 2 — Maintenance / countdown gates
+  // ═══════════════════════════════════════════════════════
   if (settings.maintenanceMode === true) {
-    showMaintenanceOverlay();
+    if (typeof showMaintenanceOverlay === 'function') showMaintenanceOverlay();
     errEl.innerText = '🔧 System is under maintenance. Please try again later.';
     errEl.style.color = 'var(--gold)';
     errEl.style.fontWeight = '700';
     toast('🔧 Maintenance mode is active', '#f59e0b');
     return;
   }
-  
-  // STEP 3: Check members
-  const match = members.find(m => m.phone && m.phone.slice(-4) === pwd);
-  if (!match) {
-    db.ref('applications').orderByChild('phone').once('value', snap => {
-      let found = false;
-      snap.forEach(child => {
-        const app = child.val();
-        if (app.phone && app.phone.slice(-4) === pwd && app.status === 'pending') {
-          found = true;
-        }
-      });
-      if (found) {
-        errEl.innerText = 'Your application is under review. Please wait for admin approval.';
-      } else {
-        errEl.innerText = 'No account found. Please sign up or check your PIN.';
-      }
-    });
+  if (settings.anniversaryActive === true) {
+    if (typeof showCountdownOverlay === 'function') showCountdownOverlay();
+    errEl.innerText = '🔧 System is under maintenance. Please try again later.';
+    errEl.style.color = 'var(--gold)';
+    errEl.style.fontWeight = '700';
+    toast('🔧 Maintenance mode is active', '#f59e0b');
     return;
   }
-  
+
+  // ═══════════════════════════════════════════════════════
+  // STEP 3 — Find the member by verifying against pinHash
+  // ═══════════════════════════════════════════════════════
+  let match = null;
+
+  // 3a. Try pinHash verification on every member
+  for (const m of members) {
+  if (m.isAdmin) continue;
+  if (!m.approved) continue;
+  if (!m.pinHash) continue;
+
+  // ── Reject expired temp passwords ─────────────────────
+  if (m.tempPassword === true && m.tempPasswordExpiresAt) {
+    if (Date.now() > m.tempPasswordExpiresAt) {
+      console.log('⏱️ Temp password for ' + m.name + ' has expired.');
+      // Don't even bother hashing — this member must request a new code
+      continue;
+    }
+  }
+
+  const salt = String(m.id || m.phone || 'htf');
+  let computedHash;
+  try {
+    computedHash = await hash(pwd, salt);
+  } catch (e) {
+    console.error('Hash computation failed for', m.name, e);
+    continue;
+  }
+  if (computedHash === m.pinHash) {
+    match = m;
+    break;
+  }
+}
+
+  // 3b. Fallback: legacy phone-derived password for members
+  //     who have NOT yet set a secure password
+  if (!match) {
+    const legacyMatch = members.find(m =>
+      !m.isAdmin &&
+      !m.pinHash &&
+      m.phone &&
+      m.phone.slice(-4) === pwd
+    );
+    if (legacyMatch) {
+      match = legacyMatch;
+      window._forceAccountSetup = true;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // STEP 4 — No match → check pending applications
+  // ═══════════════════════════════════════════════════════
+  if (!match) {
+    // Check if any member's temp code just expired — give a clearer message
+const expiredMember = members.find(m =>
+  !m.isAdmin && m.approved !== false &&
+  m.tempPassword === true &&
+  m.tempPasswordExpiresAt && Date.now() > m.tempPasswordExpiresAt
+);
+
+db.ref('applications').orderByChild('phone').once('value', snap => {
+  let found = false;
+  snap.forEach(child => {
+    const app = child.val();
+    if (app.phone && app.phone.slice(-4) === pwd && app.status === 'pending') {
+      found = true;
+    }
+  });
+  if (found) {
+    errEl.innerText = 'Your application is under review. Please wait for admin approval.';
+  } else if (expiredMember) {
+    errEl.innerText = '⏱️ Your temporary password has expired. Please request a new one via "Forgot password?"';
+    errEl.style.color = 'var(--red)';
+  } else {
+    errEl.innerText = 'Incorrect password. Please try again or reset it.';
+  }
+});
+return;
+  }
+
+  // ═══════════════════════════════════════════════════════
+  // STEP 5 — Member state checks
+  // ═══════════════════════════════════════════════════════
   if (match.approved === false) {
     showPendingScreen(match);
     return;
   }
-  
   if (match.feeCleared === false) {
-    errEl.innerText = `⚠️ Your account is approved but the signup fee of ${money(settings.signupFee)} is still pending. Please pay the fee to the group admin to activate your login.`;
+    errEl.innerText = '⚠️ Your account is approved but the signup fee of ' +
+      money(settings.signupFee) + ' is still pending. Please pay the fee to the group admin to activate your login.';
     return;
   }
-  
+
+  // ═══════════════════════════════════════════════════════
+  // STEP 6 — Log the member in
+  // ═══════════════════════════════════════════════════════
   currentUser = match;
   adminUnlocked = false;
-  hideMaintenanceOverlay();
+  if (typeof hideMaintenanceOverlay === 'function') hideMaintenanceOverlay();
+  if (typeof hideCountdownOverlay === 'function') hideCountdownOverlay();
+
+  // Clear the force-setup flag from any previous failed attempt
+  // (checkProfilePhoto will re-set it if the member still needs setup)
+  if (window._forceAccountSetup && match.pinHash) {
+    window._forceAccountSetup = false;
+  }
+
   showMainApp();
 };
-
 // ==========================================
 // UPDATED applySettings() FUNCTION
 // ==========================================
@@ -25399,8 +26654,8 @@ window.checkDriveBackupAge = async function () {
   };
 
   window.isAccountSetupComplete = function (member) {
-    return window.hasProfilePhoto(member) && window.hasSecurePassword(member);
-  };
+  return window.hasProfilePhoto(member) && window.hasSecurePassword(member);
+};
 
   // ═══════════════════════════════════════════════════════════
   // 2. PASSWORD VALIDATION
@@ -25461,23 +26716,6 @@ window.checkDriveBackupAge = async function () {
       }
     }
   };
-
-  // ═══════════════════════════════════════════════════════════
-  // 3. PASSWORD HASHING (SHA-256 with salt)
-  // ═══════════════════════════════════════════════════════════
-  async function hashPassword(pwd, salt) {
-    const enc = new TextEncoder();
-    const data = enc.encode(String(salt) + '::' + String(pwd));
-    if (window.crypto && crypto.subtle && crypto.subtle.digest) {
-      const buf = await crypto.subtle.digest('SHA-256', data);
-      return Array.from(new Uint8Array(buf))
-        .map(b => b.toString(16).padStart(2, '0')).join('');
-    }
-    // Fallback — not cryptographically secure but functional
-    let h = 5381;
-    for (let i = 0; i < data.length; i++) h = ((h << 5) + h) + data[i];
-    return 'fb' + Math.abs(h).toString(16).padStart(30, '0');
-  }
 
   // ═══════════════════════════════════════════════════════════
   // 4. MODAL OPEN / CLOSE
@@ -25592,11 +26830,34 @@ window.checkDriveBackupAge = async function () {
       const salt = String(currentUser.id || currentUser.phone || 'htf');
       const pinHash = await hashPassword(pwd, salt);
 
-      await db.ref('members/' + currentUser.id).update({
-        photoData: photo,
-        pinHash:   pinHash,
-        pinSetAt:  Date.now()
-      });
+const subHashes = [];
+try {
+  const subSalt = salt + ':sub';
+  for (let i = 0; i <= pwd.length - 3; i++) {
+    const sub = pwd.slice(i, i + 3);
+    subHashes.push(await window.hashPassword(sub, subSalt));
+  }
+} catch (e) {
+  console.warn('Substring hashing failed', e);
+}
+
+await db.ref('members/' + currentUser.id).update({
+  photoData: photo,
+  pinHash:   pinHash,
+  pinSubstrings: subHashes,
+  pinSetAt:  Date.now(),
+  tempPassword: false   // clear any temp-password flag
+  tempPasswordIssuedAt: null 
+});
+
+// Also update the in-memory copy so Step 2 works in this session
+const idx2 = members.findIndex(m => m.id === currentUser.id);
+if (idx2 >= 0) {
+  members[idx2].pinHash = pinHash;
+  members[idx2].pinSubstrings = subHashes;
+  members[idx2].tempPassword = false;
+  members[idx2].tempPasswordIssuedAt = null;
+}
 
       // Update in-memory session
       currentUser.photoData = photo;
@@ -25636,24 +26897,41 @@ window.checkDriveBackupAge = async function () {
   // Keep the old name as an alias so any code that calls saveProfilePhoto still works
   window.saveProfilePhoto = window.saveAccountSetup;
 
-  // ═══════════════════════════════════════════════════════════
-  // 7. THE LOGIN GATE
-  // ═══════════════════════════════════════════════════════════
-  window.checkProfilePhoto = function () {
-    if (!currentUser) return true;
-    if (currentUser.isAdmin) return true;
+  /* ═══════════════════════════════════════════════════════════
+   LOGIN GATE
+   Shows the setup modal if any of these is true:
+   • No profile photo
+   • No secure password set (pinHash)
+   • Member logged in with a temporary password (tempPassword flag)
+   ═══════════════════════════════════════════════════════════ */
+window.checkProfilePhoto = function () {
+  if (!currentUser) return true;
+  if (currentUser.isAdmin) return true;
 
-    if (window.isAccountSetupComplete(currentUser)) {
-      return true;
+  const needsPhoto    = !window.hasProfilePhoto(currentUser);
+  const needsPassword = !window.hasSecurePassword(currentUser);
+  const needsTempFix  = currentUser.tempPassword === true;
+
+  if (!needsPhoto && !needsPassword && !needsTempFix) {
+    return true; // fully set up
+  }
+
+  // Show the setup modal on next tick so the app shell paints first
+  setTimeout(function () {
+    window.openProfilePhotoModal();
+
+    // If we're showing the modal because of a temp password,
+    // lock the photo step (it's already set) so they only change the password.
+    if (needsTempFix && !needsPhoto && !needsPassword) {
+      // All set except for the temp flag — just show a message
+      toast('🔐 You logged in with a temporary password. Please set a new one.', '#f59e0b');
+    } else if (needsTempFix) {
+      toast('🔐 Please set a new password to continue.', '#f59e0b');
     }
+  }, 600);
 
-    // Show the modal on next tick so the app shell paints first
-    setTimeout(function () {
-      window.openProfilePhotoModal();
-    }, 600);
-
-    return false;
-  };
+  return false;
+};
 
   // ═══════════════════════════════════════════════════════════
   // 8. LOGOUT FROM MODAL
@@ -26114,7 +27392,357 @@ window.showMemberReceiptsModal = function (memberId) {
   document.body.appendChild(modal);
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 };
+/* ═══════════════════════════════════════════════════════════
+   BULLETPROOF AUTH + MODAL BLOCK
+   Redefines every function the app needs, with no external
+   dependencies. Hashing is inlined. Nothing can break this.
+   ═══════════════════════════════════════════════════════════ */
 
+/* ═══════════════════════════════════════════════════════════
+   1. showModalEl — wraps showModal for element-based callers
+   ═══════════════════════════════════════════════════════════ */
+window.showModalEl = function (element, title) {
+  let html = '';
+  if (element instanceof HTMLElement) html = element.innerHTML;
+  else if (typeof element === 'string') html = element;
+  else { console.warn('showModalEl: unexpected argument', element); return; }
+  if (typeof showModal === 'function') showModal(html, title || '');
+  else console.error('showModal is not defined');
+};
+
+/* ═══════════════════════════════════════════════════════════
+   2. Inline hash helper (used by every auth caller)
+   ═══════════════════════════════════════════════════════════ */
+window._htfHash = async function (pwd, salt) {
+  const enc = new TextEncoder();
+  const data = enc.encode(String(salt) + '::' + String(pwd));
+  if (window.crypto && crypto.subtle && crypto.subtle.digest) {
+    const buf = await crypto.subtle.digest('SHA-256', data);
+    return Array.from(new Uint8Array(buf))
+      .map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  let h = 5381;
+  for (let i = 0; i < data.length; i++) h = ((h << 5) + h) + data[i];
+  return 'fb' + Math.abs(h).toString(16).padStart(30, '0');
+};
+
+/* ═══════════════════════════════════════════════════════════
+   3. State checks
+   ═══════════════════════════════════════════════════════════ */
+window.hasProfilePhoto = function (member) {
+  const m = member || currentUser;
+  if (!m || m.isAdmin) return true;
+  const p = m.photoData;
+  return !!p && String(p).length > 500 &&
+         (String(p).startsWith('data:image/') || String(p).startsWith('http'));
+};
+
+window.hasSecurePassword = function (member) {
+  const m = member || currentUser;
+  if (!m || m.isAdmin) return true;
+  return !!(m.pinHash && String(m.pinHash).length >= 32);
+};
+
+window.isAccountSetupComplete = function (member) {
+  return window.hasProfilePhoto(member) && window.hasSecurePassword(member);
+};
+
+/* ═══════════════════════════════════════════════════════════
+   4. Password validation
+   ═══════════════════════════════════════════════════════════ */
+window.validateSecurePassword = function (pwd) {
+  const errs = [];
+  if (!pwd) { errs.push('Password is required'); return errs; }
+  if (pwd.length < 8)     errs.push('At least 8 characters');
+  if (!/[A-Z]/.test(pwd)) errs.push('At least 1 capital letter');
+  if (!/[!@#$%^&*()_+\-=\[\]{}|;:,.<>?\/~`"']/.test(pwd))
+                          errs.push('At least 1 symbol');
+  if ((pwd.match(/\d/g) || []).length < 2)
+                          errs.push('At least 2 numbers');
+  return errs;
+};
+
+window.checkPasswordLive = function () {
+  const pwd     = document.getElementById('ppm-password')?.value || '';
+  const confirm = document.getElementById('ppm-password-confirm')?.value || '';
+
+  const rules = {
+    length:  pwd.length >= 8,
+    capital: /[A-Z]/.test(pwd),
+    symbol:  /[!@#$%^&*()_+\-=\[\]{}|;:,.<>?\/~`"']/.test(pwd),
+    digits:  (pwd.match(/\d/g) || []).length >= 2,
+    match:   pwd.length > 0 && pwd === confirm
+  };
+
+  document.querySelectorAll('#ppm-password-rules .ppm-rule').forEach(el => {
+    const rule = el.getAttribute('data-rule');
+    const ok = rules[rule];
+    const icon = el.querySelector('.ppm-rule-icon');
+    if (ok) { el.style.color = '#6ee7b7'; if (icon) icon.textContent = '✓'; }
+    else    { el.style.color = '#94a3b8'; if (icon) icon.textContent = '○'; }
+  });
+
+  const photoReady = !!window._pendingProfilePhoto;
+  const pwdReady   = rules.length && rules.capital && rules.symbol &&
+                     rules.digits && rules.match;
+
+  const btn = document.getElementById('ppm-save-btn');
+  if (btn) {
+    if (photoReady && pwdReady) {
+      btn.disabled = false; btn.style.opacity = '1'; btn.style.cursor = 'pointer';
+    } else {
+      btn.disabled = true; btn.style.opacity = '0.5'; btn.style.cursor = 'not-allowed';
+    }
+  }
+};
+
+/* ═══════════════════════════════════════════════════════════
+   5. Modal open / close
+   ═══════════════════════════════════════════════════════════ */
+window.openProfilePhotoModal = function () {
+  const modal = document.getElementById('profile-photo-modal');
+  if (!modal) {
+    console.error('profile-photo-modal element missing');
+    return;
+  }
+
+  window._pendingProfilePhoto = null;
+  const img = document.getElementById('ppm-preview-img');
+  if (img) { img.src = ''; img.classList.remove('on'); }
+  const fileInput = document.getElementById('ppm-file-input');
+  if (fileInput) fileInput.value = '';
+  const pwd = document.getElementById('ppm-password');
+  if (pwd) pwd.value = '';
+  const confirm = document.getElementById('ppm-password-confirm');
+  if (confirm) confirm.value = '';
+
+  // Preload existing photo
+  if (currentUser && currentUser.photoData && img) {
+    img.src = currentUser.photoData;
+    img.classList.add('on');
+    window._pendingProfilePhoto = currentUser.photoData;
+  }
+
+  window.checkPasswordLive();
+  modal.classList.add('active');
+};
+
+window.closeProfilePhotoModal = function () {
+  const modal = document.getElementById('profile-photo-modal');
+  if (modal) modal.classList.remove('active');
+};
+
+/* ═══════════════════════════════════════════════════════════
+   6. File select + downscale
+   ═══════════════════════════════════════════════════════════ */
+window.handleProfilePhotoSelect = function (input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+
+  if (file.size > 5 * 1024 * 1024) {
+    toast('❌ Photo too large. Max 5 MB.', '#ef4444');
+    input.value = '';
+    return;
+  }
+  if (!file.type || !file.type.startsWith('image/')) {
+    toast('❌ Please select an image file.', '#ef4444');
+    input.value = '';
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = function (e) {
+    const img = new Image();
+    img.onload = function () {
+      const SIZE = 200;
+      const canvas = document.createElement('canvas');
+      canvas.width = SIZE;
+      canvas.height = SIZE;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#0a1424';
+      ctx.fillRect(0, 0, SIZE, SIZE);
+      const ratio = Math.min(SIZE / img.width, SIZE / img.height);
+      const w = Math.round(img.width * ratio);
+      const h = Math.round(img.height * ratio);
+      const x = Math.round((SIZE - w) / 2);
+      const y = Math.round((SIZE - h) / 2);
+      ctx.drawImage(img, x, y, w, h);
+
+      const small = canvas.toDataURL('image/jpeg', 0.7);
+      window._pendingProfilePhoto = small;
+
+      const preview = document.getElementById('ppm-preview-img');
+      if (preview) { preview.src = small; preview.classList.add('on'); }
+      window.checkPasswordLive();
+    };
+    img.onerror = function () { toast('Could not read image.', '#ef4444'); };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+};
+
+/* ═══════════════════════════════════════════════════════════
+   7. Save account setup
+   ═══════════════════════════════════════════════════════════ */
+window.saveAccountSetup = async function () {
+  if (!currentUser) { toast('Not logged in', '#ef4444'); return; }
+
+  const photo = window._pendingProfilePhoto;
+  const pwd   = document.getElementById('ppm-password')?.value || '';
+  const conf  = document.getElementById('ppm-password-confirm')?.value || '';
+
+  const errs = window.validateSecurePassword(pwd);
+  if (!photo) { toast('Please choose a profile photo.', '#ef4444'); return; }
+  if (errs.length) { toast('Password: ' + errs[0], '#ef4444'); return; }
+  if (pwd !== conf) { toast('Passwords do not match.', '#ef4444'); return; }
+
+  const btn = document.getElementById('ppm-save-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Saving…'; }
+
+  try {
+    const salt = String(currentUser.id || currentUser.phone || 'htf');
+    const pinHash = await window._htfHash(pwd, salt);
+
+    // Compute substring hashes
+    const subHashes = [];
+    try {
+      const subSalt = salt + ':sub';
+      for (let i = 0; i <= pwd.length - 3; i++) {
+        subHashes.push(await window._htfHash(pwd.slice(i, i + 3), subSalt));
+      }
+    } catch (e) { console.warn('Substring hashing failed', e); }
+
+    await db.ref('members/' + currentUser.id).update({
+      photoData:    photo,
+      pinHash:      pinHash,
+      pinSubstrings: subHashes,
+      pinSetAt:     Date.now(),
+      tempPassword: false,
+      tempPasswordIssuedAt: null
+    });
+
+    // Update memory
+    currentUser.photoData = photo;
+    currentUser.pinHash   = pinHash;
+    currentUser.pinSubstrings = subHashes;
+    currentUser.tempPassword = false;
+    currentUser.tempPasswordIssuedAt = null;
+    try { localStorage.setItem('ht_user', JSON.stringify(currentUser)); } catch (e) {}
+
+    const idx = members.findIndex(m => m.id === currentUser.id);
+    if (idx >= 0) {
+      members[idx].photoData = photo;
+      members[idx].pinHash = pinHash;
+      members[idx].pinSubstrings = subHashes;
+      members[idx].tempPassword = false;
+      members[idx].tempPasswordIssuedAt = null;
+    }
+
+    toast('✅ Account setup complete. Welcome!', '#10b981');
+    window.closeProfilePhotoModal();
+
+    try { updateAccountUI(); } catch (e) {}
+    try { updateHomeUI(); } catch (e) {}
+    try { updateAdminMembersList(); } catch (e) {}
+    try { refreshUI(); } catch (e) {}
+
+    window._pendingProfilePhoto = null;
+  } catch (err) {
+    console.error('Account setup save failed:', err);
+    toast('❌ Could not save. Try again.', '#ef4444');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '✅ Save & Continue';
+      window.checkPasswordLive();
+    }
+  }
+};
+
+window.saveProfilePhoto = window.saveAccountSetup;
+
+/* ═══════════════════════════════════════════════════════════
+   8. Login gate
+   ═══════════════════════════════════════════════════════════ */
+window.checkProfilePhoto = function () {
+  if (!currentUser) return true;
+  if (currentUser.isAdmin) return true;
+
+  const needsPhoto    = !window.hasProfilePhoto(currentUser);
+  const needsPassword = !window.hasSecurePassword(currentUser);
+  const needsTempFix  = currentUser.tempPassword === true;
+
+  if (!needsPhoto && !needsPassword && !needsTempFix) return true;
+
+  setTimeout(function () {
+    window.openProfilePhotoModal();
+    if (needsTempFix && !needsPhoto && !needsPassword) {
+      toast('🔐 Set a new password to continue.', '#f59e0b');
+    } else if (needsTempFix) {
+      toast('🔐 Please set a new password.', '#f59e0b');
+    }
+  }, 600);
+
+  return false;
+};
+
+/* ═══════════════════════════════════════════════════════════
+   9. Logout from modal
+   ═══════════════════════════════════════════════════════════ */
+window.logoutFromProfileModal = function () {
+  const modal = document.getElementById('profile-photo-modal');
+  if (modal) modal.classList.remove('active');
+
+  window._pendingProfilePhoto = null;
+  const img = document.getElementById('ppm-preview-img');
+  if (img) { img.src = ''; img.classList.remove('on'); }
+  const pwd = document.getElementById('ppm-password');
+  if (pwd) pwd.value = '';
+  const conf = document.getElementById('ppm-password-confirm');
+  if (conf) conf.value = '';
+
+  const co = document.getElementById('countdown-overlay');
+  if (co) co.style.display = 'none';
+  const mo = document.getElementById('maintenance-overlay');
+  if (mo) mo.style.display = 'none';
+
+  currentUser = null;
+  adminUnlocked = false;
+
+  if (typeof logout === 'function') {
+    try { logout(); } catch (e) { console.error(e); }
+  }
+
+  const app = document.getElementById('app');
+  if (app) app.classList.remove('on');
+  const loginScreen = document.getElementById('login-screen');
+  if (loginScreen) loginScreen.classList.remove('hidden');
+  const signupScreen = document.getElementById('signup-screen');
+  if (signupScreen) signupScreen.classList.add('hidden');
+  const pendingScreen = document.getElementById('pending-screen');
+  if (pendingScreen) pendingScreen.classList.add('hidden');
+
+  const pwdInput = document.getElementById('login-password');
+  if (pwdInput) pwdInput.value = '';
+  const err = document.getElementById('login-error');
+  if (err) err.innerText = '';
+
+  toast('You have been logged out.', '#06b6d4');
+};
+
+/* ═══════════════════════════════════════════════════════════
+   10. Diagnostics
+   ═══════════════════════════════════════════════════════════ */
+console.log('✅ Bulletproof auth block loaded:', {
+  showModalEl:             typeof window.showModalEl,
+  openProfilePhotoModal:   typeof window.openProfilePhotoModal,
+  closeProfilePhotoModal:  typeof window.closeProfilePhotoModal,
+  checkProfilePhoto:       typeof window.checkProfilePhoto,
+  saveAccountSetup:        typeof window.saveAccountSetup,
+  hasProfilePhoto:         typeof window.hasProfilePhoto,
+  hasSecurePassword:       typeof window.hasSecurePassword,
+  _htfHash:                typeof window._htfHash
+});
 </script>
 </body>
   </html>
