@@ -4463,25 +4463,24 @@ const ADMIN_PASSWORD_DEFAULT = 'admin123';
 /* ─────────────────────────────────────────────────────────────────────
    2. GLOBAL STATE
    ───────────────────────────────────────────────────────────────────── */
-let db = null;
+var db = null;
 
-let members       = [];       // [{id, name, phone, approved, photoData, ...}]
-let transactions  = [];       // [{id, memberPhone, type, amount, date, ...}]
-let loans         = [];       // [{id, memberId, memberPhone, status, ...}]
-let notifications = {};       // { [userId]: [ {id, text, date, read} ] }
+var members       = [];       // [{id, name, phone, approved, photoData, ...}]
+var transactions  = [];       // [{id, memberPhone, type, amount, date, ...}]
+var loans         = [];       // [{id, memberId, memberPhone, status, ...}]
+var notifications = {};       // { [userId]: [ {id, text, date, read} ] }
 
-let rotation = {
+var rotation = {
   order: [],
   currentIndex: 0,
   history: [],
   payoutStartDate: null,
   payoutEndDate:   null
 };
+var loanRotationOrder = [];
+var loanReceiverIndex = 0;
 
-let loanRotationOrder = [];
-let loanReceiverIndex = 0;
-
-let settings = {
+var settings = {
   groupName:            'Harvest Trust Finance',
   groupStartDate:       '',
   dailyAmount:          2500,
@@ -4513,7 +4512,7 @@ let settings = {
   referralBonusAmount:  10000
 };
 
-let loanSettings = {
+var loanSettings = {
   interestRate:        5,
   maxLoanPercent:      50,
   disciplineMultiplier: 1.5,
@@ -4522,26 +4521,26 @@ let loanSettings = {
   extraWeeklyInterest: 2
 };
 
-let currentUser  = null;
-let adminUnlocked = false;
-let adminShowGrid = true;
-let currentScreen = 'login';
-let currentAdminTab = 'savings';
+var currentUser  = null;
+var adminUnlocked = false;
+var adminShowGrid = true;
+var currentScreen = 'login';
+var currentAdminTab = 'savings';
 
-let memberPresence   = {};       // { [userId]: {state,last_changed} }
-let memberBalances   = {};       // { [phone]: number }
-let memberDebts      = {};       // { [phone]: number }
-let memberLoans      = {};       // { [phone]: number }  (total outstanding)
-let memberPrepaid    = {};       // { [phone]: number }
-let memberApplicationLoans = {}; // { [phone]: number }
-let memberAssignedLoans    = {}; // { [phone]: number }
-let memberActiveLoanIds    = {}; // { [phone]: [loanId, ...] }
+var memberPresence   = {};       // { [userId]: {state,last_changed} }
+var memberBalances   = {};       // { [phone]: number }
+var memberDebts      = {};       // { [phone]: number }
+var memberLoans      = {};       // { [phone]: number }  (total outstanding)
+var memberPrepaid    = {};       // { [phone]: number }
+var memberApplicationLoans = {}; // { [phone]: number }
+var memberAssignedLoans    = {}; // { [phone]: number }
+var memberActiveLoanIds    = {}; // { [phone]: [loanId, ...] }
 
-let cashFromDeposits = 0;
-let groupProfit      = 0;
+var cashFromDeposits = 0;
+var groupProfit      = 0;
 
 /* UI caches */
-let homeCache = {
+var homeCache = {
   els: {},
   last: {
     weeklyTotal: '', available: '', receiverName: '', rotationInfo: '',
@@ -4550,13 +4549,13 @@ let homeCache = {
   }
 };
 
-let mainCarouselNotifs = [];
-let mainCarouselIdx    = 0;
-let mainCarouselTimer  = null;
+var mainCarouselNotifs = [];
+var mainCarouselIdx    = 0;
+var mainCarouselTimer  = null;
 
-let selectedTransactions = new Set();
-let ledgerSearchText     = '';
-let dragOrder            = [];
+var selectedTransactions = new Set();
+var ledgerSearchText     = '';
+var dragOrder            = [];
 
 /* Reference data */
 const MEMBER_ID_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz';
@@ -5312,15 +5311,13 @@ function buildReceiptBrandHeader(member, opts) {
   const showPhoto = opts.showPhoto !== false;
 
   // Rank
-  let rank = null;
+   let rank = null;
   if (showRank && member && !member.isAdmin) {
     const stats = members.filter(m => m.approved !== false).map(m => {
-      let total = 0;
-      transactions.forEach(tx => {
-        if (tx.memberPhone === m.phone && tx.type === 'deposit') total += tx.amount;
-      });
-      return { id: m.id, total };
-    }).sort((a, b) => b.total - a.total);
+      const bal  = memberBalances[m.phone] || 0;
+      const loan = memberLoans[m.phone]    || 0;
+      return { id: m.id, net: bal - loan };
+    }).sort((a, b) => b.net - a.net);
     const idx = stats.findIndex(s => s.id === member.id);
     if (idx >= 0) rank = idx + 1;
   }
@@ -7093,37 +7090,60 @@ console.log('✅ Part 6 — Authentication loaded');
 </script>
 <script>
 /* ═══════════════════════════════════════════════════════════════════════
-   PART 7 — HOME · STATISTICS · LEDGER · NOTIFICATIONS
+   PART 7 — HOME · STATISTICS · LEDGER · NOTIFICATIONS · ACCOUNT UI
+   Single clean version. No patches.
    ═══════════════════════════════════════════════════════════════════════ */
 
 /* ─────────────────────────────────────────────────────────────────────
-   1. TAB NAVIGATION
+   Safe accessors — let-declared globals don't live on window
    ───────────────────────────────────────────────────────────────────── */
-window.goTab = function (tab, btn) {
-  if (tab !== 'home') stopHomeUpdates();
+function _p7settings()    { try { return (typeof settings    !== 'undefined' && settings)    ? settings    : {}; } catch (e) { return {}; } }
+function _p7members()     { try { return (typeof members     !== 'undefined' && members)     ? members     : []; } catch (e) { return []; } }
+function _p7transactions(){ try { return (typeof transactions!== 'undefined' && transactions)? transactions: []; } catch (e) { return []; } }
+function _p7loans()       { try { return (typeof loans       !== 'undefined' && loans)       ? loans       : []; } catch (e) { return []; } }
+function _p7currentUser() { try { return (typeof currentUser !== 'undefined') ? currentUser : null; } catch (e) { return null; } }
+function _p7memberBalances(){ try { return (typeof memberBalances !== 'undefined' && memberBalances) ? memberBalances : {}; } catch (e) { return {}; } }
+function _p7memberLoans()   { try { return (typeof memberLoans    !== 'undefined' && memberLoans)    ? memberLoans    : {}; } catch (e) { return {}; } }
+function _p7memberDebts()   { try { return (typeof memberDebts    !== 'undefined' && memberDebts)    ? memberDebts    : {}; } catch (e) { return {}; } }
+function _p7memberPrepaid() { try { return (typeof memberPrepaid  !== 'undefined' && memberPrepaid)  ? memberPrepaid  : {}; } catch (e) { return {}; } }
+function _p7notifications() { try { return (typeof notifications  !== 'undefined' && notifications)  ? notifications  : {}; } catch (e) { return {}; } }
 
-  /* Remember last non-admin tab */
+function _p7setCurrentScreen(s) { try { currentScreen = s; } catch (e) { window.currentScreen = s; } }
+function _p7getCurrentScreen()  { try { return currentScreen; } catch (e) { return window.currentScreen; } }
+function _p7setCurrentAdminTab(t) { try { currentAdminTab = t; } catch (e) { window.currentAdminTab = t; } }
+function _p7getAdminUnlocked() { try { return adminUnlocked === true; } catch (e) { return window.adminUnlocked === true; } }
+function _p7getMainCarousel()  { try { return mainCarouselNotifs; } catch (e) { return window.mainCarouselNotifs || []; } }
+function _p7setMainCarousel(v) { try { mainCarouselNotifs = v; } catch (e) { window.mainCarouselNotifs = v; } }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   1. TAB NAVIGATION
+   ═══════════════════════════════════════════════════════════════════════ */
+window.goTab = function (tab, btn) {
+  if (!tab) return;
+
   if (tab !== 'admin' && tab !== 'manage') {
     try { localStorage.setItem('lastNonAdminTab', tab); } catch (e) {}
   }
+  if (tab !== 'home') stopHomeUpdates();
 
-  /* Switch tab visibility */
+  /* Toggle tab visibility */
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('on'));
-  const el = document.getElementById('t-' + tab);
-  if (el) el.classList.add('on');
+  const targetEl = document.getElementById('t-' + tab);
+  if (targetEl) targetEl.classList.add('on');
 
   /* Highlight nav button */
   document.querySelectorAll('.ni').forEach(b => b.classList.remove('on'));
   const navBtn = btn || document.getElementById('ni-' + tab);
   if (navBtn) navBtn.classList.add('on');
 
-  currentScreen = tab;
+  _p7setCurrentScreen(tab);
 
   /* Tab-specific actions */
   if (tab === 'home') {
     startHomeUpdates();
     updateHomeRecent();
-    if (currentUser && currentUser.isAdmin) checkPayoutOverdue();
+    const cu = _p7currentUser();
+    if (cu && cu.isAdmin && typeof checkPayoutOverdue === 'function') checkPayoutOverdue();
   }
   if (tab === 'account') {
     updateAccountUI();
@@ -7135,53 +7155,51 @@ window.goTab = function (tab, btn) {
     renderStatistics();
   }
   if (tab === 'admin') {
-    if (currentUser && currentUser.isAdmin && adminUnlocked) {
-      const lock  = document.getElementById('adm-lock');
-      const panel = document.getElementById('adm-panel');
+    const cu = _p7currentUser();
+    const lock  = document.getElementById('adm-lock');
+    const panel = document.getElementById('adm-panel');
+    const adminTabs = document.querySelector('.admin-tabs');
+
+    if (cu && cu.isAdmin && _p7getAdminUnlocked()) {
       if (lock)  lock.classList.add('hidden');
       if (panel) panel.classList.remove('hidden');
-      const adminTabs = document.querySelector('.admin-tabs');
       if (adminTabs) adminTabs.style.display = 'none';
-      adminShowGrid = true;
-      showAdminWelcome();
+      try { adminShowGrid = true; } catch (e) {}
+      if (typeof showAdminWelcome === 'function') showAdminWelcome();
     } else {
-      const lock  = document.getElementById('adm-lock');
-      const panel = document.getElementById('adm-panel');
       if (lock)  lock.classList.remove('hidden');
       if (panel) panel.classList.add('hidden');
     }
   }
 
-  updateNotificationBadge();
-}
+  if (typeof updateNotificationBadge === 'function') updateNotificationBadge();
+};
 
 window.toggleShare = function () {
   const url = window.location.href;
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(url).then(
-      () => toast('🔗 Link copied', '#06b6d4'),
-      () => toast('Could not copy link', '#ef4444')
-    );
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url)
+      .then(() => toast('🔗 Link copied', '#06b6d4'))
+      .catch(() => toast('🔗 ' + url, '#06b6d4'));
   } else {
     toast('🔗 ' + url, '#06b6d4');
   }
-}
+};
 
-/* ─────────────────────────────────────────────────────────────────────
-   2. HOME UI — cached elements & single update loop
-   ───────────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════
+   2. HOME UI
+   ═══════════════════════════════════════════════════════════════════════ */
 function getHomeElements() {
   const c = homeCache.els;
   if (c.weeklyTotal !== undefined) return c;
-
-  c.weeklyTotal   = document.getElementById('total-weekly-display');
-  c.available     = document.getElementById('available-display');
-  c.receiverName  = document.getElementById('weekly-payee-name');
-  c.rotationInfo  = document.getElementById('payout-rotation-info');
-  c.payoutDate    = document.getElementById('payout-exact-date');
-  c.payoutText    = document.getElementById('payout-countdown-text');
-  c.payoutFill    = document.getElementById('payout-progress-fill');
-  c.payoutLabel   = document.getElementById('payout-progress-label');
+  c.weeklyTotal  = document.getElementById('total-weekly-display');
+  c.available    = document.getElementById('available-display');
+  c.receiverName = document.getElementById('weekly-payee-name');
+  c.rotationInfo = document.getElementById('payout-rotation-info');
+  c.payoutDate   = document.getElementById('payout-exact-date');
+  c.payoutText   = document.getElementById('payout-countdown-text');
+  c.payoutFill   = document.getElementById('payout-progress-fill');
+  c.payoutLabel  = document.getElementById('payout-progress-label');
   return c;
 }
 
@@ -7189,9 +7207,8 @@ window.updateHomeUI = function () {
   const els   = getHomeElements();
   const cache = homeCache.last;
 
-  /* Weekly Total */
   if (els.weeklyTotal) {
-    const total = computeTotalWeekly() || 0;
+    const total = (typeof computeTotalWeekly === 'function') ? computeTotalWeekly() : 0;
     const val   = 'UGX ' + total.toLocaleString();
     if (cache.weeklyTotal !== val) {
       els.weeklyTotal.textContent = val;
@@ -7199,9 +7216,9 @@ window.updateHomeUI = function () {
     }
   }
 
-  /* Available / Loan Fund */
   if (els.available) {
-    const amt = groupProfit || 0;
+    let amt = 0;
+    try { amt = groupProfit || 0; } catch (e) {}
     const val = 'UGX ' + amt.toLocaleString();
     if (cache.available !== val) {
       els.available.textContent = val;
@@ -7210,13 +7227,12 @@ window.updateHomeUI = function () {
     }
   }
 
-  /* Receiver name */
   if (els.receiverName) {
-    const order = rotation.order || [];
+    let order = [], idx = 0;
+    try { order = rotation.order || []; idx = rotation.currentIndex || 0; } catch (e) {}
     let name = '—';
     if (order.length) {
-      const idx = rotation.currentIndex || 0;
-      const m = members.find(x => x.id === order[idx]);
+      const m = _p7members().find(x => x.id === order[idx]);
       if (m) name = m.name;
     }
     if (cache.receiverName !== name) {
@@ -7225,35 +7241,37 @@ window.updateHomeUI = function () {
     }
   }
 
-  /* Rotation info */
   if (els.rotationInfo) {
-    const order = rotation.order || [];
-    let info = 'No active members';
-    if (order.length) {
-      const idx = rotation.currentIndex || 0;
-      info = '⭐ Current Receiver · #' + (idx + 1) + ' of ' + order.length;
-    }
+    let order = [], idx = 0;
+    try { order = rotation.order || []; idx = rotation.currentIndex || 0; } catch (e) {}
+    const info = order.length
+      ? '⭐ Current Receiver · #' + (idx + 1) + ' of ' + order.length
+      : 'No active members';
     if (cache.rotationInfo !== info) {
       els.rotationInfo.textContent = info;
       cache.rotationInfo = info;
     }
   }
 
-  /* Payout date */
   if (els.payoutDate) {
-    const next = getNextPayoutDate();
+    const next = (typeof getNextPayoutDate === 'function') ? getNextPayoutDate() : null;
     let str = '—';
     if (next) {
-      try { str = new Date(next).toLocaleDateString('en-UG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }); }
-      catch (e) {}
+      try {
+        str = new Date(next).toLocaleDateString('en-UG', {
+          weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+        });
+      } catch (e) {}
     }
     if (cache.payoutDate !== str) { els.payoutDate.textContent = str; cache.payoutDate = str; }
   }
 
-  /* Countdown */
   if (els.payoutText && els.payoutFill && els.payoutLabel) {
-    const next = getNextPayoutDate();
-    const cd = getPayoutCountdown(Date.now(), next);
+    const next = (typeof getNextPayoutDate === 'function') ? getNextPayoutDate() : null;
+    const cd = (typeof getPayoutCountdown === 'function')
+      ? getPayoutCountdown(Date.now(), next)
+      : { text: '—', className: '', progress: 0, label: '' };
+
     if (cache.payoutText !== cd.text) {
       els.payoutText.textContent = cd.text;
       els.payoutText.className = 'countdown-text ' + cd.className;
@@ -7270,15 +7288,13 @@ window.updateHomeUI = function () {
     }
   }
 
-  /* Deposit button visibility — members only */
   const depBtn = document.getElementById('deposit-ussd-btn');
-  if (depBtn) depBtn.style.display = (currentUser && !currentUser.isAdmin) ? 'block' : 'none';
+  const cu = _p7currentUser();
+  if (depBtn) depBtn.style.display = (cu && !cu.isAdmin) ? 'block' : 'none';
 
-  /* Home sub-widgets */
   renderMemberOfTheMonth();
 
-  /* Admin: add "Advance Rotation" button (once) */
-  if (currentUser && currentUser.isAdmin) {
+  if (cu && cu.isAdmin) {
     const card = document.querySelector('.weekly-receiver-card');
     if (card && !document.getElementById('home-advance-btn')) {
       const b = document.createElement('button');
@@ -7294,12 +7310,9 @@ window.updateHomeUI = function () {
     }
   }
 
-  if (typeof checkPayoutOverdue === 'function' && currentUser && currentUser.isAdmin) {
-    checkPayoutOverdue();
-  }
-}
+  if (cu && cu.isAdmin && typeof checkPayoutOverdue === 'function') checkPayoutOverdue();
+};
 
-/* Home update loop */
 let _homeRafId = null;
 let _homeLastRun = 0;
 const HOME_UPDATE_MS = 5000;
@@ -7311,40 +7324,35 @@ window.startHomeUpdates = function () {
 
   function tick(ts) {
     if (ts - _homeLastRun >= HOME_UPDATE_MS) {
-      if (!document.hidden && currentScreen === 'home') updateHomeUI();
+      if (!document.hidden && _p7getCurrentScreen() === 'home') updateHomeUI();
       _homeLastRun = ts;
     }
     _homeRafId = requestAnimationFrame(tick);
   }
   _homeRafId = requestAnimationFrame(tick);
-}
+};
 
 window.stopHomeUpdates = function () {
   if (_homeRafId) { cancelAnimationFrame(_homeRafId); _homeRafId = null; }
   _homeLastRun = 0;
-}
+};
 
-/* Recent transactions on home (if the element exists) */
 window.updateHomeRecent = function () {
   const el = document.getElementById('home-recent');
   if (!el) return;
-  const recent = transactions
-    .slice()
-    .sort((a, b) => (b.date || 0) - (a.date || 0))
-    .slice(0, 6);
+  const recent = _p7transactions().slice().sort((a, b) => (b.date || 0) - (a.date || 0)).slice(0, 6);
   if (!recent.length) {
     el.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📊</div><div class="empty-state-text">No transactions yet</div></div>';
     return;
   }
   el.innerHTML = recent.map((tx, i) => renderTxRow(tx, i)).join('');
-}
+};
 
-/* Single transaction row */
 function renderTxRow(tx, i) {
-  const m = members.find(x => x.phone === tx.memberPhone) || { name: tx.memberName || '?' };
+  const m = _p7members().find(x => x.phone === tx.memberPhone) || { name: tx.memberName || '?' };
   const d = tx.date ? new Date(tx.date).toLocaleDateString() : '';
-  const isPos = ['deposit','payout','profit_dist','loan_repayment','debt_cleared'].includes(tx.type);
-  const ico = TX_ICONS[tx.type] || '💫';
+  const isPos = ['deposit','payout','profit_dist','loan_repayment','debt_cleared'].indexOf(tx.type) !== -1;
+  const ico = (typeof TX_ICONS !== 'undefined' && TX_ICONS[tx.type]) || '💫';
   return '<div class="txc" style="animation-delay:' + (i * 0.04) + 's">' +
     '<div class="txc-icon">' + ico + '</div>' +
     '<div class="txc-info">' +
@@ -7358,20 +7366,25 @@ function renderTxRow(tx, i) {
   '</div>';
 }
 
-/* ─────────────────────────────────────────────────────────────────────
+/* ═══════════════════════════════════════════════════════════════════════
    3. NOTICE CAROUSEL
-   ───────────────────────────────────────────────────────────────────── */
+   ═══════════════════════════════════════════════════════════════════════ */
+let _mainCarouselTimer = null;
+
 window.renderMainCarousel = function () {
-  const track = document.getElementById('main-carousel-track');
-  const dots  = document.getElementById('main-carousel-dots');
+  const track  = document.getElementById('main-carousel-track');
+  const dots   = document.getElementById('main-carousel-dots');
   const banner = document.getElementById('main-carousel');
   if (!track || !dots) return;
 
+  const notifs = _p7getMainCarousel();
+  const S = _p7settings();
+
   let slides;
-  if (mainCarouselNotifs && mainCarouselNotifs.length) {
-    slides = mainCarouselNotifs.slice(0, 3);
-  } else if (settings.noticeText && settings.noticeText.trim()) {
-    slides = [{ text: settings.noticeText, icon: '📢' }];
+  if (notifs && notifs.length) {
+    slides = notifs.slice(0, 3);
+  } else if (S.noticeText && String(S.noticeText).trim()) {
+    slides = [{ text: S.noticeText, icon: '📢' }];
   } else {
     slides = [{ text: 'Welcome to Harvest Trust Finance. Save daily, grow together, and prosper.', icon: '🌾' }];
   }
@@ -7396,64 +7409,97 @@ window.renderMainCarousel = function () {
     '<button class="c-dot ' + (i === 0 ? 'active' : '') + '" onclick="goToMainSlide(' + i + ')" aria-label="Notice ' + (i + 1) + '"></button>'
   ).join('');
 
-  mainCarouselIdx = 0;
+  try { mainCarouselIdx = 0; } catch (e) { window.mainCarouselIdx = 0; }
   updateMainCarouselPos();
   if (banner) banner.style.display = 'block';
 
   if (slides.length > 1) startMainCarouselTimer();
-  else if (mainCarouselTimer) { clearInterval(mainCarouselTimer); mainCarouselTimer = null; }
-}
+  else if (_mainCarouselTimer) { clearInterval(_mainCarouselTimer); _mainCarouselTimer = null; }
+};
 
 function startMainCarouselTimer() {
-  if (mainCarouselTimer) clearInterval(mainCarouselTimer);
-  const count = mainCarouselNotifs.length ? Math.min(mainCarouselNotifs.length, 3) : 1;
+  if (_mainCarouselTimer) clearInterval(_mainCarouselTimer);
+  const notifs = _p7getMainCarousel();
+  const count = (notifs && notifs.length) ? Math.min(notifs.length, 3) : 1;
   if (count <= 1) return;
-  mainCarouselTimer = setInterval(() => {
-    mainCarouselIdx = (mainCarouselIdx + 1) % count;
+  _mainCarouselTimer = setInterval(() => {
+    try {
+      mainCarouselIdx = (mainCarouselIdx + 1) % count;
+    } catch (e) { window.mainCarouselIdx = ((window.mainCarouselIdx || 0) + 1) % count; }
     updateMainCarouselPos();
   }, 5000);
 }
 
 function updateMainCarouselPos() {
   const track = document.getElementById('main-carousel-track');
-  if (track) track.style.transform = 'translateX(-' + (mainCarouselIdx * 100) + '%)';
+  let idx = 0;
+  try { idx = mainCarouselIdx || 0; } catch (e) { idx = window.mainCarouselIdx || 0; }
+  if (track) track.style.transform = 'translateX(-' + (idx * 100) + '%)';
   document.querySelectorAll('#main-carousel-dots .c-dot').forEach((d, i) => {
-    d.classList.toggle('active', i === mainCarouselIdx);
+    d.classList.toggle('active', i === idx);
   });
 }
 
 window.goToMainSlide = function (i) {
-  mainCarouselIdx = i;
+  try { mainCarouselIdx = i; } catch (e) { window.mainCarouselIdx = i; }
   updateMainCarouselPos();
   startMainCarouselTimer();
 };
 
+/* ── Add notice — updates local state without extra Firebase reads ── */
 window.addCarouselNotice = function () {
-  const count = (mainCarouselNotifs || []).length;
-  if (count >= 3) { toast('⚠️ Maximum 3 notices. Delete one first.', '#f59e0b'); return; }
+  const notifs = _p7getMainCarousel();
+  if (notifs.length >= 3) { toast('⚠️ Maximum 3 notices. Delete one first.', '#f59e0b'); return; }
 
-  const msg  = ((document.getElementById('c-msg') || {}).value || '').trim();
+  const msg = ((document.getElementById('c-msg') || {}).value || '').trim();
   if (!msg) { toast('Enter a message', '#ef4444'); return; }
   if (msg.length > 200) { toast('Max 200 characters', '#ef4444'); return; }
 
   const icon = ((document.getElementById('c-icon') || {}).value || '📢').slice(0, 2);
+  const notice = { text: msg, icon: icon, payee: '', createdAt: Date.now() };
 
-  db.ref('mainNotices').push({
-    text: msg, icon, payee: '', createdAt: Date.now()
-  }).then(() => {
-    toast('✅ Notice added (' + (count + 1) + '/3)', '#10b981');
-    closeOv('ov-carousel-compose');
-    const mEl = document.getElementById('c-msg'); if (mEl) mEl.value = '';
-    const iEl = document.getElementById('c-icon'); if (iEl) iEl.value = '📢';
-    const cEl = document.getElementById('msg-counter'); if (cEl) cEl.textContent = '0/200';
-  }).catch(err => { console.error(err); toast('❌ Add failed', '#ef4444'); });
+  db.ref('mainNotices').push(notice)
+    .then(function (ref) {
+      const arr = _p7getMainCarousel().slice();
+      arr.push(Object.assign({}, notice, { key: ref.key }));
+      _p7setMainCarousel(arr);
+
+      renderMainCarousel();
+
+      if (_p7getCurrentScreen() === 'admin' && typeof renderAdminTab === 'function') {
+        renderAdminTab();
+      }
+
+      toast('✅ Notice added (' + arr.length + '/3)', '#10b981');
+
+      const mEl = document.getElementById('c-msg');       if (mEl) mEl.value = '';
+      const iEl = document.getElementById('c-icon');      if (iEl) iEl.value = '📢';
+      const cEl = document.getElementById('msg-counter'); if (cEl) cEl.textContent = '0/200';
+
+      closeOv('ov-carousel-compose');
+    })
+    .catch(function (err) {
+      console.error('Add notice failed:', err);
+      toast('❌ Add failed', '#ef4444');
+    });
 };
 
 window.removeCarouselNotice = function (key) {
   if (!key) return;
   db.ref('mainNotices/' + key).remove()
-    .then(() => toast('Notice deleted', '#ef4444'))
-    .catch(err => { console.error(err); toast('Delete failed', '#ef4444'); });
+    .then(function () {
+      const arr = _p7getMainCarousel().filter(n => n.key !== key);
+      _p7setMainCarousel(arr);
+      renderMainCarousel();
+      if (_p7getCurrentScreen() === 'admin' && typeof renderAdminTab === 'function') {
+        renderAdminTab();
+      }
+      toast('Notice deleted', '#ef4444');
+    })
+    .catch(function (err) {
+      console.error('Delete notice failed:', err);
+      toast('❌ Delete failed', '#ef4444');
+    });
 };
 
 function updateMsgCounter() {
@@ -7470,11 +7516,11 @@ function attachMsgCounterListener() {
   updateMsgCounter();
 }
 
-/* ─────────────────────────────────────────────────────────────────────
+/* ═══════════════════════════════════════════════════════════════════════
    4. MEMBER OF THE MONTH
-   ───────────────────────────────────────────────────────────────────── */
+   ═══════════════════════════════════════════════════════════════════════ */
 function computeMemberOfTheMonth() {
-  const active = members.filter(m => m.approved);
+  const active = _p7members().filter(m => m.approved);
   if (!active.length) return null;
 
   const now = new Date();
@@ -7482,10 +7528,11 @@ function computeMemberOfTheMonth() {
   const end   = new Date(now.getFullYear(), now.getMonth() + 1, 0).getTime();
 
   let best = null, bestScore = -1;
+  const txs = _p7transactions();
   for (const m of active) {
     let dep = 0;
     const days = new Set();
-    transactions.forEach(tx => {
+    txs.forEach(tx => {
       if (tx.memberPhone === m.phone && tx.date >= start && tx.date <= end) {
         if (tx.type === 'deposit') {
           dep += tx.amount;
@@ -7494,7 +7541,10 @@ function computeMemberOfTheMonth() {
       }
     });
     const score = dep + days.size * 1000;
-    if (score > bestScore) { bestScore = score; best = { member: m, deposits: dep, consistency: days.size, score }; }
+    if (score > bestScore) {
+      bestScore = score;
+      best = { member: m, deposits: dep, consistency: days.size, score: score };
+    }
   }
   return best;
 }
@@ -7504,14 +7554,15 @@ window.renderMemberOfTheMonth = function () {
   if (!container) return;
 
   const winner = computeMemberOfTheMonth();
+  const cu = _p7currentUser();
   if (!winner) { container.style.display = 'none'; return; }
-  if (!currentUser || (currentUser.id !== winner.member.id && !currentUser.isAdmin)) {
+  if (!cu || (cu.id !== winner.member.id && !cu.isAdmin)) {
     container.style.display = 'none';
     return;
   }
 
   container.style.display = 'block';
-  const isMe = currentUser.id === winner.member.id;
+  const isMe = cu.id === winner.member.id;
   const icon = isMe ? '👑' : '🏆';
   const title = isMe
     ? 'You are Member of the Month!'
@@ -7529,11 +7580,11 @@ window.renderMemberOfTheMonth = function () {
       '</div>' +
       '<div style="font-size:2rem;flex-shrink:0;">' + icon + '</div>' +
     '</div>';
-}
+};
 
-/* ─────────────────────────────────────────────────────────────────────
-   5. STATISTICS TAB
-   ───────────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════
+   5. STATISTICS
+   ═══════════════════════════════════════════════════════════════════════ */
 document.addEventListener('click', function (e) {
   const btn = e.target.closest('.stats-tab-btn');
   if (!btn) return;
@@ -7548,24 +7599,28 @@ document.addEventListener('click', function (e) {
 });
 
 window.renderStatistics = function () {
-  if (!members.length) return;
-  const active = members.filter(m => m.approved);
+  const active = _p7members().filter(m => m.approved);
+  if (!active.length) return;
 
-  /* ── Leaderboard ──────────────────────────────────── */
+  /* ── Leaderboard ranked by NET WORTH = balance − loans ── */
+  const balances = _p7memberBalances();
+  const loanMap  = _p7memberLoans();
   const stats = active.map(m => {
-    let dep = 0;
-    transactions.forEach(tx => {
-      if (tx.memberPhone === m.phone && tx.type === 'deposit') dep += tx.amount;
-    });
-    return Object.assign({}, m, { totalDeposits: dep });
+    const balance = balances[m.phone] || 0;
+    const loan    = loanMap[m.phone]  || 0;
+    return Object.assign({}, m, { balance: balance, loan: loan, netWorth: balance - loan });
   });
-  stats.sort((a, b) => b.totalDeposits - a.totalDeposits);
-  const maxDep = stats[0] ? stats[0].totalDeposits || 1 : 1;
+  stats.sort((a, b) => b.netWorth - a.netWorth);
+
+  const topNet = Math.max(1, Math.abs(stats[0] ? stats[0].netWorth : 0));
 
   let leaderHtml = '';
   stats.forEach((m, i) => {
-    const pct   = (m.totalDeposits / maxDep) * 100;
-    const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
+    const rawPct = topNet > 0 ? (m.netWorth / topNet) * 100 : 0;
+    const pct    = Math.max(0, Math.min(100, rawPct));
+    const isNeg  = m.netWorth < 0;
+    const medal  = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
+
     leaderHtml +=
       '<div class="ranking-row" style="padding:10px 12px;">' +
         '<div class="ranking-rank" style="min-width:38px;font-size:1.3rem;">' + medal + '</div>' +
@@ -7573,19 +7628,24 @@ window.renderStatistics = function () {
         '<div class="ranking-info">' +
           '<div class="ranking-name" style="font-size:0.85rem;">' + escapeHtml(m.name) + '</div>' +
           '<div class="ranking-progress-bar" style="margin:4px 0;">' +
-            '<div class="ranking-progress-fill" style="width:' + pct + '%;"></div>' +
+            '<div class="ranking-progress-fill" style="width:' + pct + '%;background:' +
+              (isNeg ? 'linear-gradient(90deg,var(--red),#b91c1c)' : 'linear-gradient(90deg,var(--gold),var(--teal))') +
+            ';"></div>' +
           '</div>' +
           '<div class="ranking-deposit" style="font-size:0.7rem;">' +
-            money(m.totalDeposits) + ' <span style="color:var(--teal);font-weight:600;">(' + pct.toFixed(1) + '%)</span>' +
+            money(m.netWorth) +
+            ' <span style="color:' + (isNeg ? 'var(--red)' : 'var(--teal)') + ';font-weight:600;">(' + pct.toFixed(1) + '%)</span>' +
+            '<div style="font-size:0.6rem;color:var(--text-3);margin-top:2px;">' +
+              'Savings ' + money(m.balance) + ' − Loans ' + money(m.loan) +
+            '</div>' +
           '</div>' +
         '</div>' +
         '<div class="ranking-actions"><a href="tel:' + escapeAttr(m.phone) + '" class="btn btn-sm btn-teal" style="padding:4px 8px;">📞</a></div>' +
       '</div>';
   });
   const lbEl = document.getElementById('compact-leaderboard');
-  if (lbEl) lbEl.innerHTML = leaderHtml || '<div class="muted">No deposits yet</div>';
+  if (lbEl) lbEl.innerHTML = leaderHtml || '<div class="muted">No members yet</div>';
 
-  /* ── Rewards ──────────────────────────────────────── */
   renderRewardsContent();
 };
 
@@ -7602,8 +7662,8 @@ window.renderRewardsContent = function () {
   }
 
   const defs = {
-    'Group Champion':    '🏆 Highest total savings (deposits) over the entire period.',
-    'Member of the Year':'🌟 Highest overall contribution score (deposits + consistency + loan repayments).',
+    'Group Champion':    '🏆 Highest total savings.',
+    'Member of the Year':'🌟 Highest overall contribution score.',
     'Most Consistent':   '📅 Most days with a deposit.',
     'Most Active':       '⚡ Most transactions.',
     'Best Loan Repayer': '💳 Consistently repays loans.'
@@ -7634,8 +7694,11 @@ window.renderRewardsContent = function () {
   });
   html += '</div>';
 
+  let profit = 0;
+  try { profit = groupProfit || 0; } catch (e) {}
+
   summaryDiv.innerHTML =
-    '<div><strong>Total Profit Pool:</strong> ' + money(data.groupProfit) + '</div>' +
+    '<div><strong>Total Profit Pool:</strong> ' + money(profit) + '</div>' +
     '<div><strong>Rewards Pool (5%):</strong> ' + money(data.totalRewardsPool) + '</div>' +
     '<div><strong>Distribution:</strong> Group Champion (40%), Member of the Year (25%), Most Consistent (18%), Most Active (12%), Best Loan Repayer (5%)</div>';
 
@@ -7643,18 +7706,23 @@ window.renderRewardsContent = function () {
 };
 
 function calculateRewards() {
-  const active = members.filter(m => m.approved);
+  const active = _p7members().filter(m => m.approved);
   if (!active.length) return null;
 
-  const pool = Math.floor((groupProfit || 0) * 0.05);
+  let profit = 0;
+  try { profit = groupProfit || 0; } catch (e) {}
+  const pool = Math.floor(profit * 0.05);
   if (pool <= 0) return null;
+
+  const txs = _p7transactions();
+  const loanList = _p7loans();
 
   const metrics = active.map(m => {
     let totalDeposits = 0;
     const consistency = new Set();
     let txCount = 0, repaidLoans = 0, loanRepayCount = 0, totalRepaid = 0;
 
-    transactions.forEach(tx => {
+    txs.forEach(tx => {
       if (tx.memberPhone !== m.phone) return;
       txCount++;
       if (tx.type === 'deposit') {
@@ -7666,68 +7734,81 @@ function calculateRewards() {
         totalRepaid += tx.amount;
       }
     });
-    loans.forEach(l => {
+    loanList.forEach(l => {
       if (l.memberId === m.id && l.repaid === true) repaidLoans++;
     });
 
     const score = totalDeposits + consistency.size * 1000 + repaidLoans * 10000;
     const loanRepayerScore = repaidLoans * 2 + loanRepayCount * 1.5 + totalRepaid / 100000;
 
-    return { member: m, totalDeposits, consistencyDays: consistency.size,
-             transactionCount: txCount, repaidLoans, loanRepayerScore, score };
+    return {
+      member: m,
+      totalDeposits: totalDeposits,
+      consistencyDays: consistency.size,
+      transactionCount: txCount,
+      repaidLoans: repaidLoans,
+      loanRepayerScore: loanRepayerScore,
+      score: score
+    };
   });
 
-  const sortedByDeposits   = [...metrics].sort((a, b) => b.totalDeposits - a.totalDeposits);
-  const sortedByScore      = [...metrics].sort((a, b) => b.score - a.score);
-  const sortedByConsistency= [...metrics].sort((a, b) => b.consistencyDays - a.consistencyDays);
-  const sortedByActivity   = [...metrics].sort((a, b) => b.transactionCount - a.transactionCount);
-  const sortedByRepayer    = [...metrics].sort((a, b) => b.loanRepayerScore - a.loanRepayerScore);
+  const sortedByDeposits    = metrics.slice().sort((a, b) => b.totalDeposits - a.totalDeposits);
+  const sortedByScore       = metrics.slice().sort((a, b) => b.score - a.score);
+  const sortedByConsistency = metrics.slice().sort((a, b) => b.consistencyDays - a.consistencyDays);
+  const sortedByActivity    = metrics.slice().sort((a, b) => b.transactionCount - a.transactionCount);
+  const sortedByRepayer     = metrics.slice().sort((a, b) => b.loanRepayerScore - a.loanRepayerScore);
 
-  const pct = {
+  const pctMap = {
     'Group Champion': 0.40,
     'Member of the Year': 0.25,
     'Most Consistent': 0.18,
     'Most Active': 0.12,
     'Best Loan Repayer': 0.05
   };
+
   const used = new Set();
   const winners = [];
 
   function pick(list, category, metricKey, label) {
     if (!list || !list.length) {
-      winners.push({ category, member: null, amount: 0, metric: 'No eligible member', eligible: false });
+      winners.push({ category: category, member: null, amount: 0, metric: 'No eligible member', eligible: false });
       return;
     }
-    for (const item of list) {
+    for (let i = 0; i < list.length; i++) {
+      const item = list[i];
       if (!item || !item.member) continue;
       if (used.has(item.member.id)) continue;
       used.add(item.member.id);
+      const v = item[metricKey];
       winners.push({
-        category,
+        category: category,
         member: item.member,
-        amount: Math.floor(pool * pct[category]),
-        metric: label + ': ' + (item[metricKey] != null ? item[metricKey].toLocaleString() : 'N/A'),
+        amount: Math.floor(pool * pctMap[category]),
+        metric: label + ': ' + (v != null ? v.toLocaleString() : 'N/A'),
         eligible: true
       });
       return;
     }
-    winners.push({ category, member: null, amount: 0, metric: 'No eligible member', eligible: false });
+    winners.push({ category: category, member: null, amount: 0, metric: 'No eligible member', eligible: false });
   }
 
-  pick(sortedByDeposits,   'Group Champion',    'totalDeposits',    'Total Deposits');
-  pick(sortedByScore,      'Member of the Year','score',            'Overall Score');
-  pick(sortedByConsistency,'Most Consistent',   'consistencyDays',  'Days with Deposits');
-  pick(sortedByActivity,   'Most Active',       'transactionCount', 'Total Transactions');
-  pick(sortedByRepayer,    'Best Loan Repayer', 'loanRepayerScore', 'Repayment Consistency');
+  pick(sortedByDeposits,    'Group Champion',     'totalDeposits',    'Total Deposits');
+  pick(sortedByScore,       'Member of the Year', 'score',            'Overall Score');
+  pick(sortedByConsistency, 'Most Consistent',    'consistencyDays',  'Days with Deposits');
+  pick(sortedByActivity,    'Most Active',        'transactionCount', 'Total Transactions');
+  pick(sortedByRepayer,     'Best Loan Repayer',  'loanRepayerScore', 'Repayment Consistency');
 
-  return { winners, totalRewardsPool: pool, totalMembers: active.length, groupProfit };
+  return { winners: winners, totalRewardsPool: pool, totalMembers: active.length, groupProfit: profit };
 }
 
-/* ─────────────────────────────────────────────────────────────────────
+/* ═══════════════════════════════════════════════════════════════════════
    6. LEDGER
-   ───────────────────────────────────────────────────────────────────── */
+   ═══════════════════════════════════════════════════════════════════════ */
+let _ledgerFilter = 'all';
+let _ledgerSearchText = '';
+
 window.setLF = function (filter, btn) {
-  window.currentLedgerFilter = filter;
+  _ledgerFilter = filter;
   document.querySelectorAll('.lf-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
   loadLedger(filter);
@@ -7735,21 +7816,20 @@ window.setLF = function (filter, btn) {
 
 window.applyLedgerFilters = function () {
   const q = (document.getElementById('ledger-search') || {}).value || '';
-  ledgerSearchText = q.trim().toLowerCase();
-  loadLedger(window.currentLedgerFilter || 'all');
+  _ledgerSearchText = q.trim().toLowerCase();
+  loadLedger(_ledgerFilter);
 };
 
 window.clearLedgerFilters = function () {
   const inp = document.getElementById('ledger-search');
   if (inp) inp.value = '';
-  ledgerSearchText = '';
-  loadLedger(window.currentLedgerFilter || 'all');
+  _ledgerSearchText = '';
+  loadLedger(_ledgerFilter);
 };
 
 window.loadLedger = function (filter) {
-  let list = transactions.slice();
+  let list = _p7transactions().slice();
 
-  /* Filter by type */
   if (filter === 'recent') {
     const cutoff = Date.now() - 7 * 86400000;
     list = list.filter(tx => tx.date && tx.date >= cutoff);
@@ -7757,19 +7837,17 @@ window.loadLedger = function (filter) {
     list = list.filter(tx => tx.type === filter);
   }
 
-  /* Search */
-  if (ledgerSearchText) {
-    const q = ledgerSearchText;
+  if (_ledgerSearchText) {
+    const q = _ledgerSearchText;
     list = list.filter(tx => {
-      const m = members.find(x => x.phone === tx.memberPhone) || { name: tx.memberName || '' };
-      return String(m.name).toLowerCase().includes(q) ||
-             String(tx.description || '').toLowerCase().includes(q) ||
-             String(tx.amount || '').includes(q) ||
-             String(tx.receiptNumber || '').toLowerCase().includes(q);
+      const m = _p7members().find(x => x.phone === tx.memberPhone) || { name: tx.memberName || '' };
+      return String(m.name).toLowerCase().indexOf(q) !== -1 ||
+             String(tx.description || '').toLowerCase().indexOf(q) !== -1 ||
+             String(tx.amount || '').indexOf(q) !== -1 ||
+             String(tx.receiptNumber || '').toLowerCase().indexOf(q) !== -1;
     });
   }
 
-  /* Sort + cap */
   list.sort((a, b) => (b.date || 0) - (a.date || 0));
   list = list.slice(0, 100);
 
@@ -7786,15 +7864,18 @@ window.loadLedger = function (filter) {
     return;
   }
 
-  const isAdmin = currentUser && currentUser.isAdmin && adminUnlocked;
+  const cu = _p7currentUser();
+  const isAdmin = cu && cu.isAdmin && _p7getAdminUnlocked();
+  const selected = (typeof selectedTransactions !== 'undefined') ? selectedTransactions : new Set();
 
   container.innerHTML = '<div style="display:flex;flex-direction:column;gap:4px;">' +
     list.map((tx, i) => {
-      const m = members.find(x => x.phone === tx.memberPhone) || { name: tx.memberName || '?' };
-      const ico = TX_ICONS[tx.type] || '💫';
+      const m = _p7members().find(x => x.phone === tx.memberPhone) || { name: tx.memberName || '?' };
+      const ico = (typeof TX_ICONS !== 'undefined' && TX_ICONS[tx.type]) || '💫';
       const d = tx.date ? new Date(tx.date).toLocaleDateString() : '';
-      const isPos = ['deposit','payout','profit_dist','loan_repayment','debt_cleared'].includes(tx.type);
-      const checked = selectedTransactions.has(tx.id);
+      const isPos = ['deposit','payout','profit_dist','loan_repayment','debt_cleared'].indexOf(tx.type) !== -1;
+      const checked = selected.has(tx.id);
+
       const editBtn = (isAdmin && tx.type !== 'payout')
         ? '<button class="btn btn-sm btn-sec" style="padding:2px 8px;font-size:0.55rem;" onclick="openEditTx(\'' + tx.id + '\')">✏️</button>'
         : '';
@@ -7825,20 +7906,29 @@ window.loadLedger = function (filter) {
 };
 
 window.toggleTransaction = function (txId) {
-  if (selectedTransactions.has(txId)) selectedTransactions.delete(txId);
-  else selectedTransactions.add(txId);
+  try {
+    if (selectedTransactions.has(txId)) selectedTransactions.delete(txId);
+    else selectedTransactions.add(txId);
+  } catch (e) {
+    if (!window.selectedTransactions) window.selectedTransactions = new Set();
+    if (window.selectedTransactions.has(txId)) window.selectedTransactions.delete(txId);
+    else window.selectedTransactions.add(txId);
+  }
   updateBulkDeleteUI();
 };
 
 function updateBulkDeleteUI() {
-  const isAdmin = currentUser && currentUser.isAdmin && adminUnlocked;
+  const cu = _p7currentUser();
+  const isAdmin = cu && cu.isAdmin && _p7getAdminUnlocked();
   const countEl = document.getElementById('selected-count');
   const delBtn  = document.getElementById('bulk-delete-btn');
   if (!countEl || !delBtn) return;
 
   if (!isAdmin) { countEl.style.display = 'none'; delBtn.style.display = 'none'; return; }
 
-  const n = selectedTransactions.size;
+  let n = 0;
+  try { n = selectedTransactions.size; } catch (e) { n = (window.selectedTransactions || new Set()).size; }
+
   if (n > 0) {
     countEl.style.display = 'inline';
     countEl.textContent = n + ' selected';
@@ -7850,51 +7940,49 @@ function updateBulkDeleteUI() {
 }
 
 window.confirmBulkDelete = function () {
-  const count = selectedTransactions.size;
-  if (count === 0) { toast('No transactions selected', '#f59e0b'); return; }
+  let ids = [];
+  try { ids = Array.from(selectedTransactions); } catch (e) { ids = Array.from(window.selectedTransactions || new Set()); }
+  if (!ids.length) { toast('No transactions selected', '#f59e0b'); return; }
 
-  const ids = Array.from(selectedTransactions);
   const preview = ids.slice(0, 10).map(id => {
-    const tx = transactions.find(t => t.id === id);
-    const m = members.find(x => x.phone === (tx && tx.memberPhone)) || { name: 'Unknown' };
+    const tx = _p7transactions().find(t => t.id === id);
+    const m = _p7members().find(x => x.phone === (tx && tx.memberPhone)) || { name: 'Unknown' };
     return '• ' + m.name + ' - ' + (tx ? tx.type : 'tx') + ' (UGX ' + ((tx && tx.amount) || 0).toLocaleString() + ')';
   }).join('\n');
   const more = ids.length > 10 ? '\n... and ' + (ids.length - 10) + ' more' : '';
 
-  if (!confirm('⚠️ Delete ' + count + ' transaction(s)?\n\n' + preview + more + '\n\nThis cannot be undone.')) return;
+  if (!confirm('⚠️ Delete ' + ids.length + ' transaction(s)?\n\n' + preview + more + '\n\nThis cannot be undone.')) return;
 
-  requirePasswordConfirmation(async () => {
+  requirePasswordConfirmation(async function () {
     let ok = 0, fail = 0;
-    for (const id of ids) {
-      try { await db.ref('transactions/' + id).remove(); ok++; }
+    for (let i = 0; i < ids.length; i++) {
+      try { await db.ref('transactions/' + ids[i]).remove(); ok++; }
       catch (e) { fail++; }
     }
-    selectedTransactions.clear();
+    try { selectedTransactions.clear(); } catch (e) { window.selectedTransactions = new Set(); }
     updateBulkDeleteUI();
     toast('🗑️ Deleted ' + ok + (fail ? ', ' + fail + ' failed' : ''), ok > 0 ? '#10b981' : '#ef4444');
-    const snap = await db.ref('transactions').once('value');
-    transactions = snap.val() ? Object.entries(snap.val()).map(([id, tx]) => Object.assign({}, tx, { id })) : [];
-    computePots();
-    refreshUI();
-    loadLedger(window.currentLedgerFilter || 'all');
+
+    if (typeof reloadData === 'function') await reloadData();
+    loadLedger(_ledgerFilter);
   }, 'Delete Multiple Transactions');
 };
 
-/* ─────────────────────────────────────────────────────────────────────
-   7. MEMBER RECEIPT MODAL
-   ───────────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════
+   7. MEMBER RECEIPTS MODAL
+   ═══════════════════════════════════════════════════════════════════════ */
 window.showMemberReceiptsModal = function (memberId) {
-  const member = members.find(m => m.id === memberId);
+  const member = _p7members().find(m => m.id === memberId);
   if (!member) { toast('Member not found', '#ef4444'); return; }
 
-  const mine = transactions
+  const mine = _p7transactions()
     .filter(tx => tx.memberPhone === member.phone)
     .sort((a, b) => (b.date || 0) - (a.date || 0));
 
   const rows = mine.length
     ? mine.map(tx => {
-        const isPos = ['deposit','payout','profit_dist','loan_repayment','debt_cleared'].includes(tx.type);
-        const ico = TX_ICONS[tx.type] || '💫';
+        const isPos = ['deposit','payout','profit_dist','loan_repayment','debt_cleared'].indexOf(tx.type) !== -1;
+        const ico = (typeof TX_ICONS !== 'undefined' && TX_ICONS[tx.type]) || '💫';
         const d = tx.date ? new Date(tx.date).toLocaleString('en-UG', { dateStyle: 'short', timeStyle: 'short' }) : '';
         return '<div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:10px;">' +
           '<div style="width:32px;height:32px;border-radius:8px;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;">' + ico + '</div>' +
@@ -7939,16 +8027,16 @@ window.showMemberReceiptsModal = function (memberId) {
 };
 
 window.showMemberReceipt = function (memberId) {
-  /* Simplified summary receipt — defer heavy version to Part 8 */
-  const member = members.find(m => m.id === memberId);
+  const member = _p7members().find(m => m.id === memberId);
   if (!member) return;
 
-  let totalDep = 0;
-  transactions.forEach(tx => {
-    if (tx.memberPhone === member.phone && tx.type === 'deposit') totalDep += tx.amount;
-  });
-  const loanBal  = memberLoans[member.phone] || 0;
-  const debtBal  = memberDebts[member.phone] || 0;
+  const balances = _p7memberBalances();
+  const loansMap = _p7memberLoans();
+  const debtsMap = _p7memberDebts();
+
+  const totalDep = balances[member.phone] || 0;
+  const loanBal  = loansMap[member.phone] || 0;
+  const debtBal  = debtsMap[member.phone] || 0;
 
   const html =
     '<div class="card">' +
@@ -7960,7 +8048,7 @@ window.showMemberReceipt = function (memberId) {
         '</div>' +
       '</div>' +
       '<div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:0.8rem;">' +
-        '<div><div class="micro muted">Total Deposits</div><strong style="color:var(--green);">' + money(totalDep) + '</strong></div>' +
+        '<div><div class="micro muted">Total Savings</div><strong style="color:var(--green);">' + money(totalDep) + '</strong></div>' +
         '<div><div class="micro muted">Loan Balance</div><strong style="color:var(--gold);">' + money(loanBal) + '</strong></div>' +
         '<div><div class="micro muted">Debt</div><strong style="color:var(--red);">' + money(debtBal) + '</strong></div>' +
         '<div><div class="micro muted">Days Active</div><strong>' + getDaysActive(member) + '</strong></div>' +
@@ -7981,25 +8069,25 @@ window.printSingleReceipt = function () {
   w.document.write('<!DOCTYPE html><html><head><title>Receipt</title><style>body{font-family:sans-serif;background:white;padding:20px;}@media print{body{padding:0;}}</style></head><body>' + content + '</body></html>');
   w.document.close();
   w.focus();
-  setTimeout(() => w.print(), 300);
+  setTimeout(function () { w.print(); }, 300);
 };
 
-/* ─────────────────────────────────────────────────────────────────────
+/* ═══════════════════════════════════════════════════════════════════════
    8. DEPOSIT FLOW
-   ───────────────────────────────────────────────────────────────────── */
-let selectedDepositNetwork = null;
+   ═══════════════════════════════════════════════════════════════════════ */
+let _selectedDepositNetwork = null;
 
 window.depositNow = function () {
-  selectedDepositNetwork = null;
+  _selectedDepositNetwork = null;
   const amt = document.getElementById('deposit-amount-input');
   if (amt) amt.value = '';
   openOv('ov-deposit-network');
 };
 
 window.selectNetwork = function (network) {
-  selectedDepositNetwork = network;
+  _selectedDepositNetwork = network;
   closeOv('ov-deposit-network');
-  setTimeout(() => {
+  setTimeout(function () {
     const title = document.getElementById('deposit-amount-title');
     const sub   = document.getElementById('deposit-amount-sub');
     if (network === 'mtn') {
@@ -8010,7 +8098,7 @@ window.selectNetwork = function (network) {
       if (sub)   sub.textContent = 'Enter the amount to deposit via Airtel';
     }
     const input = document.getElementById('deposit-amount-input');
-    if (input) { input.value = ''; setTimeout(() => input.focus(), 300); }
+    if (input) { input.value = ''; setTimeout(function () { input.focus(); }, 300); }
     updateDepositCoverage();
     openOv('ov-deposit-amount');
   }, 200);
@@ -8024,17 +8112,18 @@ window.quickAmount = function (amount) {
 window.updateDepositCoverage = function () {
   const input = document.getElementById('deposit-amount-input');
   const amount = parseFloat((input || {}).value) || 0;
-  const daily = (settings.dailyAmount || 2000) + (settings.welfareAmount || 500);
+  const S = _p7settings();
+  const daily = (S.dailyAmount || 2000) + (S.welfareAmount || 500);
   const coverage = document.getElementById('deposit-coverage');
   if (!coverage) return;
 
   if (amount > 0 && daily > 0) {
     const days = Math.floor(amount / daily);
-    const daysEl = document.getElementById('coverage-days');
-    const progEl = document.getElementById('coverage-progress');
+    const daysEl  = document.getElementById('coverage-days');
+    const progEl  = document.getElementById('coverage-progress');
     const dailyEl = document.getElementById('coverage-daily-amount');
-    if (daysEl) daysEl.textContent = days + ' day' + (days !== 1 ? 's' : '');
-    if (progEl) progEl.style.width = Math.min(100, (days / 30) * 100) + '%';
+    if (daysEl)  daysEl.textContent = days + ' day' + (days !== 1 ? 's' : '');
+    if (progEl)  progEl.style.width = Math.min(100, (days / 30) * 100) + '%';
     if (dailyEl) dailyEl.textContent = daily.toLocaleString();
     coverage.style.display = 'block';
   } else {
@@ -8045,14 +8134,14 @@ window.updateDepositCoverage = function () {
 window.copyMerchantCode = function (code) {
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(code)
-      .then(() => toast('✅ "' + code + '" copied', '#10b981'))
-      .catch(() => fallbackCopy(code));
+      .then(function () { toast('✅ "' + code + '" copied', '#10b981'); })
+      .catch(function () { _p7fallbackCopy(code); });
   } else {
-    fallbackCopy(code);
+    _p7fallbackCopy(code);
   }
 };
 
-function fallbackCopy(text) {
+function _p7fallbackCopy(text) {
   const input = document.createElement('input');
   input.value = text;
   document.body.appendChild(input);
@@ -8067,19 +8156,20 @@ window.confirmDeposit = function () {
   const amount = parseFloat((input || {}).value);
   if (isNaN(amount) || amount <= 0) {
     toast('Please enter a valid amount', '#ef4444');
-    if (input) { input.classList.add('warn-shake'); setTimeout(() => input.classList.remove('warn-shake'), 500); input.focus(); }
+    if (input) { input.classList.add('warn-shake'); setTimeout(function () { input.classList.remove('warn-shake'); }, 500); input.focus(); }
     return;
   }
   closeOv('ov-deposit-amount');
 
-  const net = selectedDepositNetwork || 'mtn';
+  const net = _selectedDepositNetwork || 'mtn';
   let ussd = '', merchant = '';
   if (net === 'mtn')        { ussd = '*165*3*01992573*' + amount + '#'; merchant = 'MTN Merchant: 01992573'; }
   else if (net === 'airtel'){ ussd = '*185*9*7079538*'  + amount + '#'; merchant = 'Airtel Till: 7079538'; }
   else { toast('Network not supported.', '#ef4444'); return; }
 
-  const memberName  = currentUser ? currentUser.name  : 'Unknown';
-  const memberPhone = currentUser ? currentUser.phone : 'Unknown';
+  const cu = _p7currentUser();
+  const memberName  = cu ? cu.name  : 'Unknown';
+  const memberPhone = cu ? cu.phone : 'Unknown';
   const time = new Date().toLocaleString();
 
   db.ref('notifications/admin').push({
@@ -8088,65 +8178,67 @@ window.confirmDeposit = function () {
     date: Date.now(),
     read: false,
     type: 'deposit_request'
-  }).then(() => toast('Deposit request sent to admin.', '#10b981'))
-    .catch(err => { console.error(err); toast('Deposit request sent, but notification failed.', '#f59e0b'); });
+  }).then(function () { toast('Deposit request sent to admin.', '#10b981'); })
+    .catch(function (err) { console.error(err); toast('Deposit request sent, but notification failed.', '#f59e0b'); });
 
   toast('📱 Dial ' + ussd, '#06b6d4');
   window.location.href = 'tel:' + ussd;
 };
 
-/* ─────────────────────────────────────────────────────────────────────
-   9. NOTIFICATION AD & POPUP (member)
-   ───────────────────────────────────────────────────────────────────── */
-let notificationAdTimer = null;
-let notificationQueue = [];
-let currentAdIndex = 0;
+/* ═══════════════════════════════════════════════════════════════════════
+   9. NOTIFICATION AD & POPUP
+   ═══════════════════════════════════════════════════════════════════════ */
+let _notifAdTimer = null;
+let _notifQueue = [];
+let _notifAdIndex = 0;
 
 window.startNotificationAd = function () {
-  if (notificationAdTimer) clearInterval(notificationAdTimer);
+  if (_notifAdTimer) clearInterval(_notifAdTimer);
   refreshNotificationQueue();
-  if (!notificationQueue.length) return;
+  if (!_notifQueue.length) return;
   setTimeout(showNextNotificationAd, 5000);
-  notificationAdTimer = setInterval(showNextNotificationAd, 60000);
+  _notifAdTimer = setInterval(showNextNotificationAd, 60000);
 };
 
 function refreshNotificationQueue() {
-  if (!currentUser || currentUser.isAdmin) { notificationQueue = []; return; }
-  const arr = notifications[currentUser.id] || [];
-  notificationQueue = arr.filter(n => !n.read && n.broadcast === true).sort(() => Math.random() - 0.5);
-  currentAdIndex = 0;
+  const cu = _p7currentUser();
+  if (!cu || cu.isAdmin) { _notifQueue = []; return; }
+  const arr = _p7notifications()[cu.id] || [];
+  _notifQueue = arr.filter(n => !n.read && n.broadcast === true).sort(function () { return Math.random() - 0.5; });
+  _notifAdIndex = 0;
 }
 
 function showNextNotificationAd() {
-  if (!currentUser || currentUser.isAdmin) return;
+  const cu = _p7currentUser();
+  if (!cu || cu.isAdmin) return;
   refreshNotificationQueue();
-  if (!notificationQueue.length) { hideNotificationAd(); return; }
-  if (currentAdIndex >= notificationQueue.length) currentAdIndex = 0;
+  if (!_notifQueue.length) { hideNotificationAd(); return; }
+  if (_notifAdIndex >= _notifQueue.length) _notifAdIndex = 0;
 
-  const n = notificationQueue[currentAdIndex];
-  const ad    = document.getElementById('notification-ad');
+  const n = _notifQueue[_notifAdIndex];
+  const ad     = document.getElementById('notification-ad');
   const textEl = document.getElementById('notification-ad-text');
   if (ad && textEl && n) {
     textEl.textContent = n.text;
     ad.classList.remove('hidden');
     ad.style.display = 'flex';
-    if (window.notifHideTimer) clearTimeout(window.notifHideTimer);
-    window.notifHideTimer = setTimeout(hideNotificationAd, 8000);
+    if (window._notifHideTimer) clearTimeout(window._notifHideTimer);
+    window._notifHideTimer = setTimeout(hideNotificationAd, 8000);
   }
-  currentAdIndex++;
+  _notifAdIndex++;
 }
 
 function hideNotificationAd() {
   const ad = document.getElementById('notification-ad');
   if (ad) { ad.classList.add('hidden'); ad.style.display = 'none'; }
-  if (window.notifHideTimer) clearTimeout(window.notifHideTimer);
+  if (window._notifHideTimer) clearTimeout(window._notifHideTimer);
 }
 
 document.addEventListener('click', function (e) {
   const ad = document.getElementById('notification-ad');
-  const close = document.getElementById('notification-ad-close');
+  const closeBtn = document.getElementById('notification-ad-close');
   if (!ad || ad.classList.contains('hidden')) return;
-  if (close && (e.target === close || close.contains(e.target))) {
+  if (closeBtn && (e.target === closeBtn || closeBtn.contains(e.target))) {
     e.stopPropagation(); hideNotificationAd(); return;
   }
   if (ad.contains(e.target)) {
@@ -8157,8 +8249,9 @@ document.addEventListener('click', function (e) {
 });
 
 window.showNotificationsPopup = function () {
-  if (!currentUser || currentUser.isAdmin) return;
-  const arr = notifications[currentUser.id] || [];
+  const cu = _p7currentUser();
+  if (!cu || cu.isAdmin) return;
+  const arr = _p7notifications()[cu.id] || [];
   const list = document.getElementById('notifications-popup-list');
   if (!list) return;
 
@@ -8169,7 +8262,7 @@ window.showNotificationsPopup = function () {
   }
 
   let html = '<div style="display:flex;flex-direction:column;gap:8px;">';
-  arr.slice().sort((a, b) => b.id - a.id).forEach(n => {
+  arr.slice().sort((a, b) => b.id - a.id).forEach(function (n) {
     html +=
       '<div style="padding:12px;border-radius:12px;background:' + (n.read ? 'rgba(255,255,255,0.04)' : 'rgba(245,158,11,0.1)') + ';border:1px solid ' + (n.read ? 'rgba(255,255,255,0.1)' : 'rgba(245,158,11,0.3)') + ';">' +
         '<div style="font-weight:' + (n.read ? '400' : '600') + ';font-size:0.85rem;">' + escapeHtml(n.text) + '</div>' +
@@ -8186,38 +8279,44 @@ window.showNotificationsPopup = function () {
 };
 
 window.markNotifRead = async function (id) {
-  const arr = notifications[currentUser.id] || [];
+  const cu = _p7currentUser();
+  if (!cu) return;
+  const arr = _p7notifications()[cu.id] || [];
   const idx = arr.findIndex(n => n.id === id);
   if (idx > -1) {
     arr[idx].read = true;
-    await db.ref('notifications/' + currentUser.id).set(arr);
-    notifications[currentUser.id] = arr;
-    updateNotificationBadge();
+    await db.ref('notifications/' + cu.id).set(arr);
+    if (typeof notifications !== 'undefined') notifications[cu.id] = arr;
+    else window.notifications[cu.id] = arr;
+    if (typeof updateNotificationBadge === 'function') updateNotificationBadge();
     showNotificationsPopup();
     if (arr.every(n => n.read)) closeOv('ov-notifications-popup');
   }
 };
 
 window.deleteNotif = async function (id) {
-  const arr = notifications[currentUser.id] || [];
+  const cu = _p7currentUser();
+  if (!cu) return;
+  const arr = _p7notifications()[cu.id] || [];
   const newArr = arr.filter(n => n.id !== id);
-  await db.ref('notifications/' + currentUser.id).set(newArr);
-  notifications[currentUser.id] = newArr;
-  updateNotificationBadge();
+  await db.ref('notifications/' + cu.id).set(newArr);
+  if (typeof notifications !== 'undefined') notifications[cu.id] = newArr;
+  else window.notifications[cu.id] = newArr;
+  if (typeof updateNotificationBadge === 'function') updateNotificationBadge();
   if (!newArr.length) closeOv('ov-notifications-popup');
   else showNotificationsPopup();
 };
 
 window.openNotificationsModal = function () {
-  if (!currentUser) return;
+  if (!_p7currentUser()) return;
   showNotificationsPopup();
 };
 
 window.openHelpModal = function () { openOv('ov-help'); };
 
-/* ─────────────────────────────────────────────────────────────────────
+/* ═══════════════════════════════════════════════════════════════════════
    10. PUSH PERMISSION
-   ───────────────────────────────────────────────────────────────────── */
+   ═══════════════════════════════════════════════════════════════════════ */
 function updatePushStatusLabel() {
   const el = document.getElementById('push-status-label');
   if (!el) return;
@@ -8231,75 +8330,73 @@ window.requestPushPermission = function () {
   if (!('Notification' in window)) { toast('Not supported on this device', '#ef4444'); return; }
   if (Notification.permission === 'granted') { toast('Push alerts already enabled ✓', '#10b981'); return; }
   if (Notification.permission === 'denied') { toast('Notifications blocked. Enable them in browser settings.', '#ef4444'); return; }
-  Notification.requestPermission().then(p => {
+  Notification.requestPermission().then(function (p) {
     updatePushStatusLabel();
     if (p === 'granted') {
       toast('Push alerts enabled ✓', '#10b981');
-      if (currentUser && db) db.ref('members/' + currentUser.id).update({ notifEnabled: true });
+      const cu = _p7currentUser();
+      if (cu && cu.id && db) db.ref('members/' + cu.id).update({ notifEnabled: true });
     } else {
       toast('Permission denied', '#ef4444');
     }
   });
 }
 
-/* ─────────────────────────────────────────────────────────────────────
+/* ═══════════════════════════════════════════════════════════════════════
    11. ACCOUNT UI
-   ───────────────────────────────────────────────────────────────────── */
+   ═══════════════════════════════════════════════════════════════════════ */
 window.updateAccountUI = function () {
-  if (!currentUser) return;
+  const cu = _p7currentUser();
+  if (!cu) return;
 
   const nameEl = document.getElementById('account-name');
   if (nameEl) {
-    if (currentUser.isAdmin) nameEl.textContent = currentUser.name || 'Admin';
-    else if (hasProfilePhoto(currentUser)) nameEl.textContent = currentUser.name || 'Member';
+    if (cu.isAdmin) nameEl.textContent = cu.name || 'Admin';
+    else if (typeof hasProfilePhoto === 'function' && hasProfilePhoto(cu)) nameEl.textContent = cu.name || 'Member';
     else nameEl.innerHTML = '<span class="photo-required-inline" onclick="openProfilePhotoModal()">📸 Upload profile photo</span>';
   }
 
   const phoneEl = document.getElementById('account-phone');
-  if (phoneEl) phoneEl.textContent = currentUser.phone || '';
+  if (phoneEl) phoneEl.textContent = cu.phone || '';
 
   const idEl = document.getElementById('account-member-id');
   if (idEl) {
-    if (currentUser.isAdmin) idEl.textContent = 'Administrator';
+    if (cu.isAdmin) idEl.textContent = 'Administrator';
     else {
-      const label = currentUser.slug
-        || (typeof currentUser.id === 'string' ? currentUser.id : null)
-        || (currentUser.name ? currentUser.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : '')
-        || '';
+      const label = cu.slug
+        || (typeof cu.id === 'string' ? cu.id : '')
+        || (cu.name ? cu.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : '');
       idEl.textContent = 'ID: ' + label;
     }
   }
 
   const av = document.getElementById('account-avatar');
   if (av) {
-    if (currentUser.isAdmin) {
+    if (cu.isAdmin) {
       av.style.background = 'linear-gradient(145deg,#f59e0b,#d97706)';
       av.style.overflow = '';
       av.innerHTML = '🔐';
-    } else if (hasProfilePhoto(currentUser)) {
+    } else if (typeof hasProfilePhoto === 'function' && hasProfilePhoto(cu)) {
       av.style.background = 'transparent';
       av.style.overflow = 'hidden';
-      av.innerHTML = '<img src="' + currentUser.photoData + '" style="width:100%;height:100%;object-fit:cover;display:block;">';
+      av.innerHTML = '<img src="' + cu.photoData + '" style="width:100%;height:100%;object-fit:cover;display:block;">';
     } else {
-      const color = getAvatarColor(currentUser.name);
+      const color = (typeof getAvatarColor === 'function') ? getAvatarColor(cu.name) : '#8b5cf6';
       av.style.background = 'linear-gradient(145deg,' + color + ',#8b5cf6)';
       av.style.overflow = '';
-      av.textContent = (currentUser.name || '?').charAt(0).toUpperCase();
+      av.textContent = (cu.name || '?').charAt(0).toUpperCase();
     }
   }
 
   const hdrSub = document.getElementById('hdr-sub');
   if (hdrSub) {
-    if (currentUser.isAdmin) hdrSub.textContent = 'Admin Panel';
-    else if (hasProfilePhoto(currentUser)) hdrSub.textContent = (currentUser.name || '').split(' ')[0];
+    if (cu.isAdmin) hdrSub.textContent = 'Admin Panel';
+    else if (typeof hasProfilePhoto === 'function' && hasProfilePhoto(cu)) hdrSub.textContent = (cu.name || '').split(' ')[0];
     else hdrSub.innerHTML = '<span class="photo-required-inline" style="font-size:0.55rem;padding:1px 6px;" onclick="openProfilePhotoModal()">📸 Upload</span>';
   }
 
   const strip = document.getElementById('account-balance-strip');
-  if (strip) strip.style.display = currentUser.isAdmin ? 'none' : 'grid';
-
-  const hint = document.getElementById('account-pin-hint');
-  if (hint) hint.textContent = currentUser.isAdmin ? '' : 'Change Password';
+  if (strip) strip.style.display = cu.isAdmin ? 'none' : 'grid';
 
   updatePushStatusLabel();
   updateLoanIndicator();
@@ -8307,18 +8404,21 @@ window.updateAccountUI = function () {
 };
 
 window.updateAccountBalances = function () {
-  if (!currentUser || currentUser.isAdmin) return;
-  const phone = currentUser.phone;
+  const cu = _p7currentUser();
+  if (!cu || cu.isAdmin) return;
+  const phone = cu.phone;
 
-  /* Prorated profit share */
   let share = 0;
-  const active = members.filter(m => m.approved);
-  if (active.length && groupProfit > 0) {
+  const active = _p7members().filter(m => m.approved);
+  let profit = 0;
+  try { profit = groupProfit || 0; } catch (e) {}
+
+  if (active.length && profit > 0) {
     let totalDays = 0;
     const map = {};
     active.forEach(m => { const d = getDaysActive(m); map[m.id] = d; totalDays += d; });
-    if (totalDays === 0) share = Math.floor(groupProfit / active.length);
-    else share = Math.floor(groupProfit * (map[currentUser.id] || 0) / totalDays);
+    if (totalDays === 0) share = Math.floor(profit / active.length);
+    else share = Math.floor(profit * (map[cu.id] || 0) / totalDays);
   }
 
   const balEl = document.getElementById('account-balance');
@@ -8327,7 +8427,8 @@ window.updateAccountBalances = function () {
     balEl.style.color = share > 0 ? 'var(--teal)' : 'var(--text-3)';
   }
 
-  const loan = memberLoans[phone] || 0;
+  const loansMap = _p7memberLoans();
+  const loan = loansMap[phone] || 0;
   const debtEl = document.getElementById('account-debt');
   if (debtEl) {
     debtEl.textContent = money(loan);
@@ -8339,11 +8440,12 @@ window.updateAccountBalances = function () {
 };
 
 window.displayLoanRepaymentSchedule = function () {
-  if (!currentUser || currentUser.isAdmin) return;
+  const cu = _p7currentUser();
+  if (!cu || cu.isAdmin) return;
   const container = document.getElementById('loan-schedule-container');
   if (!container) return;
 
-  const active = loans.find(l => l.memberId === currentUser.id && l.status === 'approved' && !l.repaid);
+  const active = _p7loans().find(l => l.memberId === cu.id && l.status === 'approved' && !l.repaid);
   if (!active || !active.repaymentSchedule || !active.repaymentSchedule.length) {
     container.innerHTML = '';
     container.style.display = 'none';
@@ -8359,7 +8461,8 @@ window.displayLoanRepaymentSchedule = function () {
       '<th style="padding:6px;">Principal</th><th style="padding:6px;">Interest</th>' +
       '<th style="padding:6px;">Payment</th><th style="padding:6px;">Balance</th>' +
     '</tr></thead><tbody>';
-  active.repaymentSchedule.forEach(w => {
+
+  active.repaymentSchedule.forEach(function (w) {
     html += '<tr>' +
       '<td style="padding:6px;">' + w.week + '</td>' +
       '<td style="padding:6px;">' + new Date(w.dueDate).toLocaleDateString() + '</td>' +
@@ -8374,10 +8477,12 @@ window.displayLoanRepaymentSchedule = function () {
 };
 
 window.updateLoanIndicator = function () {
-  if (!currentUser || currentUser.isAdmin) return;
-  const pending = loans.some(l => l.memberId === currentUser.id && l.status === 'pending');
+  const cu = _p7currentUser();
+  if (!cu || cu.isAdmin) return;
+  const pending = _p7loans().some(l => l.memberId === cu.id && l.status === 'pending');
   const item = document.getElementById('loan-menu-item');
   if (!item) return;
+
   let ind = item.querySelector('.loan-indicator');
   if (pending) {
     if (!ind) {
@@ -8388,56 +8493,56 @@ window.updateLoanIndicator = function () {
       const lbl = item.querySelector('.menu-label');
       if (lbl) lbl.appendChild(ind);
     }
-  } else if (ind) ind.remove();
+  } else if (ind) {
+    ind.remove();
+  }
 };
 
-/* ─────────────────────────────────────────────────────────────────────
-   12. ACCOUNT NAV BUTTON (nav avatar + name)
-   ───────────────────────────────────────────────────────────────────── */
 window.updateAccountNavButton = function () {
   const iconEl  = document.getElementById('ni-account-icon');
   const labelEl = document.getElementById('ni-account-label');
   if (!iconEl || !labelEl) return;
 
-  if (!currentUser) {
+  const cu = _p7currentUser();
+  if (!cu) {
     iconEl.innerHTML = '👤';
     labelEl.textContent = 'Account';
     return;
   }
 
-  if (currentUser.isAdmin) {
+  if (cu.isAdmin) {
     iconEl.innerHTML = '🔐';
-  } else if (hasProfilePhoto(currentUser)) {
-    iconEl.innerHTML = '<div class="nav-avatar"><img src="' + currentUser.photoData + '" onerror="this.parentElement.innerHTML=\'👤\';"></div>';
+  } else if (typeof hasProfilePhoto === 'function' && hasProfilePhoto(cu)) {
+    iconEl.innerHTML = '<div class="nav-avatar"><img src="' + cu.photoData + '" onerror="this.parentElement.innerHTML=\'👤\';"></div>';
   } else {
-    const letter = (currentUser.name || '?').charAt(0).toUpperCase();
-    const color = getAvatarColor(currentUser.name);
+    const letter = (cu.name || '?').charAt(0).toUpperCase();
+    const color = (typeof getAvatarColor === 'function') ? getAvatarColor(cu.name) : '#8b5cf6';
     iconEl.innerHTML = '<div class="nav-avatar-letter" style="background:linear-gradient(135deg,' + color + ',#8b5cf6);">' + letter + '</div>';
   }
 
-  const first = String(currentUser.name || '').trim().split(/\s+/)[0] || 'Account';
+  const first = String(cu.name || '').trim().split(/\s+/)[0] || 'Account';
   const poss  = /s$/i.test(first) ? first + "'" : first + "'s";
   labelEl.textContent = poss + ' Account';
   labelEl.classList.remove('compact', 'tiny');
-  requestAnimationFrame(() => {
+  requestAnimationFrame(function () {
     const w = (document.getElementById('ni-account') || {}).clientWidth || 90;
     const est = labelEl.textContent.length * 4.2;
     if (est > w - 6) labelEl.classList.add(labelEl.textContent.length * 3.7 > w - 6 ? 'tiny' : 'compact');
   });
-}
+};
 
-/* ─────────────────────────────────────────────────────────────────────
-   13. VISIBILITY (pause/resume home when tab hidden)
-   ───────────────────────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════
+   12. VISIBILITY — pause/resume home updates
+   ═══════════════════════════════════════════════════════════════════════ */
 document.addEventListener('visibilitychange', function () {
   if (document.hidden) {
     stopHomeUpdates();
-  } else if (currentScreen === 'home') {
+  } else if (_p7getCurrentScreen() === 'home') {
     startHomeUpdates();
   }
 });
 
-console.log('✅ Part 7 — Home · Statistics · Ledger loaded');
+console.log('✅ Part 7 — Home · Statistics · Ledger · Notifications · Account UI loaded');
 </script>
 <script>
 /* ═══════════════════════════════════════════════════════════════════════
@@ -8901,10 +9006,11 @@ window.updateAdminMembersList = function () {
       '<div class="mc">' +
         renderMemberAvatar(m, 40) +
         '<div style="flex:1;min-width:0;">' +
-          '<div class="mc-name">' + escapeHtml(m.name || 'Unknown') + ' ' +
-            (isOnline ? '<span class="online-dot"></span>' : '<span class="offline-dot"></span>') +
-            (!hasPhoto ? ' <span style="background:rgba(245,158,11,0.15);color:var(--gold);font-size:0.55rem;padding:2px 6px;border-radius:8px;font-weight:700;">NO PHOTO</span>' : '') +
-          '</div>' +
+           '<div class="mc-name">' + escapeHtml(m.name || 'Unknown') + ' ' +
+          (isOnline ? '<span class="online-dot"></span>' : '<span class="offline-dot"></span>') +
+          (!hasPhoto ? ' <span style="background:rgba(245,158,11,0.15);color:var(--gold);font-size:0.55rem;padding:2px 6px;border-radius:8px;font-weight:700;">NO PHOTO</span>' : '') +
+          (isMemberDebtLocked(m) ? ' <span style="background:rgba(239,68,68,0.15);color:var(--red);font-size:0.55rem;padding:2px 6px;border-radius:8px;font-weight:700;">🔒 LOCKED</span>' : '') +
+        '</div>' +
           '<div style="margin-top:4px;"><span class="pill-badge pill-green">📅 ' + getDaysActive(m) + ' days</span></div>' +
           '<div class="mc-phone">' + escapeHtml(m.phone || '') + '</div>' +
         '</div>' +
@@ -9671,21 +9777,109 @@ window.addMember = function () {
 };
 
 window.openEditMember = function (id) {
+  /* ── Find the member ─────────────────────────────────── */
   const m = members.find(x => x.id === id);
-  if (!m) return;
-  const setVal = (fid, val) => { const el = document.getElementById(fid); if (el) el.value = val; };
+  if (!m) {
+    toast('Member not found', '#ef4444');
+    return;
+  }
+
+  /* ── Debt lock gate ────────────────────────────────────
+     If total debt exceeds the group's weekly payout, the
+     member is locked. Editing is blocked and the admin is
+     offered a membership transfer instead.                 */
+  if (typeof isMemberDebtLocked === 'function' && isMemberDebtLocked(m)) {
+    const info = getMemberLockReason(m);
+    showModal(
+      '<div style="text-align:center;padding:16px;">' +
+
+        '<div style="font-size:3rem;margin-bottom:6px;">🔒</div>' +
+
+        '<div style="font-family:\'Syne\',sans-serif;font-size:1.1rem;font-weight:800;color:var(--red);margin-bottom:6px;">' +
+          'Member Locked' +
+        '</div>' +
+
+        '<div style="font-size:0.85rem;color:var(--text-2);line-height:1.5;margin-bottom:14px;">' +
+          escapeHtml(m.name) + '\'s total debt exceeds the group\'s weekly payout, ' +
+          'so editing is disabled until the debt is cleared or the membership is transferred.' +
+        '</div>' +
+
+        '<div style="background:rgba(239,68,68,0.08);border-radius:12px;padding:12px;margin-bottom:14px;">' +
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:0.8rem;text-align:left;">' +
+            '<span style="color:var(--text-3);">Total owed:</span>' +
+            '<strong style="color:var(--red);text-align:right;">' + money(info.totalOwed) + '</strong>' +
+            '<span style="color:var(--text-3);">Weekly payout:</span>' +
+            '<strong style="text-align:right;">' + money(info.payout) + '</strong>' +
+            '<span style="color:var(--text-3);">Excess:</span>' +
+            '<strong style="color:var(--red);text-align:right;">' + money(info.excess) + '</strong>' +
+          '</div>' +
+        '</div>' +
+
+        '<div style="background:rgba(6,182,212,0.08);border:1px solid rgba(6,182,212,0.2);border-radius:12px;padding:12px;margin-bottom:14px;text-align:left;">' +
+          '<div style="font-weight:700;color:var(--teal);font-size:0.8rem;margin-bottom:6px;">Options</div>' +
+          '<div style="font-size:0.75rem;color:var(--text-2);line-height:1.6;">' +
+            '• Member can still DEPOSIT to reduce their debt<br>' +
+            '• Transfer membership to another member who takes on the debt' +
+          '</div>' +
+        '</div>' +
+
+        '<button class="btn btn-gold btn-full" id="locked-open-transfer-btn">' +
+          '🔄 Transfer Membership' +
+        '</button>' +
+
+        '<button class="btn btn-sec btn-full" style="margin-top:8px;" onclick="closeCurrentModal()">' +
+          'Close' +
+        '</button>' +
+
+      '</div>',
+      '🔒 Member Locked'
+    );
+
+    /* Wire the transfer button inside the modal */
+    setTimeout(() => {
+      const btn = document.getElementById('locked-open-transfer-btn');
+      if (btn) {
+        btn.onclick = function () {
+          closeCurrentModal();
+          if (typeof showMembershipTransferModal === 'function') {
+            showMembershipTransferModal(m.id);
+          } else {
+            toast('Transfer function missing', '#ef4444');
+          }
+        };
+      }
+    }, 100);
+
+    return;
+  }
+
+  /* ── Not locked — open the normal edit form ──────────── */
+
+  const setVal = (fid, val) => {
+    const el = document.getElementById(fid);
+    if (el) el.value = val;
+  };
+
   setVal('edit-member-id', id);
-  setVal('edit-mbr-name', m.name);
-  setVal('edit-mbr-phone', m.phone);
-  setVal('edit-mbr-join', m.joinDate || '');
-  setVal('edit-mbr-photo', m.photoData || '');
+  setVal('edit-mbr-name',   m.name);
+  setVal('edit-mbr-phone',  m.phone);
+  setVal('edit-mbr-join',   m.joinDate || '');
+  setVal('edit-mbr-photo',  m.photoData || '');
+
   const prev = document.getElementById('edit-photo-preview');
   if (prev) {
-    if (m.photoData) { prev.src = m.photoData; prev.style.display = 'block'; }
-    else { prev.src = ''; prev.style.display = 'none'; }
+    if (m.photoData) {
+      prev.src = m.photoData;
+      prev.style.display = 'block';
+    } else {
+      prev.src = '';
+      prev.style.display = 'none';
+    }
   }
+
   openOv('ov-edit-member');
 };
+
 
 window.updateMember = function () {
   const id    = (document.getElementById('edit-member-id') || {}).value;
@@ -10030,11 +10224,27 @@ window.openLoanRequestModal = function () {
   if (!currentUser || currentUser.isAdmin) { toast('Members only', '#ef4444'); return; }
 
   const phone = currentUser.phone;
-  const loanBal = memberLoans[phone] || 0;
+   const loanBal = memberLoans[phone] || 0;
   if (loanBal > 0) {
     toast('❌ You have an outstanding loan of ' + money(loanBal) + '. Please clear it first.', '#ef4444');
     return;
   }
+
+  /* Debt lock gate */
+  if (isMemberDebtLocked(currentUser)) {
+    const info = getMemberLockReason(currentUser);
+    showModal(
+      '<div style="background:rgba(239,68,68,0.08);border:2px solid var(--red);border-radius:12px;padding:16px;text-align:center;">' +
+        '<div style="font-size:2.5rem;">🔒</div>' +
+        '<div style="font-weight:800;color:var(--red);font-size:1rem;margin-top:8px;">Account Locked</div>' +
+        '<div style="font-size:0.85rem;color:var(--text-2);margin-top:8px;">Your total debt of <strong>' + money(info.totalOwed) + '</strong> exceeds the group\'s weekly payout of <strong>' + money(info.payout) + '</strong>.</div>' +
+        '<div style="font-size:0.8rem;color:var(--text-3);margin-top:10px;">You can only deposit to reduce your debt, or arrange a membership transfer with the admin.</div>' +
+      '</div>',
+      '🔒 Loan Blocked'
+    );
+    return;
+  }
+
   const pending = loans.some(l => l.memberId === currentUser.id && l.status === 'pending');
   if (pending) { toast('⏳ You already have a pending loan request.', '#f59e0b'); return; }
 
@@ -10269,9 +10479,42 @@ window.confirmApproveLoan = async function () {
     });
   }
 
-  toast('Loan approved for ' + loan.memberName + ' ✅', '#10b981');
+   toast('Loan approved for ' + loan.memberName + ' ✅', '#10b981');
   closeOv('ov-approve-loan');
   await reloadData();
+
+  /* ── Debt lock check ── */
+  const approvedMember = members.find(m => m.id === loan.memberId);
+  if (approvedMember && isMemberDebtLocked(approvedMember)) {
+    const info = getMemberLockReason(approvedMember);
+    setTimeout(function () {
+      showModal(
+        '<div style="background:rgba(239,68,68,0.08);border:2px solid var(--red);border-radius:12px;padding:14px;margin-bottom:14px;">' +
+          '<div style="font-size:1.8rem;text-align:center;">🔒</div>' +
+          '<div style="font-weight:800;color:var(--red);font-size:0.95rem;text-align:center;margin-top:6px;">Member Now Locked</div>' +
+          '<div class="micro muted" style="text-align:center;margin-top:4px;">' + escapeHtml(approvedMember.name) + '\'s debt can no longer be recovered through normal payouts.</div>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:0.8rem;">' +
+          '<span style="color:var(--text-3);">Total owed:</span><strong style="color:var(--red);">' + money(info.totalOwed) + '</strong>' +
+          '<span style="color:var(--text-3);">Weekly payout:</span><strong>' + money(info.payout) + '</strong>' +
+          '<span style="color:var(--text-3);">Excess:</span><strong style="color:var(--red);">' + money(info.excess) + '</strong>' +
+        '</div>' +
+        '<div class="hint-box" style="margin-top:12px;background:rgba(245,158,11,0.08);border-color:rgba(245,158,11,0.2);">' +
+          '<strong>What now?</strong>' +
+          '<ul style="margin-top:4px;margin-left:16px;font-size:0.78rem;">' +
+            '<li>Member can still DEPOSIT to reduce the debt</li>' +
+            '<li>No new loans, debts or edits allowed until paid down</li>' +
+            '<li>Best option: transfer membership to another member</li>' +
+          '</ul>' +
+        '</div>' +
+        '<div style="display:flex;gap:10px;margin-top:14px;">' +
+          '<button class="btn btn-gold" style="flex:1;" onclick="closeCurrentModal();showMembershipTransferModal(\'' + approvedMember.id + '\')">🔄 Transfer Membership</button>' +
+          '<button class="btn btn-sec" style="flex:1;" onclick="closeCurrentModal()">Later</button>' +
+        '</div>',
+        '🔒 Member Locked'
+      );
+    }, 500);
+  }
 };
 
 window.rejectLoan = function (loanId) {
@@ -12729,6 +12972,7 @@ function getReminderTemplates() {
         '📅 Date: ' + date + '\n\n' +
         '🌾 Harvest Trust Finance\nLwogamata, Admin'
     },
+    
 
     membership_transfer: {
       title: '🔄 Membership Transfer Opportunity',
@@ -12762,6 +13006,35 @@ function getReminderTemplates() {
           (debt > 0 ? '  • Debt: ' + money(debt) + '\n' : '') +
           '\nPlease clear this as soon as possible to avoid additional penalties.\n\n' +
           'If you have any questions, please contact the admin.\n\n' +
+          '📅 Date: ' + date + '\n\n' +
+          '🌾 Harvest Trust Finance\nLwogamata, Admin';
+      }
+    },
+    debt_locked: {
+      title: '🔒 Account Locked — Action Required',
+      general: false,
+      template: (m, date) => {
+        const owed = ((window.memberLoans && memberLoans[m.phone]) || 0) +
+                     ((window.memberDebts && memberDebts[m.phone]) || 0);
+        const daily   = (settings.dailyAmount   || 2500) * 7;
+        const active  = members.filter(x => x.approved !== false).length || 1;
+        const payout  = daily * active;
+        const excess  = Math.max(0, owed - payout);
+
+        return 'Dear ' + m.name + ',\n\n' +
+          'Your account has been locked. Your current debt of ' +
+          money(owed) + ' exceeds the group\'s weekly payout of ' +
+          money(payout) + '.\n\n' +
+          'While your account is locked:\n\n' +
+          '  • You CANNOT request new loans\n' +
+          '  • You CANNOT receive additional debt\n' +
+          '  • You CANNOT edit your profile\n\n' +
+          'What you CAN do:\n\n' +
+          '  ✅ Continue saving daily to reduce the balance\n' +
+          '  ✅ Arrange a membership transfer with the admin\n\n' +
+          'Amount still needed to unlock: ' + money(excess) + '\n\n' +
+          'Please contact the admin to discuss the best path forward. ' +
+          'We are committed to helping you get back on track.\n\n' +
           '📅 Date: ' + date + '\n\n' +
           '🌾 Harvest Trust Finance\nLwogamata, Admin';
       }
@@ -12834,6 +13107,11 @@ function buildReminderReceiptHTML(member, message, receiptNumber, reminderType) 
       iconColor = '#8b5cf6'; statusTitle = '🔄 Membership Transfer'; statusSub = 'A slot is available'; break;
     case 'debt_clear':
       iconColor = '#dc2626'; statusTitle = '💳 Clear Your Debt'; statusSub = 'Please settle your outstanding balance'; break;
+     case 'debt_locked':
+      iconColor = '#dc2626';
+      statusTitle = '🔒 Account Locked';
+      statusSub   = 'Action required to unlock';
+      break;
     case 'you_are_ahead':
       iconColor = '#22c55e'; statusTitle = '🎉 You Are Ahead'; statusSub = 'Great discipline — keep it up'; break;
     case 'days_remaining':
@@ -13510,6 +13788,31 @@ console.log('✅ Part 11 — Reminder Generator loaded (7 templates)');
           '📅 Date: ' + date + '\n\n' +
           '🌾 Harvest Trust Finance\nLwogamata, Admin'
       },
+       locked_policy_notice: {
+      title: '📢 Debt Lock Policy Reminder',
+      general: true,
+      template: (m, date) => {
+        const daily   = (settings.dailyAmount || 2500) * 7;
+        const active  = members.filter(x => x.approved !== false).length || 1;
+        const payout  = daily * active;
+
+        return 'Dear Members,\n\n' +
+          'A reminder of our debt policy:\n\n' +
+          'If your total debt (loans + debts) grows beyond the group\'s ' +
+          'weekly payout of ' + money(payout) + ', your account will be locked.\n\n' +
+          'What happens when you are locked:\n\n' +
+          '  • No new loans\n' +
+          '  • No new debt assignments\n' +
+          '  • No profile edits\n\n' +
+          'The only ways to unlock:\n\n' +
+          '  1. Deposit daily to reduce your balance\n' +
+          '  2. Transfer your membership to another member\n\n' +
+          'Please plan your borrowing to stay within the safe limit. ' +
+          'Small consistent savings prevent big problems.\n\n' +
+          '📅 Date: ' + date + '\n\n' +
+          '🌾 Harvest Trust Finance\nLwogamata, Admin';
+      }
+    },
       debt_clear: {
         title: '💳 Clear Your Debt',
         general: false,
@@ -13582,6 +13885,11 @@ console.log('✅ Part 11 — Reminder Generator loaded (7 templates)');
       case 'weekly_payment_delay': iconColor = '#f97316'; statusTitle = '⏳ Weekly Payment Delay'; statusSub = 'Payout will be slightly delayed'; break;
       case 'invite_app':           iconColor = '#22c55e'; statusTitle = '📱 Invitation to the App'; statusSub = 'Try the Harvest Trust app'; break;
       case 'membership_transfer':  iconColor = '#8b5cf6'; statusTitle = '🔄 Membership Transfer'; statusSub = 'A slot is available'; break;
+       case 'locked_policy_notice':
+      iconColor = '#f59e0b';
+      statusTitle = '📢 Debt Lock Policy';
+      statusSub   = 'Please read and stay informed';
+      break;
       case 'debt_clear':           iconColor = '#dc2626'; statusTitle = '💳 Clear Your Debt'; statusSub = 'Please settle your outstanding balance'; break;
       case 'you_are_ahead':        iconColor = '#22c55e'; statusTitle = '🎉 You Are Ahead'; statusSub = 'Great discipline — keep it up'; break;
       case 'days_remaining':       iconColor = '#06b6d4'; statusTitle = '📅 Days Remaining'; statusSub = 'Your savings coverage status'; break;
@@ -13914,42 +14222,120 @@ console.log('✅ Part 11 — Reminder Generator loaded (7 templates)');
 </script>
 <script>
 /* ═══════════════════════════════════════════════════════════════════════
-   PART 15 — RECEIPT AFTER TRANSACTION + BULK RECEIPTS
-   • Single-member deposit → saves + shows receipt modal
-   • Multi-member deposit  → saves + creates log + shows receipts viewer
-   • Bulk debt assignment  → saves + creates log + shows receipts viewer
-   Images are generated on demand (Firebase quota friendly).
+   PART 19 — FINAL OVERRIDE
+   Consolidates Parts 14, 15, 16, 17, 18 into one clean script.
+   Replaces them all. Contains only the final working versions.
    ═══════════════════════════════════════════════════════════════════════ */
 (function () {
   'use strict';
 
-  /* ─────────────────────────────────────────────────────────────
-     HELPERS
-     ───────────────────────────────────────────────────────────── */
-  function ensureReceiptNumber() {
+  /* ═════════════════════════════════════════════════════════════
+     SECTION A — SAFE ACCESSORS
+     (let-declared globals don't live on window — always use these)
+     ═════════════════════════════════════════════════════════════ */
+  function loansMap() {
+    try { if (typeof memberLoans !== 'undefined' && memberLoans) return memberLoans; } catch (e) {}
+    return window.memberLoans || {};
+  }
+  function balanceOf(phone) {
+    const v = loansMap()[phone];
+    return (typeof v === 'number' && !isNaN(v)) ? v : 0;
+  }
+  function txList() {
+    try { if (typeof transactions !== 'undefined' && transactions) return transactions; } catch (e) {}
+    return window.transactions || [];
+  }
+  function memberList() {
+    try { if (typeof members !== 'undefined' && members) return members; } catch (e) {}
+    return window.members || [];
+  }
+  function settingsObj() {
+    try { if (typeof settings !== 'undefined' && settings) return settings; } catch (e) {}
+    return window.settings || {};
+  }
+
+  function newReceipt() {
     if (typeof window.generateReceiptNumber === 'function') return window.generateReceiptNumber();
     return 'HTF-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
   }
-
-  /* Build the deposit receipt HTML for one member */
-  function buildSingleDepositReceipt(member, amount, description, receiptNumber) {
-    if (typeof window.buildDepositReceiptHTML === 'function') {
-      const remLoan = (window.memberLoans && memberLoans[member.phone]) || 0;
-      const prepaid = (window.memberPrepaid && memberPrepaid[member.phone]) || 0;
-      return window.buildDepositReceiptHTML(
-        member, amount, description || 'Deposit', receiptNumber,
-        remLoan, 0, prepaid, 0
-      );
-    }
-    return null;
+  function esc(s) {
+    if (typeof window.escapeHtml === 'function') return window.escapeHtml(s);
+    return String(s || '').replace(/[&<>]/g, c => c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;');
+  }
+  function escA(s) {
+    if (typeof window.escapeAttr === 'function') return window.escapeAttr(s);
+    return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function fmt(n) {
+    if (typeof window.money === 'function') return window.money(n);
+    return 'UGX ' + Number(n || 0).toLocaleString();
   }
 
-  /* ─────────────────────────────────────────────────────────────
-     SINGLE-MEMBER RECEIPT MODAL
-     Shows after a successful deposit. Send/Copy/Save each generate
-     the image on demand (so we don't spend html2canvas work unless
-     the admin actually wants the receipt).
-     ───────────────────────────────────────────────────────────── */
+  /* ═════════════════════════════════════════════════════════════
+     SECTION B — NOTICE FIX (was Part 14)
+     Add + delete update local state without extra Firebase reads
+     ═════════════════════════════════════════════════════════════ */
+
+  window.addCarouselNotice = function () {
+    const count = (window.mainCarouselNotifs || []).length;
+    if (count >= 3) { window.toast('⚠️ Maximum 3 notices. Delete one first.', '#f59e0b'); return; }
+
+    const msg = ((document.getElementById('c-msg') || {}).value || '').trim();
+    if (!msg) { window.toast('Enter a message', '#ef4444'); return; }
+    if (msg.length > 200) { window.toast('Max 200 characters', '#ef4444'); return; }
+
+    const icon = ((document.getElementById('c-icon') || {}).value || '📢').slice(0, 2);
+    const notice = { text: msg, icon: icon, payee: '', createdAt: Date.now() };
+
+    db.ref('mainNotices').push(notice)
+      .then(function (ref) {
+        if (!window.mainCarouselNotifs) window.mainCarouselNotifs = [];
+        window.mainCarouselNotifs.push(Object.assign({}, notice, { key: ref.key }));
+
+        if (typeof window.renderMainCarousel === 'function') window.renderMainCarousel();
+        if (typeof currentScreen !== 'undefined' && currentScreen === 'admin' &&
+            typeof currentAdminTab !== 'undefined' && currentAdminTab === 'notice' &&
+            typeof window.renderAdminTab === 'function') {
+          window.renderAdminTab();
+        }
+
+        window.toast('✅ Notice added (' + window.mainCarouselNotifs.length + '/3)', '#10b981');
+
+        const mEl = document.getElementById('c-msg');        if (mEl) mEl.value = '';
+        const iEl = document.getElementById('c-icon');       if (iEl) iEl.value = '📢';
+        const cEl = document.getElementById('msg-counter');  if (cEl) cEl.textContent = '0/200';
+
+        if (typeof window.closeOv === 'function') window.closeOv('ov-carousel-compose');
+      })
+      .catch(function (err) {
+        console.error('Add notice failed:', err);
+        window.toast('❌ Add failed', '#ef4444');
+      });
+  };
+
+  window.removeCarouselNotice = function (key) {
+    if (!key) return;
+    db.ref('mainNotices/' + key).remove()
+      .then(function () {
+        window.mainCarouselNotifs = (window.mainCarouselNotifs || []).filter(n => n.key !== key);
+        if (typeof window.renderMainCarousel === 'function') window.renderMainCarousel();
+        if (typeof currentScreen !== 'undefined' && currentScreen === 'admin' &&
+            typeof currentAdminTab !== 'undefined' && currentAdminTab === 'notice' &&
+            typeof window.renderAdminTab === 'function') {
+          window.renderAdminTab();
+        }
+        window.toast('Notice deleted', '#ef4444');
+      })
+      .catch(function (err) {
+        console.error('Delete notice failed:', err);
+        window.toast('❌ Delete failed', '#ef4444');
+      });
+  };
+
+  /* ═════════════════════════════════════════════════════════════
+     SECTION C — SINGLE DEPOSIT RECEIPT MODAL (was Part 15)
+     ═════════════════════════════════════════════════════════════ */
+
   function showDepositReceiptModal(member, amount, description, receiptNumber) {
     const existing = document.getElementById('single-deposit-receipt-modal');
     if (existing) existing.remove();
@@ -13963,12 +14349,10 @@ console.log('✅ Part 11 — Reminder Generator loaded (7 templates)');
       '<div class="bs" style="max-width:440px;max-height:92vh;display:flex;flex-direction:column;padding:0;">' +
         '<div style="padding:16px 20px 10px;text-align:center;border-bottom:1px solid var(--border);">' +
           '<div style="font-family:Syne,sans-serif;font-size:1.05rem;font-weight:800;color:var(--green);">✅ Deposit Saved</div>' +
-          '<div class="micro muted" style="margin-top:2px;">' + escapeHtmlSafe(member.name) + ' · ' + moneySafe(amount) + '</div>' +
+          '<div class="micro muted" style="margin-top:2px;">' + esc(member.name) + ' · ' + fmt(amount) + '</div>' +
         '</div>' +
         '<div id="single-receipt-preview" style="flex:1;overflow-y:auto;padding:16px 20px;text-align:center;">' +
-          '<div style="padding:30px 10px;color:var(--text-3);font-size:0.8rem;" id="single-receipt-loading">' +
-            '⏳ Generating receipt…' +
-          '</div>' +
+          '<div style="padding:30px 10px;color:var(--text-3);font-size:0.8rem;">⏳ Generating receipt…</div>' +
         '</div>' +
         '<div style="padding:12px 20px 16px;display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--border);">' +
           '<button class="btn btn-green btn-full" id="sr-send-btn">💬 Send via WhatsApp</button>' +
@@ -13983,48 +14367,37 @@ console.log('✅ Part 11 — Reminder Generator loaded (7 templates)');
     document.body.appendChild(modal);
     modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
 
-    /* Auto-generate the receipt image now */
-    let imageData = null;
-    const previewEl = modal.querySelector('#single-receipt-preview');
-
-    (async function generateNow() {
-      try {
-        const html = buildSingleDepositReceipt(member, amount, description, receiptNumber);
-        if (!html) {
-          if (previewEl) previewEl.innerHTML = '<div class="empty-state">Receipt template missing.</div>';
-          return;
-        }
-        if (typeof window.renderReceiptImage !== 'function') {
-          if (previewEl) previewEl.innerHTML = '<div class="empty-state">Image library not ready.</div>';
-          return;
-        }
-        const img = await window.renderReceiptImage(html);
-        if (!img) {
-          if (previewEl) previewEl.innerHTML = '<div class="empty-state">Could not render receipt.</div>';
-          return;
-        }
-        imageData = img;
-        if (previewEl) {
-          previewEl.innerHTML =
-            '<img src="' + img + '" style="max-width:100%;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,0.3);">';
-        }
-        /* Enable buttons */
-        const send = modal.querySelector('#sr-send-btn'); if (send) send.disabled = false;
-        const copy = modal.querySelector('#sr-copy-btn'); if (copy) copy.disabled = false;
-        const save = modal.querySelector('#sr-save-btn'); if (save) save.disabled = false;
-      } catch (err) {
-        console.error('Receipt generation failed:', err);
-        if (previewEl) previewEl.innerHTML = '<div class="empty-state">Receipt generation failed. Check console.</div>';
-      }
-    })();
-
-    /* Disable buttons until image is ready */
     ['sr-send-btn', 'sr-copy-btn', 'sr-save-btn'].forEach(id => {
       const b = modal.querySelector('#' + id);
       if (b) { b.disabled = true; b.style.opacity = '0.5'; }
     });
 
-    /* Wire buttons */
+    let imageData = null;
+    const previewEl = modal.querySelector('#single-receipt-preview');
+
+    (async function () {
+      try {
+        if (typeof window.buildDepositReceiptHTML !== 'function' || typeof window.renderReceiptImage !== 'function') {
+          if (previewEl) previewEl.innerHTML = '<div class="empty-state">Receipt template missing.</div>';
+          return;
+        }
+        const remLoan = balanceOf(member.phone);
+        const prepaid = (window.memberPrepaid && memberPrepaid[member.phone]) || 0;
+        const html = window.buildDepositReceiptHTML(member, amount, description || 'Deposit', receiptNumber, remLoan, 0, prepaid, 0);
+        const img = await window.renderReceiptImage(html);
+        if (!img) { if (previewEl) previewEl.innerHTML = '<div class="empty-state">Could not render.</div>'; return; }
+        imageData = img;
+        if (previewEl) previewEl.innerHTML = '<img src="' + img + '" style="max-width:100%;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,0.3);">';
+        ['sr-send-btn', 'sr-copy-btn', 'sr-save-btn'].forEach(id => {
+          const b = modal.querySelector('#' + id);
+          if (b) { b.disabled = false; b.style.opacity = '1'; }
+        });
+      } catch (err) {
+        console.error('Receipt render failed:', err);
+        if (previewEl) previewEl.innerHTML = '<div class="empty-state">Render error — check console.</div>';
+      }
+    })();
+
     modal.querySelector('#sr-close-btn').onclick = () => modal.remove();
 
     modal.querySelector('#sr-save-btn').onclick = () => {
@@ -14041,13 +14414,13 @@ console.log('✅ Part 11 — Reminder Generator loaded (7 templates)');
       try {
         const blob = await (await fetch(imageData)).blob();
         await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-        window.toast('📋 Image copied', '#06b6d4');
+        window.toast('📋 Copied', '#06b6d4');
       } catch (err) {
         const a = document.createElement('a');
         a.href = imageData;
         a.download = 'receipt_' + receiptNumber + '.png';
         a.click();
-        window.toast('📸 Downloaded (clipboard unavailable)', '#f59e0b');
+        window.toast('📸 Downloaded', '#f59e0b');
       }
     };
 
@@ -14057,17 +14430,12 @@ console.log('✅ Part 11 — Reminder Generator loaded (7 templates)');
       if (digits.startsWith('0')) digits = '256' + digits.slice(1);
       if (!digits.startsWith('256')) digits = '256' + digits;
 
-      /* Native share on mobile */
       if (navigator.share && navigator.canShare) {
         try {
           const blob = await (await fetch(imageData)).blob();
           const file = new File([blob], 'receipt_' + receiptNumber + '.png', { type: 'image/png' });
           if (navigator.canShare({ files: [file] })) {
-            await navigator.share({
-              title: 'Deposit Receipt',
-              text: 'Receipt for ' + member.name,
-              files: [file]
-            });
+            await navigator.share({ title: 'Receipt', text: 'Receipt for ' + member.name, files: [file] });
             window.toast('✅ Shared', '#10b981');
             return;
           }
@@ -14076,9 +14444,8 @@ console.log('✅ Part 11 — Reminder Generator loaded (7 templates)');
         }
       }
 
-      /* WhatsApp + download fallback */
       const msg = '🌾 Harvest Trust Finance\n\n📄 Deposit Receipt\nMember: ' + member.name +
-        '\nAmount: ' + moneySafe(amount) + '\nReceipt: ' + receiptNumber;
+        '\nAmount: ' + fmt(amount) + '\nReceipt: ' + receiptNumber;
       window.open('https://wa.me/' + digits + '?text=' + encodeURIComponent(msg), '_blank');
       const a = document.createElement('a');
       a.href = imageData;
@@ -14088,67 +14455,53 @@ console.log('✅ Part 11 — Reminder Generator loaded (7 templates)');
     };
   }
 
-  /* Tiny safety wrappers (in case helpers are missing) */
-  function escapeHtmlSafe(s) {
-    if (typeof window.escapeHtml === 'function') return window.escapeHtml(s);
-    return String(s || '').replace(/[&<>]/g, c => c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;');
-  }
-  function moneySafe(n) {
-    if (typeof window.money === 'function') return window.money(n);
-    return 'UGX ' + Number(n || 0).toLocaleString();
-  }
-
-  /* ─────────────────────────────────────────────────────────────
-     OVERRIDE addTransactionWithPreview
-     Handles:
-       • Single-member deposit  → save + receipt modal
-       • Multi-member deposit   → save + bulk log + receipts viewer
-       • Cover-past-days        → falls through to Part 8
-       • Non-deposit            → falls through to Part 8
-     ───────────────────────────────────────────────────────────── */
-
-  /* Keep a reference to the previous implementation */
+  /* ═════════════════════════════════════════════════════════════
+     SECTION D — addTransactionWithPreview (was Part 15)
+     Single deposit → receipt modal
+     Multi deposit  → bulk log + viewer
+     Cover / non-deposit → delegates to Part 8
+     ═════════════════════════════════════════════════════════════ */
   const _prevAddTx = window.addTransactionWithPreview;
 
+  function getChecked(type) {
+    if (typeof window.getCheckedMembers === 'function') return window.getCheckedMembers(type);
+    return Array.from(document.querySelectorAll('.' + type + '-member-cb:checked'))
+      .map(cb => memberList().find(m => m.phone === cb.value))
+      .filter(Boolean);
+  }
+
   window.addTransactionWithPreview = async function () {
-    const sel = getCheckedMembersSafe('tx');
+    const sel = getChecked('tx');
     const desc = ((document.getElementById('tx-desc') || {}).value || '').trim() || 'Manual deposit';
     const isCover = ((document.getElementById('tx-cover-toggle') || {}).checked) || false;
 
     if (!sel.length) { window.toast('Select at least one member', '#ef4444'); return; }
-
-    /* Fall through for cover mode */
-    if (isCover) {
-      if (typeof _prevAddTx === 'function') return _prevAddTx();
-      return;
-    }
+    if (isCover) { if (typeof _prevAddTx === 'function') return _prevAddTx(); return; }
 
     const type = (document.getElementById('tx-type')   || {}).value;
     const amt  = parseFloat((document.getElementById('tx-amount') || {}).value);
-
-    /* Fall through for non-deposit or invalid */
     if (type !== 'deposit' || !amt || amt <= 0) {
       if (typeof _prevAddTx === 'function') return _prevAddTx();
       return;
     }
 
-    /* ── SINGLE MEMBER ────────────────────────────────── */
+    /* Single member */
     if (sel.length === 1) {
       const member = sel[0];
-
-      requirePasswordConfirmation(async function () {
+      if (isMemberDebtLocked(member) && type !== 'deposit') {
+        toast('🔒 ' + member.name + ' is locked — only deposits allowed.', '#ef4444');
+        return;
+      }
+      if (typeof window.requirePasswordConfirmation !== 'function') {
+        window.toast('Password gate missing', '#ef4444'); return;
+      }
+      window.requirePasswordConfirmation(async function () {
         try {
-          const txs = await processDepositWithFutureDaysSafe(member, amt, Date.now(), desc);
-          const writes = txs.map(tx => db.ref('transactions').push(tx));
-          await Promise.all(writes);
-
-          await reloadDataSafe();
-          closeOv('ov-add-tx');
-
-          /* Show the receipt */
-          const receiptNumber = ensureReceiptNumber();
-          showDepositReceiptModal(member, amt, desc, receiptNumber);
-
+          const txs = await processDeposit(member, amt, Date.now(), desc);
+          await Promise.all(txs.map(tx => db.ref('transactions').push(tx)));
+          if (typeof window.reloadData === 'function') await window.reloadData();
+          if (typeof window.closeOv === 'function') window.closeOv('ov-add-tx');
+          showDepositReceiptModal(member, amt, desc, newReceipt());
           window.toast('✅ Deposit saved for ' + member.name, '#10b981');
         } catch (err) {
           console.error('Single deposit failed:', err);
@@ -14158,76 +14511,61 @@ console.log('✅ Part 11 — Reminder Generator loaded (7 templates)');
       return;
     }
 
-    /* ── MULTI MEMBER ─────────────────────────────────── */
-    requirePasswordConfirmation(async function () {
+    /* Multi member */
+    if (typeof window.requirePasswordConfirmation !== 'function') {
+      window.toast('Password gate missing', '#ef4444'); return;
+    }
+    window.requirePasswordConfirmation(async function () {
       try {
         const logMembers = [];
         let writes = [];
-
+        const locked = sel.filter(m => isMemberDebtLocked(m) && type !== 'deposit');
+        if (locked.length) {
+          toast('🔒 ' + locked.map(m => m.name).join(', ') + ' locked. Only deposits allowed.', '#ef4444');
+          return;
+        }
         for (const m of sel) {
-          const txs = await processDepositWithFutureDaysSafe(m, amt, Date.now(), desc);
+          const txs = await processDeposit(m, amt, Date.now(), desc);
           writes = writes.concat(txs.map(tx => db.ref('transactions').push(tx)));
           logMembers.push({
-            name: m.name,
-            phone: m.phone,
-            amount: amt,
-            receiptNumber: ensureReceiptNumber(),
-            sent: false
+            name: m.name, phone: m.phone, amount: amt,
+            receiptNumber: newReceipt(), sent: false
           });
         }
-
         await Promise.all(writes);
-        await reloadDataSafe();
-        closeOv('ov-add-tx');
+        if (typeof window.reloadData === 'function') await window.reloadData();
+        if (typeof window.closeOv === 'function') window.closeOv('ov-add-tx');
 
-        /* Create bulk log */
-        if (typeof createBulkTxLog === 'function') {
-          const logKey = await createBulkTxLog(logMembers, amt * logMembers.length, desc);
+        if (typeof window.createBulkTxLog === 'function') {
+          const logKey = await window.createBulkTxLog(logMembers, amt * logMembers.length, desc);
           window.toast('✅ Bulk deposit saved for ' + logMembers.length + ' members', '#10b981');
-
-          /* Open the receipts viewer immediately */
-          if (logKey && typeof showBulkReceipts === 'function') {
-            setTimeout(() => showBulkReceipts('tx', logKey), 300);
+          if (logKey && typeof window.showBulkReceipts === 'function') {
+            setTimeout(() => window.showBulkReceipts('tx', logKey), 300);
           }
         } else {
-          window.toast('✅ Bulk deposit saved (' + logMembers.length + ' members)', '#10b981');
+          window.toast('✅ Bulk deposit saved', '#10b981');
         }
       } catch (err) {
         console.error('Bulk deposit failed:', err);
-        window.toast('❌ Bulk save failed', '#ef4444');
+        window.toast('❌ Bulk failed', '#ef4444');
       }
     }, 'Save Bulk Deposit');
   };
 
-  /* Safe wrappers that don't blow up if helpers are missing */
-  function getCheckedMembersSafe(type) {
-    if (typeof window.getCheckedMembers === 'function') return window.getCheckedMembers(type);
-    const boxes = document.querySelectorAll('.' + type + '-member-cb:checked');
-    return Array.from(boxes)
-      .map(cb => (window.members || []).find(m => m.phone === cb.value))
-      .filter(Boolean);
-  }
-
-  async function processDepositWithFutureDaysSafe(member, amount, ts, desc) {
-    if (typeof window.processDepositWithFutureDays === 'function') {
-      /* Part 8 version is not exported — fall back to inline */
-    }
-    /* Inline minimal deposit processing:
-       creates: daily savings, welfare, prepaid balance,
-       plus loan repayment split (application, assigned, debt, extra)
-       Uses existing helpers: memberApplicationLoans, etc. */
+  /* Minimal inline deposit processor — full allocation logic */
+  async function processDeposit(member, amount, ts, desc) {
     const writes = [];
     let rem = amount;
     const now = ts || Date.now();
     const todayStart = new Date(now).setHours(0, 0, 0, 0);
-    const daily   = (window.settings && settings.dailyAmount)   || 2500;
-    const welfare = (window.settings && settings.welfareAmount) || 500;
+    const S = settingsObj();
+    const daily   = S.dailyAmount   || 2500;
+    const welfare = S.welfareAmount || 500;
     const required = daily + welfare;
     const todayStr = new Date(todayStart).toLocaleDateString();
 
-    /* Today's requirement */
     let paidToday = 0, welfarePaidToday = false;
-    (window.transactions || []).forEach(tx => {
+    txList().forEach(tx => {
       if (tx.memberPhone === member.phone && tx.date >= todayStart && tx.date < todayStart + 86400000) {
         if (tx.type === 'deposit') paidToday += tx.amount;
         if (tx.type === 'welfare') welfarePaidToday = true;
@@ -14235,366 +14573,107 @@ console.log('✅ Part 11 — Reminder Generator loaded (7 templates)');
     });
 
     let deficit = 0;
-    const hasAction = typeof window.memberHasActionToday === 'function'
-      ? window.memberHasActionToday(member)
-      : false;
+    const hasAction = typeof window.memberHasActionToday === 'function' ? window.memberHasActionToday(member) : false;
     if (!hasAction) {
-      const neededDaily   = Math.max(0, daily - paidToday);
-      const neededWelfare = welfarePaidToday ? 0 : welfare;
-      deficit = neededDaily + neededWelfare;
+      deficit = Math.max(0, daily - paidToday) + (welfarePaidToday ? 0 : welfare);
     }
 
-    /* Existing prepaid first */
-    let prepaidBal = (window.memberPrepaid && memberPrepaid[member.phone]) || 0;
-    if (deficit > 0 && prepaidBal > 0) {
-      const used = Math.min(prepaidBal, deficit);
-      prepaidBal -= used;
-      rem -= used;
-      deficit -= used;
-      writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'prepaid_used', amount: used,
-        receiptNumber: ensureReceiptNumber(),
-        description: 'Prepaid used for today',
-        date: now + 500
-      });
+    let prepaid = (window.memberPrepaid && memberPrepaid[member.phone]) || 0;
+    if (deficit > 0 && prepaid > 0) {
+      const used = Math.min(prepaid, deficit);
+      prepaid -= used; rem -= used; deficit -= used;
+      writes.push({ memberPhone: member.phone, memberName: member.name, type: 'prepaid_used', amount: used, receiptNumber: newReceipt(), description: 'Prepaid used for today', date: now + 500 });
     }
 
-    /* Deposit for remaining today */
     if (deficit > 0 && rem > 0) {
       const used = Math.min(rem, deficit);
       rem -= used;
-      const dailyPortion   = Math.min(used, Math.max(0, daily - paidToday));
-      const welfarePortion = used - dailyPortion;
-      if (dailyPortion > 0) {
-        writes.push({
-          memberPhone: member.phone, memberName: member.name,
-          type: 'deposit', amount: dailyPortion,
-          receiptNumber: ensureReceiptNumber(),
-          isDailySavings: true,
-          description: 'Daily savings for ' + todayStr,
-          date: todayStart + 1500
-        });
-      }
-      if (welfarePortion > 0) {
-        writes.push({
-          memberPhone: member.phone, memberName: member.name,
-          type: 'welfare', amount: welfarePortion,
-          receiptNumber: ensureReceiptNumber(),
-          description: 'Welfare for ' + todayStr,
-          date: todayStart + 500
-        });
-      }
+      const dp = Math.min(used, Math.max(0, daily - paidToday));
+      const wp = used - dp;
+      if (dp > 0) writes.push({ memberPhone: member.phone, memberName: member.name, type: 'deposit', amount: dp, receiptNumber: newReceipt(), isDailySavings: true, description: 'Daily savings for ' + todayStr, date: todayStart + 1500 });
+      if (wp > 0) writes.push({ memberPhone: member.phone, memberName: member.name, type: 'welfare', amount: wp, receiptNumber: newReceipt(), description: 'Welfare for ' + todayStr, date: todayStart + 500 });
     }
 
     /* Application loans */
-    const appLoans = (window.loans || []).filter(l =>
-      l.memberPhone === member.phone && l.status === 'approved' && !l.repaid &&
-      l.loanQuestions && l.loanQuestions.length > 0
-    ).sort((a, b) => (a.approvedAt || 0) - (b.approvedAt || 0));
-
-    for (const loan of appLoans) {
+    const appL = (window.loans || []).filter(l => l.memberPhone === member.phone && l.status === 'approved' && !l.repaid && l.loanQuestions && l.loanQuestions.length > 0).sort((a, b) => (a.approvedAt || 0) - (b.approvedAt || 0));
+    for (const loan of appL) {
       if (rem <= 0) break;
       const bal = (loan.totalRepay || 0) - (loan.repaidAmount || 0);
       if (bal <= 0) continue;
-      const repay = Math.min(rem, bal);
-      rem -= repay;
-      writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'loan_repayment', amount: repay,
-        receiptNumber: ensureReceiptNumber(),
-        description: 'Loan repayment (application)',
-        date: now + 2,
-        loanId: loan.id
-      });
-      const newRepaid = (loan.repaidAmount || 0) + repay;
-      db.ref('loans/' + loan.id).update({ repaidAmount: newRepaid }).then(() => {
-        if (newRepaid >= loan.totalRepay) db.ref('loans/' + loan.id).update({ repaid: true, repaidAt: Date.now() });
-      });
+      const r = Math.min(rem, bal); rem -= r;
+      writes.push({ memberPhone: member.phone, memberName: member.name, type: 'loan_repayment', amount: r, receiptNumber: newReceipt(), description: 'Application loan repayment', date: now + 2, loanId: loan.id });
+      const newRepaid = (loan.repaidAmount || 0) + r;
+      await db.ref('loans/' + loan.id).update({ repaidAmount: newRepaid });
+      if (newRepaid >= loan.totalRepay) await db.ref('loans/' + loan.id).update({ repaid: true, repaidAt: Date.now() });
     }
 
     /* Assigned loans */
-    const assignedLoans = (window.loans || []).filter(l =>
-      l.memberPhone === member.phone && l.status === 'approved' && !l.repaid &&
-      (!l.loanQuestions || l.loanQuestions.length === 0)
-    ).sort((a, b) => (a.approvedAt || 0) - (b.approvedAt || 0));
-
-    for (const loan of assignedLoans) {
+    const asgL = (window.loans || []).filter(l => l.memberPhone === member.phone && l.status === 'approved' && !l.repaid && (!l.loanQuestions || l.loanQuestions.length === 0)).sort((a, b) => (a.approvedAt || 0) - (b.approvedAt || 0));
+    for (const loan of asgL) {
       if (rem <= 0) break;
       const bal = (loan.totalRepay || 0) - (loan.repaidAmount || 0);
       if (bal <= 0) continue;
-      const repay = Math.min(rem, bal);
-      rem -= repay;
-      writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'loan_repayment', amount: repay,
-        receiptNumber: ensureReceiptNumber(),
-        description: 'Loan repayment (assigned)',
-        date: now + 3,
-        loanId: loan.id
-      });
-      const newRepaid = (loan.repaidAmount || 0) + repay;
-      db.ref('loans/' + loan.id).update({ repaidAmount: newRepaid }).then(() => {
-        if (newRepaid >= loan.totalRepay) db.ref('loans/' + loan.id).update({ repaid: true, repaidAt: Date.now() });
-      });
+      const r = Math.min(rem, bal); rem -= r;
+      writes.push({ memberPhone: member.phone, memberName: member.name, type: 'loan_repayment', amount: r, receiptNumber: newReceipt(), description: 'Assigned loan repayment', date: now + 3, loanId: loan.id });
+      const newRepaid = (loan.repaidAmount || 0) + r;
+      await db.ref('loans/' + loan.id).update({ repaidAmount: newRepaid });
+      if (newRepaid >= loan.totalRepay) await db.ref('loans/' + loan.id).update({ repaid: true, repaidAt: Date.now() });
     }
 
     /* Debts */
     const debt = (window.memberDebts && memberDebts[member.phone]) || 0;
     if (debt > 0 && rem > 0) {
-      const used = Math.min(rem, debt);
-      rem -= used;
-      writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'debt_cleared', amount: used,
-        receiptNumber: ensureReceiptNumber(),
-        description: 'Debt cleared',
-        date: now + 4
-      });
+      const u = Math.min(rem, debt); rem -= u;
+      writes.push({ memberPhone: member.phone, memberName: member.name, type: 'debt_cleared', amount: u, receiptNumber: newReceipt(), description: 'Debt cleared', date: now + 4 });
     }
 
-    /* Extra loan repayment */
-    const loanBal = (window.memberLoans && memberLoans[member.phone]) || 0;
-    if (rem > 0 && loanBal > 0) {
-      const extra = Math.min(rem, loanBal);
-      rem -= extra;
-      writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'loan_repayment', amount: extra,
-        receiptNumber: ensureReceiptNumber(),
-        description: 'Extra loan repayment',
-        date: now + 5
-      });
+    /* Extra loan */
+    const totalLoan = (window.memberLoans && memberLoans[member.phone]) || 0;
+    if (rem > 0 && totalLoan > 0) {
+      const e = Math.min(rem, totalLoan); rem -= e;
+      writes.push({ memberPhone: member.phone, memberName: member.name, type: 'loan_repayment', amount: e, receiptNumber: newReceipt(), description: 'Extra loan repayment', date: now + 5 });
     }
 
-    /* Prepay future full days */
-    let daysCovered = 0;
-    let cur = todayStart + 86400000;
-    while (rem >= required && daysCovered < 30) {
+    /* Prepay days */
+    let days = 0, cur = todayStart + 86400000;
+    while (rem >= required && days < 30) {
       const ds = new Date(cur).toLocaleDateString();
-      writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'deposit', amount: daily,
-        receiptNumber: ensureReceiptNumber(),
-        isPrepaid: true,
-        description: 'Prepaid daily savings for ' + ds,
-        date: cur + 1500
-      });
-      writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'welfare', amount: welfare,
-        receiptNumber: ensureReceiptNumber(),
-        isPrepaid: true,
-        description: 'Prepaid welfare for ' + ds,
-        date: cur + 500
-      });
-      rem -= required;
-      cur += 86400000;
-      daysCovered++;
+      writes.push({ memberPhone: member.phone, memberName: member.name, type: 'deposit', amount: daily, receiptNumber: newReceipt(), isPrepaid: true, description: 'Prepaid savings for ' + ds, date: cur + 1500 });
+      writes.push({ memberPhone: member.phone, memberName: member.name, type: 'welfare', amount: welfare, receiptNumber: newReceipt(), isPrepaid: true, description: 'Prepaid welfare for ' + ds, date: cur + 500 });
+      rem -= required; cur += 86400000; days++;
     }
 
-    /* Leftover prepaid */
+    /* Leftover */
     if (rem > 0) {
-      prepaidBal += rem;
-      writes.push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'prepaid_balance', amount: rem,
-        receiptNumber: ensureReceiptNumber(),
-        description: 'Prepaid balance — ' + moneySafe(rem),
-        date: now + 1000
-      });
-      db.ref('members/' + member.id + '/prepaid').set(prepaidBal);
-      if (window.memberPrepaid) memberPrepaid[member.phone] = prepaidBal;
-    } else if (window.memberPrepaid && memberPrepaid[member.phone] !== prepaidBal) {
-      window.memberPrepaid[member.phone] = prepaidBal;
-      db.ref('members/' + member.id + '/prepaid').set(prepaidBal);
+      prepaid += rem;
+      writes.push({ memberPhone: member.phone, memberName: member.name, type: 'prepaid_balance', amount: rem, receiptNumber: newReceipt(), description: 'Prepaid balance', date: now + 1000 });
+      await db.ref('members/' + member.id + '/prepaid').set(prepaid);
+      if (window.memberPrepaid) memberPrepaid[member.phone] = prepaid;
+    } else if (window.memberPrepaid && memberPrepaid[member.phone] !== prepaid) {
+      window.memberPrepaid[member.phone] = prepaid;
+      await db.ref('members/' + member.id + '/prepaid').set(prepaid);
     }
 
     return writes;
   }
 
-  async function reloadDataSafe() {
-    if (typeof window.reloadData === 'function') return window.reloadData();
-    /* Fallback: refresh from Firebase */
-    if (!db) return;
-    const [tx, ls, ms] = await Promise.all([
-      db.ref('transactions').once('value'),
-      db.ref('loans').once('value'),
-      db.ref('members').once('value')
-    ]);
-    window.transactions = tx.val() ? Object.entries(tx.val()).map(([id, v]) => Object.assign({}, v, { id })) : [];
-    window.loans        = ls.val() ? Object.entries(ls.val()).map(([id, v]) => Object.assign({}, v, { id })) : [];
-    window.members      = ms.val() ? Object.entries(ms.val()).map(([id, v]) => Object.assign({}, v, { id, prepaid: v.prepaid || 0 })) : [];
-    if (typeof window.computePots === 'function') window.computePots();
-    if (typeof window.refreshUI   === 'function') window.refreshUI();
-  }
+  /* ═════════════════════════════════════════════════════════════
+     SECTION E — DEBT RECEIPT BALANCE FIX (was Part 18)
+     Correct newBalance captured from live memberLoans
+     ═════════════════════════════════════════════════════════════ */
 
-  /* ─────────────────────────────────────────────────────────────
-     OVERRIDE previewDebtAssignment to open receipts viewer
-     ───────────────────────────────────────────────────────────── */
-  const _prevDebtPreview = window.previewDebtAssignment;
-
-  window.previewDebtAssignment = function () {
-    const sel = getCheckedMembersSafe('debt');
-    if (!sel.length) { window.toast('Select at least one member', '#ef4444'); return; }
-
-    const principal    = parseFloat((document.getElementById('debt-amount')   || {}).value);
-    const interestRate = parseFloat((document.getElementById('debt-interest') || {}).value);
-    const reason       = (document.getElementById('debt-reason') || {}).value || 'Admin assigned debt';
-
-    if (!principal || principal <= 0) { window.toast('Enter a valid principal', '#ef4444'); return; }
-    if (isNaN(interestRate) || interestRate < 0) { window.toast('Enter a valid interest rate', '#ef4444'); return; }
-
-    const totalPerMember = Math.floor(principal * (1 + interestRate / 100));
-    const grandTotal = totalPerMember * sel.length;
-
-    const content =
-      '<div style="background:rgba(245,158,11,0.06);border-radius:12px;padding:12px;margin-bottom:12px;">' +
-        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:0.85rem;">' +
-          '<span style="color:var(--text-3);">Members</span><span style="font-weight:700;">' + sel.length + '</span>' +
-          '<span style="color:var(--text-3);">Per member</span><span>' + moneySafe(totalPerMember) + '</span>' +
-          '<span style="color:var(--text-3);">Interest</span><span>' + interestRate + '%</span>' +
-          '<span style="color:var(--text-3);">Grand Total</span><span style="color:var(--red);font-weight:800;">' + moneySafe(grandTotal) + '</span>' +
-        '</div>' +
-      '</div>' +
-      '<div style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:4px;">' +
-        sel.map(m =>
-          '<div style="display:flex;justify-content:space-between;padding:4px 8px;border-bottom:1px solid rgba(255,255,255,0.05);font-size:0.75rem;">' +
-            '<span>' + escapeHtmlSafe(m.name) + '</span>' +
-            '<span>' + moneySafe(totalPerMember) + '</span>' +
-          '</div>'
-        ).join('') +
-      '</div>';
-
-    if (typeof window.showBulkPreviewModal !== 'function') {
-      /* Fallback: no preview available */
-      window.toast('Preview modal not available', '#ef4444');
-      return;
-    }
-
-    window.showBulkPreviewModal('📊 Preview Debt Assignment', content, async function () {
-      closeOv('ov-bulk-preview');
-
-      const logMembers = [];
-      for (const m of sel) {
-        try {
-          const interest = totalPerMember - principal;
-          await executeDebtAssignmentSafe(m, principal, interestRate, interest, totalPerMember, reason);
-          logMembers.push({
-            name: m.name,
-            phone: m.phone,
-            amount: totalPerMember,
-            principal: principal,
-            receiptNumber: ensureReceiptNumber(),
-            sent: false
-          });
-        } catch (err) {
-          console.error('assign debt failed for', m.name, err);
-        }
-      }
-
-      await reloadDataSafe();
-      closeOv('ov-assign-debt');
-
-      if (logMembers.length && typeof createBulkDebtLog === 'function') {
-        const logKey = await createBulkDebtLog(logMembers, null, reason, 1, {
-          interestRate: interestRate,
-          principalPerMember: principal
-        });
-        window.toast('✅ Debt assigned to ' + logMembers.length + ' member(s)', '#10b981');
-        if (logKey && typeof showBulkReceipts === 'function') {
-          setTimeout(() => showBulkReceipts('debt', logKey), 300);
-        }
-      } else {
-        window.toast('✅ Debt assigned', '#10b981');
-      }
-    });
-  };
-
-  async function executeDebtAssignmentSafe(member, principal, interestRate, interest, totalRepay, reason) {
-    const ref = db.ref('loans').push();
-    const loanId = ref.key;
-    await ref.set({
-      id: loanId,
-      memberId: member.id,
-      memberName: member.name,
-      memberPhone: member.phone,
-      amount: principal,
-      interestRate,
-      totalRepay,
-      reason,
-      status: 'approved',
-      requestedAt: Date.now(),
-      approvedAt: Date.now(),
-      dueDate: null,
-      repaid: false,
-      repaidAmount: 0,
-      penaltyApplied: false,
-      loanQuestions: [],
-      weeks: 1
-    });
-    await db.ref('transactions').push({
-      memberPhone: member.phone, memberName: member.name,
-      type: 'loan_disbursement', amount: principal,
-      receiptNumber: ensureReceiptNumber(),
-      description: reason + ' (principal)',
-      date: Date.now(),
-      loanId
-    });
-    if (interest > 0) {
-      await db.ref('transactions').push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'loan_interest', amount: interest,
-        receiptNumber: ensureReceiptNumber(),
-        description: 'Interest (' + interestRate + '%)',
-        date: Date.now() + 1,
-        loanId
-      });
-    }
-  }
-
-  console.log('✅ Part 15 — Receipt-after-transaction + bulk receipts loaded');
-})();
-</script>
-<script>
-/* ═══════════════════════════════════════════════════════════════════════
-   PART 16 — DEBT RECEIPT BALANCE FIX
-   Bug: "New Loan Balance" was memberLoans[phone] + totalRepay. But
-   memberLoans already includes the new debt by the time the receipt
-   is generated, so it was double-counting.
-
-   Fix: store the correct "new balance" on the log entry at assignment
-   time (before reloadData), and read it from there when rendering.
-   Falls back to memberLoans[phone] (no addition) if the log doesn't
-   have it — for older logs.
-   ═══════════════════════════════════════════════════════════════════════ */
-(function () {
-  'use strict';
-
-  /* ─────────────────────────────────────────────────────────────
-     FIX #1 — generateDebtReceiptImage
-     Accept an explicit newBalance. Do NOT add totalRepay to memberLoans.
-     ───────────────────────────────────────────────────────────── */
   window.generateDebtReceiptImage = async function (
     member, principal, interestRate, totalRepay, reason, dueDate, newBalance
   ) {
     try {
-      const receiptNo = (typeof window.generateReceiptNumber === 'function')
-        ? window.generateReceiptNumber()
-        : 'HTF-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
-
+      const receiptNo = newReceipt();
       const interest = totalRepay - principal;
 
-      /* ── THE FIX ─────────────────────────────────────────
-         If caller passed newBalance, use it directly.
-         Otherwise read the CURRENT balance (which, at this point,
-         already includes the debt — so don't add anything).
-      */
       let finalBalance;
-      if (typeof newBalance === 'number' && !isNaN(newBalance)) {
+      if (typeof newBalance === 'number' && !isNaN(newBalance) && newBalance > 0) {
         finalBalance = newBalance;
       } else {
-        finalBalance = (window.memberLoans && memberLoans[member.phone]) || 0;
+        finalBalance = balanceOf(member.phone);
       }
 
       const html = (typeof window.buildDebtReceiptHTML === 'function')
@@ -14604,155 +14683,187 @@ console.log('✅ Part 11 — Reminder Generator loaded (7 templates)');
           )
         : null;
 
-      if (!html) {
-        console.error('buildDebtReceiptHTML not available');
-        return null;
-      }
-
+      if (!html) { console.error('buildDebtReceiptHTML missing'); return null; }
       const img = await window.renderReceiptImage(html);
       return { imageData: img, receiptNumber: receiptNo };
-
     } catch (err) {
       console.error('generateDebtReceiptImage failed:', err);
       return null;
     }
   };
 
-  /* ─────────────────────────────────────────────────────────────
-     FIX #2 — renderMemberReceipt
-     Pass member.newBalance (stored in the log) to the image generator.
-     ───────────────────────────────────────────────────────────── */
-  /* This function lives inside Part 10's IIFE and isn't globally exposed,
-     so we override showBulkReceipts to patch the flow. */
-  const _origShowBulkReceipts = window.showBulkReceipts;
-
-  /* Store a helper that Part 15 / Part 10 will use if they call it */
-  window.getDebtReceiptNewBalance = function (member, log, totalRepay) {
-    /* Prefer the balance we stored when the log was created */
-    if (typeof member.newBalance === 'number' && !isNaN(member.newBalance)) {
-      return member.newBalance;
-    }
-    /* Fallback: current balance, no addition */
-    return (window.memberLoans && memberLoans[member.phone]) || 0;
+  window.createBulkDebtLog = async function (members, dueDate, reason, totalDays, extraInfo) {
+    const logEntry = {
+      type: 'bulk_debt',
+      timestamp: Date.now(),
+      reason: reason || 'Admin assigned debt',
+      dueDate: dueDate ? new Date(dueDate).toISOString().slice(0, 10) : null,
+      totalDays: totalDays || 1,
+      totalAmount: members.reduce((s, m) => s + (m.amount || 0), 0),
+      memberCount: members.length,
+      interestRate: (extraInfo && extraInfo.interestRate) || 0,
+      principalPerMember: (extraInfo && extraInfo.principalPerMember) || 0,
+      members: members.map(m => ({
+        name: m.name,
+        phone: m.phone,
+        amount: m.amount || 0,
+        principal: m.principal || 0,
+        newBalance: (typeof m.newBalance === 'number') ? m.newBalance : 0,
+        previousBalance: (typeof m.previousBalance === 'number') ? m.previousBalance : 0,
+        receiptNumber: m.receiptNumber || newReceipt(),
+        sent: false
+      })),
+      receiptsSent: false,
+      viewed: false
+    };
+    const ref = db.ref('notifications/admin_bulk_debt_logs').push();
+    await ref.set(logEntry);
+    if (typeof window.updateLogsBadge === 'function') window.updateLogsBadge();
+    return ref.key;
   };
 
-  /* ─────────────────────────────────────────────────────────────
-     FIX #3 — Override the bulk debt flow so it stores newBalance
-     in the log at creation time (before reloadData).
-     ───────────────────────────────────────────────────────────── */
-  const _prevPreviewDebt = window.previewDebtAssignment;
+  window.createBulkTxLog = async function (members, totalAmount, description) {
+    const logEntry = {
+      type: 'bulk_deposit',
+      timestamp: Date.now(),
+      description: description || 'Bulk deposit',
+      totalAmount: totalAmount || members.reduce((s, m) => s + (m.amount || 0), 0),
+      memberCount: members.length,
+      members: members.map(m => ({
+        name: m.name,
+        phone: m.phone,
+        amount: m.amount || 0,
+        receiptNumber: m.receiptNumber || newReceipt(),
+        sent: false
+      })),
+      receiptsSent: false,
+      viewed: false
+    };
+    const ref = db.ref('notifications/admin_bulk_tx_logs').push();
+    await ref.set(logEntry);
+    if (typeof window.updateLogsBadge === 'function') window.updateLogsBadge();
+    return ref.key;
+  };
 
   window.previewDebtAssignment = function () {
-    /* Read inputs */
-    const sel = (typeof window.getCheckedMembers === 'function')
-      ? window.getCheckedMembers('debt')
-      : Array.from(document.querySelectorAll('.debt-member-cb:checked'))
-          .map(cb => (window.members || []).find(m => m.phone === cb.value))
-          .filter(Boolean);
-
+    const sel = getChecked('debt');
+    const locked = sel.filter(m => isMemberDebtLocked(m));
+    if (locked.length) {
+      toast('🔒 Cannot assign debt to locked member(s): ' + locked.map(m => m.name).join(', '), '#ef4444');
+      return;
+    }
     if (!sel.length) { window.toast('Select at least one member', '#ef4444'); return; }
 
     const principal    = parseFloat((document.getElementById('debt-amount')   || {}).value);
     const interestRate = parseFloat((document.getElementById('debt-interest') || {}).value);
     const reason       = (document.getElementById('debt-reason') || {}).value || 'Admin assigned debt';
 
-    if (!principal || principal <= 0) { window.toast('Enter a valid principal', '#ef4444'); return; }
-    if (isNaN(interestRate) || interestRate < 0) { window.toast('Enter a valid interest rate', '#ef4444'); return; }
+    if (!principal || principal <= 0) { window.toast('Invalid principal', '#ef4444'); return; }
+    if (isNaN(interestRate) || interestRate < 0) { window.toast('Invalid interest', '#ef4444'); return; }
 
-    const totalPerMember = Math.floor(principal * (1 + interestRate / 100));
-    const grandTotal = totalPerMember * sel.length;
+    const perMember = Math.floor(principal * (1 + interestRate / 100));
+    const grandTotal = perMember * sel.length;
 
-    /* Preview content */
     const content =
       '<div style="background:rgba(245,158,11,0.06);border-radius:12px;padding:12px;margin-bottom:12px;">' +
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:0.85rem;">' +
           '<span style="color:var(--text-3);">Members</span><span style="font-weight:700;">' + sel.length + '</span>' +
-          '<span style="color:var(--text-3);">Per member</span><span>' + moneySafe(totalPerMember) + '</span>' +
+          '<span style="color:var(--text-3);">Per member</span><span>' + fmt(perMember) + '</span>' +
           '<span style="color:var(--text-3);">Interest</span><span>' + interestRate + '%</span>' +
-          '<span style="color:var(--text-3);">Grand Total</span><span style="color:var(--red);font-weight:800;">' + moneySafe(grandTotal) + '</span>' +
+          '<span style="color:var(--text-3);">Grand Total</span><span style="color:var(--red);font-weight:800;">' + fmt(grandTotal) + '</span>' +
         '</div>' +
       '</div>' +
       '<div style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:4px;">' +
         sel.map(m =>
           '<div style="display:flex;justify-content:space-between;padding:4px 8px;border-bottom:1px solid rgba(255,255,255,0.05);font-size:0.75rem;">' +
-            '<span>' + escapeHtmlSafe(m.name) + '</span>' +
-            '<span>' + moneySafe(totalPerMember) + '</span>' +
+            '<span>' + esc(m.name) + '</span><span>' + fmt(perMember) + '</span>' +
           '</div>'
         ).join('') +
       '</div>';
 
     if (typeof window.showBulkPreviewModal !== 'function') {
-      window.toast('Preview modal not available', '#ef4444');
-      return;
+      window.toast('Preview modal missing', '#ef4444'); return;
     }
 
     window.showBulkPreviewModal('📊 Preview Debt Assignment', content, async function () {
       if (typeof window.closeOv === 'function') window.closeOv('ov-bulk-preview');
 
       const logMembers = [];
-
       for (const m of sel) {
         try {
-          /* Capture balance BEFORE assignment */
-          const balanceBefore = (window.memberLoans && memberLoans[m.phone]) || 0;
-          const balanceAfter  = balanceBefore + totalPerMember;
+          /* CORRECT capture — uses bare memberLoans via safe accessor */
+          const balanceBefore = balanceOf(m.phone);
+          const balanceAfter  = balanceBefore + perMember;
 
-          /* Write the debt to Firebase */
-          await executeDebtAssignmentSafe(m, principal, interestRate, totalPerMember - principal, totalPerMember, reason);
+          await executeDebtAssignment(m, principal, interestRate, perMember - principal, perMember, reason);
 
-          /* Build the log entry — with correct balanceAfter stored */
           logMembers.push({
-            name:            m.name,
-            phone:           m.phone,
-            amount:          totalPerMember,
-            principal:       principal,
-            newBalance:      balanceAfter,        /* ← the fix */
-            receiptNumber:   ensureReceiptNumber(),
-            sent:            false
+            name: m.name,
+            phone: m.phone,
+            amount: perMember,
+            principal: principal,
+            newBalance: balanceAfter,          /* correct */
+            previousBalance: balanceBefore,
+            receiptNumber: newReceipt(),
+            sent: false
           });
         } catch (err) {
-          console.error('assign debt failed for', m.name, err);
+          console.error('assign failed:', m.name, err);
         }
       }
 
-      /* Reload local state (memberLoans now includes the new debts) */
       if (typeof window.reloadData === 'function') await window.reloadData();
-
       if (typeof window.closeOv === 'function') window.closeOv('ov-assign-debt');
 
-      /* Create the log with the correct balances stored */
-      if (logMembers.length && typeof window.createBulkDebtLog === 'function') {
+      if (logMembers.length) {
         const logKey = await window.createBulkDebtLog(logMembers, null, reason, 1, {
           interestRate: interestRate,
           principalPerMember: principal
         });
         window.toast('✅ Debt assigned to ' + logMembers.length + ' member(s)', '#10b981');
-
-        /* Show receipts viewer */
         if (logKey && typeof window.showBulkReceipts === 'function') {
           setTimeout(() => window.showBulkReceipts('debt', logKey), 300);
         }
-      } else {
-        window.toast('✅ Debt assigned', '#10b981');
       }
     });
   };
 
-  /* ─────────────────────────────────────────────────────────────
-     FIX #4 — Patch showBulkReceipts so it calls the corrected
-     generateDebtReceiptImage with the stored newBalance.
-     ───────────────────────────────────────────────────────────── */
-  const _prevShowBulk = window.showBulkReceipts;
+  async function executeDebtAssignment(member, principal, interestRate, interest, totalRepay, reason) {
+    const ref = db.ref('loans').push();
+    const loanId = ref.key;
+    await ref.set({
+      id: loanId, memberId: member.id, memberName: member.name, memberPhone: member.phone,
+      amount: principal, interestRate, totalRepay, reason,
+      status: 'approved', requestedAt: Date.now(), approvedAt: Date.now(),
+      dueDate: null, repaid: false, repaidAmount: 0,
+      penaltyApplied: false, loanQuestions: [], weeks: 1
+    });
+    await db.ref('transactions').push({
+      memberPhone: member.phone, memberName: member.name,
+      type: 'loan_disbursement', amount: principal,
+      receiptNumber: newReceipt(), description: reason + ' (principal)',
+      date: Date.now(), loanId
+    });
+    if (interest > 0) {
+      await db.ref('transactions').push({
+        memberPhone: member.phone, memberName: member.name,
+        type: 'loan_interest', amount: interest,
+        receiptNumber: newReceipt(), description: 'Interest (' + interestRate + '%)',
+        date: Date.now() + 1, loanId
+      });
+    }
+  }
+
+  /* ═════════════════════════════════════════════════════════════
+     SECTION F — BULK RECEIPTS VIEWER (was Part 16, corrected)
+     ═════════════════════════════════════════════════════════════ */
 
   window.showBulkReceipts = async function (type, logKey) {
-    if (type === 'tx') {
-      /* Deposit receipts — no change needed */
-      if (typeof _prevShowBulk === 'function') return _prevShowBulk(type, logKey);
-      return;
-    }
+    const isDebt = type === 'debt';
+    const path = isDebt
+      ? 'notifications/admin_bulk_debt_logs/' + logKey
+      : 'notifications/admin_bulk_tx_logs/' + logKey;
 
-    /* Debt receipts — we want to pass newBalance to the receipt image */
-    const path = 'notifications/admin_bulk_debt_logs/' + logKey;
     const snap = await db.ref(path).once('value');
     const log = snap.val();
     if (!log) { window.toast('Log not found', '#ef4444'); return; }
@@ -14762,53 +14873,56 @@ console.log('✅ Part 11 — Reminder Generator loaded (7 templates)');
       if (typeof window.updateLogsBadge === 'function') window.updateLogsBadge();
     }
 
-    /* Store the log for later use */
-    window._currentBulkDebtLog = log;
-    window._currentBulkDebtLogKey = logKey;
-
-    /* Remove any existing modal */
     const existing = document.getElementById('bulk-receipts-modal');
     if (existing) existing.remove();
+
+    const rows = (log.members || []).map((m, i) => {
+      const sent = m.sent ? '✅' : '⏳';
+      const sendFn  = isDebt ? 'sendDebtReceipt'  : 'sendTxReceipt';
+      const copyFn  = isDebt ? 'copyDebtReceipt'  : 'copyTxReceipt';
+      const saveFn  = isDebt ? 'saveDebtReceipt'  : 'saveTxReceipt';
+      const markFn  = isDebt ? 'markDebtSent'     : 'markTxSent';
+
+      const actions = m.sent
+        ? '<span style="font-size:0.65rem;color:var(--green);">✅ Sent</span>'
+        : '<button class="btn btn-sm btn-green"  onclick="' + sendFn + '(\'' + logKey + '\',' + i + ')" style="padding:2px 10px;font-size:0.6rem;">💬 Send</button>' +
+          '<button class="btn btn-sm btn-purple" onclick="' + copyFn + '(\'' + logKey + '\',' + i + ')" style="padding:2px 10px;font-size:0.6rem;">📋 Copy</button>' +
+          '<button class="btn btn-sm btn-amber"  onclick="' + saveFn + '(\'' + logKey + '\',' + i + ')" style="padding:2px 10px;font-size:0.6rem;">💾 Save</button>' +
+          '<button class="btn btn-sm btn-sec"    onclick="' + markFn + '(\'' + logKey + '\',' + i + ')" style="padding:2px 10px;font-size:0.6rem;">✓ Mark</button>';
+
+      const balLine = isDebt && m.newBalance
+        ? ' · New bal ' + fmt(m.newBalance)
+        : '';
+
+      return '<div style="background:' + (m.sent ? 'rgba(16,185,129,0.05)' : 'rgba(255,255,255,0.03)') + ';border:1px solid ' + (m.sent ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.06)') + ';border-radius:10px;padding:12px;margin-bottom:10px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
+          '<div style="font-weight:600;font-size:0.85rem;">' + esc(m.name) + '</div>' +
+          '<div style="font-size:0.7rem;">' + sent + '</div>' +
+        '</div>' +
+        '<div class="micro muted" style="font-size:0.65rem;margin-bottom:8px;">' +
+          esc(m.phone) + ' · ' + fmt(m.amount) + balLine + ' · ' + esc(m.receiptNumber) +
+        '</div>' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + actions + '</div>' +
+      '</div>';
+    }).join('');
 
     const modal = document.createElement('div');
     modal.id = 'bulk-receipts-modal';
     modal.className = 'ov on';
     modal.style.zIndex = '100020';
 
-    const rows = log.members.map((m, i) => {
-      const sent = m.sent ? '✅' : '⏳';
-      const status = m.sent
-        ? '<span style="font-size:0.65rem;color:var(--green);">✅ Sent</span>'
-        : '<button class="btn btn-sm btn-green"  onclick="sendDebtReceipt(\'' + logKey + '\',' + i + ')" style="padding:2px 10px;font-size:0.6rem;">💬 Send</button>' +
-          '<button class="btn btn-sm btn-purple" onclick="copyDebtReceipt(\'' + logKey + '\',' + i + ')" style="padding:2px 10px;font-size:0.6rem;">📋 Copy</button>' +
-          '<button class="btn btn-sm btn-amber"  onclick="saveDebtReceipt(\'' + logKey + '\',' + i + ')" style="padding:2px 10px;font-size:0.6rem;">💾 Save</button>' +
-          '<button class="btn btn-sm btn-sec"    onclick="markDebtReceiptSent(\'' + logKey + '\',' + i + ')" style="padding:2px 10px;font-size:0.6rem;">✓ Mark Sent</button>';
-
-      return '<div style="background:' + (m.sent ? 'rgba(16,185,129,0.05)' : 'rgba(255,255,255,0.03)') + ';border:1px solid ' + (m.sent ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.06)') + ';border-radius:10px;padding:12px;margin-bottom:10px;">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
-          '<div style="font-weight:600;font-size:0.85rem;">' + escapeHtmlSafe(m.name) + '</div>' +
-          '<div style="font-size:0.7rem;">' + sent + '</div>' +
-        '</div>' +
-        '<div class="micro muted" style="font-size:0.65rem;margin-bottom:8px;">' +
-          escapeHtmlSafe(m.phone) + ' · ' + moneySafe(m.amount) +
-          (m.newBalance != null ? ' · New bal ' + moneySafe(m.newBalance) : '') +
-        '</div>' +
-        '<div style="display:flex;gap:6px;flex-wrap:wrap;">' + status + '</div>' +
-      '</div>';
-    }).join('');
-
     modal.innerHTML =
       '<div class="bs" style="max-width:520px;max-height:90vh;display:flex;flex-direction:column;padding:16px 18px;">' +
         '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;">' +
           '<div style="flex:1;min-width:0;">' +
-            '<div class="bs-title" style="margin:0 0 4px;">📨 Bulk Debt Receipts</div>' +
-            '<div class="micro muted">' + log.memberCount + ' members · Total ' + moneySafe(log.totalAmount) + '</div>' +
+            '<div class="bs-title" style="margin:0 0 4px;">' + (isDebt ? '📨 Bulk Debt Receipts' : '📨 Bulk Deposit Receipts') + '</div>' +
+            '<div class="micro muted">' + log.memberCount + ' members · ' + fmt(log.totalAmount) + '</div>' +
           '</div>' +
           '<button onclick="document.getElementById(\'bulk-receipts-modal\').remove()" style="background:rgba(255,255,255,0.08);border:none;width:32px;height:32px;border-radius:50%;color:var(--text);font-size:1.1rem;flex-shrink:0;">✕</button>' +
         '</div>' +
         '<div style="flex:1;overflow-y:auto;padding-right:4px;">' + rows + '</div>' +
         '<div style="display:flex;gap:8px;margin-top:10px;">' +
-          '<button class="btn btn-sm btn-teal" onclick="deleteBulkLog(\'debt\',\'' + logKey + '\')" style="flex:1;">🗑️ Delete Log</button>' +
+          '<button class="btn btn-sm btn-teal" onclick="deleteBulkLog(\'' + type + '\',\'' + logKey + '\')" style="flex:1;">🗑️ Delete Log</button>' +
           '<button class="btn btn-sm btn-sec" onclick="document.getElementById(\'bulk-receipts-modal\').remove()" style="flex:1;">Close</button>' +
         '</div>' +
       '</div>';
@@ -14817,194 +14931,551 @@ console.log('✅ Part 11 — Reminder Generator loaded (7 templates)');
     modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
   };
 
-  /* ─────────────────────────────────────────────────────────────
-     FIX #5 — Debt receipt actions with the corrected balance
-     ───────────────────────────────────────────────────────────── */
-
-  async function fetchDebtMember(logKey, index) {
+  /* ── Debt receipt actions ─────────────────────────────── */
+  async function fetchDebt(logKey, i) {
     const snap = await db.ref('notifications/admin_bulk_debt_logs/' + logKey).once('value');
     const log = snap.val();
-    if (!log) { window.toast('Log not found', '#ef4444'); return null; }
-    const member = (log.members || [])[index];
-    if (!member) { window.toast('Member not found', '#ef4444'); return null; }
-    return { log, member };
+    if (!log) return null;
+    const m = (log.members || [])[i];
+    if (!m) return null;
+    return { log, m };
   }
-
-  async function renderDebtReceiptImage(logKey, index) {
-    const data = await fetchDebtMember(logKey, index);
-    if (!data) return null;
-    const { log, member } = data;
-
-    const principal = member.principal || member.amount || 0;
-    const rate      = log.interestRate || 0;
-    const total     = member.amount || 0;
-
-    /* Pass member.newBalance so the receipt shows the correct figure */
+  async function renderDebtImg(logKey, i) {
+    const d = await fetchDebt(logKey, i);
+    if (!d) return null;
+    const principal = d.m.principal || d.m.amount || 0;
+    const rate = d.log.interestRate || 0;
+    const total = d.m.amount || 0;
+    const bal = (typeof d.m.newBalance === 'number' && d.m.newBalance > 0)
+      ? d.m.newBalance
+      : balanceOf(d.m.phone);
     return window.generateDebtReceiptImage(
-      { name: member.name, phone: member.phone },
-      principal, rate, total, log.reason || 'Admin assigned debt', log.dueDate,
-      member.newBalance       /* ← the fix */
+      { name: d.m.name, phone: d.m.phone },
+      principal, rate, total, d.log.reason || 'Admin assigned debt', d.log.dueDate, bal
     );
   }
 
-  window.sendDebtReceipt = async function (logKey, index) {
-    const data = await fetchDebtMember(logKey, index);
-    if (!data) return;
-    const { log, member } = data;
+  window.sendDebtReceipt = async function (logKey, i) {
+    const d = await fetchDebt(logKey, i);
+    if (!d) return;
+    window.toast('⏳ Generating…', '#06b6d4');
+    const r = await renderDebtImg(logKey, i);
+    if (!r || !r.imageData) { window.toast('❌ Failed', '#ef4444'); return; }
+    await sendImageWhatsApp(r.imageData, d.m.phone, d.m.name, d.m.receiptNumber, 'Debt Receipt');
+    await markSent('debt', logKey, i);
+    window.showBulkReceipts('debt', logKey);
+  };
+  window.copyDebtReceipt = async function (logKey, i) {
+    window.toast('⏳ Generating…', '#06b6d4');
+    const r = await renderDebtImg(logKey, i);
+    if (!r || !r.imageData) { window.toast('❌ Failed', '#ef4444'); return; }
+    await copyImage(r.imageData);
+    await markSent('debt', logKey, i);
+    window.showBulkReceipts('debt', logKey);
+  };
+  window.saveDebtReceipt = async function (logKey, i) {
+    window.toast('⏳ Generating…', '#06b6d4');
+    const r = await renderDebtImg(logKey, i);
+    if (!r || !r.imageData) { window.toast('❌ Failed', '#ef4444'); return; }
+    downloadImage(r.imageData, 'debt_' + r.receiptNumber + '.png');
+    window.toast('💾 Saved', '#10b981');
+  };
+  window.markDebtSent = async function (logKey, i) {
+    await markSent('debt', logKey, i);
+    window.toast('✅ Marked sent', '#10b981');
+    window.showBulkReceipts('debt', logKey);
+  };
 
-    window.toast('⏳ Generating receipt…', '#06b6d4');
-    const receipt = await renderDebtReceiptImage(logKey, index);
-    if (!receipt || !receipt.imageData) { window.toast('❌ Failed to generate', '#ef4444'); return; }
+  /* ── Deposit receipt actions ──────────────────────────── */
+  async function fetchTx(logKey, i) {
+    const snap = await db.ref('notifications/admin_bulk_tx_logs/' + logKey).once('value');
+    const log = snap.val();
+    if (!log) return null;
+    const m = (log.members || [])[i];
+    if (!m) return null;
+    return { log, m };
+  }
+  async function renderTxImg(logKey, i) {
+    const d = await fetchTx(logKey, i);
+    if (!d) return null;
+    if (typeof window.generateDepositReceiptImage === 'function') {
+      const res = await window.generateDepositReceiptImage(
+        { name: d.m.name, phone: d.m.phone },
+        d.m.amount,
+        d.log.description || 'Bulk deposit',
+        d.m.receiptNumber
+      );
+      if (res && res.imageData) return res;
+    }
+    /* Fallback inline */
+    if (typeof window.buildDepositReceiptHTML !== 'function' || typeof window.renderReceiptImage !== 'function') return null;
+    const html = window.buildDepositReceiptHTML(
+      { name: d.m.name, phone: d.m.phone },
+      d.m.amount, d.log.description || 'Bulk deposit', d.m.receiptNumber,
+      balanceOf(d.m.phone), 0, 0, 0
+    );
+    const img = await window.renderReceiptImage(html);
+    return { imageData: img, receiptNumber: d.m.receiptNumber };
+  }
 
-    let digits = String(member.phone || '').replace(/\D/g, '');
+  window.sendTxReceipt = async function (logKey, i) {
+    const d = await fetchTx(logKey, i);
+    if (!d) return;
+    window.toast('⏳ Generating…', '#06b6d4');
+    const r = await renderTxImg(logKey, i);
+    if (!r || !r.imageData) { window.toast('❌ Failed', '#ef4444'); return; }
+    await sendImageWhatsApp(r.imageData, d.m.phone, d.m.name, d.m.receiptNumber, 'Deposit Receipt');
+    await markSent('tx', logKey, i);
+    window.showBulkReceipts('tx', logKey);
+  };
+  window.copyTxReceipt = async function (logKey, i) {
+    window.toast('⏳ Generating…', '#06b6d4');
+    const r = await renderTxImg(logKey, i);
+    if (!r || !r.imageData) { window.toast('❌ Failed', '#ef4444'); return; }
+    await copyImage(r.imageData);
+    await markSent('tx', logKey, i);
+    window.showBulkReceipts('tx', logKey);
+  };
+  window.saveTxReceipt = async function (logKey, i) {
+    window.toast('⏳ Generating…', '#06b6d4');
+    const r = await renderTxImg(logKey, i);
+    if (!r || !r.imageData) { window.toast('❌ Failed', '#ef4444'); return; }
+    downloadImage(r.imageData, 'deposit_' + r.receiptNumber + '.png');
+    window.toast('💾 Saved', '#10b981');
+  };
+  window.markTxSent = async function (logKey, i) {
+    await markSent('tx', logKey, i);
+    window.toast('✅ Marked sent', '#10b981');
+    window.showBulkReceipts('tx', logKey);
+  };
+
+  /* ── Shared helpers ───────────────────────────────────── */
+  async function markSent(type, logKey, i) {
+    const path = type === 'debt'
+      ? 'notifications/admin_bulk_debt_logs/' + logKey
+      : 'notifications/admin_bulk_tx_logs/' + logKey;
+    await db.ref(path + '/members/' + i + '/sent').set(true);
+    const snap = await db.ref(path).once('value');
+    const log = snap.val();
+    if (log && (log.members || []).every(m => m.sent)) {
+      await db.ref(path + '/receiptsSent').set(true);
+    }
+    if (typeof window.updateLogsBadge === 'function') window.updateLogsBadge();
+    if (type === 'debt' && typeof window.renderBulkDebtLogs === 'function') window.renderBulkDebtLogs();
+    if (type === 'tx'   && typeof window.renderBulkTxLogs   === 'function') window.renderBulkTxLogs();
+  }
+
+  async function sendImageWhatsApp(imageData, phone, name, receiptNumber, kind) {
+    let digits = String(phone || '').replace(/\D/g, '');
     if (digits.startsWith('0')) digits = '256' + digits.slice(1);
     if (!digits.startsWith('256')) digits = '256' + digits;
 
-    /* Native share */
     if (navigator.share && navigator.canShare) {
       try {
-        const blob = await (await fetch(receipt.imageData)).blob();
-        const file = new File([blob], 'debt_receipt_' + member.receiptNumber + '.png', { type: 'image/png' });
+        const blob = await (await fetch(imageData)).blob();
+        const file = new File([blob], 'receipt_' + receiptNumber + '.png', { type: 'image/png' });
         if (navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            title: 'Debt Receipt',
-            text: 'Debt receipt for ' + member.name,
-            files: [file]
-          });
+          await navigator.share({ title: kind, text: kind + ' for ' + name, files: [file] });
           window.toast('✅ Shared', '#10b981');
-          await markDebtReceiptSentSilent(logKey, index);
-          window.showBulkReceipts('debt', logKey);
           return;
         }
       } catch (err) {
         if (err.name === 'AbortError') return;
       }
     }
-
-    /* WhatsApp + download */
-    const msg = '🌾 Harvest Trust Finance\n\n📄 Debt Receipt\nMember: ' + member.name +
-      '\nAmount: ' + moneySafe(member.amount) + '\nReceipt: ' + member.receiptNumber;
+    const msg = '🌾 Harvest Trust Finance\n\n📄 ' + kind + '\nMember: ' + name +
+      '\nReceipt: ' + receiptNumber;
     window.open('https://wa.me/' + digits + '?text=' + encodeURIComponent(msg), '_blank');
-    const a = document.createElement('a');
-    a.href = receipt.imageData;
-    a.download = 'debt_receipt_' + member.receiptNumber + '.png';
-    a.click();
+    downloadImage(imageData, 'receipt_' + receiptNumber + '.png');
     window.toast('💬 WhatsApp opened. Attach the image.', '#25D366');
-    await markDebtReceiptSentSilent(logKey, index);
-    window.showBulkReceipts('debt', logKey);
-  };
+  }
 
-  window.copyDebtReceipt = async function (logKey, index) {
-    window.toast('⏳ Generating receipt…', '#06b6d4');
-    const receipt = await renderDebtReceiptImage(logKey, index);
-    if (!receipt || !receipt.imageData) { window.toast('❌ Failed', '#ef4444'); return; }
+  async function copyImage(imageData) {
     try {
-      const blob = await (await fetch(receipt.imageData)).blob();
+      const blob = await (await fetch(imageData)).blob();
       await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-      window.toast('📋 Image copied', '#06b6d4');
-      await markDebtReceiptSentSilent(logKey, index);
-      window.showBulkReceipts('debt', logKey);
+      window.toast('📋 Copied', '#06b6d4');
     } catch (err) {
-      const a = document.createElement('a');
-      a.href = receipt.imageData;
-      a.download = 'debt_receipt.png';
-      a.click();
-      window.toast('📸 Downloaded', '#f59e0b');
-      await markDebtReceiptSentSilent(logKey, index);
-      window.showBulkReceipts('debt', logKey);
+      downloadImage(imageData, 'receipt.png');
+      window.toast('📸 Downloaded (clipboard unavailable)', '#f59e0b');
     }
-  };
+  }
 
-  window.saveDebtReceipt = async function (logKey, index) {
-    window.toast('⏳ Generating receipt…', '#06b6d4');
-    const receipt = await renderDebtReceiptImage(logKey, index);
-    if (!receipt || !receipt.imageData) { window.toast('❌ Failed', '#ef4444'); return; }
+  function downloadImage(imageData, filename) {
     const a = document.createElement('a');
-    a.href = receipt.imageData;
-    a.download = 'debt_receipt_' + receipt.receiptNumber + '.png';
+    a.href = imageData;
+    a.download = filename;
     a.click();
-    window.toast('💾 Saved', '#10b981');
-  };
+  }
 
-  window.markDebtReceiptSent = async function (logKey, index) {
-    await markDebtReceiptSentSilent(logKey, index);
-    window.toast('✅ Marked sent', '#10b981');
-    window.showBulkReceipts('debt', logKey);
-  };
-
-  async function markDebtReceiptSentSilent(logKey, index) {
-    const path = 'notifications/admin_bulk_debt_logs/' + logKey;
-    await db.ref(path + '/members/' + index + '/sent').set(true);
-    const snap = await db.ref(path).once('value');
-    const log = snap.val();
-    if (log && log.members && log.members.every(m => m.sent)) {
-      await db.ref(path + '/receiptsSent').set(true);
-    }
+  window.deleteBulkLog = async function (type, logKey) {
+    if (!confirm('Delete this log and all its receipt records?')) return;
+    const path = type === 'debt'
+      ? 'notifications/admin_bulk_debt_logs/' + logKey
+      : 'notifications/admin_bulk_tx_logs/' + logKey;
+    await db.ref(path).remove();
+    window.toast('Log deleted', '#ef4444');
+    const modal = document.getElementById('bulk-receipts-modal');
+    if (modal) modal.remove();
+    if (type === 'debt' && typeof window.renderBulkDebtLogs === 'function') window.renderBulkDebtLogs();
+    if (type === 'tx'   && typeof window.renderBulkTxLogs   === 'function') window.renderBulkTxLogs();
     if (typeof window.updateLogsBadge === 'function') window.updateLogsBadge();
-    if (typeof window.renderBulkDebtLogs === 'function') window.renderBulkDebtLogs();
-  }
+  };
 
-  /* ─────────────────────────────────────────────────────────────
-     HELPERS
-     ───────────────────────────────────────────────────────────── */
-  function ensureReceiptNumber() {
-    if (typeof window.generateReceiptNumber === 'function') return window.generateReceiptNumber();
-    return 'HTF-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
-  }
-  function escapeHtmlSafe(s) {
-    if (typeof window.escapeHtml === 'function') return window.escapeHtml(s);
-    return String(s || '').replace(/[&<>]/g, c => c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;');
-  }
-  function moneySafe(n) {
-    if (typeof window.money === 'function') return window.money(n);
-    return 'UGX ' + Number(n || 0).toLocaleString();
-  }
+  /* ═════════════════════════════════════════════════════════════
+     SECTION G — REPAIR OLD DEBT LOGS (utility)
+     Run manually:  repairOldDebtLogs()
+     ═════════════════════════════════════════════════════════════ */
+  window.repairOldDebtLogs = async function () {
+    if (!confirm('Repair old debt logs? Adds correct newBalance to each log member.')) return;
+    window.toast('⏳ Repairing…', '#06b6d4');
+    const snap = await db.ref('notifications/admin_bulk_debt_logs').once('value');
+    const all = snap.val() || {};
+    const keys = Object.keys(all);
+    if (!keys.length) { window.toast('No logs found', '#f59e0b'); return; }
 
-  async function executeDebtAssignmentSafe(member, principal, interestRate, interest, totalRepay, reason) {
-    const ref = db.ref('loans').push();
-    const loanId = ref.key;
-    await ref.set({
-      id: loanId,
-      memberId: member.id,
-      memberName: member.name,
-      memberPhone: member.phone,
-      amount: principal,
-      interestRate,
-      totalRepay,
-      reason,
-      status: 'approved',
-      requestedAt: Date.now(),
-      approvedAt: Date.now(),
-      dueDate: null,
-      repaid: false,
-      repaidAmount: 0,
-      penaltyApplied: false,
-      loanQuestions: [],
-      weeks: 1
-    });
-    await db.ref('transactions').push({
-      memberPhone: member.phone, memberName: member.name,
-      type: 'loan_disbursement', amount: principal,
-      receiptNumber: ensureReceiptNumber(),
-      description: reason + ' (principal)',
-      date: Date.now(),
-      loanId
-    });
-    if (interest > 0) {
-      await db.ref('transactions').push({
-        memberPhone: member.phone, memberName: member.name,
-        type: 'loan_interest', amount: interest,
-        receiptNumber: ensureReceiptNumber(),
-        description: 'Interest (' + interestRate + '%)',
-        date: Date.now() + 1,
-        loanId
+    const map = loansMap();
+    const updates = {};
+    let patched = 0;
+
+    keys.forEach(k => {
+      const log = all[k];
+      (log.members || []).forEach((m, i) => {
+        if (typeof m.newBalance === 'number' && m.newBalance > 0) return;
+        const correct = map[m.phone] || 0;
+        if (correct > 0) {
+          updates['notifications/admin_bulk_debt_logs/' + k + '/members/' + i + '/newBalance'] = correct;
+          patched++;
+        }
       });
-    }
-  }
+    });
 
-  console.log('✅ Part 16 — Debt receipt balance fix loaded');
+    if (!patched) { window.toast('Nothing to repair', '#10b981'); return; }
+    await db.ref().update(updates);
+    window.toast('✅ Patched ' + patched + ' entries', '#10b981');
+  };
+
+  /* ═════════════════════════════════════════════════════════════
+     DEBUG
+     ═════════════════════════════════════════════════════════════ */
+  window.dumpDebtLogs = async function () {
+    const snap = await db.ref('notifications/admin_bulk_debt_logs').orderByChild('timestamp').limitToLast(5).once('value');
+    const val = snap.val() || {};
+    console.log('─── Latest 5 debt logs ───');
+    Object.entries(val).forEach(([key, log]) => {
+      console.log('Log', key, '·', new Date(log.timestamp).toLocaleString());
+      (log.members || []).forEach((m, i) => {
+        console.log('  [' + i + ']', m.name,
+          '| amount:', m.amount,
+          '| newBalance:', m.newBalance,
+          '| sent:', !!m.sent);
+      });
+    });
+    console.log('');
+    console.log('Live loans map:', loansMap());
+  };
+
+  console.log('✅ Part 19 — Final override loaded. All Parts 14-18 replaced.');
+  console.log('   Utility: repairOldDebtLogs() | dumpDebtLogs()');
 })();
 </script>
-<!-- /#app -->
+<script>
+/* ═══════════════════════════════════════════════════════════════════════
+   PART 20 — DEBT LOCK + MEMBERSHIP TRANSFER
+   New feature: when a member's total debt exceeds the group's weekly
+   payout, they're "locked" — no new loans, no new debt, no edits.
+   They can only deposit (to reduce the debt) or transfer membership.
+   ═══════════════════════════════════════════════════════════════════════ */
+'use strict';
+
+/* ─────────────────────────────────────────────────────────────────────
+   1. WEEKLY PAYOUT — the ceiling for "recoverable" debt
+   ───────────────────────────────────────────────────────────────────── */
+function getWeeklyPayoutAmount() {
+  const dailyAmount = (settings.dailyAmount || 2500) * 7;
+  const active = members.filter(m => m.approved !== false).length || 1;
+  return dailyAmount * active;
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   2. DEBT LOCK CHECK
+   A member is "locked" when their total debt (loans + debts) exceeds
+   what the group could ever pay out to them in one week. Meaning: even
+   if they won the rotation, the payout wouldn't cover their debt.
+   ───────────────────────────────────────────────────────────────────── */
+function isMemberDebtLocked(member) {
+  if (!member || member.isAdmin) return false;
+  const totalOwed = (memberLoans[member.phone] || 0) + (memberDebts[member.phone] || 0);
+  const payout = getWeeklyPayoutAmount();
+  return totalOwed > payout;
+}
+
+function getMemberLockReason(member) {
+  const totalOwed = (memberLoans[member.phone] || 0) + (memberDebts[member.phone] || 0);
+  const payout = getWeeklyPayoutAmount();
+  return {
+    totalOwed,
+    payout,
+    excess: totalOwed - payout,
+    message: 'Total debt (' + money(totalOwed) + ') exceeds the weekly payout (' + money(payout) + ').'
+  };
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   3. PICKER — choose a member to transfer to
+   ───────────────────────────────────────────────────────────────────── */
+window.showMembershipTransferModal = function (fromMemberId) {
+  const from = members.find(m => m.id === fromMemberId);
+  if (!from) { toast('Member not found', '#ef4444'); return; }
+
+  const candidates = members.filter(m => m.id !== from.id && m.approved !== false);
+  if (!candidates.length) {
+    toast('No other members available to transfer to', '#ef4444');
+    return;
+  }
+
+  const owed = (memberLoans[from.phone] || 0) + (memberDebts[from.phone] || 0);
+  const daysActive = getDaysActive(from);
+
+  const optionsHtml = candidates.map(m => {
+    const mOwed = (memberLoans[m.phone] || 0) + (memberDebts[m.phone] || 0);
+    const mDays = getDaysActive(m);
+    return '<option value="' + m.id + '">' +
+      escapeHtml(m.name) + ' — ' + mDays + 'd, owes ' + money(mOwed) +
+      '</option>';
+  }).join('');
+
+  const html =
+    '<div style="background:rgba(239,68,68,0.08);border:2px solid var(--red);border-radius:12px;padding:14px;margin-bottom:14px;">' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">' +
+        '<span style="font-size:1.8rem;">🔒</span>' +
+        '<div>' +
+          '<div style="font-weight:800;color:var(--red);font-size:0.95rem;">Membership Transfer Required</div>' +
+          '<div class="micro muted" style="margin-top:2px;">' + escapeHtml(from.name) + '\'s debt cannot be recovered through normal payouts.</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:0.78rem;margin-top:10px;">' +
+        '<span style="color:var(--text-3);">Total owed:</span><strong style="color:var(--red);">' + money(owed) + '</strong>' +
+        '<span style="color:var(--text-3);">Days active:</span><strong>' + daysActive + ' days</strong>' +
+        '<span style="color:var(--text-3);">Join date:</span><strong>' + (from.joinDate || 'N/A') + '</strong>' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="fgrp">' +
+      '<label class="flbl">Transfer to</label>' +
+      '<select id="transfer-to-member" class="inp">' +
+        '<option value="">-- Select Member --</option>' + optionsHtml +
+      '</select>' +
+    '</div>' +
+
+    '<div id="transfer-preview" class="hint-box" style="display:none;"></div>' +
+
+    '<div class="hint-box" style="background:rgba(6,182,212,0.08);border-color:rgba(6,182,212,0.2);">' +
+      '<strong>What happens on transfer:</strong>' +
+      '<ul style="margin-top:4px;margin-left:16px;font-size:0.78rem;">' +
+        '<li>All of ' + escapeHtml(from.name) + '\'s transactions move to the buyer</li>' +
+        '<li>All loans move to the buyer</li>' +
+        '<li>Buyer inherits the payout rotation position</li>' +
+        '<li>Buyer takes on the combined debt</li>' +
+        '<li>' + escapeHtml(from.name) + '\'s account is removed</li>' +
+      '</ul>' +
+    '</div>' +
+
+    '<div style="display:flex;gap:10px;margin-top:14px;">' +
+      '<button class="btn btn-gold" style="flex:1;" id="do-transfer-btn" disabled>🔄 Confirm Transfer</button>' +
+      '<button class="btn btn-sec" style="flex:1;" onclick="closeCurrentModal()">Cancel</button>' +
+    '</div>';
+
+  showModal(html, '🔄 Membership Transfer — ' + from.name);
+
+  /* Wire the select */
+  setTimeout(() => {
+    const sel = document.getElementById('transfer-to-member');
+    const preview = document.getElementById('transfer-preview');
+    const confirmBtn = document.getElementById('do-transfer-btn');
+    if (!sel || !preview || !confirmBtn) return;
+
+    sel.onchange = function () {
+      const toId = sel.value;
+      if (!toId) {
+        preview.style.display = 'none';
+        confirmBtn.disabled = true;
+        return;
+      }
+      const to = members.find(m => m.id === toId);
+      if (!to) { preview.style.display = 'none'; confirmBtn.disabled = true; return; }
+
+      const fromOwed = (memberLoans[from.phone] || 0) + (memberDebts[from.phone] || 0);
+      const toOwed   = (memberLoans[to.phone]   || 0) + (memberDebts[to.phone]   || 0);
+      const combined = fromOwed + toOwed;
+      const combinedDays = getDaysActive(from) + getDaysActive(to);
+
+      preview.style.display = 'block';
+      preview.innerHTML =
+        '<strong>After transfer:</strong>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:0.8rem;margin-top:6px;">' +
+          '<span style="color:var(--text-3);">Buyer:</span><strong>' + escapeHtml(to.name) + '</strong>' +
+          '<span style="color:var(--text-3);">Combined debt:</span><strong style="color:var(--red);">' + money(combined) + '</strong>' +
+          '<span style="color:var(--text-3);">Combined days:</span><strong>' + combinedDays + '</strong>' +
+          '<span style="color:var(--text-3);">Payout position:</span><strong>Inherited</strong>' +
+        '</div>';
+      confirmBtn.disabled = false;
+    };
+
+    confirmBtn.onclick = function () {
+      const toId = sel.value;
+      if (!toId) return;
+      const to = members.find(m => m.id === toId);
+      if (!to) return;
+      if (!confirm('⚠️ Transfer ' + from.name + '\'s membership to ' + to.name + '?\n\nThis cannot be undone.')) return;
+
+      requirePasswordConfirmation(async () => {
+        await processMembershipTransfer(from, to, null);
+        closeCurrentModal();
+      }, 'Membership Transfer');
+    };
+  }, 200);
+};
+
+/* ─────────────────────────────────────────────────────────────────────
+   4. THE ACTUAL TRANSFER
+   Moves all transactions, loans, rotation slot from one member to another
+   and deletes the source member.
+   ───────────────────────────────────────────────────────────────────── */
+window.processMembershipTransfer = async function (from, to, requestId) {
+  if (!from || !to) { toast('Invalid members', '#ef4444'); return; }
+  if (from.id === to.id) { toast('Cannot transfer to the same member', '#ef4444'); return; }
+
+  try {
+    /* ── Compute merged values ──────────────────────────── */
+    const fromDays = getDaysActive(from);
+    const toDays   = getDaysActive(to);
+    const totalDays = fromDays + toDays;
+
+    const fromDate = new Date(from.joinDate || Date.now());
+    const toDate   = new Date(to.joinDate   || Date.now());
+    const earliest = fromDate < toDate ? fromDate : toDate;
+    const earliestStr = earliest.toISOString().split('T')[0];
+
+    /* ── Reassign transactions ──────────────────────────── */
+    const txSnap = await db.ref('transactions').once('value');
+    const allTx = txSnap.val() || {};
+    const updates = {};
+    let txCount = 0;
+
+    for (const [id, tx] of Object.entries(allTx)) {
+      if (tx.memberPhone === from.phone) {
+        updates['transactions/' + id + '/memberPhone'] = to.phone;
+        updates['transactions/' + id + '/memberName']  = to.name;
+        const origDesc = tx.description || tx.type || 'Transaction';
+        updates['transactions/' + id + '/description'] = '[Transferred] ' + origDesc;
+        txCount++;
+      }
+    }
+
+    /* ── Reassign loans ─────────────────────────────────── */
+    const loanSnap = await db.ref('loans').once('value');
+    const allLoans = loanSnap.val() || {};
+    let loanCount = 0;
+
+    for (const [id, loan] of Object.entries(allLoans)) {
+      if (loan.memberId === from.id || loan.memberPhone === from.phone) {
+        updates['loans/' + id + '/memberId']    = to.id;
+        updates['loans/' + id + '/memberName']  = to.name;
+        updates['loans/' + id + '/memberPhone'] = to.phone;
+        loanCount++;
+      }
+    }
+
+    /* ── Update buyer ───────────────────────────────────── */
+    updates['members/' + to.id + '/joinDate']  = earliestStr;
+    updates['members/' + to.id + '/daysActive'] = totalDays;
+    updates['members/' + to.id + '/updatedAt'] = Date.now();
+
+    /* ── Apply all updates in one write ────────────────── */
+    if (Object.keys(updates).length) await db.ref().update(updates);
+
+    /* ── Rotation: replace from.id with to.id, remove duplicates ── */
+    const order = (rotation.order || []).slice();
+    const fromIdx = order.indexOf(from.id);
+    const newOrder = order.filter(id => id !== from.id && id !== to.id);
+    if (fromIdx >= 0) {
+      newOrder.splice(Math.min(fromIdx, newOrder.length), 0, to.id);
+    } else if (!newOrder.includes(to.id)) {
+      newOrder.push(to.id);
+    }
+    await db.ref('rotation').update({ order: newOrder, currentIndex: 0 });
+    rotation.order = newOrder;
+    rotation.currentIndex = 0;
+
+    /* ── Delete source member ──────────────────────────── */
+    await db.ref('members/' + from.id).remove();
+
+    /* ── Close request if provided ─────────────────────── */
+    if (requestId) {
+      await db.ref('leaveRequests/' + requestId).update({
+        status: 'transferred',
+        transferredTo: to.id,
+        transferredAt: Date.now(),
+        transferredBy: currentUser && currentUser.name || 'Admin'
+      });
+    }
+
+    /* ── Notify buyer ──────────────────────────────────── */
+    await db.ref('notifications/' + to.id).push({
+      id: Date.now(),
+      text: '🔄 You took over ' + from.name + '\'s membership. New debt: ' +
+            money((memberLoans[from.phone] || 0) + (memberDebts[from.phone] || 0)) +
+            '. Active days: ' + totalDays + '.',
+      date: Date.now(),
+      read: false,
+      type: 'transfer_complete'
+    });
+
+    /* ── Reload + refresh ──────────────────────────────── */
+    if (typeof reloadData === 'function') await reloadData();
+    if (typeof refreshUI   === 'function') refreshUI();
+    if (typeof updateAdminMembersList === 'function') updateAdminMembersList();
+
+    toast('✅ Transferred ' + txCount + ' transactions and ' + loanCount +
+          ' loans from ' + from.name + ' to ' + to.name, '#10b981');
+
+  } catch (err) {
+    console.error('Transfer failed:', err);
+    toast('❌ Transfer failed: ' + err.message, '#ef4444');
+  }
+};
+
+/* ─────────────────────────────────────────────────────────────────────
+   5. DELETE THE OLD STUB and replace with real behavior
+   showMemberTransferOption now actually opens the picker if locked,
+   or offers the simple delete if no debt.
+   ───────────────────────────────────────────────────────────────────── */
+window.showMemberTransferOption = function (memberId) {
+  const member = members.find(m => m.id === memberId);
+  if (!member) { toast('Member not found', '#ef4444'); return; }
+
+  const totalOwed = (memberLoans[member.phone] || 0) + (memberDebts[member.phone] || 0);
+
+  if (totalOwed === 0) {
+    if (confirm('Delete ' + member.name + '? No outstanding balance.')) {
+      requirePasswordConfirmation(async () => {
+        await db.ref('members/' + member.id).remove();
+        const newOrder = (rotation.order || []).filter(id => id !== member.id);
+        await db.ref('rotation').update({ order: newOrder, currentIndex: 0 });
+        toast(member.name + ' deleted', '#ef4444');
+        if (typeof reloadData === 'function') await reloadData();
+        if (typeof refreshUI   === 'function') refreshUI();
+      }, 'Delete Member');
+    }
+    return;
+  }
+
+  /* Has debt — always offer transfer */
+  showMembershipTransferModal(memberId);
+};
+
+console.log('✅ Part 20 — Debt lock + membership transfer loaded');
+</script>
 </body>
 </html>
