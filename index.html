@@ -2906,6 +2906,7 @@ body.nav-open .nav-fab-item:nth-child(3) { transition-delay: 0.12s; }
 body.nav-open .nav-fab-item:nth-child(4) { transition-delay: 0.16s; }
 body.nav-open .nav-fab-item:nth-child(5) { transition-delay: 0.20s; }
 body.nav-open .nav-fab-item:nth-child(6) { transition-delay: 0.24s; }
+body.nav-open .nav-fab-item:nth-child(7) { transition-delay: 0.28s; }
 
 /* ═══════════════════════════════════════════════════════════════
    FAB BUTTON — animated book + label
@@ -3331,6 +3332,7 @@ body.nav-open .fab-label {
 }
 </style>
 </head>
+<body>
 <!-- ═══════════════════════════════════════════════════════════════
      BACKGROUND DECOR
      ═══════════════════════════════════════════════════════════════ -->
@@ -3898,6 +3900,9 @@ body.nav-open .fab-label {
 
 <div id="nav-fab-wrap">
   <div id="nav-fab-menu">
+     <button type="button" class="nav-fab-item" data-action="nav-goto-home">
+      <span class="nf-icon">🏠</span><span>Home</span>
+    </button>
     <button type="button" class="nav-fab-item" data-action="nav-goto-dashboard">
       <span class="nf-icon">📊</span><span>Dashboard</span>
     </button>
@@ -3937,7 +3942,7 @@ body.nav-open .fab-label {
     </button>
     <div class="fab-label" aria-hidden="true">Go to</div>
   </div>
-
+</div><!-- /#app -->
 </div><!-- /#app -->
 
 <!-- ═══════════════════════════════════════════════════════════════
@@ -9494,6 +9499,8 @@ body.nav-open .fab-label {
 
     // Slight delay so the FAB close animation feels responsive
     setTimeout(function() {
+      if (target === 'home')        { window.goTab('home');        return; }
+      if (target === 'account')     { window.goTab('account');     return; }
       if (target === 'account')     { window.goTab('account');     return; }
       if (target === 'admin')       { window.goTab('admin');       return; }
       if (target === 'dashboard')   { window.goTab('dashboard');   return; }
@@ -9503,6 +9510,7 @@ body.nav-open .fab-label {
     }, 120);
   }
 
+   window.registerAction('nav-goto-home',        function() { navTo('home');        });
   window.registerAction('nav-goto-dashboard',   function() { navTo('dashboard');   });
   window.registerAction('nav-goto-leaderboard', function() { navTo('leaderboard'); });
   window.registerAction('nav-goto-rewards',     function() { navTo('rewards');     });
@@ -10654,9 +10662,17 @@ body.nav-open .fab-label {
     await db.ref().update(updates);
     window.toast('✅ Patched ' + patched + ' entries', 'var(--success)');
   };
+   window.registerAction('open-assign-debt', function() {
+    window.openOv('ov-assign-debt');
+  });
+
+  window.registerAction('open-group-tx', function() {
+    window.openOv('ov-group-transaction');
+  });
 
   console.log('✅ Part 7 — Transactions loaded.');
   console.log('   Registered actions:', window.listActions().length);
+  
 })();
 </script>
 <!-- Part 8: Loans & rotation -->
@@ -14171,13 +14187,20 @@ body.nav-open .fab-label {
       await window.reloadData();
     }, 'Distribute Profit');
   });
+  // Part 9 — group setup
+  window.registerAction('submit-setup', function() {
+    window.closeOv('ov-setup');
+    window.toast('Setup saved', 'var(--success)');
+  });
 
   console.log('✅ Part 9 — Admin Panel loaded.');
 })();
 </script>
 
 <!-- Part 10: Receipts & reminders -->
+
 <script id="part-10-receipts">
+
 (function() {
   'use strict';
 
@@ -14252,6 +14275,18 @@ body.nav-open .fab-label {
           '</div>'
         : '');
   };
+  // Part 10 — receipts
+  window.registerAction('print-receipt', function() {
+    const content = (document.getElementById('single-receipt-content') || {}).innerHTML || '';
+    if (!content) { window.toast('Nothing to print', 'var(--warning)'); return; }
+    const w = window.open('', '_blank');
+    w.document.write('<!DOCTYPE html><html><head><title>Receipt</title>' +
+      '<style>body{font-family:sans-serif;padding:20px;}</style></head>' +
+      '<body>' + content + '</body></html>');
+    w.document.close();
+    w.focus();
+    setTimeout(function() { w.print(); }, 300);
+  });
 
   // ═══════════════════════════════════════════════════════════════
   // 2. QUOTE HELPER
@@ -15899,3 +15934,553 @@ body.nav-open .fab-label {
   console.log('   Debug helpers available: debug.showState(), debug.actions(), debug.selftest()');
 })();
 </script>
+<!-- Part 13: Forgot Password — hardened rebuild (overrides Part 5) -->
+<script id="part-13-forgot-hardened">
+(function() {
+  'use strict';
+
+  const MAX_PER_DAY = 3;
+  const TTL_MS      = 5 * 60 * 1000;
+
+  let _f = {
+    step: 0,
+    phone: '',
+    member: null,
+    tempPassword: '',
+    expiresAt: 0,
+    remaining: 0,
+    timer: null
+  };
+
+  function log(...args) {
+    console.log('%c[forgot]', 'color:#1877f2;font-weight:bold;', ...args);
+  }
+
+  function resetState() {
+    if (_f.timer) { clearInterval(_f.timer); _f.timer = null; }
+    _f.step = 0;
+    _f.phone = '';
+    _f.member = null;
+    _f.tempPassword = '';
+    _f.expiresAt = 0;
+    _f.remaining = 0;
+  }
+
+  function getContainer() {
+    return document.getElementById('forgot-step-container');
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // RENDER
+  // ═══════════════════════════════════════════════════════════════
+  function render() {
+    const c = getContainer();
+    if (!c) {
+      console.error('[forgot] container #forgot-step-container not found');
+      return;
+    }
+
+    log('rendering step:', _f.step);
+
+    // ── Step 0: phone ──────────────────────────────────────
+    if (_f.step === 0) {
+      c.innerHTML =
+        '<div class="hint-box">Enter the phone number you registered with.</div>' +
+        '<div class="fgrp">' +
+          '<label class="flbl">Phone Number</label>' +
+          '<input type="tel" id="forgot-phone" class="inp" ' +
+                 'placeholder="0770371720 or +256770371720" ' +
+                 'style="font-size:1.1rem;padding:14px;text-align:center;">' +
+        '</div>' +
+        '<button type="button" class="btn btn-gold btn-full" ' +
+                'data-action="forgot-step0" style="padding:13px;">Next →</button>';
+
+      setTimeout(function() {
+        const el = document.getElementById('forgot-phone');
+        if (el) el.focus();
+      }, 200);
+      return;
+    }
+
+    // ── Step 1: 4 identity questions ───────────────────────
+    if (_f.step === 1) {
+      c.innerHTML =
+        '<div class="hint-box">Answer the questions. ' +
+          '<strong style="color:var(--warning);">At least 3 of 4 must be correct.</strong>' +
+        '</div>' +
+        '<div class="fgrp"><label class="flbl">1. Your full name(s)</label>' +
+          '<input type="text" id="forgot-name" class="inp" placeholder="As registered"></div>' +
+        '<div class="fgrp"><label class="flbl">2. Last amount saved (UGX)</label>' +
+          '<input type="number" id="forgot-amount" class="inp" placeholder="Deposit + welfare">' +
+          '<div class="micro">Total of your last daily deposit plus welfare.</div></div>' +
+        '<div class="fgrp"><label class="flbl">3. When did you last save?</label>' +
+          '<input type="date" id="forgot-date" class="inp"></div>' +
+        '<div class="fgrp"><label class="flbl">4. When did you join? <span class="muted">(optional)</span></label>' +
+          '<input type="date" id="forgot-join-date" class="inp"></div>' +
+        '<button type="button" class="btn btn-gold btn-full" ' +
+                'data-action="forgot-step1" style="padding:13px;">Verify →</button>';
+      return;
+    }
+
+    // ── Step 2: 3-char substring ───────────────────────────
+    if (_f.step === 2) {
+      c.innerHTML =
+        '<div class="hint-box" style="background:var(--warning-soft);">' +
+          '⚠️ Step 1 did not match. Try the secondary verification.' +
+        '</div>' +
+        '<div class="fgrp">' +
+          '<label class="flbl">Enter 3 consecutive characters from your password</label>' +
+          '<input type="text" id="forgot-substring" class="inp" maxlength="3" ' +
+                 'style="font-size:1.4rem;padding:14px;text-align:center;' +
+                        'letter-spacing:6px;font-family:monospace;" ' +
+                 'placeholder="abc">' +
+          '<div class="micro">Any 3 characters that appear in order inside your password.</div>' +
+        '</div>' +
+        '<button type="button" class="btn btn-gold btn-full" ' +
+                'data-action="forgot-step2" style="padding:13px;">Verify →</button>';
+      setTimeout(function() {
+        const el = document.getElementById('forgot-substring');
+        if (el) el.focus();
+      }, 200);
+      return;
+    }
+
+    // ── Result: temp password shown ────────────────────────
+    if (_f.step === 'result') {
+      const expiresAt = _f.expiresAt || (Date.now() + TTL_MS);
+
+      c.innerHTML =
+        '<div class="hint-box" style="background:var(--success-soft);border-color:var(--success);text-align:center;padding:18px;">' +
+          '<div style="font-size:2.5rem;margin-bottom:6px;">✅</div>' +
+          '<div style="font-weight:800;color:var(--success);margin-bottom:10px;">Identity Verified</div>' +
+          '<div style="font-size:0.78rem;margin-bottom:6px;">Your one-time temporary password is:</div>' +
+          '<div id="temp-password-code" style="font-family:\'JetBrains Mono\',monospace;' +
+               'font-size:1.7rem;font-weight:900;color:var(--brand);letter-spacing:4px;' +
+               'margin:10px 0;user-select:all;">' +
+            window.escapeHtml(_f.tempPassword) +
+          '</div>' +
+          '<div class="micro">Write this down now. Log in and set a new password immediately.</div>' +
+        '</div>' +
+        '<div style="margin-top:12px;padding:12px 14px;background:var(--danger-soft);' +
+             'border:1px solid rgba(250,56,62,0.3);border-radius:var(--r-sm);text-align:center;">' +
+          '<div class="micro" style="color:var(--danger);font-weight:700;' +
+               'text-transform:uppercase;letter-spacing:1px;">⏱️ Expires In</div>' +
+          '<div id="temp-password-countdown" style="font-family:\'JetBrains Mono\',monospace;' +
+               'font-size:1.5rem;font-weight:900;color:var(--danger);">05:00</div>' +
+        '</div>' +
+        '<div style="margin-top:8px;padding:8px 12px;background:var(--warning-soft);' +
+             'border-radius:var(--r-sm);text-align:center;font-size:0.72rem;color:var(--warning);">' +
+          'ℹ️ You have <strong>' + _f.remaining + '</strong> request(s) remaining today.' +
+        '</div>' +
+        '<button type="button" class="btn btn-teal btn-full" ' +
+                'data-action="close-forgot" style="margin-top:12px;padding:12px;">' +
+          'Got It, Close' +
+        '</button>';
+
+      if (_f.timer) clearInterval(_f.timer);
+      _f.timer = setInterval(function() {
+        const el = document.getElementById('temp-password-countdown');
+        const code = document.getElementById('temp-password-code');
+        if (!el) { clearInterval(_f.timer); _f.timer = null; return; }
+        const msLeft = expiresAt - Date.now();
+        if (msLeft <= 0) {
+          el.textContent = 'EXPIRED';
+          el.style.color = 'var(--danger)';
+          if (code) { code.style.textDecoration = 'line-through'; code.style.opacity = '0.4'; }
+          clearInterval(_f.timer);
+          _f.timer = null;
+          return;
+        }
+        const t = Math.floor(msLeft / 1000);
+        el.textContent = String(Math.floor(t / 60)).padStart(2, '0') + ':' +
+                         String(t % 60).padStart(2, '0');
+      }, 1000);
+      return;
+    }
+
+    // ── Sent to admin ──────────────────────────────────────
+    if (_f.step === 'sent') {
+      c.innerHTML =
+        '<div class="hint-box" style="background:var(--info-soft);border-color:var(--info);' +
+             'text-align:center;padding:18px;">' +
+          '<div style="font-size:2.5rem;margin-bottom:6px;">📨</div>' +
+          '<div style="font-weight:800;color:var(--info);margin-bottom:10px;">' +
+            'Request Sent to Admin' +
+          '</div>' +
+          '<div style="font-size:0.82rem;">' +
+            'Both verification steps failed. Your reset request has been sent to admin ' +
+            'for manual verification.' +
+          '</div>' +
+        '</div>' +
+        '<button type="button" class="btn btn-sec btn-full" ' +
+                'data-action="close-forgot" style="margin-top:12px;padding:12px;">Close</button>';
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // OPEN / CLOSE
+  // ═══════════════════════════════════════════════════════════════
+  window.registerAction('forgot-password', function() {
+    log('opened');
+    resetState();
+    _f.step = 0;
+    render();
+    window.openOv('ov-forgot-password');
+  });
+
+  window.registerAction('close-forgot', function() {
+    log('closed');
+    window.closeOv('ov-forgot-password');
+    resetState();
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 0 — phone lookup
+  // ═══════════════════════════════════════════════════════════════
+  window.registerAction('forgot-step0', function() {
+    log('step0 invoked');
+
+    const raw = ((document.getElementById('forgot-phone') || {}).value || '').trim();
+    log('raw input:', raw);
+
+    if (!raw) {
+      window.toast('Enter your phone number', 'var(--danger)');
+      return;
+    }
+
+    const core = window.phoneCore(raw);
+    log('normalised core:', core);
+
+    if (core.length !== 9) {
+      window.toast('Invalid phone. Use 0XXXXXXXXX or +256XXXXXXXXX', 'var(--danger)');
+      return;
+    }
+
+    if (!Array.isArray(window.members) || !window.members.length) {
+      log('members array empty — Firebase not loaded yet');
+      window.toast('Still loading. Please wait a moment and try again.', '#f7b928');
+      return;
+    }
+
+    const member = window.members.find(function(m) {
+      return window.phoneCore(m.phone) === core;
+    });
+
+    if (!member) {
+      log('no member found with that phone');
+      window.toast('No member found with that phone number', 'var(--danger)');
+      return;
+    }
+
+    log('member found:', member.name, '| approved:', member.approved);
+
+    if (member.approved === false) {
+      window.toast('Your account is not approved yet', '#f7b928');
+      return;
+    }
+
+    // Daily limit
+    const todayISO = window._isoDate(new Date());
+    const rec = member.resetAttempts || {};
+    const countToday = (rec.date === todayISO) ? (Number(rec.count) || 0) : 0;
+    const remaining = Math.max(0, MAX_PER_DAY - countToday);
+
+    log('attempts today:', countToday, '| remaining:', remaining);
+
+    if (remaining <= 0) {
+      window.toast('❌ Daily limit of ' + MAX_PER_DAY + ' requests reached.', 'var(--danger)');
+      return;
+    }
+
+    _f.phone   = member.phone;
+    _f.member  = member;
+    _f.step    = 1;
+    log('moving to step 1');
+    render();
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 1 — 4 identity questions
+  // ═══════════════════════════════════════════════════════════════
+  window.registerAction('forgot-step1', async function() {
+    log('step1 invoked');
+
+    const member = _f.member;
+    if (!member) {
+      window.toast('Session expired. Start over.', 'var(--danger)');
+      _f.step = 0;
+      render();
+      return;
+    }
+
+    const inputName     = ((document.getElementById('forgot-name')      || {}).value || '').trim();
+    const inputAmount   = parseFloat((document.getElementById('forgot-amount') || {}).value);
+    const inputSaveDate = (document.getElementById('forgot-date')      || {}).value || '';
+    const inputJoinDate = (document.getElementById('forgot-join-date') || {}).value || '';
+
+    log('answers:', { inputName, inputAmount, inputSaveDate, inputJoinDate });
+
+    if (!inputName) {
+      window.toast('Please enter your full name', 'var(--danger)');
+      return;
+    }
+    if (isNaN(inputAmount) || inputAmount <= 0) {
+      window.toast('Please enter your last saved amount', 'var(--danger)');
+      return;
+    }
+    if (!inputSaveDate) {
+      window.toast('Please enter your last save date', 'var(--danger)');
+      return;
+    }
+
+    // Compute expected values
+    const myTx = window.transactions.filter(function(tx) {
+      return tx.memberPhone === member.phone;
+    });
+
+    log('member has', myTx.length, 'transactions');
+
+    const nameOk = namesMatch(inputName, member.name);
+    log('name match:', nameOk);
+
+    let expectedTotal = 0;
+    let isoDate = '', yestDate = '';
+    let amountOk = false, dateOk = false;
+
+    if (myTx.length > 0) {
+      const savings = myTx.filter(function(tx) {
+        return tx.type === 'deposit' || tx.type === 'welfare';
+      });
+      const relevant = savings.length ? savings : myTx;
+      relevant.sort(function(a, b) { return (b.date || 0) - (a.date || 0); });
+
+      const latestTs = relevant[0].date;
+      const latestDay = new Date(latestTs);
+      latestDay.setHours(0, 0, 0, 0);
+      const start = latestDay.getTime();
+      const end   = start + 86400000 - 1;
+
+      relevant.forEach(function(tx) {
+        if (tx.date >= start && tx.date <= end) {
+          expectedTotal += Number(tx.amount) || 0;
+        }
+      });
+
+      isoDate  = window._isoDate(new Date(start));
+      yestDate = window._isoDate(new Date(start - 86400000));
+
+      const tolerance = Math.max(200, expectedTotal * 0.05);
+      amountOk = Math.abs(inputAmount - expectedTotal) <= tolerance;
+      dateOk   = (inputSaveDate === isoDate) || (inputSaveDate === yestDate);
+
+      log('expected total:', expectedTotal, '| isoDate:', isoDate,
+          '| yestDate:', yestDate, '| amountOk:', amountOk, '| dateOk:', dateOk);
+    } else {
+      log('member has no transactions — amount/date checks will fail');
+    }
+
+    // Join date (optional, ±7 days)
+    let joinOk = false;
+    if (inputJoinDate && member.joinDate) {
+      const jd = new Date(member.joinDate);
+      if (!isNaN(jd.getTime())) {
+        const expected = window._isoDate(jd);
+        const a = new Date(inputJoinDate + 'T00:00:00').getTime();
+        const b = new Date(expected + 'T00:00:00').getTime();
+        joinOk = Math.abs(a - b) / 86400000 <= 7;
+        log('join date expected:', expected, '| joinOk:', joinOk);
+      }
+    }
+
+    const passCount = [nameOk, amountOk, dateOk, joinOk].filter(Boolean).length;
+    log('pass count:', passCount, '/ 4');
+
+    if (passCount >= 3) {
+      await grantReset(member);
+      return;
+    }
+
+    window.toast('Step 1 failed (' + passCount + '/4). Trying secondary verification…', '#f7b928');
+    _f.step = 2;
+    render();
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // STEP 2 — 3-char substring
+  // ═══════════════════════════════════════════════════════════════
+  window.registerAction('forgot-step2', async function() {
+    log('step2 invoked');
+
+    const member = _f.member;
+    if (!member) {
+      window.toast('Session expired. Start over.', 'var(--danger)');
+      _f.step = 0;
+      render();
+      return;
+    }
+
+    const input = ((document.getElementById('forgot-substring') || {}).value || '').trim();
+    log('substring input:', input);
+
+    if (input.length !== 3) {
+      window.toast('Enter exactly 3 characters', 'var(--danger)');
+      return;
+    }
+
+    const stored = Array.isArray(member.pinSubstrings) ? member.pinSubstrings : [];
+    log('stored substring hashes:', stored.length);
+
+    if (!stored.length) {
+      log('member has no pinSubstrings — likely never set a secure password');
+      window.toast('No password history for this account. Sending request to admin.', '#f7b928');
+      await sendAdminRequest(member);
+      return;
+    }
+
+    // Hash the input with the same salt+prefix
+    const salt = String(member.id || member.phone || 'htf') + ':sub';
+    let inputHash;
+    try {
+      inputHash = await window.hashPassword(input, salt);
+    } catch (e) {
+      log('hash failed:', e);
+      window.toast('Verification error. Try again.', 'var(--danger)');
+      return;
+    }
+
+    log('input hash:', inputHash.slice(0, 12) + '…');
+
+    if (stored.indexOf(inputHash) !== -1) {
+      log('substring matches');
+      await grantReset(member);
+      return;
+    }
+
+    log('substring did not match');
+    await sendAdminRequest(member);
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // HELPERS
+  // ═══════════════════════════════════════════════════════════════
+  function namesMatch(input, expected) {
+    const norm = function(s) {
+      return String(s || '').toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+    };
+    const a = norm(input);
+    const b = norm(expected);
+    if (!a || !b) return false;
+    if (a === b) return true;
+    const aT = a.split(' ').filter(Boolean);
+    const bT = b.split(' ').filter(Boolean);
+    const short = aT.length <= bT.length ? aT : bT;
+    const long  = aT.length <= bT.length ? bT : aT;
+    return short.every(function(t) { return long.indexOf(t) !== -1; });
+  }
+
+  async function grantReset(member) {
+    log('granting reset for:', member.name);
+
+    const todayISO = window._isoDate(new Date());
+    const rec = member.resetAttempts || {};
+    const countToday = (rec.date === todayISO) ? (Number(rec.count) || 0) : 0;
+
+    if (countToday >= MAX_PER_DAY) {
+      window.toast('❌ Daily limit reached.', 'var(--danger)');
+      return;
+    }
+
+    const temp = window.randomChars(6, window.MEMBER_ID_ALPHABET);
+    const salt = String(member.id || member.phone || 'htf');
+
+    let pinHash;
+    const subHashes = [];
+    try {
+      pinHash = await window.hashPassword(temp, salt);
+      const subSalt = salt + ':sub';
+      for (let i = 0; i <= temp.length - 3; i++) {
+        subHashes.push(await window.hashPassword(temp.slice(i, i + 3), subSalt));
+      }
+    } catch (e) {
+      log('hash generation failed:', e);
+      window.toast('Could not generate password.', 'var(--danger)');
+      return;
+    }
+
+    const issuedAt  = Date.now();
+    const expiresAt = issuedAt + TTL_MS;
+    const newCount  = countToday + 1;
+    const newAttempts = { date: todayISO, count: newCount, lastAt: issuedAt };
+
+    try {
+      await db.ref('members/' + member.id).update({
+        pinHash: pinHash,
+        pinSubstrings: subHashes,
+        pinSetAt: issuedAt,
+        pinResetAt: issuedAt,
+        pinResetMethod: 'forgot-flow',
+        tempPassword: true,
+        tempPasswordIssuedAt: issuedAt,
+        tempPasswordExpiresAt: expiresAt,
+        resetAttempts: newAttempts
+      });
+      log('member updated with temp password');
+    } catch (e) {
+      log('Firebase update failed:', e);
+      window.toast('Could not save. Try again.', 'var(--danger)');
+      return;
+    }
+
+    // Update in-memory
+    const idx = window.members.findIndex(function(m) { return m.id === member.id; });
+    if (idx >= 0) {
+      window.members[idx].pinHash = pinHash;
+      window.members[idx].pinSubstrings = subHashes;
+      window.members[idx].tempPassword = true;
+      window.members[idx].tempPasswordExpiresAt = expiresAt;
+      window.members[idx].resetAttempts = newAttempts;
+    }
+
+    _f.tempPassword = temp;
+    _f.expiresAt = expiresAt;
+    _f.remaining = Math.max(0, MAX_PER_DAY - newCount);
+    _f.step = 'result';
+
+    log('temp password issued (valid 5 min)');
+    render();
+    window.toast('✅ New temp code issued. Expires in 5 minutes.', 'var(--success)');
+  }
+
+  async function sendAdminRequest(member) {
+    log('sending admin request');
+    try {
+      await db.ref('passwordResetRequests').push({
+        memberId: member.id,
+        memberName: member.name,
+        phone: member.phone,
+        requestedAt: Date.now(),
+        status: 'pending',
+        verified: false,
+        source: 'forgot-flow'
+      });
+      await db.ref('notifications/admin').push({
+        id: Date.now(),
+        text: '🔑 Password reset requested by ' + member.name + ' (' + member.phone + ').',
+        date: Date.now(),
+        read: false,
+        type: 'password_reset_request'
+      });
+      _f.step = 'sent';
+      render();
+      window.toast('📨 Reset request sent to admin.', '#4599ff');
+    } catch (e) {
+      log('admin request failed:', e);
+      window.toast('Could not send request. Contact admin directly.', 'var(--danger)');
+    }
+  }
+
+  log('hardened build loaded — click "Forgot password?" to test');
+})();
+</script>
+</body>
+</html>
