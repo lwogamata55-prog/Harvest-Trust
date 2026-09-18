@@ -10739,29 +10739,24 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
   }
 
   async function executeDebtAssignment(member, principal, interestRate, interest, total, reason) {
-    // Principal debt row
+    // ONE transaction for the full obligation (principal + interest).
+    // The group's fund drops by exactly what the member owes.
+    // When they repay, the fund comes back up by the same amount.
     await db.ref('transactions').push({
       memberPhone: member.phone,
       memberName: member.name,
-      type: 'debt',
-      amount: principal,
+      type: 'loan_disbursement',
+      amount: total,                          // ← 2625, not 2500
       receiptNumber: window.generateReceiptNumber(),
-      description: (reason || 'Debt assigned') + ' — principal',
-      date: Date.now()
+      description: (reason || 'Debt assigned') +
+                   ' — ' + window.money(principal) +
+                   ' @ ' + interestRate + '% = ' + window.money(total),
+      date: Date.now(),
+      isDebtAssignment: true,
+      principal: principal,
+      interestRate: interestRate,
+      interest: interest
     });
-
-    // Interest as loan_interest so it hits the loan fund
-    if (interest > 0) {
-      await db.ref('transactions').push({
-        memberPhone: member.phone,
-        memberName: member.name,
-        type: 'loan_interest',
-        amount: interest,
-        receiptNumber: window.generateReceiptNumber(),
-        description: (reason || 'Debt assigned') + ' — interest (' + interestRate + '%)',
-        date: Date.now() + 1
-      });
-    }
   }
 
   // ═══════════════════════════════════════════════════════════════
