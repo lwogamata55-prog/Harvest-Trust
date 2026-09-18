@@ -4408,6 +4408,67 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
 </div>
 
 <!-- Notifications popup -->
+<!-- ═══════════════════════════════════════════════════════════════
+     LEAVING NOTICE COMPOSER
+     ═══════════════════════════════════════════════════════════════ -->
+<div class="ov" id="ov-leaving-notice">
+  <div class="bs" style="max-width:540px;">
+    <div class="bs-title">📢 Compose Leaving Notice</div>
+
+    <!-- Notice type -->
+    <div class="fgrp">
+      <label class="flbl">Notice Type</label>
+      <select id="ln-type" class="inp">
+        <option value="leaving">📢 Member is leaving the group</option>
+        <option value="slot_available">🔄 Membership slot available</option>
+        <option value="debt_distributed">🔀 Account distributed to group</option>
+        <option value="account_deleted">🚫 Account deleted</option>
+      </select>
+    </div>
+
+    <!-- Member picker -->
+    <div class="fgrp">
+      <label class="flbl">Member</label>
+      <select id="ln-member" class="inp">
+        <option value="">-- Select member --</option>
+      </select>
+    </div>
+
+    <!-- Editable message -->
+    <div class="fgrp">
+      <label class="flbl">Message (edit as needed)</label>
+      <textarea id="ln-message" class="inp" rows="6" maxlength="280"></textarea>
+      <div class="micro text-right" id="ln-counter">0/280</div>
+    </div>
+
+    <!-- Icon picker -->
+    <div class="fgrp">
+      <label class="flbl">Icon</label>
+      <input type="text" id="ln-icon" class="inp" value="📢" maxlength="2"
+             style="text-align:center;font-size:1.4rem;">
+    </div>
+
+    <!-- Preview -->
+    <div id="ln-preview" class="hint-box"
+         style="background:var(--info-soft);border-color:rgba(69,153,255,0.2);">
+      <div style="font-weight:700;color:var(--info);margin-bottom:4px;">📝 Preview</div>
+      <div id="ln-preview-text"
+           style="font-size:0.82rem;white-space:pre-wrap;line-height:1.5;"></div>
+    </div>
+
+    <button type="button" class="btn btn-gold btn-full" data-action="post-leaving-notice">
+      📢 Post to Carousel
+    </button>
+    <button type="button" class="btn btn-sec btn-full" data-action="skip-leaving-notice"
+            id="ln-skip-btn" style="display:none;">
+      ⏭️ Skip Notice &amp; Continue
+    </button>
+    <button type="button" class="btn btn-sec btn-full" data-action="close-modal"
+            data-modal="ov-leaving-notice" id="ln-cancel-btn">
+      Cancel
+    </button>
+  </div>
+</div>
 <div class="ov" id="ov-notifications-popup">
   <div class="bs">
     <div class="bs-title">🔔 Notifications</div>
@@ -4951,6 +5012,7 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
     loan_disbursement: '💸',
     loan_repayment:    '💳',
     loan_adjustment:   '📈',
+    redistributed_debt:'🔀',
     loan_interest:     '📈',
     prepaid_used:      '💠',
     prepaid_balance:   '💠',
@@ -5955,6 +6017,13 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
 
         // ── Loan adjustment (tracking only) ──────────────────
         case 'loan_adjustment':
+          window.memberLoans[phone] = (window.memberLoans[phone] || 0) + a;
+          break;
+          
+        // ── Redistributed debt — amount moves to member's loan
+        //     balance WITHOUT touching the fund (the money already
+        //     left the fund when the original loan went out).
+        case 'redistributed_debt':
           window.memberLoans[phone] = (window.memberLoans[phone] || 0) + a;
           break;
 
@@ -12622,7 +12691,16 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
         }).join('')
       : '<div class="empty-state" style="padding:20px;">No notices yet.</div>';
 
-    c.innerHTML =
+   c.innerHTML =
+      '<div class="card">' +
+        '<div class="sec-h" style="margin-top:0;">📢 Leaving / Slot Notices</div>' +
+        '<button type="button" class="btn btn-gold btn-full" data-action="open-leaving-notice">' +
+          '📢 Compose Leaving Notice' +
+        '</button>' +
+        '<div class="micro" style="margin-top:6px;text-align:center;">' +
+          'Pick a member, edit the message, post to the home carousel.' +
+        '</div>' +
+      '</div>' +
       '<div class="card">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
           '<div class="sec-h" style="margin:0;">📋 Carousel Notices</div>' +
@@ -13165,9 +13243,200 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
       await window.reloadData();
     }, 'Clear Signup Fee');
   });
+// ═══════════════════════════════════════════════════════════════
+  // 10b. LEAVING NOTICE COMPOSER
+  // ═══════════════════════════════════════════════════════════════
+  window._lnPending = null;
 
-   // ═══════════════════════════════════════════════════════════════
-  // 11. MEMBER TRANSFER (debt-lock escape hatch) — v2
+  window.registerAction('open-leaving-notice', function(el) {
+    const memberId   = el ? el.getAttribute('data-member-id')   : null;
+    const noticeType = el ? el.getAttribute('data-notice-type') : null;
+
+    if (!el) window._lnPending = window._lnPending || null;
+
+    const memberSel = document.getElementById('ln-member');
+    if (memberSel) {
+      const active = window.members.filter(function(m) { return m.approved !== false; });
+      memberSel.innerHTML =
+        '<option value="">-- Select member --</option>' +
+        active.map(function(m) {
+          return '<option value="' + window.escapeAttr(m.id) + '">' +
+            window.escapeHtml(m.name) + ' — ' + window.getDaysActive(m) + 'd' +
+            (window.memberLoans[m.phone] ? ', owes ' + window.money(window.memberLoans[m.phone]) : '') +
+            '</option>';
+        }).join('');
+      if (memberId) memberSel.value = memberId;
+    }
+
+    const typeSel = document.getElementById('ln-type');
+    if (typeSel && noticeType) typeSel.value = noticeType;
+
+    const msgEl = document.getElementById('ln-message');
+    if (msgEl) msgEl.value = '';
+
+    const skipBtn   = document.getElementById('ln-skip-btn');
+    const cancelBtn = document.getElementById('ln-cancel-btn');
+    const isGate = !!window._lnPending;
+    if (skipBtn)   skipBtn.style.display   = isGate ? 'block' : 'none';
+    if (cancelBtn) cancelBtn.style.display = isGate ? 'none'  : 'block';
+
+    window.openOv('ov-leaving-notice');
+    setTimeout(function() { buildLeavingNoticePreview(); }, 50);
+  });
+
+  ['ln-type', 'ln-member', 'ln-message', 'ln-icon'].forEach(function(id) {
+    document.addEventListener('change', function(e) {
+      if (e.target && e.target.id === id) buildLeavingNoticePreview();
+    });
+    document.addEventListener('input', function(e) {
+      if (e.target && e.target.id === id) buildLeavingNoticePreview();
+    });
+  });
+
+  window.buildLeavingNoticePreview = function() {
+    const type     = (document.getElementById('ln-type')   || {}).value || 'leaving';
+    const memberId = (document.getElementById('ln-member') || {}).value || '';
+    const custom   = ((document.getElementById('ln-message') || {}).value || '').trim();
+
+    const previewText = document.getElementById('ln-preview-text');
+    const counter     = document.getElementById('ln-counter');
+    if (counter) counter.textContent = custom.length + '/280';
+
+    if (!memberId) {
+      if (previewText) previewText.textContent = '(select a member to see the notice)';
+      return;
+    }
+
+    const m = window.members.find(function(x) { return x.id === memberId; });
+    if (!m) {
+      if (previewText) previewText.textContent = '(member not found)';
+      return;
+    }
+
+    let body = custom;
+    if (!body) {
+      body = generateLeavingNoticeBody(m, type);
+      const msgEl = document.getElementById('ln-message');
+      if (msgEl && !msgEl.value) msgEl.value = body;
+    }
+
+    if (previewText) previewText.textContent = body;
+  };
+
+  function generateLeavingNoticeBody(m, type) {
+    const owed       = window.computeMemberTotalDebt(m);
+    const daysActive = window.getDaysActive(m);
+
+    if (type === 'slot_available') {
+      return 'SLOT AVAILABLE\n\n' +
+        m.name + ' is leaving. Their slot is available for transfer.\n' +
+        'Active days: ' + daysActive + '\n' +
+        'Outstanding debt: ' + window.money(owed) + '\n' +
+        'Rotation position included.\n\n' +
+        'Contact the admin to apply. First come, first served.';
+    }
+
+    if (type === 'debt_distributed') {
+      return 'DEBT DISTRIBUTION\n\n' +
+        m.name + ' has left the group and their account was distributed ' +
+        'equally across all remaining members.\n\n' +
+        'Total debt shared: ' + window.money(owed) + '\n' +
+        'Active days shared: ' + daysActive + '\n\n' +
+        'Each member now carries a share. Repayments continue through daily deposits.';
+    }
+
+    if (type === 'account_deleted') {
+      return 'ACCOUNT REMOVED\n\n' +
+        m.name + ' has been removed from the group.\n' +
+        'Final debt: ' + window.money(owed) + '\n' +
+        'Active days: ' + daysActive + '\n\n' +
+        'The rotation has been adjusted accordingly.';
+    }
+
+    return 'MEMBER LEAVING THE GROUP\n\n' +
+      m.name + ' is leaving the group.\n' +
+      'Active days: ' + daysActive + '\n' +
+      'Outstanding debt: ' + window.money(owed) + '\n\n' +
+      'What happens next: The slot may be transferred to a member or distributed ' +
+      'across the group. All pending balances will be settled accordingly. ' +
+      'Contact the admin for details.';
+  }
+
+  window.registerAction('post-leaving-notice', async function() {
+    const type     = (document.getElementById('ln-type')   || {}).value || 'leaving';
+    const memberId = (document.getElementById('ln-member') || {}).value || '';
+    const message  = ((document.getElementById('ln-message') || {}).value || '').trim();
+    const icon     = ((document.getElementById('ln-icon')    || {}).value || '📢').slice(0, 2);
+
+    if (!memberId) { window.toast('Please select a member', 'var(--danger)'); return; }
+    if (!message)  { window.toast('Message is empty', 'var(--danger)'); return; }
+    if (message.length > 280) { window.toast('Max 280 characters', 'var(--danger)'); return; }
+
+    if ((window.mainCarouselNotifs || []).length >= 3) {
+      window.toast('Carousel is full (3/3). Delete one first.', 'var(--warning)');
+      return;
+    }
+
+    try {
+      const m = window.members.find(function(x) { return x.id === memberId; });
+      await db.ref('mainNotices').push({
+        text: message,
+        icon: icon,
+        payee: m ? m.name : '',
+        noticeType: type,
+        memberId: memberId,
+        createdAt: Date.now()
+      });
+
+      window.toast('Notice posted to carousel', 'var(--success)');
+      window.closeOv('ov-leaving-notice');
+
+      if (window._lnPending && typeof window._lnPending.afterPost === 'function') {
+        const cb = window._lnPending.afterPost;
+        window._lnPending = null;
+        setTimeout(cb, 300);
+      } else {
+        window._lnPending = null;
+      }
+    } catch (err) {
+      console.error('Post leaving notice failed:', err);
+      window.toast('Failed to post notice', 'var(--danger)');
+    }
+  });
+
+  window.registerAction('skip-leaving-notice', function() {
+    const pending = window._lnPending;
+    window._lnPending = null;
+    window.closeOv('ov-leaving-notice');
+    if (pending && typeof pending.afterPost === 'function') {
+      pending.afterPost();
+    }
+  });
+
+  window.promptLeavingNotice = function(memberId, noticeType, afterPost) {
+    const m = window.members.find(function(x) { return x.id === memberId; });
+    if (!m) { if (typeof afterPost === 'function') afterPost(); return; }
+
+    window._lnPending = {
+      member: m,
+      noticeType: noticeType,
+      afterPost: afterPost
+    };
+
+    const opener = window.getAction('open-leaving-notice');
+    if (typeof opener === 'function') {
+      opener({
+        getAttribute: function(name) {
+          if (name === 'data-member-id')   return memberId;
+          if (name === 'data-notice-type') return noticeType;
+          return null;
+        }
+      });
+    }
+  };
+
+  // ═══════════════════════════════════════════════════════════════
+  // 11. MEMBER TRANSFER
   // ═══════════════════════════════════════════════════════════════
   window.registerAction('open-member-transfer', function(el) {
     const id = el.getAttribute('data-member-id');
@@ -13175,7 +13444,6 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
     showMembershipTransferModal(id);
   });
 
-  // Module state — only one transfer modal at a time
   let _transferFrom = null;
   let _transferTo   = null;
 
@@ -13187,19 +13455,19 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
       return m.id !== from.id && m.approved !== false;
     });
     if (!candidates.length) {
-      window.toast('No other members available to transfer to', 'var(--danger)');
+      window.toast('No other members available', 'var(--danger)');
       return;
     }
 
     _transferFrom = from;
     _transferTo   = null;
 
-    // Clean any prior instance
     const old = document.getElementById('member-transfer-modal');
     if (old) old.remove();
 
     const owed       = window.computeMemberTotalDebt(from);
     const daysActive = window.getDaysActive(from);
+    const nOthers    = candidates.length;
 
     const optionsHtml = candidates.map(function(m) {
       const mOwed = window.computeMemberTotalDebt(m);
@@ -13214,79 +13482,75 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
     modal.style.display = 'flex';
     modal.style.zIndex = '9000';
 
-    modal.innerHTML =
-      '<div class="bs" style="max-width:520px;width:92%;">' +
-        '<div class="bs-title" style="margin-bottom:12px;">🔄 Membership Transfer — ' +
-          window.escapeHtml(from.name) + '</div>' +
+    let html = '';
+    html += '<div class="bs" style="max-width:540px;width:92%;">';
+    html += '<div class="bs-title" style="margin-bottom:12px;">Membership Resolution — ' +
+            window.escapeHtml(from.name) + '</div>';
 
-        /* Warning card */
-        '<div style="background:var(--danger-soft);border:2px solid var(--danger);' +
-             'border-radius:12px;padding:14px;margin-bottom:14px;">' +
-          '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">' +
-            '<span style="font-size:1.6rem;">🔒</span>' +
-            '<div>' +
-              '<div style="font-weight:800;color:var(--danger);font-size:0.95rem;">' +
-                'Membership Transfer' +
-              '</div>' +
-              '<div class="micro">' + window.escapeHtml(from.name) +
-                '\'s debt cannot be recovered through normal payouts.</div>' +
-            '</div>' +
-          '</div>' +
-          '<div style="display:grid;grid-template-columns:1fr auto;gap:4px;' +
-               'font-size:0.78rem;margin-top:8px;">' +
-            '<span style="color:var(--text-2);">Total owed:</span>' +
-            '<strong style="color:var(--danger);">' + window.money(owed) + '</strong>' +
-            '<span style="color:var(--text-2);">Days active:</span>' +
-            '<strong>' + daysActive + ' days</strong>' +
-            '<span style="color:var(--text-2);">Join date:</span>' +
-            '<strong>' + window.escapeHtml(from.joinDate || 'N/A') + '</strong>' +
-          '</div>' +
-        '</div>' +
+    html += '<div style="background:var(--danger-soft);border:2px solid var(--danger);' +
+            'border-radius:12px;padding:14px;margin-bottom:14px;">';
+    html += '<div style="display:grid;grid-template-columns:1fr auto;gap:4px;font-size:0.8rem;">';
+    html += '<span style="color:var(--text-2);">Total owed:</span>';
+    html += '<strong style="color:var(--danger);">' + window.money(owed) + '</strong>';
+    html += '<span style="color:var(--text-2);">Days active:</span>';
+    html += '<strong>' + daysActive + ' days</strong>';
+    html += '<span style="color:var(--text-2);">Join date:</span>';
+    html += '<strong>' + window.escapeHtml(from.joinDate || 'N/A') + '</strong>';
+    html += '</div></div>';
 
-        /* Recipient select */
-        '<div class="fgrp">' +
-          '<label class="flbl">Transfer to</label>' +
-          '<select id="transfer-to-member" class="inp">' +
-            '<option value="">-- Select Member --</option>' + optionsHtml +
-          '</select>' +
-        '</div>' +
+    html += '<div style="font-size:0.72rem;font-weight:800;color:var(--brand);' +
+            'text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">' +
+            'Option A — Sell to one member</div>';
 
-        /* Live preview */
-        '<div id="transfer-preview" class="hint-box" style="display:none;"></div>' +
+    html += '<div class="fgrp">';
+    html += '<label class="flbl">Recipient</label>';
+    html += '<select id="transfer-to-member" class="inp">';
+    html += '<option value="">-- Select Member --</option>' + optionsHtml;
+    html += '</select></div>';
 
-        /* Explanation */
-        '<div class="hint-box" style="background:var(--info-soft);border-color:var(--info);">' +
-          '<strong>What happens on transfer:</strong>' +
-          '<ul style="margin-top:4px;margin-left:16px;font-size:0.78rem;">' +
-            '<li>All of ' + window.escapeHtml(from.name) + '\'s transactions move to the buyer</li>' +
-            '<li>All loans move to the buyer</li>' +
-            '<li>Buyer inherits the payout rotation position</li>' +
-            '<li>Buyer takes on the combined debt</li>' +
-            '<li>' + window.escapeHtml(from.name) + '\'s account is removed</li>' +
-          '</ul>' +
-        '</div>' +
+    html += '<div id="transfer-preview" class="hint-box" style="display:none;"></div>';
 
-        /* Buttons */
-        '<div style="display:flex;gap:10px;margin-top:14px;">' +
-          '<button type="button" class="btn btn-gold" id="transfer-confirm-btn" ' +
-                  'style="flex:1;" disabled>🔄 Confirm Transfer</button>' +
-          '<button type="button" class="btn btn-sec" id="transfer-cancel-btn" ' +
-                  'style="flex:1;">Cancel</button>' +
-        '</div>' +
-      '</div>';
+    html += '<button type="button" class="btn btn-gold btn-full" id="transfer-confirm-btn" disabled>' +
+            'Confirm Transfer to Selected</button>';
 
+    html += '<div style="display:flex;align-items:center;gap:10px;margin:16px 0;">';
+    html += '<div style="flex:1;height:1px;background:var(--border);"></div>';
+    html += '<div class="micro" style="letter-spacing:1px;">OR</div>';
+    html += '<div style="flex:1;height:1px;background:var(--border);"></div>';
+    html += '</div>';
+
+    html += '<div style="font-size:0.72rem;font-weight:800;color:var(--purple);' +
+            'text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">' +
+            'Option B — Distribute equally</div>';
+
+    html += '<div class="hint-box" style="background:var(--purple-soft);' +
+            'border-color:rgba(139,92,246,0.25);">' +
+            'Split the debt and active days equally across all ' +
+            '<strong>' + nOthers + '</strong> other members. ' +
+            'Each takes ' + window.money(Math.floor(owed / nOthers)) +
+            ' and ' + (daysActive / nOthers).toFixed(1) + ' days.' +
+            '</div>';
+
+    html += '<button type="button" class="btn btn-purple btn-full" id="distribute-btn">' +
+            'Distribute to All ' + nOthers + ' Members</button>';
+
+    html += '<button type="button" class="btn btn-sec btn-full" id="transfer-cancel-btn" ' +
+            'style="margin-top:12px;">Cancel</button>';
+
+    html += '</div>';
+
+    modal.innerHTML = html;
     document.body.appendChild(modal);
 
-    // Backdrop click = cancel
     modal.addEventListener('click', function(e) {
       if (e.target === modal) closeTransferModal();
     });
 
-    // Wire the select
-    const sel        = modal.querySelector('#transfer-to-member');
-    const preview    = modal.querySelector('#transfer-preview');
-    const confirmBtn = modal.querySelector('#transfer-confirm-btn');
-    const cancelBtn  = modal.querySelector('#transfer-cancel-btn');
+    const sel           = modal.querySelector('#transfer-to-member');
+    const preview       = modal.querySelector('#transfer-preview');
+    const confirmBtn    = modal.querySelector('#transfer-confirm-btn');
+    const cancelBtn     = modal.querySelector('#transfer-cancel-btn');
+    const distributeBtn = modal.querySelector('#distribute-btn');
 
     sel.addEventListener('change', function() {
       const toId = sel.value;
@@ -13296,7 +13560,6 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
         _transferTo = null;
         return;
       }
-
       const to = window.members.find(function(m) { return m.id === toId; });
       if (!to) {
         preview.style.display = 'none';
@@ -13304,7 +13567,6 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
         _transferTo = null;
         return;
       }
-
       _transferTo = to;
 
       const fromOwed = window.computeMemberTotalDebt(from);
@@ -13316,52 +13578,45 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
       preview.innerHTML =
         '<strong>After transfer:</strong>' +
         '<div style="display:grid;grid-template-columns:1fr auto;gap:4px;' +
-             'font-size:0.8rem;margin-top:6px;">' +
-          '<span style="color:var(--text-2);">Buyer:</span>' +
-          '<strong>' + window.escapeHtml(to.name) + '</strong>' +
-          '<span style="color:var(--text-2);">Combined debt:</span>' +
-          '<strong style="color:var(--danger);">' + window.money(combined) + '</strong>' +
-          '<span style="color:var(--text-2);">Combined days:</span>' +
-          '<strong>' + combinedDays + '</strong>' +
-          '<span style="color:var(--text-2);">Payout position:</span>' +
-          '<strong>Inherited</strong>' +
+        'font-size:0.8rem;margin-top:6px;">' +
+        '<span style="color:var(--text-2);">Buyer:</span>' +
+        '<strong>' + window.escapeHtml(to.name) + '</strong>' +
+        '<span style="color:var(--text-2);">Combined debt:</span>' +
+        '<strong style="color:var(--danger);">' + window.money(combined) + '</strong>' +
+        '<span style="color:var(--text-2);">Combined days:</span>' +
+        '<strong>' + combinedDays + '</strong>' +
         '</div>';
 
       confirmBtn.disabled = false;
     });
 
     confirmBtn.addEventListener('click', function() {
-      if (!_transferFrom || !_transferTo) {
-        window.toast('Select a recipient first', 'var(--warning)');
-        return;
-      }
-      if (confirmBtn.disabled) return;
+      if (!_transferFrom || !_transferTo || confirmBtn.disabled) return;
+      const fromM = _transferFrom;
+      const toM   = _transferTo;
 
-      const from = _transferFrom;
-      const to   = _transferTo;
+      if (!confirm('Transfer ' + fromM.name + ' to ' + toM.name + '? This cannot be undone.')) return;
 
-      if (!confirm('⚠️ Transfer ' + from.name + '\'s membership to ' + to.name +
-          '?\n\nThis cannot be undone.')) return;
-
-      // 1. Close the transfer modal FIRST so the password modal is
-      //    the only thing on screen.
       closeTransferModal();
 
-      // 2. Ask for the admin password. On success, run the transfer.
       window.requirePasswordConfirmation(function() {
-        // Show a small progress toast, then execute
-        window.toast('⏳ Transferring membership…', '#4599ff');
-
-        (async function() {
-          try {
-            const result = await processMembershipTransfer(from, to);
-            window.toast('✅ Transferred ' + result.txCount +
-              ' transaction(s) and ' + result.loanCount + ' loan(s)', 'var(--success)');
-          } catch (err) {
-            console.error('[transfer] failed:', err);
-            window.toast('❌ Transfer failed: ' + (err && err.message || err), 'var(--danger)');
+        window.promptLeavingNotice(
+          fromM.id,
+          'slot_available',
+          function() {
+            window.toast('Transferring...', '#4599ff');
+            (async function() {
+              try {
+                const result = await processMembershipTransfer(fromM, toM);
+                window.toast('Transferred ' + result.txCount + ' tx and ' +
+                  result.loanCount + ' loans to ' + toM.name, 'var(--success)');
+              } catch (err) {
+                console.error('[transfer] failed:', err);
+                window.toast('Transfer failed: ' + (err && err.message || err), 'var(--danger)');
+              }
+            })();
           }
-        })();
+        );
       }, 'Membership Transfer');
     });
 
@@ -13369,7 +13624,10 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
       closeTransferModal();
     });
 
-    // Autofocus the select
+    distributeBtn.addEventListener('click', function() {
+      showDistributeToAllModal(from);
+    });
+
     setTimeout(function() { sel.focus(); }, 150);
   }
 
@@ -13380,12 +13638,265 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
     _transferTo   = null;
   }
 
-  // Also allow the global action bus to close it
   window.registerAction('close-member-transfer', function() {
     closeTransferModal();
   });
 
-  // ── Execute the transfer ─────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
+  // 11b. DISTRIBUTE TO ALL MEMBERS
+  // ═══════════════════════════════════════════════════════════════
+  function showDistributeToAllModal(from) {
+    const others = window.members.filter(function(m) {
+      return m.id !== from.id && m.approved !== false;
+    });
+    if (!others.length) {
+      window.toast('No other members to distribute to', 'var(--danger)');
+      return;
+    }
+
+    const totalOwed   = window.computeMemberTotalDebt(from);
+    const totalDays   = window.getDaysActive(from);
+    const n           = others.length;
+    const debtShare   = Math.floor(totalOwed / n);
+    const debtRemain  = totalOwed - (debtShare * n);
+    const daysShare   = Math.floor(totalDays / n);
+    const daysRemain  = totalDays - (daysShare * n);
+
+    const payout = (window.settings.dailyAmount || 2500) * 7 *
+                   window.members.filter(function(m) { return m.approved !== false; }).length;
+
+    const rows = others.map(function(m, i) {
+      const currentOwed = window.computeMemberTotalDebt(m);
+      const share       = debtShare + (i < debtRemain ? 1 : 0);
+      const newOwed     = currentOwed + share;
+      const willLock    = newOwed > payout;
+      const extraDays   = daysShare + (i < daysRemain ? 1 : 0);
+
+      let row = '';
+      row += '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;';
+      row += 'background:' + (willLock ? 'var(--danger-soft)' : 'var(--surface-2)') + ';';
+      row += 'border:1px solid ' + (willLock ? 'rgba(250,56,62,0.25)' : 'var(--border)') + ';';
+      row += 'border-radius:8px;margin-bottom:6px;font-size:0.75rem;">';
+      row += window.renderMemberAvatar(m, 30);
+      row += '<div style="flex:1;min-width:0;">';
+      row += '<div style="font-weight:600;">' + window.escapeHtml(m.name);
+      if (willLock) row += ' <span class="pill-badge pill-red" style="font-size:0.5rem;">WILL LOCK</span>';
+      row += '</div>';
+      row += '<div class="micro" style="font-size:0.65rem;">Owes ' + window.money(currentOwed) +
+             ' to <strong>' + window.money(newOwed) + '</strong></div>';
+      row += '</div>';
+      row += '<div style="text-align:right;flex-shrink:0;">';
+      row += '<div style="font-family:monospace;font-size:0.72rem;font-weight:700;' +
+             'color:var(--danger);">+' + window.money(share) + '</div>';
+      row += '<div class="micro" style="font-size:0.6rem;">+' + extraDays + 'd</div>';
+      row += '</div>';
+      row += '</div>';
+      return row;
+    }).join('');
+
+    const locks = others.filter(function(m, i) {
+      const share = debtShare + (i < debtRemain ? 1 : 0);
+      return (window.computeMemberTotalDebt(m) + share) > payout;
+    }).length;
+
+    const existing = document.getElementById('distribute-modal');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'distribute-modal';
+    modal.className = 'ov on custom-modal';
+    modal.style.display = 'flex';
+    modal.style.zIndex = '9500';
+
+    let html = '';
+    html += '<div class="bs" style="max-width:560px;width:92%;">';
+    html += '<div class="bs-title">Distribute to All Members</div>';
+
+    html += '<div style="background:var(--purple-soft);border:2px solid var(--purple);' +
+            'border-radius:12px;padding:14px;margin-bottom:14px;font-size:0.82rem;line-height:1.6;">';
+    html += 'Splitting <strong>' + window.escapeHtml(from.name) + '</strong> account across ' +
+            '<strong>' + n + '</strong> member(s).<br><br>';
+    html += 'Each receives <strong>' + window.money(debtShare) + '</strong> of debt ' +
+            '(plus 1 shilling for the first ' + debtRemain + ' member(s)) and ' +
+            '<strong>' + daysShare + ' day(s)</strong> ' +
+            '(plus 1 day for the first ' + daysRemain + ' member(s)).';
+    html += '</div>';
+
+    if (locks > 0) {
+      html += '<div style="background:var(--danger-soft);border:1px solid rgba(250,56,62,0.3);' +
+              'border-radius:10px;padding:10px 12px;margin-bottom:12px;font-size:0.78rem;">';
+      html += '<strong>' + locks + ' member(s)</strong> will become locked after this ' +
+              'distribution because their new total will exceed the weekly payout.';
+      html += '</div>';
+    }
+
+    html += '<div style="font-size:0.72rem;font-weight:800;color:var(--text-2);' +
+            'text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">' +
+            'Recipients (' + n + ')</div>';
+
+    html += '<div style="max-height:40vh;overflow-y:auto;padding-right:4px;">' + rows + '</div>';
+
+    html += '<div class="micro" style="text-align:center;margin-top:12px;font-style:italic;">' +
+            'The loan fund is not affected - the money already left the fund when the ' +
+            'original loans were issued. Repayments will restore it over time.' +
+            '</div>';
+
+    html += '<div style="display:flex;gap:10px;margin-top:14px;">';
+    html += '<button type="button" class="btn btn-purple" id="distribute-confirm-btn" ' +
+            'style="flex:1;">Confirm Distribution</button>';
+    html += '<button type="button" class="btn btn-sec" id="distribute-cancel-btn" ' +
+            'style="flex:1;">Cancel</button>';
+    html += '</div>';
+
+    html += '</div>';
+
+    modal.innerHTML = html;
+    document.body.appendChild(modal);
+
+    modal.addEventListener('click', function(e) {
+      if (e.target === modal) modal.remove();
+    });
+
+    modal.querySelector('#distribute-cancel-btn').addEventListener('click', function() {
+      modal.remove();
+    });
+
+    modal.querySelector('#distribute-confirm-btn').addEventListener('click', function() {
+      if (!confirm('Permanently distribute ' + from.name + '?')) return;
+
+      modal.remove();
+      closeTransferModal();
+
+      window.requirePasswordConfirmation(function() {
+        window.promptLeavingNotice(
+          from.id,
+          'debt_distributed',
+          function() {
+            window.toast('Distributing...', '#4599ff');
+            (async function() {
+              try {
+                const result = await executeDistribution(from, others, debtShare, debtRemain,
+                                                         daysShare, daysRemain);
+                window.toast('Distributed across ' + result.recipients + ' member(s)',
+                             'var(--success)');
+              } catch (err) {
+                console.error('[distribute] failed:', err);
+                window.toast('Distribution failed: ' + (err && err.message || err),
+                             'var(--danger)');
+              }
+            })();
+          }
+        );
+      }, 'Distribute to All');
+    });
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // 11c. EXECUTE DISTRIBUTION
+  // ═══════════════════════════════════════════════════════════════
+  async function executeDistribution(from, recipients, debtShare, debtRemain,
+                                     daysShare, daysRemain) {
+    if (!from || !recipients || !recipients.length) {
+      throw new Error('Invalid distribution parameters');
+    }
+
+    const now = Date.now();
+    const updates = {};
+
+    const loansSnap = await db.ref('loans').once('value');
+    const allLoans = loansSnap.val() || {};
+    Object.keys(allLoans).forEach(function(id) {
+      const l = allLoans[id];
+      if (l.memberId === from.id || l.memberPhone === from.phone) {
+        updates['loans/' + id + '/repaid'] = true;
+        updates['loans/' + id + '/repaidAt'] = now;
+        updates['loans/' + id + '/repaidByRedistribution'] = true;
+      }
+    });
+
+    const writes = [];
+    for (let i = 0; i < recipients.length; i++) {
+      const m = recipients[i];
+      const share     = debtShare + (i < debtRemain ? 1 : 0);
+      const extraDays = daysShare + (i < daysRemain ? 1 : 0);
+      const newDays   = window.getDaysActive(m) + extraDays;
+
+      const loanRef = db.ref('loans').push();
+      writes.push(loanRef.set({
+        memberId:      m.id,
+        memberName:    m.name,
+        memberPhone:   m.phone,
+        amount:        share,
+        interestRate:  0,
+        totalRepay:    share,
+        status:        'approved',
+        approvedAt:    now,
+        dueDate:       now + 28 * 86400000,
+        repaid:        false,
+        repaidAmount:  0,
+        loanQuestions: [],
+        isRedistribution: true,
+        fromMemberId:     from.id,
+        fromMemberName:   from.name
+      }));
+
+      writes.push(db.ref('transactions').push({
+        memberPhone:      m.phone,
+        memberName:       m.name,
+        type:             'redistributed_debt',
+        amount:           share,
+        receiptNumber:    window.generateReceiptNumber(),
+        description:      'Redistribution from ' + from.name,
+        date:             now + i,
+        loanId:           loanRef.key,
+        isRedistribution: true,
+        fromMemberId:     from.id,
+        fromMemberName:   from.name
+      }));
+
+      updates['members/' + m.id + '/daysActive'] = newDays;
+      updates['members/' + m.id + '/updatedAt']  = now;
+    }
+
+    updates['members/' + from.id] = null;
+
+    const newOrder = (window.rotation.order || []).filter(function(id) {
+      return id !== from.id;
+    });
+    updates['rotation/order'] = newOrder;
+    updates['rotation/currentIndex'] = 0;
+
+    await db.ref().update(updates);
+    await Promise.all(writes);
+
+    for (let i = 0; i < recipients.length; i++) {
+      const m = recipients[i];
+      const share = debtShare + (i < debtRemain ? 1 : 0);
+      const extraDays = daysShare + (i < daysRemain ? 1 : 0);
+      try {
+        await db.ref('notifications/' + m.id).push({
+          id: Date.now() + i,
+          text: 'You received ' + window.money(share) + ' of debt and ' +
+                extraDays + ' day(s) from ' + from.name + ' (distributed across the group).',
+          date: Date.now(),
+          read: false,
+          type: 'redistribution'
+        });
+      } catch (e) { /* silent */ }
+    }
+
+    await window.reloadData();
+    if (typeof window.updateAdminMembersList === 'function') {
+      window.updateAdminMembersList();
+    }
+    if (typeof window.refreshUI === 'function') window.refreshUI();
+
+    return { recipients: recipients.length, totalDebt: debtShare * recipients.length };
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // 11d. SINGLE TRANSFER EXECUTOR
+  // ═══════════════════════════════════════════════════════════════
   async function processMembershipTransfer(from, to) {
     if (!from || !to) throw new Error('Invalid members');
     if (from.id === to.id) throw new Error('Cannot transfer to the same member');
@@ -13399,7 +13910,6 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
     const earliest = fromDate < toDate ? fromDate : toDate;
     const earliestStr = earliest.toISOString().split('T')[0];
 
-    // ── 1. Reassign transactions ────────────────────────────
     const txSnap = await db.ref('transactions').once('value');
     const allTx = txSnap.val() || {};
     const updates = {};
@@ -13416,7 +13926,6 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
       }
     });
 
-    // ── 2. Reassign loans ───────────────────────────────────
     const loanSnap = await db.ref('loans').once('value');
     const allLoans = loanSnap.val() || {};
     let loanCount = 0;
@@ -13431,50 +13940,40 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
       }
     });
 
-    // ── 3. Update the buyer ─────────────────────────────────
     updates['members/' + to.id + '/joinDate']   = earliestStr;
     updates['members/' + to.id + '/daysActive'] = totalDays;
     updates['members/' + to.id + '/updatedAt']  = Date.now();
+    updates['members/' + to.id + '/prepaid']    = 0;
+    updates['members/' + from.id] = null;
 
-    if (Object.keys(updates).length) await db.ref().update(updates);
-
-    // ── 4. Rotation swap ────────────────────────────────────
-    const order    = (window.rotation.order || []).slice();
-    const fromIdx  = order.indexOf(from.id);
-    const newOrder = order.filter(function(id) {
-      return id !== from.id && id !== to.id;
-    });
-
+    const order = (window.rotation.order || []).slice();
+    const fromIdx = order.indexOf(from.id);
+    const newOrder = order.filter(function(id) { return id !== from.id && id !== to.id; });
     if (fromIdx >= 0) {
       newOrder.splice(Math.min(fromIdx, newOrder.length), 0, to.id);
     } else if (newOrder.indexOf(to.id) === -1) {
       newOrder.push(to.id);
     }
+    updates['rotation/order'] = newOrder;
+    updates['rotation/currentIndex'] = 0;
 
-    await db.ref('rotation').update({ order: newOrder, currentIndex: 0 });
+    if (Object.keys(updates).length) await db.ref().update(updates);
+
     window.rotation.order = newOrder;
     window.rotation.currentIndex = 0;
 
-    // ── 5. Delete source member ─────────────────────────────
-    await db.ref('members/' + from.id).remove();
+    try {
+      await db.ref('notifications/' + to.id).push({
+        id: Date.now(),
+        text: 'You took over ' + from.name + ' membership. ' +
+              'New debt: ' + window.money(window.computeMemberTotalDebt(from)) +
+              '. Active days: ' + totalDays + '.',
+        date: Date.now(),
+        read: false,
+        type: 'transfer_complete'
+      });
+    } catch (e) { /* silent */ }
 
-    // ── 6. Notify buyer ─────────────────────────────────────
-    // ── 6a. Kill any prepaid field on the buyer ──────────────
-    //      (legacy data that shouldn't survive into the new model)
-    await db.ref('members/' + to.id + '/prepaid').set(0);
-
-    // ── 6b. Notify buyer ─────────────────────────────────────
-    await db.ref('notifications/' + to.id).push({
-      id: Date.now(),
-      text: '🔄 You took over ' + from.name + '\'s membership. ' +
-            'New debt: ' + window.money(window.computeMemberTotalDebt(from)) +
-            '. Active days: ' + totalDays + '.',
-      date: Date.now(),
-      read: false,
-      type: 'transfer_complete'
-    });
-
-    // ── 7. Refresh local state ──────────────────────────────
     await window.reloadData();
     if (typeof window.updateAdminMembersList === 'function') {
       window.updateAdminMembersList();
@@ -13484,9 +13983,10 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
     return { txCount: txCount, loanCount: loanCount, totalDays: totalDays };
   }
 
-  // Expose in case any other part needs it
-  window.processMembershipTransfer = processMembershipTransfer;
-  window.closeTransferModal        = closeTransferModal;
+  window.processMembershipTransfer  = processMembershipTransfer;
+  window.showDistributeToAllModal   = showDistributeToAllModal;
+  window.executeDistribution        = executeDistribution;
+  window.closeTransferModal         = closeTransferModal;
   // ═══════════════════════════════════════════════════════════════
   // 12. APPLICATIONS & REQUESTS
   // ═══════════════════════════════════════════════════════════════
