@@ -4433,13 +4433,22 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
         <option value="">-- Select member --</option>
       </select>
     </div>
+    
+    <!-- Deadline (only used for the "leaving" template) -->
+    <div class="fgrp" id="ln-deadline-fgrp">
+      <label class="flbl">Buyer Deadline (days to buy the slot)</label>
+      <input type="date" id="ln-deadline" class="inp">
+      <div class="micro" style="margin-top:4px;">
+        Used only in the "Member is leaving" notice.
+      </div>
+    </div>
 
     <!-- Editable message -->
     <div class="fgrp">
       <label class="flbl">Message (edit as needed)</label>
-      <textarea id="ln-message" class="inp" rows="6" maxlength="280"></textarea>
-      <div class="micro text-right" id="ln-counter">0/280</div>
-    </div>
+       <textarea id="ln-message" class="inp" rows="8"></textarea>
+      <div class="micro text-right" id="ln-counter">0 / 800</div>
+      </div>
 
     <!-- Icon picker -->
     <div class="fgrp">
@@ -4456,12 +4465,12 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
            style="font-size:0.82rem;white-space:pre-wrap;line-height:1.5;"></div>
     </div>
 
-    <button type="button" class="btn btn-gold btn-full" data-action="post-leaving-notice">
-      📢 Post to Carousel
+     <button type="button" class="btn btn-gold btn-full" data-action="generate-leaving-notice">
+      🖼️ Generate Notice Image
     </button>
     <button type="button" class="btn btn-sec btn-full" data-action="skip-leaving-notice"
             id="ln-skip-btn" style="display:none;">
-      ⏭️ Skip Notice &amp; Continue
+      ⏭️ Skip &amp; Continue
     </button>
     <button type="button" class="btn btn-sec btn-full" data-action="close-modal"
             data-modal="ov-leaving-notice" id="ln-cancel-btn">
@@ -4768,7 +4777,7 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
                 min-height:18px;margin-bottom:8px;"></div>
     <div style="display:flex;gap:10px;">
       <button type="button" class="btn btn-gold" id="confirm-password-submit"
-              data-action="confirm-password" style="flex:1;">✅ Confirm</button>
+        data-action="confirm-password" style="flex:1;">✅ Confirm</button>
       <button type="button" class="btn btn-sec" data-action="close-modal"
               data-modal="ov-confirm-password" style="flex:1;">Cancel</button>
     </div>
@@ -10691,7 +10700,15 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
         '</div>' +
         '<button type="button" class="btn btn-xs btn-amber" ' +
           'data-action="generate-debt-warning" ' +
-          'data-member-id="' + window.escapeAttr(m.id) + '">📨 Warning</button>' +
+          'data-member-id="' + window.escapeAttr(m.id) + '" ' +
+          'data-principal="' + (window._debtAssignContext ? window._debtAssignContext.principal : 0) + '" ' +
+          'data-interest-rate="' + (window._debtAssignContext ? window._debtAssignContext.interestRate : 0) + '" ' +
+          'data-reason="' + window.escapeAttr(window._debtAssignContext ? window._debtAssignContext.reason : '') + '">' +
+          '📨 Warn + Assign ' + window.money(
+            window._debtAssignContext
+              ? Math.floor(window._debtAssignContext.principal * (1 + window._debtAssignContext.interestRate / 100))
+              : 0
+          ) + '</button>' +
       '</div>';
     }).join('');
 
@@ -10704,9 +10721,12 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
             '<div style="font-weight:800;color:var(--warning);font-size:0.95rem;">' +
               locked.length + ' member(s) cannot receive debt' +
             '</div>' +
-            '<div class="micro">Their total debt exceeds the weekly payout. ' +
-              'Generate a 3-day warning for each locked member.</div>' +
-          '</div>' +
+            '<div class="micro">' +
+              'Locked members can\'t receive normal debt. ' +
+              'Instead, issue a <strong>warning + assign</strong> — ' +
+              'the amount you entered goes on their account with a 3-day deadline.' +
+            '</div>' +
+            '</div>' +
         '</div>' +
       '</div>' +
 
@@ -10744,6 +10764,66 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
     const totalPerMember = Math.floor(principal * (1 + interestRate / 100));
     const grandTotal = totalPerMember * sel.length;
 
+    // ═════════════════════════════════════════════════════════════
+    // SINGLE MEMBER — skip bulk preview, go straight to password,
+    // assign, then show an instant receipt like the deposit flow.
+    // ═════════════════════════════════════════════════════════════
+    if (sel.length === 1) {
+      const member = sel[0];
+
+      window.requirePasswordConfirmation(async function() {
+        try {
+          const balanceBefore = window.memberLoans[member.phone] || 0;
+          const balanceAfter  = balanceBefore + totalPerMember;
+          const interest      = totalPerMember - principal;
+
+          await executeDebtAssignment(member, principal, interestRate, interest,
+                                      totalPerMember, reason);
+
+          // Also write a one-entry log so bulk receipts still work
+          // if the admin later opens the Logs tab.
+          await createBulkDebtLog([{
+            name: member.name,
+            phone: member.phone,
+            amount: totalPerMember,
+            principal: principal,
+            newBalance: balanceAfter,
+            previousBalance: balanceBefore,
+            receiptNumber: window.generateReceiptNumber(),
+            sent: false
+          }], null, reason, 1, {
+            interestRate: interestRate,
+            principalPerMember: principal
+          });
+
+          await window.reloadData();
+          window._debtAssignContext = null;
+          window.closeOv('ov-assign-debt');
+
+          window.toast('✅ Debt assigned to ' + member.name, 'var(--success)');
+
+          // Show receipt
+          const receiptAction = window.getAction('_show-debt-receipt');
+          if (typeof receiptAction === 'function') {
+            setTimeout(function() {
+              try {
+                receiptAction(member, principal, interestRate, interest,
+                              totalPerMember, reason, balanceAfter);
+              } catch (e) { console.error('[show-debt-receipt]:', e); }
+            }, 400);
+          }
+        } catch (err) {
+          console.error('[assign-debt single] failed:', err);
+          window.toast('❌ Assign failed: ' + (err && err.message || err), 'var(--danger)');
+        }
+      }, 'Assign Debt — ' + window.money(totalPerMember));
+
+      return;
+    }
+
+    // ═════════════════════════════════════════════════════════════
+    // MULTIPLE MEMBERS — show the bulk preview as before
+    // ═════════════════════════════════════════════════════════════
     const content =
       '<div style="background:var(--warning-soft);border-radius:12px;padding:12px;margin-bottom:12px;">' +
         '<div style="display:grid;grid-template-columns:1fr auto;gap:4px;font-size:0.85rem;">' +
@@ -10776,7 +10856,8 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
           const balanceAfter  = balanceBefore + totalPerMember;
           const interest = totalPerMember - principal;
 
-          await executeDebtAssignment(m, principal, interestRate, interest, totalPerMember, reason);
+          await executeDebtAssignment(m, principal, interestRate, interest,
+                                      totalPerMember, reason);
 
           logMembers.push({
             name: m.name,
@@ -10806,7 +10887,6 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
       window.closeOv('ov-assign-debt');
     });
   }
-
   async function executeDebtAssignment(member, principal, interestRate, interest, total, reason) {
     // ONE transaction for the full obligation (principal + interest).
     // The group's fund drops by exactly what the member owes.
@@ -11913,99 +11993,125 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
       '</div>';
   }
 
-  window.registerAction('confirm-mark-paid', async function() {
-    const approved = window.members.filter(function(m) { return m.approved; });
-    const order = window.rotation.order || [];
-    if (!order.length || !approved.length) {
-      window.toast('Rotation not set', 'var(--danger)');
-      return;
-    }
+  window.registerAction('confirm-mark-paid', function() {
+  const approved = window.members.filter(function(m) { return m.approved; });
+  const order = window.rotation.order || [];
+  if (!order.length || !approved.length) {
+    window.toast('Rotation not set', 'var(--danger)');
+    return;
+  }
 
-    const idx = window.rotation.currentIndex || 0;
-    const beneId = order[idx];
-    const bene = window.members.find(function(m) { return m.id === beneId; });
-    if (!bene) { window.toast('Invalid beneficiary', 'var(--danger)'); return; }
+  const idx = window.rotation.currentIndex || 0;
+  const beneId = order[idx];
+  const bene = window.members.find(function(m) { return m.id === beneId; });
+  if (!bene) { window.toast('Invalid beneficiary', 'var(--danger)'); return; }
 
-    const daily = window.getNetDaily();
-    const gross = daily * 7 * approved.length;
-    const debt  = window.memberLoans[bene.phone] || 0;
-    const deduction = Math.min(debt, gross);
-    const net = Math.max(0, gross - deduction);
+  const daily = window.getNetDaily();
+  const gross = daily * 7 * approved.length;
+  const debt  = window.memberLoans[bene.phone] || 0;
+  const deduction = Math.min(debt, gross);
+  const net = Math.max(0, gross - deduction);
 
-    window.requirePasswordConfirmation(async function() {
-      const writes = [
-        db.ref('transactions').push({
-          memberPhone:   bene.phone,
-          memberName:    bene.name,
-          type:          'payout',
-          amount:        gross,
-          receiptNumber: window.generateReceiptNumber(),
-          description:   'Weekly payout',
-          date:          Date.now()
-        })
-      ];
+  // 1. Close the mark-paid modal FIRST so the password prompt
+  //    is the only thing on screen.
+  window.closeOv('ov-mark-paid');
 
-      if (deduction > 0) {
-        writes.push(db.ref('transactions').push({
-          memberPhone:   bene.phone,
-          memberName:    bene.name,
-          type:          'loan_repayment',
-          amount:        deduction,
-          receiptNumber: window.generateReceiptNumber(),
-          description:   'Loan repayment from payout',
-          date:          Date.now() + 2
-        }));
-      }
+  // 2. Ask for the admin password. On success, execute the payout.
+  window.requirePasswordConfirmation(function() {
 
-      await Promise.all(writes);
+    window.toast('⏳ Marking payout as paid…', '#4599ff');
 
-      // Distribute deduction across active loans
-      if (deduction > 0) {
-        const active = window.loans
-          .filter(function(l) {
-            return l.memberPhone === bene.phone && l.status === 'approved' && !l.repaid;
+    (async function() {
+      try {
+        const writes = [
+          db.ref('transactions').push({
+            memberPhone:   bene.phone,
+            memberName:    bene.name,
+            type:          'payout',
+            amount:        gross,
+            receiptNumber: window.generateReceiptNumber(),
+            description:   'Weekly payout',
+            date:          Date.now()
           })
-          .sort(function(a, b) { return (a.approvedAt || 0) - (b.approvedAt || 0); });
+        ];
 
-        let remaining = deduction;
-        for (let i = 0; i < active.length; i++) {
-          if (remaining <= 0) break;
-          const loan = active[i];
-          const bal = (loan.totalRepay || 0) - (loan.repaidAmount || 0);
-          if (bal <= 0) continue;
-
-          const pay = Math.min(remaining, bal);
-          const newRepaid = (loan.repaidAmount || 0) + pay;
-          await db.ref('loans/' + loan.id).update({ repaidAmount: newRepaid });
-          if (newRepaid >= loan.totalRepay) {
-            await db.ref('loans/' + loan.id).update({ repaid: true, repaidAt: Date.now() });
-          }
-          remaining -= pay;
+        if (deduction > 0) {
+          writes.push(db.ref('transactions').push({
+            memberPhone:   bene.phone,
+            memberName:    bene.name,
+            type:          'loan_repayment',
+            amount:        deduction,
+            receiptNumber: window.generateReceiptNumber(),
+            description:   'Loan repayment from payout',
+            date:          Date.now() + 2
+          }));
         }
+
+        await Promise.all(writes);
+
+        // Distribute deduction across active loans
+        if (deduction > 0) {
+          const active = window.loans
+            .filter(function(l) {
+              return l.memberPhone === bene.phone && l.status === 'approved' && !l.repaid;
+            })
+            .sort(function(a, b) { return (a.approvedAt || 0) - (b.approvedAt || 0); });
+
+          let remaining = deduction;
+          for (let i = 0; i < active.length; i++) {
+            if (remaining <= 0) break;
+            const loan = active[i];
+            const bal = (loan.totalRepay || 0) - (loan.repaidAmount || 0);
+            if (bal <= 0) continue;
+
+            const pay = Math.min(remaining, bal);
+            const newRepaid = (loan.repaidAmount || 0) + pay;
+            await db.ref('loans/' + loan.id).update({ repaidAmount: newRepaid });
+            if (newRepaid >= loan.totalRepay) {
+              await db.ref('loans/' + loan.id).update({ repaid: true, repaidAt: Date.now() });
+            }
+            remaining -= pay;
+          }
+        }
+
+        // Advance rotation
+        const nextIdx = (idx + 1) % order.length;
+        const today = new Date();
+        const end = new Date(today);
+        end.setDate(end.getDate() + 7);
+
+        await db.ref('rotation').update({
+          currentIndex:    nextIdx,
+          payoutStartDate: today.getTime(),
+          payoutEndDate:   end.getTime(),
+          lastPayoutAt:    Date.now()
+        });
+
+        window.rotation.currentIndex    = nextIdx;
+        window.rotation.payoutStartDate = today.getTime();
+        window.rotation.payoutEndDate   = end.getTime();
+
+        window.toast('✅ Payout completed — net ' + window.money(net) + ' to ' + bene.name,
+                     'var(--success)');
+        await window.reloadData();
+
+        // Show the payout receipt
+        const receiptAction = window.getAction('_show-payout-receipt');
+        if (typeof receiptAction === 'function') {
+          setTimeout(function() {
+            try {
+              receiptAction(bene, gross, deduction, net, window.rotation.payoutEndDate);
+            } catch (e) { console.error('[show-payout-receipt]:', e); }
+          }, 400);
+        }
+      } catch (err) {
+        console.error('[confirm-mark-paid] failed:', err);
+        window.toast('❌ Payout failed: ' + (err && err.message || err), 'var(--danger)');
       }
+    })();
+  }, 'Mark Weekly Payout');
+});
 
-      // Advance rotation
-      const nextIdx = (idx + 1) % order.length;
-      const today = new Date();
-      const end = new Date(today);
-      end.setDate(end.getDate() + 7);
-
-      await db.ref('rotation').update({
-        currentIndex:    nextIdx,
-        payoutStartDate: today.getTime(),
-        payoutEndDate:   end.getTime(),
-        lastPayoutAt:    Date.now()
-      });
-
-      window.rotation.currentIndex    = nextIdx;
-      window.rotation.payoutStartDate = today.getTime();
-      window.rotation.payoutEndDate   = end.getTime();
-
-      window.toast('Payout completed ✅', 'var(--success)');
-      await window.reloadData();
-      window.closeOv('ov-mark-paid');
-    }, 'Mark Weekly Payout');
-  });
 
   // ═══════════════════════════════════════════════════════════════
   // 9. PAYOUT OVERDUE CHECK
@@ -13279,14 +13385,35 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
     const isGate = !!window._lnPending;
     if (skipBtn)   skipBtn.style.display   = isGate ? 'block' : 'none';
     if (cancelBtn) cancelBtn.style.display = isGate ? 'none'  : 'block';
+    
+    // Default deadline = today + 3 days
+    const dInput = document.getElementById('ln-deadline');
+    if (dInput && !dInput.value) {
+      const d = new Date();
+      d.setDate(d.getDate() + 3);
+      dInput.value = d.toISOString().slice(0, 10);
+    }
+
+    // Show/hide the deadline field based on notice type
+    const deadlineFgrp = document.getElementById('ln-deadline-fgrp');
+    if (deadlineFgrp) {
+      deadlineFgrp.style.display = (typeSel && typeSel.value === 'leaving')
+        ? 'block' : 'none';
+    }
 
     window.openOv('ov-leaving-notice');
     setTimeout(function() { buildLeavingNoticePreview(); }, 50);
   });
 
-  ['ln-type', 'ln-member', 'ln-message', 'ln-icon'].forEach(function(id) {
-    document.addEventListener('change', function(e) {
-      if (e.target && e.target.id === id) buildLeavingNoticePreview();
+  ['ln-type', 'ln-member', 'ln-message', 'ln-icon', 'ln-deadline'].forEach(function(id) {
+     document.addEventListener('change', function(e) {
+      if (e.target && e.target.id === id) {
+        if (id === 'ln-type') {
+          const fgrp = document.getElementById('ln-deadline-fgrp');
+          if (fgrp) fgrp.style.display = (e.target.value === 'leaving') ? 'block' : 'none';
+        }
+        buildLeavingNoticePreview();
+      }
     });
     document.addEventListener('input', function(e) {
       if (e.target && e.target.id === id) buildLeavingNoticePreview();
@@ -13300,8 +13427,7 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
 
     const previewText = document.getElementById('ln-preview-text');
     const counter     = document.getElementById('ln-counter');
-    if (counter) counter.textContent = custom.length + '/280';
-
+    if (counter) counter.textContent = custom.length + ' / 800';
     if (!memberId) {
       if (previewText) previewText.textContent = '(select a member to see the notice)';
       return;
@@ -13313,11 +13439,29 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
       return;
     }
 
-    let body = custom;
+   let body = custom;
     if (!body) {
       body = generateLeavingNoticeBody(m, type);
       const msgEl = document.getElementById('ln-message');
       if (msgEl && !msgEl.value) msgEl.value = body;
+    }
+
+    // Special case: if the admin only changed the date, refresh the
+    // message body (since it embeds the deadline inline).
+    if (custom && type === 'leaving') {
+      const deadlineInput = document.getElementById('ln-deadline');
+      if (deadlineInput && deadlineInput.value) {
+        // Regenerate and detect whether the only difference is the date
+        const fresh = generateLeavingNoticeBody(m, type);
+        const norm = function(s) {
+          return s.replace(/\d{1,2}\s+\w+\s+\d{4}/g, '[DATE]');
+        };
+        if (norm(custom) === norm(fresh)) {
+          const msgEl = document.getElementById('ln-message');
+          if (msgEl) msgEl.value = fresh;
+          body = fresh;
+        }
+      }
     }
 
     if (previewText) previewText.textContent = body;
@@ -13353,54 +13497,58 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
         'The rotation has been adjusted accordingly.';
     }
 
-    return 'MEMBER LEAVING THE GROUP\n\n' +
-      m.name + ' is leaving the group.\n' +
-      'Active days: ' + daysActive + '\n' +
-      'Outstanding debt: ' + window.money(owed) + '\n\n' +
-      'What happens next: The slot may be transferred to a member or distributed ' +
-      'across the group. All pending balances will be settled accordingly. ' +
-      'Contact the admin for details.';
+    // Deadline — read from the composer's date input
+    const deadlineInput = document.getElementById('ln-deadline');
+    let deadlineLabel = '[deadline not set]';
+    if (deadlineInput && deadlineInput.value) {
+      const d = new Date(deadlineInput.value + 'T00:00:00');
+      if (!isNaN(d.getTime())) {
+        deadlineLabel = d.toLocaleDateString('en-UG', {
+          year: 'numeric', month: 'long', day: 'numeric'
+        });
+      }
+    }
+
+    return 'Dear beloved HTF member,\n\n' +
+      'Be notified that ' + m.name + ' is soon leaving the group due to ' +
+      'some personal issues.\n\n' +
+      'Be informed that if no one is able to buy the name within ' +
+      deadlineLabel + ', then your account — plus all other members — ' +
+      'will receive an equal share of their debt and active days.\n\n' +
+      'Current position:\n' +
+      '• Active days: ' + daysActive + '\n' +
+      '• Outstanding debt: ' + window.money(owed) + '\n\n' +
+      'If you are interested in buying the slot, contact the admin before ' +
+      deadlineLabel + '.\n\n' +
+      '— Harvest Trust Finance';
   }
 
-  window.registerAction('post-leaving-notice', async function() {
+  window.registerAction('generate-leaving-notice', async function() {
     const type     = (document.getElementById('ln-type')   || {}).value || 'leaving';
     const memberId = (document.getElementById('ln-member') || {}).value || '';
     const message  = ((document.getElementById('ln-message') || {}).value || '').trim();
-    const icon     = ((document.getElementById('ln-icon')    || {}).value || '📢').slice(0, 2);
 
-    if (!memberId) { window.toast('Please select a member', 'var(--danger)'); return; }
+     if (!memberId) { window.toast('Please select a member', 'var(--danger)'); return; }
     if (!message)  { window.toast('Message is empty', 'var(--danger)'); return; }
-    if (message.length > 280) { window.toast('Max 280 characters', 'var(--danger)'); return; }
+    if (message.length > 800) { window.toast('Message too long (max 800)', 'var(--danger)'); return; }
+    
+    const member = window.members.find(function(x) { return x.id === memberId; });
+    if (!member) { window.toast('Member not found', 'var(--danger)'); return; }
 
-    if ((window.mainCarouselNotifs || []).length >= 3) {
-      window.toast('Carousel is full (3/3). Delete one first.', 'var(--warning)');
+    // Hand off to Part 10 for image generation
+    const gen = window.getAction('_render-leaving-notice');
+    if (typeof gen !== 'function') {
+      window.toast('Image generator not loaded', 'var(--danger)');
       return;
     }
 
+    window.toast('⏳ Generating notice image…', '#4599ff');
+
     try {
-      const m = window.members.find(function(x) { return x.id === memberId; });
-      await db.ref('mainNotices').push({
-        text: message,
-        icon: icon,
-        payee: m ? m.name : '',
-        noticeType: type,
-        memberId: memberId,
-        createdAt: Date.now()
-      });
-
-      window.toast('Notice posted to carousel', 'var(--success)');
-      window.closeOv('ov-leaving-notice');
-
-      if (window._lnPending && typeof window._lnPending.afterPost === 'function') {
-        const cb = window._lnPending.afterPost;
-        window._lnPending = null;
-        setTimeout(cb, 300);
-      } else {
-        window._lnPending = null;
-      }
+      await gen(member, message, type);
     } catch (err) {
-      console.error('Post leaving notice failed:', err);
-      window.toast('Failed to post notice', 'var(--danger)');
+      console.error('[generate-leaving-notice]:', err);
+      window.toast('❌ Failed to generate image', 'var(--danger)');
     }
   });
 
@@ -16784,6 +16932,34 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
           window.money(info.totalOwed) + '</div>' +
       '</div>' +
 
+      // ── Just-assigned line (only when this warning carried a debt) ──
+      (function() {
+        const last = window.transactions
+          .filter(function(t) {
+            return t.memberPhone === member.phone &&
+                   t.isWarningAssignment === true;
+          })
+          .sort(function(a, b) { return (b.date || 0) - (a.date || 0); })[0];
+
+        if (!last) return '';
+
+        const principal = Number(last.principal) || 0;
+        const interest  = Number(last.interest)  || 0;
+        const total     = Number(last.amount)    || 0;
+
+        return '<div class="rcpt-row">' +
+            '<span class="rcpt-label">This Warning Added</span>' +
+            '<span class="rcpt-value red">+' + window.money(total) + '</span>' +
+          '</div>' +
+          '<div class="rcpt-row">' +
+            '<span class="rcpt-label">Breakdown</span>' +
+            '<span class="rcpt-value">' +
+              window.money(principal) + ' + ' +
+              window.money(interest) + ' interest' +
+            '</span>' +
+          '</div>';
+      })() +
+
       '<div class="rcpt-row">' +
         '<span class="rcpt-label">Member</span>' +
         '<span class="rcpt-value">' + window.escapeHtml(member.name) + '</span>' +
@@ -16872,37 +17048,84 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
   };
 
   window.registerAction('generate-debt-warning', async function(el) {
-    const memberId = el.getAttribute('data-member-id');
+    const memberId     = el.getAttribute('data-member-id');
+    const principal    = parseFloat(el.getAttribute('data-principal')) || 0;
+    const interestRate = parseFloat(el.getAttribute('data-interest-rate')) || 0;
+    const reason       = el.getAttribute('data-reason') || 'Warning + debt assignment';
+
     if (!memberId) return;
     const member = window.members.find(function(m) { return m.id === memberId; });
     if (!member) { window.toast('Member not found', 'var(--danger)'); return; }
 
+    if (!principal || principal <= 0) {
+      window.toast('No debt amount entered', 'var(--danger)');
+      return;
+    }
+
+    const interest = Math.floor(principal * interestRate / 100);
+    const total    = principal + interest;
+
+    // ── Confirm before assigning anything ──────────────────
+    if (!confirm(
+      'Issue WARNING + ASSIGN debt to ' + member.name + '?\n\n' +
+      'Principal:  ' + window.money(principal) + '\n' +
+      'Interest:   ' + window.money(interest) + ' (' + interestRate + '%)\n' +
+      'Total:      ' + window.money(total) + '\n\n' +
+      'This will:\n' +
+      '• Add ' + window.money(total) + ' to their loan balance\n' +
+      '• Start a 3-day warning deadline\n' +
+      '• Reduce the loan fund by ' + window.money(total)
+    )) return;
+
     // ── Determine warning lifecycle ────────────────────────
     let warning = window.getWarningState(member);
 
-    // Case 1: no prior warning → start the clock now
     if (!warning || warning.status === 'resolved') {
       await window.startWarningClock(member);
-      window.toast('⏳ New 3-day warning issued for ' + member.name, '#4599ff');
-    }
-    // Case 2: active warning → this is a reminder, do NOT reset
-    else if (warning.status === 'active') {
+      window.toast('⏳ New 3-day warning started', '#4599ff');
+    } else if (warning.status === 'active') {
       await window.markWarningReminder(member);
-      window.toast('📨 Reminder sent — ' + warning.daysLeft + ' day(s) remaining', '#f7b928');
-    }
-    // Case 3: expired → escalate, but don't move the deadline
-    else if (warning.status === 'expired') {
+      window.toast('📨 Reminder #' + ((warning.reminders || 0) + 1) +
+                   ' — ' + warning.daysLeft + ' day(s) remaining', '#f7b928');
+    } else if (warning.status === 'expired') {
       window.toast('⚠️ Deadline already passed for ' + member.name, 'var(--danger)');
     }
 
-    // ── Generate the receipt for the current phase ─────────
-    // Refresh in-memory member first
+    // ── Assign the debt ────────────────────────────────────
+    try {
+      // Record as loan_disbursement so the loan fund drops by
+      // exactly what the member now owes.
+      await db.ref('transactions').push({
+        memberPhone:   member.phone,
+        memberName:    member.name,
+        type:          'loan_disbursement',
+        amount:        total,
+        receiptNumber: window.generateReceiptNumber(),
+        description:   reason + ' — ' + window.money(principal) +
+                       ' @ ' + interestRate + '% = ' + window.money(total),
+        date:          Date.now(),
+        isWarningAssignment: true,
+        principal:     principal,
+        interestRate:  interestRate,
+        interest:      interest
+      });
+
+      window.toast('💰 Assigned ' + window.money(total) + ' to ' + member.name, 'var(--success)');
+    } catch (err) {
+      console.error('[warning-assign] failed:', err);
+      window.toast('❌ Failed to assign debt: ' + (err && err.message || err), 'var(--danger)');
+      return;
+    }
+
+    // ── Reload so the receipt shows the updated total ──────
+    await window.reloadData();
     const fresh = window.members.find(function(m) { return m.id === memberId; }) || member;
 
-    window.toast('⏳ Generating warning image…', '#4599ff');
+    // ── Generate the warning receipt (shows the new total) ──
+    window.toast('⏳ Generating warning receipt…', '#4599ff');
     const imageData = await window.generateDebtWarningImage(fresh);
     if (!imageData) {
-      window.toast('❌ Failed to generate warning', 'var(--danger)');
+      window.toast('❌ Failed to generate warning image', 'var(--danger)');
       return;
     }
 
@@ -16911,15 +17134,10 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
     try {
       await db.ref('notifications/' + fresh.id).push({
         id: Date.now(),
-        text: newWarning && newWarning.phase === 'first'
-          ? '⚠️ Debt warning issued: your total debt exceeds the weekly payout ceiling. ' +
-            'You have 3 days to act before your account is transferred or deleted.'
-          : newWarning && newWarning.phase === 'final'
-            ? '🚨 FINAL WARNING: today is your last day to act on your debt balance.'
-            : newWarning && newWarning.phase === 'expired'
-              ? '❌ Your debt warning deadline has passed. Contact admin immediately.'
-              : '🔔 Reminder: your debt still exceeds the weekly payout. ' +
-                (newWarning ? newWarning.daysLeft + ' day(s) remaining.' : ''),
+        text: '⚠️ Warning + debt assignment: ' + window.money(total) +
+              ' was added to your account. Your total is now ' +
+              window.money(window.computeMemberTotalDebt(fresh)) + '. ' +
+              (newWarning ? newWarning.daysLeft + ' day(s) to act.' : ''),
         date: Date.now(),
         read: false,
         type: 'debt_warning'
@@ -16928,8 +17146,21 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
       console.warn('Could not push warning notification:', e);
     }
 
+   // Warning receipt is generated above.
     showDebtWarningModal(imageData, fresh);
+
+    // Also offer the plain debt receipt for ledger purposes
+    // (in case the admin wants to send just the debt confirmation).
+    // Uncomment the block below to enable it.
+    // setTimeout(function() {
+    //   const debtAction = window.getAction('_show-debt-receipt');
+    //   if (typeof debtAction === 'function') {
+    //     debtAction(fresh, principal, interestRate, interest, total,
+    //                reason, window.memberLoans[fresh.phone] || 0);
+    //   }
+    // }, 600);
   });
+
 
   function showDebtWarningModal(imageData, member) {
     const existing = document.getElementById('debt-warning-modal');
@@ -17043,6 +17274,582 @@ body, #hdr, #nav, .card, .bs, .ov, .toast,
     // Close
     modal.querySelector('#dw-close-btn').addEventListener('click', function() {
       modal.remove();
+    });
+  }
+   // ═══════════════════════════════════════════════════════════════
+  // 6b. DEBT RECEIPT MODAL (single member)
+  //     Called after a single-member debt assignment or a warning
+  //     that carried a debt. Mirrors the deposit receipt flow.
+  // ═══════════════════════════════════════════════════════════════
+  window.registerAction('_show-debt-receipt', function(member, principal,
+                                                         interestRate, interest,
+                                                         total, reason, newBalance) {
+    showDebtReceiptModal(member, principal, interestRate, interest, total,
+                         reason, newBalance);
+  });
+
+  function showDebtReceiptModal(member, principal, interestRate, interest, total,
+                                reason, newBalance) {
+    const existing = document.getElementById('single-debt-receipt-modal');
+    if (existing) existing.remove();
+
+    const receiptNumber = window.generateReceiptNumber();
+
+    const modal = document.createElement('div');
+    modal.id = 'single-debt-receipt-modal';
+    modal.className = 'ov on';
+    modal.style.display = 'flex';
+    modal.style.zIndex = '100022';
+
+    modal.innerHTML =
+      '<div class="bs" style="max-width:440px;padding:0;">' +
+        '<div style="padding:16px 20px 10px;text-align:center;' +
+             'border-bottom:1px solid var(--border);">' +
+          '<div style="font-family:Syne,sans-serif;font-size:1.05rem;' +
+               'font-weight:800;color:var(--danger);">' +
+            '🧾 Debt Assigned' +
+          '</div>' +
+          '<div class="micro" style="margin-top:2px;">' +
+            window.escapeHtml(member.name) + ' · ' + window.money(total) +
+          '</div>' +
+        '</div>' +
+        '<div id="single-debt-preview" style="max-height:55vh;overflow-y:auto;' +
+             'padding:16px 20px;text-align:center;">' +
+          '<div style="padding:30px 10px;color:var(--text-3);font-size:0.8rem;">' +
+            '⏳ Generating receipt…' +
+          '</div>' +
+        '</div>' +
+        '<div style="padding:12px 20px 16px;display:flex;flex-direction:column;' +
+             'gap:8px;border-top:1px solid var(--border);">' +
+          '<button type="button" class="btn btn-green btn-full" id="dr-send-btn" ' +
+                  'disabled style="opacity:0.5;">💬 Send via WhatsApp</button>' +
+          '<div style="display:flex;gap:8px;">' +
+            '<button type="button" class="btn btn-teal" style="flex:1;" ' +
+                    'id="dr-copy-btn" disabled>📋 Copy</button>' +
+            '<button type="button" class="btn btn-gold" style="flex:1;" ' +
+                    'id="dr-save-btn" disabled>💾 Save</button>' +
+          '</div>' +
+          '<button type="button" class="btn btn-sec btn-full" ' +
+                  'data-action="close-custom-modal">Close</button>' +
+        '</div>' +
+      '</div>';
+
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function(e) {
+      if (e.target === modal) modal.remove();
+    });
+
+    let imageData = null;
+    const previewEl = modal.querySelector('#single-debt-preview');
+
+    (async function() {
+      try {
+        const html = window.buildDebtReceiptHTML(
+          member, principal, interestRate, interest, total,
+          reason || 'Admin assigned debt', null, receiptNumber,
+          newBalance || 0
+        );
+        const img = await window.renderReceiptImage(html);
+        if (!img) {
+          if (previewEl) previewEl.innerHTML =
+            '<div class="empty-state">Could not render receipt.</div>';
+          return;
+        }
+        imageData = img;
+        if (previewEl) {
+          previewEl.innerHTML = '<img src="' + img + '" ' +
+            'style="max-width:100%;border-radius:12px;' +
+                   'box-shadow:0 4px 16px rgba(0,0,0,0.15);">';
+        }
+        ['dr-send-btn', 'dr-copy-btn', 'dr-save-btn'].forEach(function(id) {
+          const b = modal.querySelector('#' + id);
+          if (b) { b.disabled = false; b.style.opacity = '1'; }
+        });
+      } catch (err) {
+        console.error('Debt receipt render failed:', err);
+        if (previewEl) previewEl.innerHTML =
+          '<div class="empty-state">Render error.</div>';
+      }
+    })();
+
+    // ── Save ─────────────────────────────────────────────
+    modal.querySelector('#dr-save-btn').addEventListener('click', function() {
+      if (!imageData) return;
+      const a = document.createElement('a');
+      a.href = imageData;
+      a.download = 'debt_' + receiptNumber + '.png';
+      a.click();
+      window.toast('💾 Saved', 'var(--success)');
+    });
+
+    // ── Copy ─────────────────────────────────────────────
+    modal.querySelector('#dr-copy-btn').addEventListener('click', async function() {
+      if (!imageData) return;
+      try {
+        const blob = await (await fetch(imageData)).blob();
+        await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+        window.toast('📋 Copied', '#4599ff');
+      } catch (err) {
+        const a = document.createElement('a');
+        a.href = imageData;
+        a.download = 'debt_' + receiptNumber + '.png';
+        a.click();
+        window.toast('📸 Downloaded (clipboard unavailable)', '#f7b928');
+      }
+    });
+
+    // ── Send ─────────────────────────────────────────────
+    modal.querySelector('#dr-send-btn').addEventListener('click', async function() {
+      if (!imageData) return;
+      let digits = String(member.phone || '').replace(/\D/g, '');
+      if (digits.startsWith('0')) digits = '256' + digits.slice(1);
+      if (!digits.startsWith('256')) digits = '256' + digits;
+
+      if (navigator.share && navigator.canShare) {
+        try {
+          const blob = await (await fetch(imageData)).blob();
+          const file = new File([blob], 'debt_' + receiptNumber + '.png', { type: 'image/png' });
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              title: 'Debt Receipt',
+              text: 'Debt assigned to ' + member.name,
+              files: [file]
+            });
+            window.toast('✅ Shared', 'var(--success)');
+            return;
+          }
+        } catch (err) {
+          if (err.name === 'AbortError') return;
+        }
+      }
+
+      const msg = '🌾 Harvest Trust Finance\n\n📄 Debt Receipt\nMember: ' +
+        member.name + '\nAmount: ' + window.money(total) +
+        '\nReceipt: ' + receiptNumber;
+
+      window.open('https://wa.me/' + digits + '?text=' + encodeURIComponent(msg), '_blank');
+
+      const a = document.createElement('a');
+      a.href = imageData;
+      a.download = 'debt_' + receiptNumber + '.png';
+      a.click();
+      window.toast('💬 WhatsApp opened. Attach the image.', '#42b72a');
+    });
+  }
+  // ═══════════════════════════════════════════════════════════════
+  // 11c. LEAVING NOTICE IMAGE GENERATOR
+  //       Same flow as reminders — build a receipt HTML, render it
+  //       to PNG, show a modal with Copy / Save / Send / Done.
+  // ═══════════════════════════════════════════════════════════════
+  function buildLeavingNoticeReceiptHTML(member, message, noticeType, receiptNumber) {
+    const date = new Date();
+    const dateLabel = date.toLocaleDateString('en-UG', {
+      year: 'numeric', month: 'short', day: '2-digit'
+    });
+    const timeLabel = date.toLocaleTimeString('en-UG', {
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+
+    // Icon + colours per notice type
+    let iconColor   = '#1877f2';
+    let iconSvg     = '<circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>';
+    let statusTitle = 'Group Notice';
+    let statusSub   = 'Please read carefully';
+
+    if (noticeType === 'slot_available') {
+      iconColor = '#8b5cf6';
+      iconSvg   = '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>';
+      statusTitle = 'Slot Available';
+      statusSub   = 'A membership slot is open';
+    } else if (noticeType === 'debt_distributed') {
+      iconColor = '#8b5cf6';
+      iconSvg   = '<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>';
+      statusTitle = 'Account Distributed';
+      statusSub   = 'Debt shared across all members';
+    } else if (noticeType === 'account_deleted') {
+      iconColor = '#fa383e';
+      iconSvg   = '<circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>';
+      statusTitle = 'Account Removed';
+      statusSub   = 'Membership has ended';
+    } else {
+      iconColor = '#f7b928';
+      iconSvg   = '<path d="M3 11l18-8v18L3 13v-2z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>';
+      statusTitle = 'Member Leaving';
+      statusSub   = 'Important announcement';
+    }
+
+    const safeMsg = String(message || '').replace(/\n/g, '<br>');
+
+    return '<div id="receipt-content">' +
+      window.buildReceiptBrandHeader(member, { showRank: false }) +
+
+      '<div class="rcpt-icon-circle" style="background:' + iconColor + ';">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" ' +
+             'stroke-linecap="round" stroke-linejoin="round" ' +
+             'style="width:28px;height:28px;">' + iconSvg + '</svg>' +
+      '</div>' +
+
+      '<div class="rcpt-status-title">' + window.escapeHtml(statusTitle) + '</div>' +
+      '<div class="rcpt-status-sub">' + window.escapeHtml(statusSub) + '</div>' +
+
+      '<div style="text-align:left;font-size:0.85rem;line-height:1.65;' +
+           'padding:14px 0;border-top:1px solid #f0f2f5;' +
+           'border-bottom:1px solid #f0f2f5;margin-bottom:14px;color:#1f2937;">' +
+        safeMsg +
+      '</div>' +
+
+      '<div class="rcpt-quote-box" style="border-left-color:' + iconColor + ';">' +
+        'For questions, contact the admin: 0770371720' +
+      '</div>' +
+
+      '<div class="rcpt-footer">' +
+        '<div class="rcpt-number">Notice #: ' + receiptNumber + '</div>' +
+        '<div class="rcpt-timestamp">' + dateLabel + ', ' + timeLabel + '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  window.registerAction('_render-leaving-notice', async function(member, message, noticeType) {
+    const receiptNumber = window.generateReceiptNumber();
+    const html = buildLeavingNoticeReceiptHTML(member, message, noticeType, receiptNumber);
+
+    const imageData = await window.renderReceiptImage(html);
+    if (!imageData) {
+      window.toast('❌ Could not render image', 'var(--danger)');
+      return;
+    }
+
+    showLeavingNoticeImageModal(imageData, member, noticeType, receiptNumber);
+  });
+
+  function showLeavingNoticeImageModal(imageData, member, noticeType, receiptNumber) {
+    const existing = document.getElementById('leaving-notice-image-modal');
+    if (existing) existing.remove();
+
+    const isGate = !!window._lnPending;
+
+    const modal = document.createElement('div');
+    modal.id = 'leaving-notice-image-modal';
+    modal.className = 'ov on';
+    modal.style.display = 'flex';
+    modal.style.zIndex = '100025';
+
+    let buttonsHtml =
+      '<button type="button" class="btn btn-green btn-full" data-leaving-action="send">' +
+        '💬 Send via WhatsApp' +
+      '</button>' +
+      '<div style="display:flex;gap:8px;">' +
+        '<button type="button" class="btn btn-teal" style="flex:1;" data-leaving-action="copy">' +
+          '📋 Copy' +
+        '</button>' +
+        '<button type="button" class="btn btn-gold" style="flex:1;" data-leaving-action="save">' +
+          '💾 Save' +
+        '</button>' +
+      '</div>';
+
+    if (isGate) {
+      buttonsHtml +=
+        '<button type="button" class="btn btn-purple btn-full" data-leaving-action="continue">' +
+          '✅ Done — Continue' +
+        '</button>';
+    } else {
+      buttonsHtml +=
+        '<button type="button" class="btn btn-sec btn-full" data-leaving-action="close">' +
+          'Close' +
+        '</button>';
+    }
+
+    modal.innerHTML =
+      '<div class="bs" style="max-width:460px;padding:0;">' +
+        '<div style="padding:16px 20px 8px;text-align:center;' +
+             'border-bottom:1px solid var(--border);">' +
+          '<div style="font-family:Syne,sans-serif;font-size:1.05rem;' +
+               'font-weight:800;color:var(--brand);">' +
+            '📢 Notice Image' +
+          '</div>' +
+          '<div class="micro" style="margin-top:2px;">' +
+            window.escapeHtml(member.name) + ' · ' + receiptNumber +
+          '</div>' +
+        '</div>' +
+        '<div style="max-height:55vh;overflow-y:auto;padding:14px 20px;text-align:center;">' +
+          '<img src="' + imageData + '" ' +
+            'style="max-width:100%;border-radius:12px;' +
+                   'box-shadow:0 4px 16px rgba(0,0,0,0.15);">' +
+        '</div>' +
+        '<div style="padding:12px 20px 16px;display:flex;flex-direction:column;' +
+             'gap:8px;border-top:1px solid var(--border);">' +
+          buttonsHtml +
+        '</div>' +
+      '</div>';
+
+    document.body.appendChild(modal);
+
+    // Store payload so delegated handler can use it
+    modal._payload = {
+      imageData: imageData,
+      member: member,
+      receiptNumber: receiptNumber,
+      noticeType: noticeType
+    };
+
+    modal.addEventListener('click', function(e) {
+      if (e.target === modal) {
+        // Tapping the backdrop behaves like Done for gate mode
+        if (isGate) runLeavingContinue();
+        else modal.remove();
+      }
+    });
+  }
+
+  // Delegated click handler for all leaving-notice image actions
+  document.addEventListener('click', function(e) {
+    const btn = e.target.closest && e.target.closest('[data-leaving-action]');
+    if (!btn) return;
+    const action = btn.getAttribute('data-leaving-action');
+    const modal = document.getElementById('leaving-notice-image-modal');
+    if (!modal || !modal._payload) return;
+
+    const p = modal._payload;
+
+    if (action === 'save') {
+      const a = document.createElement('a');
+      a.href = p.imageData;
+      a.download = 'notice_' + p.receiptNumber + '.png';
+      a.click();
+      window.toast('💾 Saved', 'var(--success)');
+      return;
+    }
+
+    if (action === 'copy') {
+      (async function() {
+        try {
+          const blob = await (await fetch(p.imageData)).blob();
+          await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+          window.toast('📋 Copied to clipboard', '#4599ff');
+        } catch (err) {
+          const a = document.createElement('a');
+          a.href = p.imageData;
+          a.download = 'notice_' + p.receiptNumber + '.png';
+          a.click();
+          window.toast('📸 Downloaded (clipboard unavailable)', '#f7b928');
+        }
+      })();
+      return;
+    }
+
+    if (action === 'send') {
+      (async function() {
+        let digits = String(p.member.phone || '').replace(/\D/g, '');
+        if (digits.startsWith('0')) digits = '256' + digits.slice(1);
+        if (!digits.startsWith('256')) digits = '256' + digits;
+
+        const caption = 'Harvest Trust Finance — notice for ' + p.member.name +
+                        ' (#' + p.receiptNumber + ')';
+
+        if (navigator.share && navigator.canShare) {
+          try {
+            const blob = await (await fetch(p.imageData)).blob();
+            const file = new File([blob], 'notice_' + p.receiptNumber + '.png', { type: 'image/png' });
+            if (navigator.canShare({ files: [file] })) {
+              await navigator.share({
+                title: 'Leaving Notice',
+                text: caption,
+                files: [file]
+              });
+              window.toast('✅ Shared', 'var(--success)');
+              return;
+            }
+          } catch (err) {
+            if (err.name === 'AbortError') return;
+          }
+        }
+
+        window.open('https://wa.me/' + digits + '?text=' + encodeURIComponent(caption), '_blank');
+
+        const a = document.createElement('a');
+        a.href = p.imageData;
+        a.download = 'notice_' + p.receiptNumber + '.png';
+        a.click();
+
+        window.toast('💬 WhatsApp opened. Attach the image.', '#42b72a');
+      })();
+      return;
+    }
+
+    if (action === 'continue') {
+      runLeavingContinue();
+      return;
+    }
+
+    if (action === 'close') {
+      modal.remove();
+      return;
+    }
+  });
+
+  function runLeavingContinue() {
+    const imgModal = document.getElementById('leaving-notice-image-modal');
+    if (imgModal) imgModal.remove();
+    window.closeOv('ov-leaving-notice');
+
+    const pending = window._lnPending;
+    window._lnPending = null;
+    if (pending && typeof pending.afterPost === 'function') {
+      setTimeout(pending.afterPost, 200);
+    }
+  }
+   // ═══════════════════════════════════════════════════════════════
+  // 6c. PAYOUT RECEIPT MODAL
+  //     Shown after a weekly payout is confirmed. Same UX as the
+  //     deposit and debt receipts.
+  // ═══════════════════════════════════════════════════════════════
+  window.registerAction('_show-payout-receipt', function(member, gross, deduction, net, nextPayoutDate) {
+    showPayoutReceiptModal(member, gross, deduction, net, nextPayoutDate);
+  });
+
+  function showPayoutReceiptModal(member, gross, deduction, net, nextPayoutDate) {
+    const existing = document.getElementById('single-payout-receipt-modal');
+    if (existing) existing.remove();
+
+    const receiptNumber = window.generateReceiptNumber();
+
+    const modal = document.createElement('div');
+    modal.id = 'single-payout-receipt-modal';
+    modal.className = 'ov on';
+    modal.style.display = 'flex';
+    modal.style.zIndex = '100024';
+
+    modal.innerHTML =
+      '<div class="bs" style="max-width:440px;padding:0;">' +
+        '<div style="padding:16px 20px 10px;text-align:center;' +
+             'border-bottom:1px solid var(--border);">' +
+          '<div style="font-family:Syne,sans-serif;font-size:1.05rem;' +
+               'font-weight:800;color:#6d28d9;">' +
+            '✅ Payout Complete' +
+          '</div>' +
+          '<div class="micro" style="margin-top:2px;">' +
+            window.escapeHtml(member.name) + ' · ' + window.money(net) +
+          '</div>' +
+        '</div>' +
+        '<div id="single-payout-preview" style="max-height:55vh;overflow-y:auto;' +
+             'padding:16px 20px;text-align:center;">' +
+          '<div style="padding:30px 10px;color:var(--text-3);font-size:0.8rem;">' +
+            '⏳ Generating receipt…' +
+          '</div>' +
+        '</div>' +
+        '<div style="padding:12px 20px 16px;display:flex;flex-direction:column;' +
+             'gap:8px;border-top:1px solid var(--border);">' +
+          '<button type="button" class="btn btn-green btn-full" id="pr-send-btn" ' +
+                  'disabled style="opacity:0.5;">💬 Send via WhatsApp</button>' +
+          '<div style="display:flex;gap:8px;">' +
+            '<button type="button" class="btn btn-teal" style="flex:1;" ' +
+                    'id="pr-copy-btn" disabled>📋 Copy</button>' +
+            '<button type="button" class="btn btn-gold" style="flex:1;" ' +
+                    'id="pr-save-btn" disabled>💾 Save</button>' +
+          '</div>' +
+          '<button type="button" class="btn btn-sec btn-full" ' +
+                  'data-action="close-custom-modal">Close</button>' +
+        '</div>' +
+      '</div>';
+
+    document.body.appendChild(modal);
+    modal.addEventListener('click', function(e) {
+      if (e.target === modal) modal.remove();
+    });
+
+    let imageData = null;
+    const previewEl = modal.querySelector('#single-payout-preview');
+
+    (async function() {
+      try {
+        const html = window.buildPayoutReceiptHTML(
+          member, gross, deduction, net, nextPayoutDate, receiptNumber
+        );
+        const img = await window.renderReceiptImage(html);
+        if (!img) {
+          if (previewEl) previewEl.innerHTML =
+            '<div class="empty-state">Could not render receipt.</div>';
+          return;
+        }
+        imageData = img;
+        if (previewEl) {
+          previewEl.innerHTML = '<img src="' + img + '" ' +
+            'style="max-width:100%;border-radius:12px;' +
+                   'box-shadow:0 4px 16px rgba(0,0,0,0.15);">';
+        }
+        ['pr-send-btn', 'pr-copy-btn', 'pr-save-btn'].forEach(function(id) {
+          const b = modal.querySelector('#' + id);
+          if (b) { b.disabled = false; b.style.opacity = '1'; }
+        });
+      } catch (err) {
+        console.error('Payout receipt render failed:', err);
+        if (previewEl) previewEl.innerHTML =
+          '<div class="empty-state">Render error.</div>';
+      }
+    })();
+
+    // Save
+    modal.querySelector('#pr-save-btn').addEventListener('click', function() {
+      if (!imageData) return;
+      const a = document.createElement('a');
+      a.href = imageData;
+      a.download = 'payout_' + receiptNumber + '.png';
+      a.click();
+      window.toast('💾 Saved', 'var(--success)');
+    });
+
+    // Copy
+    modal.querySelector('#pr-copy-btn').addEventListener('click', async function() {
+      if (!imageData) return;
+      try {
+        const blob = await (await fetch(imageData)).blob();
+        await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+        window.toast('📋 Copied', '#4599ff');
+      } catch (err) {
+        const a = document.createElement('a');
+        a.href = imageData;
+        a.download = 'payout_' + receiptNumber + '.png';
+        a.click();
+        window.toast('📸 Downloaded (clipboard unavailable)', '#f7b928');
+      }
+    });
+
+    // Send
+    modal.querySelector('#pr-send-btn').addEventListener('click', async function() {
+      if (!imageData) return;
+      let digits = String(member.phone || '').replace(/\D/g, '');
+      if (digits.startsWith('0')) digits = '256' + digits.slice(1);
+      if (!digits.startsWith('256')) digits = '256' + digits;
+
+      if (navigator.share && navigator.canShare) {
+        try {
+          const blob = await (await fetch(imageData)).blob();
+          const file = new File([blob], 'payout_' + receiptNumber + '.png', { type: 'image/png' });
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              title: 'Payout Receipt',
+              text: 'Weekly payout to ' + member.name,
+              files: [file]
+            });
+            window.toast('✅ Shared', 'var(--success)');
+            return;
+          }
+        } catch (err) {
+          if (err.name === 'AbortError') return;
+        }
+      }
+
+      const msg = '🌾 Harvest Trust Finance\n\n📄 Payout Receipt\nBeneficiary: ' +
+        member.name + '\nNet: ' + window.money(net) +
+        '\nReceipt: ' + receiptNumber;
+
+      window.open('https://wa.me/' + digits + '?text=' + encodeURIComponent(msg), '_blank');
+
+      const a = document.createElement('a');
+      a.href = imageData;
+      a.download = 'payout_' + receiptNumber + '.png';
+      a.click();
+      window.toast('💬 WhatsApp opened. Attach the image.', '#42b72a');
     });
   }
 
