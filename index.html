@@ -3143,7 +3143,7 @@ window.registerAction('_loadAllData', function() {
   }, function(err) { console.error('members listener:', err); _markLoaded('members'); });
 
   /* transactions */
-  window.db.ref('transactions').once('value').then(function(snap) {
+  window.db.ref('transactions').limitToLast(500).once('value').then(function(snap) {
     const raw = snap.val() || {};
     window.transactions = Object.entries(raw).map(function(pair) {
       return Object.assign({}, pair[1], { id: pair[0] });
@@ -3153,21 +3153,21 @@ window.registerAction('_loadAllData', function() {
     _markLoaded('transactions');
 
     const seen = new Set(window.transactions.map(function(t) { return t.id; }));
-    window.db.ref('transactions').limitToLast(50).on('child_added', function(child) {
+    window.db.ref('transactions').limitToLast(200).on('child_added', function(child) {
       const tx = Object.assign({}, child.val(), { id: child.key });
       if (seen.has(tx.id)) return;
       seen.add(tx.id);
       window.transactions.push(tx);
       window.computePots(); window.refreshUI();
     });
-    window.db.ref('transactions').limitToLast(50).on('child_changed', function(child) {
+    window.db.ref('transactions').limitToLast(200).on('child_changed', function(child) {
       const tx = Object.assign({}, child.val(), { id: child.key });
       const i = window.transactions.findIndex(function(t) { return t.id === tx.id; });
       if (i >= 0) window.transactions[i] = tx;
       else window.transactions.push(tx);
       window.computePots(); window.refreshUI();
     });
-    window.db.ref('transactions').limitToLast(50).on('child_removed', function(child) {
+    window.db.ref('transactions').limitToLast(200).on('child_removed', function(child) {
       const i = window.transactions.findIndex(function(t) { return t.id === child.key; });
       if (i >= 0) window.transactions.splice(i, 1);
       window.computePots(); window.refreshUI();
@@ -3235,7 +3235,7 @@ window.registerAction('_loadAllData', function() {
   }, function(err) { console.error('mainNotices listener:', err); _markLoaded('notices'); });
 
   /* notifications */
-  window.db.ref('notifications').limitToLast(50).on('value', function(snap) {
+   window.db.ref('notifications').limitToLast(100).on('value', function(snap) {
     window.notifications = snap.val() || {};
     if (typeof window.updateNotificationBadge === 'function') {
       try { window.updateNotificationBadge(); } catch (err) { console.error(err); }
@@ -4070,7 +4070,7 @@ function handleSignupPhoto(files) {
   reader.onload = function(e) {
     const img = new Image();
     img.onload = function() {
-      const SIZE = 200;
+      const SIZE = 160;
       const canvas = document.createElement('canvas');
       canvas.width = SIZE; canvas.height = SIZE;
       const ctx = canvas.getContext('2d');
@@ -4079,7 +4079,7 @@ function handleSignupPhoto(files) {
       const w = Math.round(img.width * ratio), h = Math.round(img.height * ratio);
       const x = Math.round((SIZE - w) / 2), y = Math.round((SIZE - h) / 2);
       ctx.drawImage(img, x, y, w, h);
-      const small = canvas.toDataURL('image/jpeg', 0.72);
+      const small = canvas.toDataURL('image/jpeg', 0.65);
       _signupExtra.photoData = small;
       const prev = document.getElementById('signup-photo-preview');
       if (prev) { prev.src = small; prev.style.display = 'block'; }
@@ -4296,7 +4296,7 @@ window.registerAction('profile-photo-selected', function(input, files) {
   reader.onload = function(e) {
     const img = new Image();
     img.onload = function() {
-      const SIZE = 200;
+      const SIZE = 160;
       const canvas = document.createElement('canvas');
       canvas.width = SIZE; canvas.height = SIZE;
       const ctx = canvas.getContext('2d');
@@ -4305,7 +4305,7 @@ window.registerAction('profile-photo-selected', function(input, files) {
       const w = Math.round(img.width * ratio), h = Math.round(img.height * ratio);
       const x = Math.round((SIZE - w) / 2), y = Math.round((SIZE - h) / 2);
       ctx.drawImage(img, x, y, w, h);
-      const small = canvas.toDataURL('image/jpeg', 0.72);
+      const small = canvas.toDataURL('image/jpeg', 0.65);
       _pendingProfilePhoto = small;
       const pv = document.getElementById('ppm-preview-img');
       if (pv) { pv.src = small; pv.classList.add('on'); }
@@ -9217,13 +9217,14 @@ window.renderAdminHarvest = function(c) {
     : '—';
 
   c.innerHTML =
-    '<div class="card">' +
-      '<div class="sec-h" style="margin-top:0;">🌾 Harvest Actions</div>' +
-      '<button type="button" class="btn btn-green btn-full" data-action="open-mark-paid">✅ Mark Weekly Payout</button>' +
-      '<button type="button" class="btn btn-gold btn-full" data-action="profit-distribution">🎉 Distribute Profit Pool</button>' +
-      '<button type="button" class="btn btn-purple btn-full" data-action="open-rotation-manager">🔄 Manage Payout Rotation</button>' +
-      '<button type="button" class="btn btn-teal btn-full" data-action="advance-rotation-start">⏩ Advance Rotation Now</button>' +
-    '</div>' +
+  '<div class="card">' +
+    '<div class="sec-h" style="margin-top:0;">🌾 Harvest Actions</div>' +
+    '<button type="button" class="btn btn-green btn-full" data-action="open-mark-paid">✅ Mark Weekly Payout</button>' +
+    '<button type="button" class="btn btn-gold btn-full" data-action="profit-distribution">🎉 Distribute Profit Pool</button>' +
+    '<button type="button" class="btn btn-purple btn-full" data-action="open-rotation-manager">🔄 Manage Payout Rotation</button>' +
+    '<button type="button" class="btn btn-teal btn-full" data-action="advance-rotation-start">⏩ Advance Rotation Now</button>' +
+    '<button type="button" class="btn btn-sec btn-full" data-action="open-year-end-archives">📚 Year-End Archives</button>' +
+  '</div>' +
     '<div class="card">' +
       '<div class="sec-h" style="margin-top:0;">📊 Rotation Status</div>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">' +
@@ -9336,6 +9337,7 @@ window.renderAdminSettings = function(c) {
       '<div class="sec-h" style="margin-top:0;">🛡️ Backup Health</div>' +
       '<button type="button" class="btn btn-teal btn-full" data-action="manual-backup">💾 Export Backup Now</button>' +
       '<button type="button" class="btn btn-sec btn-full" data-action="show-recovery-instructions">🚨 Data Recovery Guide</button>' +
+      '<button type="button" class="btn btn-purple btn-full" data-action="show-storage-health">📊 Storage Health</button>' +
     '</div>' +
     '<div class="danger-zone">' +
       '<div class="danger-zone-label">⚠️ Danger Zone</div>' +
@@ -9379,7 +9381,7 @@ function handlePhotoInput(input, files, previewId, dataId, labelId) {
   reader.onload = function(e) {
     const img = new Image();
     img.onload = function() {
-      const SIZE = 240;
+      const SIZE = 160;
       const canvas = document.createElement('canvas');
       canvas.width = SIZE; canvas.height = SIZE;
       const ctx = canvas.getContext('2d');
@@ -9388,7 +9390,7 @@ function handlePhotoInput(input, files, previewId, dataId, labelId) {
       const w = Math.round(img.width * ratio), h = Math.round(img.height * ratio);
       const x = Math.round((SIZE - w) / 2), y = Math.round((SIZE - h) / 2);
       ctx.drawImage(img, x, y, w, h);
-      const small = canvas.toDataURL('image/jpeg', 0.72);
+      const small = canvas.toDataURL('image/jpeg', 0.65);
       const prev = document.getElementById(previewId);
       if (prev) { prev.src = small; prev.style.display = 'block'; }
       const data = document.getElementById(dataId);
@@ -10445,63 +10447,1025 @@ window.registerAction('show-recovery-instructions', function() {
     '</div>', '🚨 Data Recovery Instructions');
 });
 
-window.registerAction('profit-distribution', function() {
-  if (window.groupProfit <= 0) { window.toast('No profit to distribute', 'var(--danger)'); return; }
-  const active = window.members.filter(function(m) { return m.approved; });
-  if (!active.length) { window.toast('No active members', 'var(--danger)'); return; }
-  const rewardsPool = Math.floor(window.groupProfit * 0.05);
-  const prorated = window.groupProfit - rewardsPool;
-  let totalDays = 0;
-  const map = {};
-  active.forEach(function(m) { const d = window.getDaysActive(m); map[m.id] = d; totalDays += d; });
-  const rows = active.map(function(m) {
-    return { name: m.name, days: map[m.id], share: totalDays === 0 ? Math.floor(prorated / active.length) : Math.floor(prorated * map[m.id] / totalDays) };
-  }).sort(function(a, b) { return b.share - a.share; });
-  const html =
-    '<div class="hint-box">Total Profit: ' + window.money(window.groupProfit) +
-      ' | Prorated (95%): ' + window.money(prorated) + ' | Rewards (5%): ' + window.money(rewardsPool) + '</div>' +
-    '<div style="max-height:280px;overflow-y:auto;">' +
-      '<table style="width:100%;border-collapse:collapse;font-size:0.8rem;">' +
-        '<thead><tr style="background:var(--brand-soft);"><th style="padding:6px;text-align:left;">Member</th><th style="padding:6px;">Days</th><th style="padding:6px;text-align:right;">Share</th></tr></thead>' +
-        '<tbody>' + rows.map(function(r) {
-          return '<tr><td style="padding:6px;">' + window.escapeHtml(r.name) + '</td><td style="padding:6px;text-align:center;">' + r.days + '</td><td style="padding:6px;text-align:right;">' + window.money(r.share) + '</td></tr>';
-        }).join('') + '</tbody>' +
-      '</table>' +
-    '</div>' +
-    '<button type="button" class="btn btn-green btn-full" data-action="execute-profit-distribution" style="margin-top:12px;">✅ Confirm &amp; Distribute</button>';
-  window.showModal(html, 'Profit Distribution');
+/* ═══════════════════════════════════════════════════════════════
+   STORAGE HEALTH PANEL
+   Estimates database size + shows bandwith budget
+   ═══════════════════════════════════════════════════════════════ */
+window.registerAction('show-storage-health', async function() {
+  if (!window.currentUser || !window.currentUser.isAdmin) {
+    window.toast('Admin only', 'var(--danger)');
+    return;
+  }
+
+  window.openOv('ov-loading');
+  const lIcon = document.getElementById('loading-icon');
+  const lMsg  = document.getElementById('loading-message');
+  if (lIcon) lIcon.textContent = '📊';
+  if (lMsg)  lMsg.innerHTML = '<div class="muted">Analyzing database…</div>';
+
+  try {
+    /* Fetch top-level paths with shallow=true — returns { key: true } */
+    const shallowSnap = await window.db.ref('/').once('value');
+    const topLevel = Object.keys(shallowSnap.val() || {});
+
+    /* Also grab JSON-encoded size of the whole DB */
+    const url = (window.FIREBASE_CONFIG.databaseURL || '').replace(/\/$/, '') + '/.json';
+    const token = ''; // public read — no token needed for your rules
+
+    /* We'll estimate by fetching each section's shallow keys */
+    const counts = {};
+    for (const path of topLevel) {
+      try {
+        const s = await window.db.ref(path).once('value');
+        const v = s.val();
+        if (v && typeof v === 'object') {
+          counts[path] = Array.isArray(v) ? v.length : Object.keys(v).length;
+        } else if (v !== null && v !== undefined) {
+          counts[path] = 1;
+        } else {
+          counts[path] = 0;
+        }
+      } catch (e) { counts[path] = 0; }
+    }
+
+    /* Approximate total bytes based on real data */
+    let totalBytes = 0;
+    const detail = [];
+
+    /* Members — includes photos */
+    const memberCount = (window.members || []).length;
+    let memberBytes = 0;
+    (window.members || []).forEach(function(m) {
+      const photoLen = m.photoData ? String(m.photoData).length : 0;
+      memberBytes += 300 + photoLen; /* base fields + photo */
+    });
+    totalBytes += memberBytes;
+    detail.push({ label: 'Members', count: memberCount, bytes: memberBytes, note: memberCount > 0 ? '~' + Math.round(memberBytes / memberCount / 1024) + ' KB each' : '' });
+
+    /* Transactions */
+    const txCount = (window.transactions || []).length;
+    const txBytes = txCount * 320;
+    totalBytes += txBytes;
+    detail.push({ label: 'Transactions', count: txCount, bytes: txBytes, note: '~320 B each' });
+
+    /* Loans */
+    const loanCount = (window.loans || []).length;
+    const loanBytes = loanCount * 600;
+    totalBytes += loanBytes;
+    detail.push({ label: 'Loans', count: loanCount, bytes: loanBytes, note: '~600 B each' });
+
+    /* Notices */
+    const noticeCount = (window.mainCarouselNotifs || []).length;
+    const noticeBytes = noticeCount * 400;
+    totalBytes += noticeBytes;
+    detail.push({ label: 'Notices', count: noticeCount, bytes: noticeBytes, note: '~400 B each' });
+
+    /* Notifications (per member) — estimate from raw size */
+    let notifCount = 0;
+    let notifBytes = 0;
+    if (window.notifications && typeof window.notifications === 'object') {
+      Object.keys(window.notifications).forEach(function(mid) {
+        const list = window.notifications[mid];
+        if (Array.isArray(list)) {
+          notifCount += list.length;
+          notifBytes += list.length * 200;
+        } else if (list && typeof list === 'object') {
+          const n = Object.keys(list).length;
+          notifCount += n;
+          notifBytes += n * 200;
+        }
+      });
+    }
+    totalBytes += notifBytes;
+    if (notifCount > 0) detail.push({ label: 'Notifications', count: notifCount, bytes: notifBytes, note: '~200 B each' });
+
+    /* Archive */
+    let archiveBytes = 0;
+    try {
+      const archSnap = await window.db.ref('archive/yearEnd').once('value');
+      const archVal = archSnap.val() || {};
+      const years = Object.keys(archVal);
+      years.forEach(function(y) {
+        /* Rough estimate: 2 KB per archived member + 1 KB overhead */
+        const yData = archVal[y];
+        const memberCount = (yData.shares || []).length;
+        archiveBytes += 2048 + memberCount * 2000;
+      });
+      if (years.length) {
+        detail.push({ label: 'Year-End Archives', count: years.length, bytes: archiveBytes, note: years.length + ' year' + (years.length === 1 ? '' : 's') });
+      }
+    } catch (e) { /* archive may not exist */ }
+    totalBytes += archiveBytes;
+
+    /* Settings, rotation, applications — small fixed */
+    const miscBytes = 4096;
+    totalBytes += miscBytes;
+    detail.push({ label: 'Settings & other', count: '—', bytes: miscBytes, note: 'static config' });
+
+    /* Format helpers */
+    const fmtBytes = function(b) {
+      if (b < 1024) return b + ' B';
+      if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+      return (b / 1048576).toFixed(2) + ' MB';
+    };
+
+    const DB_LIMIT = 1024 * 1024 * 1024; // 1 GB
+    const percent = (totalBytes / DB_LIMIT) * 100;
+
+    /* Estimate years remaining */
+    const bytesPerYear = totalBytes || 1;
+    const yearsRemaining = Math.floor(DB_LIMIT / Math.max(bytesPerYear, 1024));
+
+    /* Bandwidth estimate */
+    const dailyBoots = memberCount * 1; /* 1 boot/day/member */
+    const bootSize = totalBytes + 200 * 1024; /* full DB + baseline */
+    const dailyBandwidth = dailyBoots * bootSize;
+    const monthlyBandwidth = dailyBandwidth * 30;
+    const BW_LIMIT = 10 * 1024 * 1024 * 1024; // 10 GB
+    const bwPercent = (monthlyBandwidth / BW_LIMIT) * 100;
+
+    /* Build the report HTML */
+    const rows = detail.map(function(d) {
+      return '<tr>' +
+        '<td>' + window.escapeHtml(d.label) + '</td>' +
+        '<td class="num" style="text-align:right;">' + d.count + '</td>' +
+        '<td class="num" style="text-align:right;">' + fmtBytes(d.bytes) + '</td>' +
+        '<td class="micro" style="color:var(--text-3);">' + window.escapeHtml(d.note) + '</td>' +
+      '</tr>';
+    }).join('');
+
+    const status = percent < 1 ? 'healthy'
+                 : percent < 10 ? 'good'
+                 : percent < 50 ? 'caution'
+                 : 'danger';
+    const statusColor = status === 'healthy' || status === 'good' ? '#6db1ff'
+                     : status === 'caution' ? '#ffb84d' : '#ff5c60';
+    const statusLabel = status === 'healthy' ? '✅ Healthy'
+                     : status === 'good' ? '👍 Good'
+                     : status === 'caution' ? '⚠️ Watch'
+                     : '🚨 High';
+
+    const html =
+      '<div style="padding:6px 0;">' +
+        '<div style="text-align:center;margin-bottom:16px;">' +
+          '<div style="font-family:Syne,sans-serif;font-size:1.5rem;font-weight:800;color:' + statusColor + ';line-height:1.1;">' +
+            fmtBytes(totalBytes) +
+          '</div>' +
+          '<div class="micro" style="margin-top:4px;">of 1 GB free tier · ' + percent.toFixed(4) + '% used</div>' +
+          '<div style="margin-top:8px;">' +
+            '<span class="pill-badge" style="background:' + statusColor + '22;color:' + statusColor + ';border:1px solid ' + statusColor + '55;padding:4px 12px;font-size:.7rem;">' +
+              statusLabel +
+            '</span>' +
+          '</div>' +
+        '</div>' +
+
+        '<div class="hint-box" style="text-align:center;">' +
+          '<div style="font-size:.75rem;">' +
+            'At current usage, you could store data for <strong>~' +
+            (yearsRemaining >= 1000 ? '1000+' : yearsRemaining.toLocaleString()) +
+            ' more year' + (yearsRemaining === 1 ? '' : 's') +
+            '</strong> before hitting the limit.' +
+          '</div>' +
+        '</div>' +
+
+        '<div class="sec-h" style="margin-top:18px;">📦 Storage Breakdown</div>' +
+        '<table style="width:100%;border-collapse:collapse;font-size:.75rem;">' +
+          '<thead><tr style="background:var(--brand-soft);">' +
+            '<th style="padding:6px;text-align:left;">Section</th>' +
+            '<th style="padding:6px;text-align:right;">Count</th>' +
+            '<th style="padding:6px;text-align:right;">Size</th>' +
+            '<th style="padding:6px;text-align:left;">Per item</th>' +
+          '</tr></thead>' +
+          '<tbody>' + rows + '</tbody>' +
+        '</table>' +
+
+        '<div class="sec-h" style="margin-top:18px;">📡 Bandwidth Estimate</div>' +
+        '<div style="background:var(--surface-2);border-radius:10px;padding:12px;">' +
+          '<div style="display:grid;grid-template-columns:1fr auto;gap:4px;font-size:.75rem;">' +
+            '<span style="color:var(--text-3);">Daily app opens</span><span>' + dailyBoots + '</span>' +
+            '<span style="color:var(--text-3);">Bandwidth per boot</span><span>' + fmtBytes(bootSize) + '</span>' +
+            '<span style="color:var(--text-3);">Monthly bandwidth</span><span style="color:' + (bwPercent < 50 ? '#6db1ff' : '#ffb84d') + ';font-weight:700;">' + fmtBytes(monthlyBandwidth) + '</span>' +
+            '<span style="color:var(--text-3);">Free tier limit</span><span>10 GB / month</span>' +
+          '</div>' +
+          '<div class="payout-progress-track" style="margin-top:10px;height:6px;">' +
+            '<div style="width:' + Math.min(100, bwPercent).toFixed(1) + '%;height:100%;background:linear-gradient(90deg,#4599ff,#6db1ff);border-radius:99px;"></div>' +
+          '</div>' +
+          '<div class="micro" style="margin-top:6px;text-align:center;">' +
+            bwPercent.toFixed(2) + '% of monthly bandwidth used' +
+          '</div>' +
+        '</div>' +
+
+        '<div class="hint-box" style="background:var(--brand-soft);border-color:var(--brand);margin-top:14px;font-size:.72rem;line-height:1.6;">' +
+          '<strong>💡 What happens at year-end:</strong> When you distribute profits, nearly all transactions and members are wiped — freeing ~99% of stored data. Only the archive summary (few KB per year) is retained.' +
+        '</div>' +
+
+        '<button type="button" class="btn btn-sec btn-full" data-action="close-modal" data-modal="ov-loading" style="margin-top:12px;">Close</button>' +
+      '</div>';
+
+    if (lMsg) lMsg.innerHTML = '';
+    if (lIcon) lIcon.style.display = 'none';
+
+    /* Show as a proper modal instead of the loading overlay */
+    window.closeOv('ov-loading');
+    setTimeout(function() {
+      window.showModal(html, '📊 Storage Health');
+    }, 100);
+
+  } catch (err) {
+    console.error('[storage-health] failed:', err);
+    window.closeOv('ov-loading');
+    window.toast('Could not analyze storage: ' + (err && err.message || err), 'var(--danger)');
+  }
 });
 
-window.registerAction('execute-profit-distribution', function() {
-  window.requirePasswordConfirmation(async function() {
-    const active = window.members.filter(function(m) { return m.approved; });
-    if (!active.length) return;
-    const rewardsPool = Math.floor(window.groupProfit * 0.05);
-    const prorated = window.groupProfit - rewardsPool;
-    let totalDays = 0;
-    const map = {};
-    active.forEach(function(m) { const d = window.getDaysActive(m); map[m.id] = d; totalDays += d; });
-    const writes = [];
-    active.forEach(function(m) {
-      const share = totalDays === 0 ? Math.floor(prorated / active.length) : Math.floor(prorated * map[m.id] / totalDays);
-      if (share > 0) {
-        writes.push(window.db.ref('transactions').push({
-          memberPhone: m.phone, memberName: m.name, type: 'profit_dist',
-          amount: share, receiptNumber: window.generateReceiptNumber(),
-          description: 'Profit share (' + map[m.id] + ' days)', date: Date.now()
-        }));
+/* ═══════════════════════════════════════════════════════════════
+   YEAR-END DISTRIBUTION + RESET
+   Replaces: profit-distribution, execute-profit-distribution
+   Logs shares (95%) + rewards (5%), archives, wipes, preserves
+   groupStartDate for Year 2.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ─── Compute shares (95%) ─── */
+function computeYearEndShares() {
+  const active = window.members.filter(function(m){ return m.approved !== false; });
+  const rewardsPool = Math.floor((window.groupProfit || 0) * 0.05);
+  const prorated    = Math.max(0, (window.groupProfit || 0) - rewardsPool);
+
+  let totalDays = 0;
+  active.forEach(function(m){ totalDays += window.getDaysActive(m); });
+
+  const shares = active.map(function(m){
+    const d = window.getDaysActive(m);
+    const share = totalDays === 0
+      ? Math.floor(prorated / Math.max(1, active.length))
+      : Math.floor(prorated * d / totalDays);
+    return { id: m.id, name: m.name, phone: m.phone, days: d, share: share };
+  });
+
+  return { active, shares, rewardsPool, prorated, totalDays };
+}
+
+/* ─── Compute rewards (5%) — 5 categories with distinct winners ─── */
+function computeYearEndRewards() {
+  const active = window.members.filter(function(m){ return m.approved !== false; });
+  const pool = Math.floor((window.groupProfit || 0) * 0.05);
+  if (!active.length || pool <= 0) return { winners: [], pool: pool };
+
+  const metrics = active.map(function(m){
+    let totalDeposits = 0, repaidLoans = 0, txCount = 0, totalRepaid = 0;
+    const consistency = new Set();
+
+    window.transactions.forEach(function(tx){
+      if (tx.memberPhone !== m.phone) return;
+      txCount++;
+      if (tx.type === 'deposit') {
+        totalDeposits += Number(tx.amount) || 0;
+        consistency.add(new Date(tx.date).toISOString().slice(0,10));
       }
+      if (tx.type === 'loan_repayment') totalRepaid += Number(tx.amount) || 0;
     });
-    await Promise.all(writes);
-    window.toast('Profit distributed ✅', 'var(--success)');
-    window.closeCurrentModal();
-    await window.reloadData();
-  }, 'Distribute Profit');
+    window.loans.forEach(function(l){
+      if (l.memberId === m.id && l.repaid === true) repaidLoans++;
+    });
+
+    const score = totalDeposits + consistency.size * 1000 + repaidLoans * 10000;
+    const repayerScore = repaidLoans * 2 + totalRepaid / 100000;
+
+    return {
+      member: m,
+      totalDeposits: totalDeposits,
+      consistencyDays: consistency.size,
+      transactionCount: txCount,
+      loanRepayerScore: repayerScore,
+      score: score
+    };
+  });
+
+  const byDeposits    = metrics.slice().sort(function(a,b){ return b.totalDeposits - a.totalDeposits; });
+  const byScore       = metrics.slice().sort(function(a,b){ return b.score - a.score; });
+  const byConsistency = metrics.slice().sort(function(a,b){ return b.consistencyDays - a.consistencyDays; });
+  const byActivity    = metrics.slice().sort(function(a,b){ return b.transactionCount - a.transactionCount; });
+  const byRepayer     = metrics.slice().sort(function(a,b){ return b.loanRepayerScore - a.loanRepayerScore; });
+
+  const pctMap = {
+    'Group Champion':    0.40,
+    'Member of the Year':0.25,
+    'Most Consistent':   0.18,
+    'Most Active':       0.12,
+    'Best Loan Repayer': 0.05
+  };
+
+  const used = new Set();
+  const winners = [];
+
+  function pick(list, category, metricKey, label){
+    for (let i = 0; i < list.length; i++) {
+      const item = list[i];
+      if (used.has(item.member.id)) continue;
+      used.add(item.member.id);
+      winners.push({
+        category: category,
+        member: item.member,
+        amount: Math.floor(pool * pctMap[category]),
+        metric: label + ': ' + (item[metricKey] != null ? item[metricKey].toLocaleString() : '—')
+      });
+      return;
+    }
+    winners.push({ category: category, member: null, amount: 0, metric: 'No eligible member' });
+  }
+
+  pick(byDeposits,    'Group Champion',    'totalDeposits',    'Total Deposits');
+  pick(byScore,       'Member of the Year','score',            'Overall Score');
+  pick(byConsistency, 'Most Consistent',   'consistencyDays',  'Consistency Days');
+  pick(byActivity,    'Most Active',       'transactionCount', 'Transactions');
+  pick(byRepayer,     'Best Loan Repayer', 'loanRepayerScore', 'Repayment Score');
+
+  return { winners: winners, pool: pool };
+}
+
+/* ─── Inject year-end CSS once (navy glass — matches login) ─── */
+function ensureYearEndStyles() {
+  if (document.getElementById('ye-style')) return;
+  const s = document.createElement('style');
+  s.id = 'ye-style';
+  s.textContent =
+    /* Modal shell — deep navy gradient + radial glows, matching login */
+    '.ye-modal{position:relative;overflow:hidden;' +
+      'background:' +
+        'radial-gradient(ellipse 90% 70% at 20% 0%, rgba(69,153,255,.28), transparent 60%),' +
+        'radial-gradient(ellipse 80% 60% at 85% 100%, rgba(24,119,242,.22), transparent 60%),' +
+        'linear-gradient(155deg, #071021 0%, #0a1628 45%, #0d1e3a 100%);' +
+      'border:1.5px solid rgba(107,177,255,.28);' +
+      'border-radius:24px;max-width:560px;width:100%;max-height:92vh;' +
+      'overflow-y:auto;padding:26px;' +
+      'box-shadow:0 24px 70px rgba(0,10,40,.70), 0 8px 24px rgba(0,10,40,.45), ' +
+        'inset 0 1px 0 rgba(255,255,255,.10);' +
+      'color:#eaf2ff;' +
+    '}' +
+    /* Subtle top-light sheen like the login card */
+    '.ye-modal::before{content:"";position:absolute;top:-50%;left:-30%;width:70%;height:200%;' +
+      'background:radial-gradient(ellipse at center, rgba(255,255,255,.10) 0%, transparent 60%);' +
+      'transform:rotate(25deg);pointer-events:none;}' +
+
+    /* Header */
+    '.ye-hd{position:relative;z-index:1;}' +
+    '.ye-hd h3{margin:0 0 4px;font-family:Syne,sans-serif;font-size:1.12rem;font-weight:800;' +
+      'color:#6db1ff;letter-spacing:-.2px;' +
+      'text-shadow:0 2px 18px rgba(69,153,255,.45);}' +
+    '.ye-sub{font-size:.78rem;color:rgba(255,255,255,.62);margin-bottom:16px}' +
+
+    /* Stat tiles — glassy */
+    '.ye-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px;position:relative;z-index:1;}' +
+    '.ye-stat{background:rgba(255,255,255,.06);border:1px solid rgba(107,177,255,.22);' +
+      'border-radius:12px;padding:12px;' +
+      'backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);}' +
+    '.ye-lbl{font-size:.6rem;color:rgba(255,255,255,.55);text-transform:uppercase;' +
+      'letter-spacing:.7px;margin-bottom:5px;font-weight:600;}' +
+    '.ye-val{font-family:JetBrains Mono,monospace;font-size:1rem;font-weight:700;color:#6db1ff;' +
+      'text-shadow:0 0 14px rgba(69,153,255,.35);}' +
+    '.ye-val.warn{color:#ffb84d;text-shadow:0 0 14px rgba(255,184,77,.35);}' +
+
+    /* Tabs */
+    '.ye-tabs{display:flex;gap:6px;border-bottom:1px solid rgba(107,177,255,.20);' +
+      'margin-bottom:14px;position:relative;z-index:1;}' +
+    '.ye-tab{padding:9px 14px;font-size:.78rem;font-weight:600;color:rgba(255,255,255,.55);' +
+      'background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;' +
+      'transition:all .15s;font-family:inherit;}' +
+    '.ye-tab.active{color:#6db1ff;border-bottom-color:#6db1ff;' +
+      'text-shadow:0 0 12px rgba(69,153,255,.5);}' +
+    '.ye-tab:hover:not(.active){color:rgba(255,255,255,.85);}' +
+    '.ye-panel{display:none;position:relative;z-index:1;}' +
+    '.ye-panel.active{display:block}' +
+
+    /* Tables */
+    '.ye-table{width:100%;border-collapse:collapse;font-size:.78rem}' +
+    '.ye-table th,.ye-table td{padding:9px 10px;text-align:left;' +
+      'border-bottom:1px solid rgba(107,177,255,.14);}' +
+    '.ye-table th{color:rgba(255,255,255,.55);font-weight:600;font-size:.66rem;' +
+      'text-transform:uppercase;letter-spacing:.6px;' +
+      'background:rgba(69,153,255,.08);}' +
+    '.ye-table tr:last-child td{border-bottom:none}' +
+    '.ye-table tr:hover td{background:rgba(69,153,255,.06);}' +
+    '.ye-num{font-family:JetBrains Mono,monospace;text-align:right;}' +
+
+    /* Reward cards */
+    '.ye-rw-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));' +
+      'gap:8px;margin-bottom:12px}' +
+    '.ye-rw-card{background:rgba(255,255,255,.06);' +
+      'border:1px solid rgba(107,177,255,.24);border-radius:12px;padding:12px 10px;' +
+      'text-align:center;' +
+      'backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);}' +
+    '.ye-rw-cat{font-size:.6rem;font-weight:800;text-transform:uppercase;letter-spacing:.7px;' +
+      'color:#6db1ff;margin-bottom:5px;}' +
+    '.ye-rw-name{font-size:.82rem;font-weight:700;margin-bottom:4px;color:#eaf2ff}' +
+    '.ye-rw-amt{font-family:JetBrains Mono,monospace;font-size:.85rem;color:#ffb84d;' +
+      'font-weight:700;text-shadow:0 0 12px rgba(255,184,77,.35);}' +
+    '.ye-rw-met{font-size:.6rem;color:rgba(255,255,255,.5);margin-top:4px}' +
+
+    '.ye-meta{font-size:.7rem;color:rgba(255,255,255,.5);text-align:center;' +
+      'margin-bottom:12px;font-family:JetBrains Mono,monospace;}' +
+
+    /* Notes */
+    '.ye-note{font-size:.78rem;line-height:1.65;padding:12px 14px;border-radius:10px;' +
+      'margin-bottom:14px;position:relative;z-index:1;}' +
+    '.ye-note.danger{background:rgba(255,92,96,.14);border-left:3px solid #ff5c60;' +
+      'color:#ffc9cb;border:1px solid rgba(255,92,96,.28);border-left-width:3px;}' +
+
+    /* Progress list */
+    '.ye-prog-list{list-style:none;padding:0;margin:16px 0;position:relative;z-index:1;}' +
+    '.ye-prog-list li{display:flex;align-items:center;gap:10px;padding:8px 0;' +
+      'font-size:.82rem;color:rgba(255,255,255,.45);transition:color .3s}' +
+    '.ye-prog-list li.active{color:#6db1ff}' +
+    '.ye-prog-list li.done{color:#eaf2ff}' +
+    '.ye-prog-list .dot{width:16px;height:16px;border-radius:50%;' +
+      'background:rgba(255,255,255,.08);border:2px solid rgba(107,177,255,.30);' +
+      'flex-shrink:0;transition:all .3s}' +
+    '.ye-prog-list li.active .dot{background:#4599ff;border-color:#4599ff;' +
+      'box-shadow:0 0 12px rgba(69,153,255,.7)}' +
+    '.ye-prog-list li.done .dot{background:#6db1ff;border-color:#6db1ff;position:relative}' +
+    '.ye-prog-list li.done .dot::after{content:"✓";position:absolute;inset:0;' +
+      'display:flex;align-items:center;justify-content:center;color:#071021;' +
+      'font-size:10px;font-weight:900}' +
+
+    /* Archive row buttons */
+    '.ye-arch-row{position:relative;z-index:1;}' +
+    '.ye-arch-row:hover{background:rgba(69,153,255,.10) !important;' +
+      'border-color:#4599ff !important;transform:translateX(2px);}' +
+    '.ye-arch-row:active{transform:scale(.98);}' +
+
+    /* Buttons inside modal — brighter than default */
+    '.ye-modal .btn-sec{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.20);' +
+      'color:#eaf2ff;}' +
+    '.ye-modal .btn-sec:hover{background:rgba(255,255,255,.14);border-color:rgba(107,177,255,.45);}' +
+    '.ye-modal .btn-red{background:linear-gradient(180deg,#ff7b80,#e03b40);' +
+      'box-shadow:0 8px 22px rgba(255,92,96,.40);}' +
+    '.ye-modal .btn-red:hover{filter:brightness(1.08);}' +
+    '.ye-modal .btn-gold{background:linear-gradient(180deg,#4599ff,#1877f2);' +
+      'box-shadow:0 8px 22px rgba(24,119,242,.50), inset 0 1px 0 rgba(255,255,255,.25);}' +
+
+    /* Scrollbar inside modal */
+    '.ye-modal::-webkit-scrollbar{width:6px}' +
+    '.ye-modal::-webkit-scrollbar-track{background:transparent}' +
+    '.ye-modal::-webkit-scrollbar-thumb{background:rgba(107,177,255,.30);border-radius:99px}' +
+    '.ye-modal::-webkit-scrollbar-thumb:hover{background:rgba(107,177,255,.50)}' +
+
+    /* Inner scroll containers */
+    '.ye-modal div[style*="overflow-y:auto"]::-webkit-scrollbar{width:6px}' +
+    '.ye-modal div[style*="overflow-y:auto"]::-webkit-scrollbar-thumb{' +
+      'background:rgba(107,177,255,.30);border-radius:99px}' +
+
+    /* Y-axis scroll shadow at top of modal */
+    '@media(max-width:520px){' +
+      '.ye-modal{padding:20px;border-radius:20px;}' +
+      '.ye-hd h3{font-size:1rem;}' +
+      '.ye-grid{grid-template-columns:1fr 1fr;gap:8px;}' +
+      '.ye-val{font-size:.85rem;}' +
+    '}';
+  document.head.appendChild(s);
+}
+
+/* ─── Build modal HTML ─── */
+function buildYearEndModalHtml(mode, shares, rewards, stats) {
+  const isPreview = mode === 'preview';
+  const fmt = function(n){ return Number(n || 0).toLocaleString(); };
+
+  const sharesRows = shares.map(function(s){
+    const pct = stats.prorated ? (s.share / stats.prorated * 100).toFixed(1) : '—';
+    return '<tr>' +
+      '<td>' + window.escapeHtml(s.name) + '</td>' +
+      '<td class="ye-num">' + s.days + '</td>' +
+      '<td class="ye-num" style="color:#6db1ff;font-weight:700">UGX ' + fmt(s.share) + '</td>' +
+      '<td class="ye-num">' + pct + '%</td>' +
+    '</tr>';
+  }).join('');
+
+  const rewardsCards = rewards.winners.map(function(w){
+    if (!w.member) {
+      return '<div class="ye-rw-card" style="opacity:.5">' +
+        '<div class="ye-rw-cat">' + window.escapeHtml(w.category) + '</div>' +
+        '<div class="ye-rw-name">—</div>' +
+        '<div class="ye-rw-amt">UGX 0</div>' +
+        '<div class="ye-rw-met">' + window.escapeHtml(w.metric) + '</div>' +
+      '</div>';
+    }
+    return '<div class="ye-rw-card">' +
+      '<div class="ye-rw-cat">' + window.escapeHtml(w.category) + '</div>' +
+      '<div class="ye-rw-name">' + window.escapeHtml(w.member.name) + '</div>' +
+      '<div class="ye-rw-amt">UGX ' + fmt(w.amount) + '</div>' +
+      '<div class="ye-rw-met">' + window.escapeHtml(w.metric) + '</div>' +
+    '</div>';
+  }).join('');
+
+  const dangerBlock = isPreview
+    ? '<div class="ye-note danger">' +
+        '<strong>⚠️ After pressing "Distribute Now" and confirming your PIN:</strong><br><br>' +
+        '• <strong>Profit transactions will be logged</strong> for every member (95% shares + 5% rewards)<br>' +
+        '• <strong>All transactions will be deleted</strong><br>' +
+        '• <strong>All members will be removed</strong> — accounts, photos, PINs, loans<br>' +
+        '• <strong>Rotation order will be cleared</strong><br>' +
+        '• <strong>The group start date is PRESERVED</strong> so the anniversary continues<br>' +
+        '• <strong>Everyone must register again</strong> to join Year 2' +
+      '</div>'
+    : '<div class="ye-note" style="background:var(--brand-soft2);border-left:3px solid var(--brand);color:var(--text)">' +
+        '✅ Distribution complete. The archive is saved under <span class="mono">archive/yearEnd/</span>. Everyone can now register for Year 2.' +
+      '</div>';
+
+  const actionButtons = isPreview
+    ? '<div style="display:flex;gap:10px;margin-top:14px">' +
+        '<button type="button" class="btn btn-red" id="ye-confirm-btn" style="flex:1;padding:14px;font-weight:800">🔥 Distribute Now</button>' +
+        '<button type="button" class="btn btn-sec" id="ye-cancel-btn" style="flex:1">Cancel</button>' +
+      '</div>'
+    : '<button type="button" class="btn btn-gold btn-full" id="ye-close-btn" style="padding:14px;margin-top:14px">✓ Done — Start Year 2</button>';
+
+  return '' +
+    '<div class="ye-hd">' +
+      '<h3>' + (isPreview ? '📊 Year-End Distribution Preview' : '🎉 Distribution Complete') + '</h3>' +
+      '<div class="ye-sub">' + (isPreview
+        ? 'Review carefully — this cannot be undone.'
+        : 'Members removed · Year 2 begins now') +
+      '</div>' +
+    '</div>' +
+
+    '<div class="ye-grid">' +
+      '<div class="ye-stat"><div class="ye-lbl">Total Profit</div><div class="ye-val">UGX ' + fmt(stats.groupProfit) + '</div></div>' +
+      '<div class="ye-stat"><div class="ye-lbl">Prorated (95%)</div><div class="ye-val">UGX ' + fmt(stats.prorated) + '</div></div>' +
+      '<div class="ye-stat"><div class="ye-lbl">Rewards (5%)</div><div class="ye-val warn">UGX ' + fmt(stats.rewardsPool) + '</div></div>' +
+      '<div class="ye-stat"><div class="ye-lbl">Members Paid</div><div class="ye-val">' + shares.length + '</div></div>' +
+    '</div>' +
+
+    '<div class="ye-tabs">' +
+      '<button type="button" class="ye-tab active" data-tab="shares">💠 Shares Breakdown</button>' +
+      '<button type="button" class="ye-tab" data-tab="rewards">🏆 Rewards Breakdown</button>' +
+    '</div>' +
+
+    '<div class="ye-panel active" data-panel="shares">' +
+      '<div style="max-height:230px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:14px">' +
+        '<table class="ye-table">' +
+          '<thead><tr><th>Member</th><th class="ye-num">Days</th><th class="ye-num">Share</th><th class="ye-num">%</th></tr></thead>' +
+          '<tbody>' + sharesRows + '</tbody>' +
+        '</table>' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="ye-panel" data-panel="rewards">' +
+      '<div class="ye-rw-grid">' + rewardsCards + '</div>' +
+      '<div class="ye-meta">5 categories · pool split 40 / 25 / 18 / 12 / 5</div>' +
+    '</div>' +
+
+    dangerBlock +
+    actionButtons;
+}
+
+/* ─── Open a modal overlay with the given HTML ─── */
+function openYearEndModal(mode, shares, rewards, stats, onConfirm) {
+  ensureYearEndStyles();
+  const existing = document.getElementById('ye-modal-ov');
+  if (existing) existing.remove();
+
+  const ov = document.createElement('div');
+  ov.id = 'ye-modal-ov';
+  ov.className = 'ov on custom-modal';
+  ov.style.display = 'flex';
+  ov.style.zIndex = '101000';
+  ov.innerHTML = '<div class="ye-modal">' + buildYearEndModalHtml(mode, shares, rewards, stats) + '</div>';
+  document.body.appendChild(ov);
+
+  /* Tab wiring */
+  ov.querySelectorAll('.ye-tab').forEach(function(tab){
+    tab.addEventListener('click', function(){
+      const target = tab.getAttribute('data-tab');
+      ov.querySelectorAll('.ye-tab').forEach(function(t){ t.classList.remove('active'); });
+      ov.querySelectorAll('.ye-panel').forEach(function(p){ p.classList.remove('active'); });
+      tab.classList.add('active');
+      const panel = ov.querySelector('.ye-panel[data-panel="' + target + '"]');
+      if (panel) panel.classList.add('active');
+    });
+  });
+
+  /* Buttons */
+  const cancelBtn  = ov.querySelector('#ye-cancel-btn');
+  const confirmBtn = ov.querySelector('#ye-confirm-btn');
+  const closeBtn   = ov.querySelector('#ye-close-btn');
+
+  if (cancelBtn)  cancelBtn.addEventListener('click', function(){ ov.remove(); });
+  if (confirmBtn) confirmBtn.addEventListener('click', function(){
+    ov.remove();
+    if (typeof onConfirm === 'function') onConfirm();
+  });
+  if (closeBtn) closeBtn.addEventListener('click', function(){ ov.remove(); });
+
+  /* Backdrop tap closes only in preview mode */
+  ov.addEventListener('click', function(e){
+    if (e.target === ov && mode === 'preview') ov.remove();
+  });
+
+  return ov;
+}
+
+/* ─── Progress modal ─── */
+function openYearEndProgress() {
+  ensureYearEndStyles();
+  const existing = document.getElementById('ye-prog-ov');
+  if (existing) existing.remove();
+
+  const ov = document.createElement('div');
+  ov.id = 'ye-prog-ov';
+  ov.className = 'ov on custom-modal';
+  ov.style.display = 'flex';
+  ov.style.zIndex = '102000';
+  ov.innerHTML =
+    '<div class="ye-modal" style="max-width:400px">' +
+      '<div class="ye-hd">' +
+        '<h3>⏳ Resetting Cycle</h3>' +
+        '<div class="ye-sub">Please wait — this takes a few seconds.</div>' +
+      '</div>' +
+      '<ul class="ye-prog-list" id="ye-prog-list">' +
+        '<li><span class="dot"></span><span>Logging profit shares (95%)</span></li>' +
+        '<li><span class="dot"></span><span>Logging reward prizes (5%)</span></li>' +
+        '<li><span class="dot"></span><span>Saving year-end archive</span></li>' +
+        '<li><span class="dot"></span><span>Deleting transactions &amp; loans</span></li>' +
+        '<li><span class="dot"></span><span>Removing members</span></li>' +
+        '<li><span class="dot"></span><span>Clearing rotation &amp; applications</span></li>' +
+        '<li><span class="dot"></span><span>Preserving group start date</span></li>' +
+        '<li><span class="dot"></span><span>Starting Year 2</span></li>' +
+      '</ul>' +
+    '</div>';
+  document.body.appendChild(ov);
+  return ov;
+}
+
+async function animateYearEndProgress() {
+  const list = document.querySelectorAll('#ye-prog-list li');
+  for (let i = 0; i < list.length; i++) {
+    list[i].classList.add('active');
+    await new Promise(function(r){ setTimeout(r, 320); });
+    list[i].classList.remove('active');
+    list[i].classList.add('done');
+  }
+}
+
+/* ─── Main action: open preview ─── */
+window.registerAction('profit-distribution', function() {
+  if ((window.groupProfit || 0) <= 0) {
+    window.toast('No profit to distribute', 'var(--danger)');
+    return;
+  }
+  const active = window.members.filter(function(m){ return m.approved; });
+  if (!active.length) {
+    window.toast('No active members', 'var(--danger)');
+    return;
+  }
+
+  const shareData  = computeYearEndShares();
+  const rewardData = computeYearEndRewards();
+
+  const stats = {
+    groupProfit: window.groupProfit || 0,
+    prorated:    shareData.prorated,
+    rewardsPool: shareData.rewardsPool,
+    totalDays:   shareData.totalDays
+  };
+
+  openYearEndModal('preview', shareData.shares, rewardData, stats, function() {
+    /* User clicked "Distribute Now" → ask for PIN */
+    window.requirePasswordConfirmation(async function() {
+      await runYearEndReset(shareData.shares, rewardData, stats);
+    }, 'Confirm Year-End Distribution');
+  });
 });
+
+/* ─── The actual reset ─── */
+async function runYearEndReset(shares, rewards, stats) {
+  const progress = openYearEndProgress();
+
+  try {
+    /* 1. Log profit_dist transactions for shares (95%) */
+    const shareWrites = shares.map(function(s){
+      if (s.share <= 0) return Promise.resolve();
+      return window.db.ref('transactions').push({
+        memberPhone: s.phone,
+        memberName:  s.name,
+        type: 'profit_dist',
+        amount: s.share,
+        receiptNumber: window.generateReceiptNumber(),
+        description: 'Year-end profit share (' + s.days + ' days)',
+        date: Date.now(),
+        isYearEndShare: true
+      });
+    });
+    await Promise.all(shareWrites);
+
+    /* 2. Log profit_dist transactions for rewards (5%) */
+    const rewardWrites = rewards.winners.map(function(w){
+      if (!w.member || w.amount <= 0) return Promise.resolve();
+      return window.db.ref('transactions').push({
+        memberPhone: w.member.phone,
+        memberName:  w.member.name,
+        type: 'profit_dist',
+        amount: w.amount,
+        receiptNumber: window.generateReceiptNumber(),
+        description: 'Year-end reward — ' + w.category,
+        date: Date.now(),
+        isYearEndReward: true,
+        rewardCategory: w.category
+      });
+    });
+    await Promise.all(rewardWrites);
+
+    /* 3. Save archive BEFORE wipe */
+    const now = new Date();
+    const startYear = window.settings.groupStartDate
+      ? new Date(window.settings.groupStartDate).getFullYear()
+      : now.getFullYear();
+    const endYear = now.getFullYear();
+    const yearLabel = (startYear === endYear) ? String(startYear) : (startYear + '-' + endYear);
+
+    const archivePayload = {
+      label: yearLabel,
+      groupStartDate: window.settings.groupStartDate || null,
+      wipedAt: Date.now(),
+      totalProfit: stats.groupProfit,
+      prorated:    stats.prorated,
+      rewardsPool: stats.rewardsPool,
+      totalDays:   stats.totalDays,
+      memberCount: shares.length,
+      shares: shares,
+      rewards: rewards.winners.map(function(w){
+        return {
+          category: w.category,
+          memberId: w.member ? w.member.id : null,
+          memberName: w.member ? w.member.name : null,
+          memberPhone: w.member ? w.member.phone : null,
+          amount: w.amount,
+          metric: w.metric
+        };
+      })
+    };
+    await window.db.ref('archive/yearEnd/' + yearLabel).set(archivePayload);
+
+    /* 4. Wipe everything except settings */
+    const wipes = {
+      members: null,
+      transactions: null,
+      loans: null,
+      rotation: null,
+      applications: null,
+      notifications: null,
+      mainNotices: null,
+      passwordResetRequests: null,
+      leaveRequests: null,
+      status: null
+    };
+    await window.db.ref().update(wipes);
+
+    /* 5. Preserve groupStartDate explicitly (settings untouched otherwise) */
+    if (window.settings.groupStartDate) {
+      await window.db.ref('settings').update({
+        groupStartDate: window.settings.groupStartDate
+      });
+    }
+
+    /* 6. Progress animation completes */
+    await animateYearEndProgress();
+
+    /* 7. Reload state — everything is empty now */
+    if (progress) progress.remove();
+    await window.reloadData();
+
+    /* 8. Clear local caches that reference members */
+    window.memberBalances         = {};
+    window.memberDebts            = {};
+    window.memberLoans            = {};
+    window.memberPrepaid          = {};
+    window.memberApplicationLoans = {};
+    window.memberAssignedLoans    = {};
+    window.memberActiveLoanIds    = {};
+    window.cashFromDeposits       = 0;
+    window.groupProfit            = 0;
+
+    /* 9. Refresh UI so home tab etc show empty state */
+    if (typeof window.refreshUI === 'function') window.refreshUI();
+    if (typeof window.updateHomeUI === 'function') window.updateHomeUI();
+    if (typeof window.updateAccountBalances === 'function') window.updateAccountBalances();
+
+    /* 10. Show completion summary */
+    openYearEndModal('complete', shares, rewards, stats, null);
+
+    window.toast('🌾 Year ' + yearLabel + ' archived · Year 2 begins', 'var(--success)');
+  } catch (err) {
+    console.error('[year-end reset] failed:', err);
+    if (progress) progress.remove();
+    window.toast('❌ Reset failed: ' + (err && err.message || err), 'var(--danger)');
+  }
+}
 
 window.registerAction('submit-setup', function() {
   window.closeOv('ov-setup');
   window.toast('Setup saved', 'var(--success)');
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   YEAR-END ARCHIVES VIEWER
+   Browse past distribution records under archive/yearEnd/*
+   ═══════════════════════════════════════════════════════════════ */
+
+async function openYearEndArchives() {
+  ensureYearEndStyles();
+  const existing = document.getElementById('ye-arch-ov');
+  if (existing) existing.remove();
+
+  const ov = document.createElement('div');
+  ov.id = 'ye-arch-ov';
+  ov.className = 'ov on custom-modal';
+  ov.style.display = 'flex';
+  ov.style.zIndex = '101000';
+  ov.innerHTML =
+    '<div class="ye-modal">' +
+      '<div class="ye-hd">' +
+        '<h3>📚 Year-End Archives</h3>' +
+        '<div class="ye-sub">Every distribution since founding — permanent record</div>' +
+      '</div>' +
+      '<div id="ye-arch-list" style="min-height:80px;">' +
+        '<div style="text-align:center;padding:30px;color:var(--text-3);font-size:.8rem;">⏳ Loading…</div>' +
+      '</div>' +
+      '<button type="button" class="btn btn-sec btn-full" id="ye-arch-close" style="margin-top:14px;">Close</button>' +
+    '</div>';
+  document.body.appendChild(ov);
+
+  ov.querySelector('#ye-arch-close').addEventListener('click', function(){ ov.remove(); });
+  ov.addEventListener('click', function(e){ if (e.target === ov) ov.remove(); });
+
+  /* Fetch archives */
+  try {
+    const snap = await window.db.ref('archive/yearEnd').once('value');
+    const val = snap.val() || {};
+    const years = Object.keys(val).sort().reverse();
+
+    if (!years.length) {
+      ov.querySelector('#ye-arch-list').innerHTML =
+        '<div style="text-align:center;padding:30px;color:var(--text-3);font-size:.8rem;">' +
+          '📭 No archives yet.<br><br>' +
+          '<span class="mono" style="font-size:.7rem;">Distribute profits to create the first one.</span>' +
+        '</div>';
+      return;
+    }
+
+    ov.querySelector('#ye-arch-list').innerHTML = years.map(function(year){
+      const a = val[year] || {};
+      const wipedAt = a.wipedAt ? new Date(a.wipedAt).toLocaleDateString('en-UG', {
+        year: 'numeric', month: 'short', day: 'numeric'
+      }) : '—';
+      const memberCount = a.memberCount || (a.shares ? a.shares.length : 0);
+      const totalProfit = a.totalProfit || 0;
+      return '<button type="button" class="ye-arch-row" data-year="' + window.escapeAttr(year) + '" ' +
+        'style="display:flex;align-items:center;gap:12px;width:100%;padding:12px 14px;margin-bottom:8px;' +
+        'background:var(--surface-2);border:1px solid var(--border);border-radius:12px;cursor:pointer;' +
+        'text-align:left;transition:all .15s ease;font-family:inherit;color:var(--text);">' +
+        '<div style="width:44px;height:44px;border-radius:12px;' +
+          'background:linear-gradient(135deg, #4599ff, #1877f2);' +
+          'display:flex;align-items:center;justify-content:center;' +
+          'font-family:Syne,sans-serif;font-weight:800;font-size:.72rem;color:#fff;flex-shrink:0;' +
+          'box-shadow:0 4px 14px rgba(24,119,242,.35);">' +
+          window.escapeHtml(year) +
+        '</div>' +
+        '<div style="flex:1;min-width:0;">' +
+          '<div style="font-weight:700;font-size:.86rem;color:var(--text);">' +
+            'UGX ' + Number(totalProfit).toLocaleString() + ' distributed' +
+          '</div>' +
+          '<div style="font-size:.65rem;color:var(--text-3);margin-top:2px;">' +
+            memberCount + ' member' + (memberCount === 1 ? '' : 's') +
+            ' · archived ' + wipedAt +
+          '</div>' +
+        '</div>' +
+        '<div style="color:var(--brand);font-size:1.2rem;flex-shrink:0;">›</div>' +
+      '</button>';
+    }).join('');
+
+    /* Wire row clicks */
+    ov.querySelectorAll('.ye-arch-row').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        const year = btn.getAttribute('data-year');
+        const record = val[year];
+        if (record) openYearEndArchiveDetail(year, record);
+      });
+      btn.addEventListener('mouseenter', function(){ btn.style.borderColor = 'var(--brand)'; });
+      btn.addEventListener('mouseleave', function(){ btn.style.borderColor = 'var(--border)'; });
+    });
+  } catch (err) {
+    console.error('[archives] load failed:', err);
+    ov.querySelector('#ye-arch-list').innerHTML =
+      '<div style="text-align:center;padding:30px;color:var(--danger);font-size:.8rem;">' +
+        '❌ Failed to load archives.' +
+      '</div>';
+  }
+}
+
+/* ─── Detail modal for one archived year ─── */
+function openYearEndArchiveDetail(year, record) {
+  const existing = document.getElementById('ye-arch-detail-ov');
+  if (existing) existing.remove();
+
+  const shares  = record.shares || [];
+  const winners = record.rewards || [];
+  const stats = {
+    groupProfit: record.totalProfit || 0,
+    prorated:    record.prorated || 0,
+    rewardsPool: record.rewardsPool || 0,
+    totalDays:   record.totalDays || 0
+  };
+
+  const fmt = function(n){ return Number(n || 0).toLocaleString(); };
+
+  const sharesRows = shares.map(function(s){
+    const pct = stats.prorated ? (s.share / stats.prorated * 100).toFixed(1) : '—';
+    return '<tr>' +
+      '<td>' + window.escapeHtml(s.name) + '</td>' +
+      '<td class="ye-num">' + (s.days || 0) + '</td>' +
+      '<td class="ye-num" style="color:#6db1ff;font-weight:700">UGX ' + fmt(s.share) + '</td>' +
+      '<td class="ye-num">' + pct + '%</td>' +
+    '</tr>';
+  }).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--text-3);padding:20px;">No share data</td></tr>';
+
+  const rewardsCards = winners.map(function(w){
+    return '<div class="ye-rw-card">' +
+      '<div class="ye-rw-cat">' + window.escapeHtml(w.category || '—') + '</div>' +
+      '<div class="ye-rw-name">' + window.escapeHtml(w.memberName || '—') + '</div>' +
+      '<div class="ye-rw-amt">UGX ' + fmt(w.amount) + '</div>' +
+      '<div class="ye-rw-met">' + window.escapeHtml(w.metric || '') + '</div>' +
+    '</div>';
+  }).join('') || '<div class="ye-rw-card" style="opacity:.5"><div class="ye-rw-name">—</div></div>';
+
+  const archivedDate = record.wipedAt
+    ? new Date(record.wipedAt).toLocaleString('en-UG', {
+        year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
+      })
+    : '—';
+
+  const modal = document.createElement('div');
+  modal.id = 'ye-arch-detail-ov';
+  modal.className = 'ov on custom-modal';
+  modal.style.display = 'flex';
+  modal.style.zIndex = '102000';
+  modal.innerHTML =
+    '<div class="ye-modal">' +
+      '<div class="ye-hd">' +
+        '<h3>📖 Year ' + window.escapeHtml(year) + ' — Distribution Record</h3>' +
+        '<div class="ye-sub">Archived ' + window.escapeHtml(archivedDate) + '</div>' +
+      '</div>' +
+
+      '<div class="ye-grid">' +
+        '<div class="ye-stat"><div class="ye-lbl">Total Profit</div><div class="ye-val">UGX ' + fmt(stats.groupProfit) + '</div></div>' +
+        '<div class="ye-stat"><div class="ye-lbl">Prorated (95%)</div><div class="ye-val">UGX ' + fmt(stats.prorated) + '</div></div>' +
+        '<div class="ye-stat"><div class="ye-lbl">Rewards (5%)</div><div class="ye-val warn">UGX ' + fmt(stats.rewardsPool) + '</div></div>' +
+        '<div class="ye-stat"><div class="ye-lbl">Members Paid</div><div class="ye-val">' + shares.length + '</div></div>' +
+      '</div>' +
+
+      '<div class="ye-tabs">' +
+        '<button type="button" class="ye-tab active" data-tab="shares">💠 Shares Breakdown</button>' +
+        '<button type="button" class="ye-tab" data-tab="rewards">🏆 Rewards Breakdown</button>' +
+      '</div>' +
+
+      '<div class="ye-panel active" data-panel="shares">' +
+        '<div style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;margin-bottom:14px">' +
+          '<table class="ye-table">' +
+            '<thead><tr><th>Member</th><th class="ye-num">Days</th><th class="ye-num">Share</th><th class="ye-num">%</th></tr></thead>' +
+            '<tbody>' + sharesRows + '</tbody>' +
+          '</table>' +
+        '</div>' +
+      '</div>' +
+
+      '<div class="ye-panel" data-panel="rewards">' +
+        '<div class="ye-rw-grid">' + rewardsCards + '</div>' +
+      '</div>' +
+
+      '<div class="ye-note" style="background:var(--brand-soft2);border-left:3px solid var(--brand);color:var(--text);margin-top:14px;">' +
+        '<strong>📌 Note:</strong> These figures are the archived snapshot from the day the cycle reset. ' +
+        'Live member data has since been cleared.' +
+      '</div>' +
+
+      '<button type="button" class="btn btn-gold btn-full" id="ye-arch-detail-close" style="margin-top:14px;">Close</button>' +
+    '</div>';
+  document.body.appendChild(modal);
+
+  /* Tab wiring */
+  modal.querySelectorAll('.ye-tab').forEach(function(tab){
+    tab.addEventListener('click', function(){
+      const target = tab.getAttribute('data-tab');
+      modal.querySelectorAll('.ye-tab').forEach(function(t){ t.classList.remove('active'); });
+      modal.querySelectorAll('.ye-panel').forEach(function(p){ p.classList.remove('active'); });
+      tab.classList.add('active');
+      const panel = modal.querySelector('.ye-panel[data-panel="' + target + '"]');
+      if (panel) panel.classList.add('active');
+    });
+  });
+
+  modal.querySelector('#ye-arch-detail-close').addEventListener('click', function(){ modal.remove(); });
+  modal.addEventListener('click', function(e){ if (e.target === modal) modal.remove(); });
+}
+
+window.openYearEndArchives = openYearEndArchives;
+window.registerAction('open-year-end-archives', function() {
+  window.openYearEndArchives();
 });
 
 console.log('✅ Part 4 — Transactions + Loans + Admin loaded. Total actions: ' + window.listActions().length);
