@@ -9865,13 +9865,39 @@ window.registerAction('approve-app', async function(el) {
       }
     }
 
+    /* Carry PIN from Google signup so member can log in right away */
+    if (a.pinHash) {
+      await window.db.ref('members/' + newId).update({
+        pinHash: a.pinHash,
+        pinSubstrings: a.pinSubstrings || null,
+        pinSetAt: a.pinSetAt || Date.now()
+      });
+    }
+
+
     if (signupFee > 0) {
+      /* 1. Debt obligation on the new member */
       await window.db.ref('transactions').push({
-        memberPhone: newMember.phone, memberName: newMember.name,
-        type: 'debt', amount: signupFee,
+        memberPhone: newMember.phone,
+        memberName:  newMember.name,
+        type: 'debt',
+        amount: signupFee,
         receiptNumber: window.generateReceiptNumber(),
         description: 'Signup fee (' + window.money(signupFee) + ')',
-        date: Date.now(), isSignupFee: true
+        date: Date.now(),
+        isSignupFee: true
+      });
+
+      /* 2. Credit the group — the fee is treated as group income.
+            This immediately adds to groupProfit so it can be loaned
+            or distributed at year-end. */
+      await window.db.ref('transactions').push({
+        type: 'welfare',
+        amount: signupFee,
+        receiptNumber: window.generateReceiptNumber(),
+        description: 'Signup fee income — ' + newMember.name,
+        date: Date.now() + 1,
+        isSignupFeeIncome: true
       });
     }
 
@@ -14055,111 +14081,155 @@ function initAuthV2() {
   }
 
   async function collectGoogleProfile(user, name, email) {
-    let photoData = '';
-    if (user.photoURL) {
-      window.toast('Downloading photo…', '#4599ff');
-      photoData = await fetchImageAsDataURL(user.photoURL);
+  let photoData = '';
+  if (user.photoURL) {
+    window.toast('Downloading photo…', '#4599ff');
+    photoData = await fetchImageAsDataURL(user.photoURL);
+  }
+
+  const ex = document.getElementById('google-profile-modal');
+  if (ex) ex.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'google-profile-modal';
+  modal.className = 'ov on custom-modal';
+  modal.style.display = 'flex';
+  modal.style.zIndex = '26000';
+  modal.innerHTML =
+    '<div class="bs" style="max-width:440px;padding:24px 22px;text-align:center;">' +
+      '<div style="font-size:2.6rem;margin-bottom:6px;">🔐</div>' +
+      '<div class="bs-title" style="margin-bottom:6px;">Set Your PIN</div>' +
+      '<div class="micro" style="margin-bottom:14px;line-height:1.6;">' +
+        'Choose a 5-character PIN. You\'ll use it to log in alongside Google. ' +
+        'Write it down — this is your password.' +
+      '</div>' +
+
+      '<div class="fgrp" style="text-align:left;">' +
+        '<label class="flbl">Phone Number *</label>' +
+        '<input type="tel" id="gp-phone" class="inp" placeholder="0770371720" autocomplete="tel">' +
+      '</div>' +
+
+      '<div class="fgrp" style="text-align:left;">' +
+        '<label class="flbl">New PIN (5 characters) *</label>' +
+        '<input type="text" id="gp-pin" class="inp" maxlength="5" autocomplete="new-password" ' +
+          'style="text-align:center;letter-spacing:8px;font-family:monospace;font-size:1.2rem;padding:13px;" ' +
+          'placeholder="A1B2C">' +
+      '</div>' +
+
+      '<div class="fgrp" style="text-align:left;">' +
+        '<label class="flbl">Confirm PIN *</label>' +
+        '<input type="text" id="gp-pin2" class="inp" maxlength="5" autocomplete="new-password" ' +
+          'style="text-align:center;letter-spacing:8px;font-family:monospace;font-size:1.2rem;padding:13px;" ' +
+          'placeholder="A1B2C">' +
+      '</div>' +
+
+      '<div class="fgrp" style="text-align:left;">' +
+        '<label class="flbl">Why do you want to join? <span class="muted">(optional)</span></label>' +
+        '<textarea id="gp-why" class="inp" rows="2"></textarea>' +
+      '</div>' +
+
+      '<div id="gp-error" style="color:var(--danger);font-size:0.75rem;font-weight:600;min-height:18px;margin:6px 0;"></div>' +
+      '<button type="button" class="btn btn-primary btn-full" id="gp-continue" style="padding:13px;">' +
+        'Create My Account →' +
+      '</button>' +
+      '<button type="button" class="btn btn-sec btn-full" id="gp-cancel" style="margin-top:8px;">Cancel</button>' +
+    '</div>';
+  document.body.appendChild(modal);
+
+  const phoneEl   = modal.querySelector('#gp-phone');
+  const pinEl     = modal.querySelector('#gp-pin');
+  const pin2El    = modal.querySelector('#gp-pin2');
+  const whyEl     = modal.querySelector('#gp-why');
+  const errEl     = modal.querySelector('#gp-error');
+  const contBtn   = modal.querySelector('#gp-continue');
+  const cancelBtn = modal.querySelector('#gp-cancel');
+
+  function normalisePin(v) {
+    return String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
+  }
+  pinEl.addEventListener('input', function() { pinEl.value = normalisePin(pinEl.value); });
+  pin2El.addEventListener('input', function() { pin2El.value = normalisePin(pin2El.value); });
+
+  setTimeout(function() { phoneEl.focus(); }, 200);
+
+  cancelBtn.addEventListener('click', function() {
+    modal.remove();
+    try { auth.signOut(); } catch (e) {}
+  });
+
+  contBtn.addEventListener('click', async function() {
+    errEl.textContent = '';
+    const rawPhone = (phoneEl.value || '').trim();
+    const pin1     = normalisePin(pinEl.value);
+    const pin2     = normalisePin(pin2El.value);
+    const why      = (whyEl.value || '').trim();
+
+    /* ── Validation ── */
+    if (!rawPhone) { errEl.textContent = 'Please enter your phone number.'; return; }
+    const normalized = window.normalizePhone(rawPhone);
+    if (!normalized) { errEl.textContent = 'Invalid phone. Use 0770371720 or +256770371720.'; return; }
+
+    if (pin1.length !== 5) { errEl.textContent = 'PIN must be exactly 5 characters.'; return; }
+    if (!/^[A-Z0-9]{5}$/.test(pin1)) { errEl.textContent = 'PIN can only contain letters and numbers.'; return; }
+    if (pin1 !== pin2) { errEl.textContent = 'PINs do not match.'; return; }
+
+    if (window.members.some(function(m) { return m.phone === normalized; })) {
+      errEl.textContent = 'This phone is already registered.'; return;
     }
+    try {
+      const s = await window.db.ref('applications').orderByChild('phone').equalTo(normalized).once('value');
+      let pendingExists = false;
+      s.forEach(function(c) { if (c.val().status === 'pending') pendingExists = true; });
+      if (pendingExists) { errEl.textContent = 'This phone already has a pending application.'; return; }
+    } catch (e) {}
 
-    const ex = document.getElementById('google-profile-modal');
-    if (ex) ex.remove();
+    contBtn.disabled = true;
+    contBtn.textContent = '⏳ Creating account…';
 
-    const modal = document.createElement('div');
-    modal.id = 'google-profile-modal';
-    modal.className = 'ov on custom-modal';
-    modal.style.display = 'flex';
-    modal.style.zIndex = '26000';
-    modal.innerHTML =
-      '<div class="bs" style="max-width:440px;padding:24px 22px;text-align:center;">' +
-        '<div style="font-size:3rem;margin-bottom:8px;">✅</div>' +
-        '<div class="bs-title" style="margin-bottom:6px;">Signed in with Google</div>' +
-        '<div class="micro" style="margin-bottom:16px;">' +
-          'Welcome, <strong>' + window.escapeHtml(name) + '</strong><br>' +
-          '<span style="font-family:monospace;font-size:0.75rem;">' + window.escapeHtml(email) + '</span>' +
-        '</div>' +
-        (photoData
-          ? '<div style="width:84px;height:84px;margin:0 auto 16px;border-radius:50%;overflow:hidden;border:3px solid var(--brand);">' +
-              '<img src="' + photoData + '" style="width:100%;height:100%;object-fit:cover;display:block;">' +
-            '</div>'
-          : '') +
-        '<div class="hint-box" style="text-align:left;font-size:0.78rem;">' +
-          'We need your <strong>phone number</strong> to complete the application.' +
-        '</div>' +
-        '<div class="fgrp" style="text-align:left;">' +
-          '<label class="flbl">Phone Number</label>' +
-          '<input type="tel" id="gp-phone" class="inp" placeholder="0770371720" autocomplete="tel">' +
-        '</div>' +
-        '<div class="fgrp" style="text-align:left;">' +
-          '<label class="flbl">Why do you want to join? <span class="muted">(optional)</span></label>' +
-          '<textarea id="gp-why" class="inp" rows="2"></textarea>' +
-        '</div>' +
-        '<div id="gp-error" style="color:var(--danger);font-size:0.75rem;font-weight:600;min-height:18px;margin:6px 0;"></div>' +
-        '<button type="button" class="btn btn-primary btn-full" id="gp-continue" style="padding:13px;">Continue →</button>' +
-        '<button type="button" class="btn btn-sec btn-full" id="gp-cancel" style="margin-top:8px;">Cancel</button>' +
-      '</div>';
-    document.body.appendChild(modal);
+    try {
+      /* ── Hash PIN for storage ── */
+      const pinHash = await window.hashPassword(pin1, normalized);
+      const subHashes = [];
+      const subSalt = normalized + ':sub';
+      for (let i = 0; i <= pin1.length - 3; i++) {
+        subHashes.push(await window.hashPassword(pin1.slice(i, i + 3), subSalt));
+      }
 
-    const phoneEl   = modal.querySelector('#gp-phone');
-    const whyEl     = modal.querySelector('#gp-why');
-    const errEl     = modal.querySelector('#gp-error');
-    const contBtn   = modal.querySelector('#gp-continue');
-    const cancelBtn = modal.querySelector('#gp-cancel');
+      /* ── Submit application with PIN included ── */
+      await window.db.ref('applications').push({
+        name: name,
+        phone: normalized,
+        email: email,
+        googleUid: user.uid,
+        emailVerified: true,
+        provider: 'google',
 
-    setTimeout(function() { phoneEl.focus(); }, 200);
+        /* PIN fields — carried to member on approval */
+        pinHash: pinHash,
+        pinSubstrings: subHashes,
+        pinSetAt: Date.now(),
 
-    cancelBtn.addEventListener('click', function() {
+        photoData: photoData,
+        why: why,
+        status: 'pending',
+        date: Date.now(),
+        agreedToTerms: true
+      });
+
       modal.remove();
       try { auth.signOut(); } catch (e) {}
-    });
 
-    contBtn.addEventListener('click', async function() {
-      errEl.textContent = '';
-      const rawPhone = (phoneEl.value || '').trim();
-      const why = (whyEl.value || '').trim();
+      window.toast('✅ Account created! Admin will review shortly.', 'var(--success)');
+      showPendingFor(name);
 
-      if (!rawPhone) { errEl.textContent = 'Please enter your phone number.'; return; }
-      const normalized = window.normalizePhone(rawPhone);
-      if (!normalized) { errEl.textContent = 'Invalid phone. Use 0770371720 or +256770371720.'; return; }
-
-      if (window.members.some(function(m) { return m.phone === normalized; })) {
-        errEl.textContent = 'This phone is already registered.'; return;
-      }
-      try {
-        const s = await window.db.ref('applications').orderByChild('phone').equalTo(normalized).once('value');
-        let pendingExists = false;
-        s.forEach(function(c) { if (c.val().status === 'pending') pendingExists = true; });
-        if (pendingExists) { errEl.textContent = 'This phone already has a pending application.'; return; }
-      } catch (e) {}
-
-      contBtn.disabled = true;
-      contBtn.textContent = '⏳ Submitting…';
-
-      try {
-        await window.db.ref('applications').push({
-          name: name,
-          phone: normalized,
-          email: email,
-          googleUid: user.uid,
-          emailVerified: true,
-          provider: 'google',
-          photoData: photoData,
-          why: why,
-          status: 'pending',
-          date: Date.now(),
-          agreedToTerms: true
-        });
-        modal.remove();
-        try { auth.signOut(); } catch (e) {}
-        window.toast('✅ Application submitted! Admin will review.', 'var(--success)');
-        showPendingFor(name);
-      } catch (err) {
-        console.error('[google apply] failed:', err);
-        errEl.textContent = 'Submission failed: ' + (err.message || err);
-        contBtn.disabled = false;
-        contBtn.textContent = 'Continue →';
-      }
-    });
-  }
+    } catch (err) {
+      console.error('[google apply] failed:', err);
+      errEl.textContent = 'Submission failed: ' + (err.message || err);
+      contBtn.disabled = false;
+      contBtn.textContent = 'Create My Account →';
+    }
+  });
+}
 
   /* ════════════════════════════════════════════════════════════
      4. EMAIL SIGNUP WITH REAL VERIFICATION
@@ -14343,79 +14413,157 @@ function initAuthV2() {
   }
 
   function showProfileStepForEmail(email) {
-    const modal = document.createElement('div');
-    modal.id = 'email-profile-modal';
-    modal.className = 'ov on custom-modal';
-    modal.style.display = 'flex';
-    modal.style.zIndex = '26000';
-    modal.innerHTML =
-      '<div class="bs" style="max-width:440px;padding:24px 22px;">' +
-        '<div class="bs-title" style="margin-bottom:6px;">Complete Your Profile</div>' +
-        '<div class="micro" style="margin-bottom:14px;">Email <strong>' +
-          window.escapeHtml(email) + '</strong> verified ✅</div>' +
-        '<div class="fgrp"><label class="flbl">Full Name</label>' +
-          '<input type="text" id="ep-name" class="inp" placeholder="Your full name"></div>' +
-        '<div class="fgrp"><label class="flbl">Phone Number</label>' +
-          '<input type="tel" id="ep-phone" class="inp" placeholder="0770371720"></div>' +
-        '<div class="fgrp"><label class="flbl">Why join? <span class="muted">(optional)</span></label>' +
-          '<textarea id="ep-why" class="inp" rows="2"></textarea></div>' +
-        '<div id="ep-error" style="color:var(--danger);font-size:0.75rem;font-weight:600;min-height:18px;margin:6px 0;"></div>' +
-        '<button type="button" class="btn btn-primary btn-full" id="ep-continue" style="padding:13px;">Submit Application</button>' +
-        '<button type="button" class="btn btn-sec btn-full" id="ep-cancel" style="margin-top:8px;">Cancel</button>' +
-      '</div>';
-    document.body.appendChild(modal);
+  const modal = document.createElement('div');
+  modal.id = 'email-profile-modal';
+  modal.className = 'ov on custom-modal';
+  modal.style.display = 'flex';
+  modal.style.zIndex = '26000';
+  modal.innerHTML =
+    '<div class="bs" style="max-width:440px;padding:24px 22px;">' +
+      '<div class="bs-title" style="margin-bottom:6px;">Complete Your Profile</div>' +
+      '<div class="micro" style="margin-bottom:14px;">Email <strong>' +
+        window.escapeHtml(email) + '</strong> verified ✅</div>' +
 
-    const nameEl    = modal.querySelector('#ep-name');
-    const phoneEl   = modal.querySelector('#ep-phone');
-    const whyEl     = modal.querySelector('#ep-why');
-    const errEl     = modal.querySelector('#ep-error');
-    const contBtn   = modal.querySelector('#ep-continue');
-    const cancelBtn = modal.querySelector('#ep-cancel');
+      '<div class="fgrp"><label class="flbl">Full Name *</label>' +
+        '<input type="text" id="ep-name" class="inp" placeholder="Your full name"></div>' +
 
-    setTimeout(function() { nameEl.focus(); }, 200);
-    cancelBtn.addEventListener('click', function() { modal.remove(); });
+      '<div class="fgrp"><label class="flbl">Phone Number *</label>' +
+        '<input type="tel" id="ep-phone" class="inp" placeholder="0770371720"></div>' +
 
-    contBtn.addEventListener('click', async function() {
-      errEl.textContent = '';
-      const name = (nameEl.value || '').trim();
-      const rawPhone = (phoneEl.value || '').trim();
-      const why = (whyEl.value || '').trim();
+      '<div class="fgrp"><label class="flbl">Choose a PIN (5 letters/numbers) *</label>' +
+        '<input type="text" id="ep-pin" class="inp" maxlength="5" autocomplete="new-password" ' +
+          'style="text-align:center;letter-spacing:8px;font-family:monospace;font-size:1.2rem;padding:13px;" ' +
+          'placeholder="A1B2C">' +
+        '<div class="micro" style="margin-top:4px;">You will use this PIN to log in. Write it down.</div></div>' +
 
-      if (!name) { errEl.textContent = 'Enter your full name.'; return; }
-      if (!rawPhone) { errEl.textContent = 'Enter your phone.'; return; }
-      const normalized = window.normalizePhone(rawPhone);
-      if (!normalized) { errEl.textContent = 'Invalid phone format.'; return; }
+      '<div class="fgrp"><label class="flbl">Confirm PIN *</label>' +
+        '<input type="text" id="ep-pin2" class="inp" maxlength="5" autocomplete="new-password" ' +
+          'style="text-align:center;letter-spacing:8px;font-family:monospace;font-size:1.2rem;padding:13px;" ' +
+          'placeholder="A1B2C"></div>' +
 
-      if (window.members.some(function(m) { return m.phone === normalized; })) {
-        errEl.textContent = 'This phone is already registered.'; return;
-      }
+      '<div class="fgrp"><label class="flbl">Why join? <span class="muted">(optional)</span></label>' +
+        '<textarea id="ep-why" class="inp" rows="2"></textarea></div>' +
 
-      contBtn.disabled = true;
-      contBtn.textContent = '⏳ Submitting…';
+      '<div id="ep-error" style="color:var(--danger);font-size:0.75rem;font-weight:600;min-height:18px;margin:6px 0;"></div>' +
 
-      try {
-        await window.db.ref('applications').push({
-          name: name,
-          phone: normalized,
-          email: email,
-          emailVerified: true,
-          provider: 'email',
-          why: why,
-          status: 'pending',
-          date: Date.now(),
-          agreedToTerms: true
-        });
-        modal.remove();
-        window.toast('✅ Application submitted! Admin will review.', 'var(--success)');
-        showPendingFor(name);
-      } catch (err) {
-        console.error('[email apply] failed:', err);
-        errEl.textContent = 'Submission failed: ' + (err.message || err);
-        contBtn.disabled = false;
-        contBtn.textContent = 'Submit Application';
-      }
-    });
+      '<button type="button" class="btn btn-primary btn-full" id="ep-continue" style="padding:13px;">' +
+        'Submit Application' +
+      '</button>' +
+      '<button type="button" class="btn btn-sec btn-full" id="ep-cancel" style="margin-top:8px;">Cancel</button>' +
+    '</div>';
+  document.body.appendChild(modal);
+
+  const nameEl    = modal.querySelector('#ep-name');
+  const phoneEl   = modal.querySelector('#ep-phone');
+  const pinEl     = modal.querySelector('#ep-pin');
+  const pin2El    = modal.querySelector('#ep-pin2');
+  const whyEl     = modal.querySelector('#ep-why');
+  const errEl     = modal.querySelector('#ep-error');
+  const contBtn   = modal.querySelector('#ep-continue');
+  const cancelBtn = modal.querySelector('#ep-cancel');
+
+  /* Normalise PIN to uppercase A-Z / 0-9 only */
+  function normalisePin(v) {
+    return String(v || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
   }
+  pinEl.addEventListener('input',  function() { pinEl.value  = normalisePin(pinEl.value); });
+  pin2El.addEventListener('input', function() { pin2El.value = normalisePin(pin2El.value); });
+
+  setTimeout(function() { nameEl.focus(); }, 200);
+
+  cancelBtn.addEventListener('click', function() { modal.remove(); });
+
+  /* Allow Enter to submit */
+  [nameEl, phoneEl, pinEl, pin2El].forEach(function(el) {
+    el.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); contBtn.click(); }
+    });
+  });
+
+  contBtn.addEventListener('click', async function() {
+    errEl.textContent = '';
+
+    const name       = (nameEl.value  || '').trim();
+    const rawPhone   = (phoneEl.value || '').trim();
+    const pin1       = normalisePin(pinEl.value);
+    const pin2       = normalisePin(pin2El.value);
+    const why        = (whyEl.value   || '').trim();
+
+    /* ── Validation ── */
+    if (!name) { errEl.textContent = 'Enter your full name.'; return; }
+    if (name.length < 2) { errEl.textContent = 'Name is too short.'; return; }
+
+    if (!rawPhone) { errEl.textContent = 'Enter your phone number.'; return; }
+    const normalized = window.normalizePhone(rawPhone);
+    if (!normalized) { errEl.textContent = 'Invalid phone. Use 0770371720 or +256770371720.'; return; }
+
+    if (pin1.length !== 5) { errEl.textContent = 'PIN must be exactly 5 characters.'; return; }
+    if (!/^[A-Z0-9]{5}$/.test(pin1)) { errEl.textContent = 'PIN can only contain letters and numbers.'; return; }
+    if (pin1 !== pin2) { errEl.textContent = 'PINs do not match.'; return; }
+
+    if (window.members.some(function(m) { return m.phone === normalized; })) {
+      errEl.textContent = 'This phone is already registered.'; return;
+    }
+    try {
+      const s = await window.db.ref('applications').orderByChild('phone').equalTo(normalized).once('value');
+      let pendingExists = false;
+      s.forEach(function(c) { if (c.val().status === 'pending') pendingExists = true; });
+      if (pendingExists) { errEl.textContent = 'This phone already has a pending application.'; return; }
+    } catch (e) {}
+
+    contBtn.disabled = true;
+    contBtn.textContent = '⏳ Submitting…';
+
+    try {
+      /* ── Hash the PIN before storing ── */
+      const pinHash = await window.hashPassword(pin1, normalized);
+      const subHashes = [];
+      const subSalt = normalized + ':sub';
+      for (let i = 0; i <= pin1.length - 3; i++) {
+        subHashes.push(await window.hashPassword(pin1.slice(i, i + 3), subSalt));
+      }
+
+      /* ── Submit the application with PIN + email + emailHash ── */
+      const salt = normalized + ':email';
+      let emailHash = null;
+      try {
+        /* We don't have the raw password anymore (was cleared on verify),
+           so we store a stable hash of the verified email itself as a placeholder.
+           The member will log in via email/password through Firebase Auth anyway. */
+        emailHash = await window.hashPassword('verified::' + email, salt);
+      } catch (e) { /* ignore */ }
+
+      await window.db.ref('applications').push({
+        name: name,
+        phone: normalized,
+        email: email,
+        emailVerified: true,
+        emailHash: emailHash,
+        provider: 'email',
+
+        /* PIN carried to member on approval */
+        pinHash: pinHash,
+        pinSubstrings: subHashes,
+        pinSetAt: Date.now(),
+
+        why: why,
+        status: 'pending',
+        date: Date.now(),
+        agreedToTerms: true
+      });
+
+      modal.remove();
+      window.toast('✅ Application submitted! Admin will review.', 'var(--success)');
+      showPendingFor(name);
+
+    } catch (err) {
+      console.error('[email apply] failed:', err);
+      errEl.textContent = 'Submission failed: ' + (err.message || err);
+      contBtn.disabled = false;
+      contBtn.textContent = 'Submit Application';
+    }
+  });
+}
 
   /* ════════════════════════════════════════════════════════════
      5. LEGACY SIGNUP FALLBACK (no Firebase Auth)
@@ -14535,6 +14683,12 @@ function initAuthV2() {
             if (appData.email) updates.email = appData.email;
             if (appData.emailVerified) updates.emailVerified = true;
             if (appData.provider) updates.provider = appData.provider;
+
+            /* ── Carry the PIN so the member can log in immediately ── */
+            if (appData.pinHash) updates.pinHash = appData.pinHash;
+            if (appData.pinSubstrings) updates.pinSubstrings = appData.pinSubstrings;
+            if (appData.pinSetAt) updates.pinSetAt = appData.pinSetAt;
+
             if (Object.keys(updates).length) {
               window.db.ref('members/' + c.key).update(updates).catch(function() {});
             }
@@ -15621,6 +15775,228 @@ function initEmailEnforcement() {
 
 if (document.readyState === 'complete') initEmailEnforcement();
 else window.addEventListener('load', initEmailEnforcement);
+
+})();
+</script>
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   PART 9 v2 — NOTIFICATION BADGE (self-healing, both roles)
+   Fixes:
+   - Admin badge now targets the correct element
+   - Counts unread notifications for admins AND members
+   - Live listener + 15s safety poll
+   - Detailed logging when counts change
+   ═══════════════════════════════════════════════════════════════ */
+(function() {
+'use strict';
+
+function initBadge() {
+  if (!window.db) {
+    console.warn('[Badge] Firebase not ready — retry in 2s');
+    return setTimeout(initBadge, 2000);
+  }
+
+  console.log('🔔 [Badge] initialising…');
+
+  /* ────────────────────────────────────────────────────────
+     Safe notification extractor — accepts arrays or objects
+     ──────────────────────────────────────────────────────── */
+  function extractNotifications(node) {
+    if (!node) return [];
+    if (Array.isArray(node)) {
+      return node.filter(Boolean).map(function(n, i) {
+        return Object.assign({}, n, { _key: (n && n._key) || String(i) });
+      });
+    }
+    if (typeof node === 'object') {
+      return Object.entries(node).map(function(pair) {
+        return Object.assign({}, pair[1], { _key: pair[0] });
+      });
+    }
+    return [];
+  }
+
+  /* ────────────────────────────────────────────────────────
+     Count unread notifications for a given key
+     ──────────────────────────────────────────────────────── */
+  function unreadCount(key) {
+    const list = extractNotifications((window.notifications || {})[key]);
+    return list.filter(function(n) { return n && !n.read; }).length;
+  }
+
+  /* ────────────────────────────────────────────────────────
+     Apply a count to the badge element
+     ──────────────────────────────────────────────────────── */
+  function applyBadge(count) {
+    const badge = document.getElementById('notification-badge');
+    if (!badge) return;
+
+    if (count > 0) {
+      badge.classList.remove('hidden');
+      badge.textContent = count > 99 ? '99+' : String(count);
+      badge.title = count + ' unread notification' + (count === 1 ? '' : 's');
+    } else {
+      badge.classList.add('hidden');
+      badge.textContent = '0';
+      badge.title = '';
+    }
+  }
+
+  /* ────────────────────────────────────────────────────────
+     Main updater
+     ──────────────────────────────────────────────────────── */
+  let lastCount = -1;
+
+  async function updateBadge() {
+    const cu = window.currentUser;
+
+    if (!cu) {
+      applyBadge(0);
+      return;
+    }
+
+    try {
+      if (cu.isAdmin) {
+        /* Admin sees: unread admin notifications + pending items */
+        const adminUnread = unreadCount('admin');
+
+        let pendingApps = 0, pendingLeaves = 0, pendingResets = 0, pendingLoans = 0;
+        try {
+          const [appSnap, leaveSnap, resetSnap] = await Promise.all([
+            window.db.ref('applications').orderByChild('status').equalTo('pending').once('value'),
+            window.db.ref('leaveRequests').orderByChild('status').equalTo('pending').once('value'),
+            window.db.ref('passwordResetRequests').orderByChild('status').equalTo('pending').once('value')
+          ]);
+          pendingApps   = appSnap.val()   ? Object.keys(appSnap.val()).length : 0;
+          pendingLeaves = leaveSnap.val() ? Object.keys(leaveSnap.val()).length : 0;
+          pendingResets = resetSnap.val() ? Object.keys(resetSnap.val()).length : 0;
+        } catch (e) {
+          console.warn('[Badge] pending-count fetch failed:', e);
+        }
+        pendingLoans = (window.loans || []).filter(function(l) { return l.status === 'pending'; }).length;
+
+        const total = adminUnread + pendingApps + pendingLeaves + pendingResets + pendingLoans;
+
+        if (total !== lastCount) {
+          console.log('[Badge] admin total =', total,
+            '{ adminUnread:', adminUnread,
+            ', apps:', pendingApps,
+            ', loans:', pendingLoans,
+            ', leaves:', pendingLeaves,
+            ', resets:', pendingResets, '}');
+          lastCount = total;
+        }
+        applyBadge(total);
+        return;
+      }
+
+      /* Member: unread from their own node */
+      const count = unreadCount(cu.id);
+      if (count !== lastCount) {
+        console.log('[Badge] member', cu.id, '→ unread =', count);
+        lastCount = count;
+      }
+      applyBadge(count);
+
+    } catch (err) {
+      console.error('[Badge] update failed:', err);
+    }
+  }
+
+  /* ────────────────────────────────────────────────────────
+     Live listener on notifications node
+     ──────────────────────────────────────────────────────── */
+  try {
+    window.db.ref('notifications').limitToLast(200).on('value', function(snap) {
+      window.notifications = snap.val() || {};
+      updateBadge();
+    }, function(err) {
+      console.error('[Badge] live listener error:', err);
+    });
+    console.log('[Badge] live listener attached');
+  } catch (e) {
+    console.error('[Badge] listener attach failed:', e);
+  }
+
+  /* ────────────────────────────────────────────────────────
+     Watch for user change (login / logout)
+     ──────────────────────────────────────────────────────── */
+  let lastUserId = null;
+  setInterval(function() {
+    const cu = window.currentUser;
+    const id = cu ? (cu.id || (cu.isAdmin ? 'admin' : null)) : null;
+    if (id !== lastUserId) {
+      lastUserId = id;
+      lastCount = -1;
+      console.log('[Badge] user changed →', id);
+      updateBadge();
+    }
+  }, 1000);
+
+  /* ────────────────────────────────────────────────────────
+     Safety poll every 15s
+     ──────────────────────────────────────────────────────── */
+  setInterval(function() {
+    if (!document.hidden) updateBadge();
+  }, 15000);
+
+  /* ────────────────────────────────────────────────────────
+     Expose manual refresh + diagnostic
+     ──────────────────────────────────────────────────────── */
+  window.refreshBadge = function() {
+    console.log('[Badge] manual refresh');
+    lastCount = -1;
+    return window.db.ref('notifications').once('value').then(function(snap) {
+      window.notifications = snap.val() || {};
+      return updateBadge();
+    });
+  };
+
+  window.diagnoseBadge = function() {
+    const cu = window.currentUser;
+    console.group('🔔 Badge Diagnostic v2');
+    console.log('User:', cu ? (cu.name || cu.id) : 'NONE');
+    console.log('Is admin:', cu ? cu.isAdmin : '—');
+    console.log('Notifications keys:', Object.keys(window.notifications || {}));
+    if (cu) {
+      const key = cu.isAdmin ? 'admin' : cu.id;
+      const list = extractNotifications((window.notifications || {})[key]);
+      const unread = list.filter(n => !n.read);
+      console.log('My notification key:', key);
+      console.log('  · total:', list.length);
+      console.log('  · unread:', unread.length);
+      if (unread.length) console.log('  · first unread:', unread[0]);
+    }
+    const badge = document.getElementById('notification-badge');
+    if (badge) {
+      console.log('Badge classes:', badge.className);
+      console.log('Badge text:', badge.textContent);
+      console.log('Badge display:', getComputedStyle(badge).display);
+    }
+    console.groupEnd();
+  };
+
+  /* ────────────────────────────────────────────────────────
+     Wrap refreshUI
+     ──────────────────────────────────────────────────────── */
+  const origRefresh = window.refreshUI;
+  if (typeof origRefresh === 'function') {
+    window.refreshUI = function() {
+      try { origRefresh.apply(this, arguments); } catch (e) {}
+      updateBadge();
+    };
+  }
+
+  /* ────────────────────────────────────────────────────────
+     Initial fire
+     ──────────────────────────────────────────────────────── */
+  setTimeout(updateBadge, 1500);
+
+  console.log('✅ [Badge] ready');
+}
+
+if (document.readyState === 'complete') initBadge();
+else window.addEventListener('load', initBadge);
 
 })();
 </script>
